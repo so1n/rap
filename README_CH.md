@@ -61,6 +61,7 @@ async def demo(): pass
 快速上手例子:
 ```Python
 import asyncio
+from typing import Iterator
 
 from rap.client import Client
 
@@ -73,14 +74,14 @@ def sync_sum(a: int, b: int) -> int:
 
 
 # 被装饰的函数一定是async def函数 
-@client.register
+@client.register()
 async def sync_sum(a: int, b: int) -> int:
     pass
 
 
 # 被装饰的函数一定是async def函数,由于该函数是生成器语法, 要以yield代替pass 
-@client.register
-async def async_gen(a: int):
+@client.register()
+async def async_gen(a: int) -> Iterator:
     yield
 
 
@@ -105,16 +106,77 @@ async def main():
     
 asyncio.run(main())
 ```
+# 3.功能介绍
+## 3.1注册函数
+服务端支持`def`和`async def`,如果是`def`函数, 则会用多线程去运行.注册时会对函数的参数和返回值的TypeHints进行校验, 如果类型不符合json规定的类型, 则会报错.
+服务端自带一份注册表, 在同一个组内, 如果有重复的值,也会报错, 可以使用group定义要注册的组或者通过name重新定义注册的名(这时候调用也需要指定对应的group).
+此外,注册时可以设置`is_private`为True,设置后的函数只能被本机的rap.client调用.
+```Python
+import asyncio
+from typing import Iterator
 
-# 2.功能介绍
-## 2.1.session
+from rap.server import Server
+
+
+def demo1(a: int, b: int) -> int:
+    return a + b
+
+
+async def demo2(a: int, b: int) -> int:
+    await asyncio.sleep(1)
+    return a + b
+
+
+async def demo_gen(a: int) -> Iterator[int]:
+    for i in range(a):
+        yield i
+
+
+server: Server = Server()
+server.register(demo1)   # 注册def函数
+server.register(demo2)   # 注册async def 函数
+server.register(demo_gen)  # 注册async iterator函数
+server.register(demo2, name='demo2-alias')   # 注册并重新设置注册的名字
+server.register(demo2, group='new-group')    # 注册并设定要注册的组
+server.register(demo2, group='root', is_private=True)  # 注册并设定要注册的组,且设置为私有
+```
+对于客户端, 建议使用`client.register`,不要使用`client.call`, `client.raw_call`.
+`client.register`它采用Python的语法来定义函数名,参数以及参数类型,返回值类型, 
+可以让调用者像调用普通函数一样去调用,同时因为TypeHint的特性,可以利用现有的工具对函数进行检查.
+注意: 使用`client.register`时, 一定要使用`async def ...`.
+```Python
+from typing import Iterator
+from rap.client import Client
+
+client: Client = Client()
+
+
+# 注册普通函数
+@client.register()
+async def demo1(a: int, b: int) -> int: pass
+
+
+# 注册async iterator函数, pass替换为yield
+# 由于会进行多次请求,必须保持所有请求都会基于同一个链接进行请求, 所以在启动时会检测是否启动会话,如果启动会自动复用当前的会话, 否则创建会话
+@client.register()
+async def demo_gen(a: int) -> Iterator: yield 
+
+
+# 注册普通函数,并且设置名字为demo2-alias
+@client.register(name='demo2-alias')
+async def demo2(a: int, b: int) -> int: pass
+
+
+# 注册普通函数,并且设置组为new-group
+@client.register(group='new-group')
+async def demo2(a: int, b: int) -> int: pass
+```
+## 3.2.session
 [示例代码](https://github.com/so1n/rap/tree/master/example/session)
 
 `rap`客户端支持会话功能, 在启用会话后,所有请求都只会通过当前会话的链接请求到对应的服务端,同时每次请求时,会在header的session_id设置当前会话id,方便服务端识别.
 `rap`的会话支持显式设置和隐式设置,各有优缺点,不做强制限制.
 ```Python
-import time
-
 from rap.client import Client
 
 
@@ -125,12 +187,12 @@ def sync_sum(a: int, b: int) -> int:
     pass
 
 
-@client.register
+@client.register()
 async def async_sum(a: int, b: int) -> int:
     pass
 
 
-@client.register
+@client.register()
 async def async_gen(a: int):
     yield
 
@@ -140,7 +202,7 @@ async def no_param_run():
     print(f"sync result: {await client.call(sync_sum, 1, 2)}")
     print(f"async result: {await async_sum(1, 3)}")
 
-    # 异步生成器会自动复用当前的会话
+    # 异步生成器在启动时会检测是否启动会话,如果启动会自动复用当前的会话, 否则创建会话
     async for i in async_gen(10):
         print(f"async gen result:{i}")
 
@@ -152,7 +214,7 @@ async def param_run(session: "Session"):
     # 对于@client.register的调用方式有点不友好
     print(f"async result: {await async_sum(1, 3, session=session)}")
 
-    # 异步生成器会自动复用当前的会话
+    # 异步生成器在启动时会检测是否启动会话,如果启动会自动复用当前的会话, 否则创建会话
     async for i in async_gen(10):
         print(f"async gen result:{i}")
 
@@ -164,7 +226,7 @@ async def execute(session: "Session"):
     print(f"sync result: {await session.execute('sync_sum', arg_list=[1, 2])}")
     print(f"async result: {await session.execute(async_sum(1, 3))}")
 
-    # 异步生成器会自动复用当前的会话
+    # 异步生成器在启动时会检测是否启动会话,如果启动会自动复用当前的会话, 否则创建会话
     async for i in async_gen(10):
         print(f"async gen result:{i}")
 
@@ -177,13 +239,13 @@ async def run_once():
         await param_run(s)
         await execute(s)
     await client.wait_close()
-
 ```
-## 2.2.channel
+## 3.3.channel
 [示例代码](https://github.com/so1n/rap/tree/master/example/channel)
 
-channel支持客户端与服务端以双工的方式进行交互,类似于Http的WebSocket.
-客户端中只支持`@client.register`注册channel函数, channel函数的特点是函数的参数只有一个, 且类型为`Channel`:
+channel支持客户端与服务端以双工的方式进行交互,类似于Http的WebSocket,需要注意的是channel不支持group设置.
+
+客户端中只支持`@client.register`注册channel函数, channel函数的特点是函数的参数只有一个, 且类型为`Channel`.
 channel会维持一个会话,在channel启用到关闭之前只会通过一个链接与服务端保持通信.
 为了避免使用`while True`的情况,支持使用`async for`语法,同时支持使用`while await channel.loop()`语法代替`while True`
 ```Python
@@ -193,7 +255,7 @@ from rap.client.model import Response
 client = Client()
 
 
-@client.register
+@client.register()
 async def async_channel(channel: Channel):
     await channel.write("hello")  # 发送数据
     cnt: int = 0
@@ -203,7 +265,7 @@ async def async_channel(channel: Channel):
     return
 
 
-@client.register
+@client.register()
 async def echo_body(channel: Channel):
     await channel.write("hi!")
     # 读取数据, 只有读取到数据才会返回, 如果收到关闭channel的信令, 则会退出循环
@@ -212,7 +274,7 @@ async def echo_body(channel: Channel):
         await channel.write(body)
 
 
-@client.register
+@client.register()
 async def echo_response(channel: Channel):
     await channel.write("hi!")
     # 读取响应数据(包括header等数据), 只有读取到数据才会返回, 如果收到关闭channel的信令, 则会退出循环
@@ -221,7 +283,7 @@ async def echo_response(channel: Channel):
         print(f"response: {response}")
         await channel.write(response.body)
 ```
-## 2.3.ssl支持
+## 3.4.ssl支持
 [示例代码](https://github.com/so1n/rap/tree/master/example/ssl)
 
 得益于`Python asyncio`模块的封装, `rap`能非常方便的使用ssl
@@ -244,7 +306,29 @@ rpc_server = Server(
     ssl_key_path="./rap_ssl.key",
 )
 ```
-## 2.4.中间件
+## 3.5.event
+在服务端中支持`start_event`和`stop_event`分别用于启动之前和关闭之后的事件处理.
+如插件需要用到redis时,需要在rap.server启动之前启动,并在关闭之后关闭:
+```Python
+from rap.server import Server
+
+
+async def mock_start():
+    print('start event')
+
+
+async def mock_stop(): 
+    print('stop event')
+
+
+# 方法一
+server = Server(start_event_list=[mock_start()], stop_event_list=[mock_stop()])
+# 方法二
+server = Server()
+server.load_start_event([mock_start()])
+server.load_stop_event([mock_stop()])
+```
+## 3.6.中间件
 `rap`目前支持2种中间件:
 - 链接中间件: 创建链接时会使用,如限制链接总数等等...
   链接中间件可以参考[block.py](https://github.com/so1n/rap/blob/master/rap/server/middleware/conn/block.py),
@@ -262,12 +346,15 @@ from rap.server.middleware import AccessMsgMiddleware, ConnLimitMiddleware
 rpc_server = Server()
 rpc_server.load_middleware([ConnLimitMiddleware(), AccessMsgMiddleware()])
 ```
-## 2.5.processor
+## 3.7.processor
 `rap`的processor用于处理入站流量和出站流量,其中`process_request`是处理入站流量,`process_response`是处理出站流量.
 
 `rap.client`和`rap.server`的processor的方法是基本一样的, `rap.server`支持`start_event_handle`和`stop_event_handle`方法,分别在`Server`启动和关闭时调用 
+
 [服务端示例](https://github.com/so1n/rap/blob/master/rap/server/processor/crypto.py)
+
 [客户端示例](https://github.com/so1n/rap/blob/master/rap/client/processor/crypto.py)
+
 `rap.client` 引入processor方法
 ```Python
 from rap.client import Client
@@ -284,36 +371,11 @@ from rap.server.processor import CryptoProcessor
 server = Server()
 server.load_processor([CryptoProcessor({'key_id': 'xxxxxxxxxxxxxxxx'})])
 ```
-## 2.6.event
-在服务端中支持`start_event`和`stop_event`分别用于启动之前和关闭之后的事件处理.
-如插件需要用到redis时,需要在rap.server启动之前启动,并在关闭之后关闭:
-```Python
-import aioredis
-from rap.server import Server
-from rap.manager.redis_manager import redis_manager
 
-
-async def init_redis():
-    conn_pool = await aioredis.create_pool("redis://localhost", minsize=1, maxsize=10, encoding="utf-8")
-    redis_manager.init(conn_pool)
-
-
-async def close_redis():
-    await redis_manager.close()
-
-
-# 方法一
-server = Server(start_event_list=[init_redis()], stop_event_list=[close_redis()])
-# 方法二
-server = Server()
-server.load_start_event([init_redis()])
-server.load_stop_event([close_redis()])
-
-```
-# 3.插件
+# 4.插件
 rap通过`middleware`和`processor`支持插件功能,`middleware`只支持服务端, `processor`支持客户端和服务端
 
-## 3.1.加密传输
+## 4.1.加密传输
 加密传输只加密请求和响应的body内容, 不对header等进行加密.在加密的同时会添加nonce参数,防止重放,添加timestamp参数防止超时访问.
 
 客户端示例:
@@ -340,7 +402,7 @@ server = Server()
 # nonce_timeout: nonce的过期时间,最好大于timeout
 server.load_processor([CryptoProcessor({"demo_id": "xxxxxxxxxxxxxxxx"}, timeout=60, nonce_timeout=120)])
 ```
-## 3.2.限制最大链接数
+## 4.2.限制最大链接数
 仅限服务端使用,可以限制服务端的最大链接数,超过设定值则不会处理新的请求
 ```Python
 from rap.server import Server
@@ -359,7 +421,7 @@ server.load_middleware(
     ]
 )
 ```
-## 3.3.限制ip访问
+## 4.3.限制ip访问
 支持限制单个ip或者整个网段的ip, 同时支持白名单和黑名单模式,如果启用白名单,则默认禁用黑名单模式
 ```Python
 from rap.server import Server
@@ -371,15 +433,11 @@ server = Server()
 # black_ip_list: 黑名单列表,支持网段ip
 server.load_middleware([IpBlockMiddleware(allow_ip_list=['192.168.0.0/31'], block_ip_list=['192.168.0.2'])])
 ```
-# 4.高级功能
+# 5.高级功能
 **TODO**, 本功能暂未实现
 
-# 5.协议设计
+# 6.协议设计
 **TODO**, 文档正在编辑中
 
-# 6.底层传输介绍
+# 7.底层传输介绍
 **TODO**, 文档正在编辑中
-
-
-
-
