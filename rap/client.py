@@ -123,7 +123,7 @@ class Client:
         return await self._response(msg_id)
 
     async def call(self, func: Callable, *args: Any) -> Any:
-        return self.call_by_text(func.__name__, *args)
+        return await self.call_by_text(func.__name__, *args)
 
     async def iterator_call(self, method: str, *args: Any) -> Any:
         msg_id: int = await self._request(method, *args)
