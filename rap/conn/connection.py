@@ -35,6 +35,7 @@ class BaseConnection:
         self.timeout: int = timeout
         self.peer: Optional[str] = None
         self._loop: LOOP_TYPE = loop if loop else get_event_loop()
+        self.connection_info: Optional[str] = None
 
     async def write(self, data: tuple, timeout: Optional[int] = None):
         logging.debug(f'sending {data} to {self.peer}')
@@ -78,10 +79,36 @@ class BaseConnection:
 
 
 class Connection(BaseConnection):
+    def __init__(
+            self,
+            unpacker: UNPACKER_TYPE,
+            timeout: int,
+            pack_param: Optional[dict] = None,
+            loop: Optional[LOOP_TYPE] = None
+    ):
+        super().__init__(unpacker, timeout, pack_param, loop)
+        self.connection_info: Optional[str] = None
+        self._cond: asyncio.Condition = asyncio.Condition()
+        self._future: Optional[asyncio.Future] = None
+
     async def connect(self, host: str, port: int):
+        self.connection_info: str = f'{host}:{port}'
         self._reader, self._writer = await asyncio.open_connection(host, port, loop=self._loop)
         self.peer = self._writer.get_extra_info('peername')
         self._is_closed = False
+
+    async def acquire(self) -> 'Connection':
+        async with self._cond:
+            if self._future:
+                await self._cond.wait()
+            self._future = asyncio.Future()
+            return self
+
+    async def release(self, conn: 'Connection'):
+        async with self._cond:
+            self._future.set_result(None)
+            self._cond.notify()
+            return
 
 
 class ServerConnection(Connection):
