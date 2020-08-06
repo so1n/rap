@@ -19,7 +19,7 @@ from rap.types import (
 __all__ = ['Connection', 'ServerConnection']
 
 
-class Connection:
+class BaseConnection:
     def __init__(
             self,
             unpacker: UNPACKER_TYPE,
@@ -35,11 +35,6 @@ class Connection:
         self.timeout: int = timeout
         self.peer: Optional[str] = None
         self._loop: LOOP_TYPE = loop if loop else get_event_loop()
-
-    async def connect(self, host: str, port: int):
-        self._reader, self._writer = await asyncio.open_connection(host, port, loop=self._loop)
-        self.peer = self._writer.get_extra_info('peername')
-        self._is_closed = False
 
     async def write(self, data: tuple, timeout: Optional[int] = None):
         logging.debug(f'sending {data} to {self.peer}')
@@ -80,6 +75,13 @@ class Connection:
     async def await_close(self):
         self.close()
         await self.wait_closed()
+
+
+class Connection(BaseConnection):
+    async def connect(self, host: str, port: int):
+        self._reader, self._writer = await asyncio.open_connection(host, port, loop=self._loop)
+        self.peer = self._writer.get_extra_info('peername')
+        self._is_closed = False
 
 
 class ServerConnection(Connection):
