@@ -44,6 +44,7 @@ except KeyboardInterrupt:
 ```
 
 ## Client
+For the client, there is no difference between `async def` and `def`. In fact, `rap` is still called by the method of `call_by_text`. Using `async def` can be decorated by `client.register` and can also be written with the help of IDE Correct code
 ```Python
 import asyncio
 
