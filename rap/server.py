@@ -37,6 +37,7 @@ class RequestHandle(object):
     async def response_to_conn(
             self,
             msg_id: Optional[int] = None,
+            call_id: Optional[int] = None,
             exception: Optional[Exception] = None,
             result: Optional[Any] = None
     ):
@@ -44,7 +45,7 @@ class RequestHandle(object):
         if exception:
             error_response = (type(exception).__name__, str(exception))
 
-        response: RESPONSE_TYPE = (Constant.RESPONSE, msg_id, error_response, result)
+        response: RESPONSE_TYPE = (Constant.RESPONSE, msg_id, call_id, 0, error_response, result)
         try:
             await self._conn.write(response, self._timeout)
         except asyncio.TimeoutError:
@@ -53,43 +54,43 @@ class RequestHandle(object):
             logging.error(f"response to {self._conn.peer} error: {e}. result:{result}, error:{exception}")
 
     @staticmethod
-    def _parse_request(request: REQUEST_TYPE) -> Tuple[int, Callable, Tuple, str]:
-        if len(request) != 4 or request[0] != Constant.REQUEST:
+    def _parse_request(request: REQUEST_TYPE) -> Tuple[int, int, Callable, Tuple, str]:
+        if len(request) != 6 or request[0] != Constant.REQUEST:
             raise ProtocolError()
 
-        _, msg_id, method_name, args = request
+        _, msg_id, call_id, is_encrypt, method_name, args = request
         method = _func_dict.get(method_name)
         if not method:
             raise FuncNotFoundError("No such method {}".format(method_name))
-        return msg_id, method, args, method_name
+        return msg_id, call_id, method, args, method_name
 
     async def msg_handle(self, request: REQUEST_TYPE):
         logging.debug(f'get request data:{request} from {self._conn.peer}')
         start_time: float = time.time()
 
         if not isinstance(request, (tuple, list)):
-            await self.response_to_conn(None, ProtocolError(), None)
+            await self.response_to_conn(None, None, ProtocolError(), None)
             logging.error(f"parse request data: {request} from {self._conn.peer} error")
             return
         try:
-            msg_id, method, args, method_name = self._parse_request(request)
+            msg_id, call_id, method, args, method_name = self._parse_request(request)
         except Exception:
-            await self.response_to_conn(None, ProtocolError(), None)
+            await self.response_to_conn(None, None, ProtocolError(), None)
             logging.error(f"parse request data: {request} from {self._conn.peer}  error")
             return
 
         status: bool = False
         try:
-            if msg_id in self._generator_dict:
+            if call_id in self._generator_dict:
                 try:
-                    ret = self._generator_dict[msg_id]
+                    ret = self._generator_dict[call_id]
                     if inspect.isgenerator(ret):
                         ret = next(ret)
                     elif inspect.isasyncgen(ret):
                         ret = await ret.__anext__()
-                    await self.response_to_conn(msg_id, None, ret)
+                    await self.response_to_conn(msg_id, call_id, None, ret)
                 except StopAsyncIteration as e:
-                    await self.response_to_conn(None, e, None)
+                    await self.response_to_conn(msg_id, call_id, e, None)
             else:
                 if asyncio.iscoroutinefunction(method):
                     ret: Any = await asyncio.wait_for(method(*args), self._timeout)
@@ -97,15 +98,15 @@ class RequestHandle(object):
                     ret: Any = await get_event_loop().run_in_executor(None, method, *args)
                 status = True
                 if inspect.isgenerator(ret):
-                    self._generator_dict[msg_id] = ret
+                    self._generator_dict[call_id] = ret
                     ret = next(ret)
                 elif inspect.isasyncgen(ret):
-                    self._generator_dict[msg_id] = ret
+                    self._generator_dict[call_id] = ret
                     ret = await ret.__anext__()
-                await self.response_to_conn(msg_id, None, ret)
+                await self.response_to_conn(msg_id, call_id, None, ret)
         except Exception as e:
             logging.error(f"run:{method_name} error:{e}. peer:{self._conn.peer} request:{request}")
-            await self.response_to_conn(msg_id, ServerError('execute func error'), None)
+            await self.response_to_conn(msg_id, call_id, ServerError('execute func error'), None)
 
         logging.info(f"Method:{method_name}, time:{time.time() - start_time}, status:{status}")
 
@@ -157,7 +158,7 @@ class Server(object):
                 logging.debug(f"close conn:{conn.peer} info:{e}")
                 break
             except Exception as e:
-                await request_handle.response_to_conn(-1, ServerError(), None)
+                await request_handle.response_to_conn(None, None, ServerError(), None)
                 conn.set_reader_exc(e)
                 raise e
             await request_handle.msg_handle(request)

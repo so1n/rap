@@ -30,11 +30,10 @@ class AsyncIteratorCall:
             method: str,
             request: 'Client._request',
             response: 'Client._response',
-            msg_id: int,
             *args: Tuple
     ):
         self._method: str = method
-        self._msg_id: int = msg_id
+        self._call_id: Optional[int] = None
         self._args = args
         self._request: 'Client._request' = request
         self._response: 'Client._response' = response
@@ -43,7 +42,9 @@ class AsyncIteratorCall:
         return self
 
     async def __anext__(self):
-        msg_id = await self._request(self._method, *self._args, msg_id=self._msg_id)
+        msg_id, call_id = await self._request(self._method, *self._args, call_id=self._call_id)
+        if not self._call_id:
+            self._call_id = call_id
         value = await self._response(msg_id)
         return value
 
@@ -80,14 +81,15 @@ class Client:
         await self._conn.connect(self._host, self._port)
         logging.debug(f"Connection to {self._connection_info}...")
 
-    async def _request(self, method: str, *args: Any, msg_id: Optional[int] = None) -> int:
-        if not msg_id:
-            msg_id: int = self._msg_id + 1
-            self._msg_id = msg_id
+    async def _request(self, method: str, *args: Any, call_id: Optional[int] = None) -> Tuple[int, int]:
+        msg_id: int = self._msg_id + 1
+        self._msg_id = msg_id
+        if not call_id:
+            call_id = msg_id
 
         if self._conn is None or self._conn.is_closed():
             raise ConnectionError('Connection not create')
-        request: REQUEST_TYPE = (Constant.REQUEST, msg_id, method, args)
+        request: REQUEST_TYPE = (Constant.REQUEST, msg_id, call_id, 0, method, args)
         try:
             await self._conn.write(request, self._timeout)
             logging.debug(f'send:{request} to {self._connection_info}')
@@ -96,7 +98,7 @@ class Client:
             raise e
         except Exception as e:
             raise e
-        return msg_id
+        return msg_id, call_id
 
     async def _response(self, msg_id: int) -> Any:
         try:
@@ -112,22 +114,20 @@ class Client:
 
         if response is None:
             raise ConnectionError("Connection closed")
-
         response_msg_id, result = self._parse_response(response)
         if response_msg_id != msg_id:
             raise RPCError('Invalid Message ID')
         return result
 
     async def call_by_text(self, method: str, *args: Any) -> Any:
-        msg_id: int = await self._request(method, *args)
+        msg_id, call_id = await self._request(method, *args)
         return await self._response(msg_id)
 
     async def call(self, func: Callable, *args: Any) -> Any:
         return await self.call_by_text(func.__name__, *args)
 
     async def iterator_call(self, method: str, *args: Any) -> Any:
-        msg_id: int = await self._request(method, *args)
-        async for result in AsyncIteratorCall(method, self._request, self._response, msg_id, *args):
+        async for result in AsyncIteratorCall(method, self._request, self._response, *args):
             yield result
 
     def register(self, func: Callable) -> Any:
@@ -151,11 +151,11 @@ class Client:
 
     @staticmethod
     def _parse_response(response: RESPONSE_TYPE) -> Tuple[int, Any]:
-        if len(response) != 4 or response[0] != Constant.RESPONSE:
+        if len(response) != 6 or response[0] != Constant.RESPONSE:
             logging.debug(f'Protocol error, received unexpected data: {response}')
             raise ProtocolError()
         try:
-            (_, msg_id, error, result) = response
+            (_, msg_id, call_id, is_encrypt, error, result) = response
         except Exception:
             logging.debug(f'Protocol error, received unexpected data: {response}')
             raise ProtocolError()
