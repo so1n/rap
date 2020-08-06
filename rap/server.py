@@ -32,6 +32,7 @@ class RequestHandle(object):
     def __init__(self, conn: ServerConnection, timeout: int):
         self._conn: ServerConnection = conn
         self._timeout: int = timeout
+        self._generator_dict: dict = {}
 
     async def response_to_conn(
             self,
@@ -79,14 +80,30 @@ class RequestHandle(object):
 
         status: bool = False
         try:
-            if asyncio.iscoroutinefunction(method):
-                ret: Any = await asyncio.wait_for(method(*args), self._timeout)
+            if msg_id in self._generator_dict:
+                try:
+                    ret = self._generator_dict[msg_id]
+                    if inspect.isgenerator(ret):
+                        ret = next(ret)
+                    elif inspect.isasyncgen(ret):
+                        ret = await ret.__anext__()
+                    await self.response_to_conn(msg_id, None, ret)
+                except StopAsyncIteration as e:
+                    await self.response_to_conn(None, e, None)
             else:
-                ret: Any = await get_event_loop().run_in_executor(None, method, *args)
-            status = True
-            await self.response_to_conn(msg_id, None, ret)
+                if asyncio.iscoroutinefunction(method):
+                    ret: Any = await asyncio.wait_for(method(*args), self._timeout)
+                else:
+                    ret: Any = await get_event_loop().run_in_executor(None, method, *args)
+                status = True
+                if inspect.isgenerator(ret):
+                    self._generator_dict[msg_id] = ret
+                    ret = next(ret)
+                elif inspect.isasyncgen(ret):
+                    self._generator_dict[msg_id] = ret
+                    ret = await ret.__anext__()
+                await self.response_to_conn(msg_id, None, ret)
         except Exception as e:
-            print(e)
             logging.error(f"run:{method_name} error:{e}. peer:{self._conn.peer} request:{request}")
             await self.response_to_conn(msg_id, ServerError('execute func error'), None)
 

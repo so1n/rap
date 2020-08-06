@@ -4,13 +4,11 @@ import logging
 import msgpack
 
 from functools import wraps
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, cast, Optional, Tuple
 
-from asgiref.sync import async_to_sync
-
+from rap import exceptions as rap_exc
 from rap.conn.connection import Connection
 from rap.exceptions import (
-    RpcRunTimeError,
     RPCError,
     ProtocolError,
 )
@@ -20,11 +18,34 @@ from rap.types import (
 )
 from rap.utlis import (
     Constant,
-    get_event_loop
 )
 
 
 __all__ = ['Client']
+
+
+class AsyncIteratorCall:
+    def __init__(
+            self,
+            method: str,
+            request: 'Client._request',
+            response: 'Client._response',
+            msg_id: int,
+            *args: Tuple
+    ):
+        self._method: str = method
+        self._msg_id: int = msg_id
+        self._args = args
+        self._request: 'Client._request' = request
+        self._response: 'Client._response' = response
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        msg_id = await self._request(self._method, *self._args, msg_id=self._msg_id)
+        value = await self._response(msg_id)
+        return value
 
 
 class Client:
@@ -59,9 +80,10 @@ class Client:
         await self._conn.connect(self._host, self._port)
         logging.debug(f"Connection to {self._connection_info}...")
 
-    async def call(self, method: str, *args: Tuple) -> Any:
-        msg_id: int = self._msg_id + 1
-        self._msg_id = msg_id
+    async def _request(self, method: str, *args: Any, msg_id: Optional[int] = None) -> int:
+        if not msg_id:
+            msg_id: int = self._msg_id + 1
+            self._msg_id = msg_id
 
         if self._conn is None or self._conn.is_closed():
             raise ConnectionError('Connection not create')
@@ -74,7 +96,9 @@ class Client:
             raise e
         except Exception as e:
             raise e
+        return msg_id
 
+    async def _response(self, msg_id: int) -> Any:
         try:
             response: Optional[RESPONSE_TYPE] = await self._conn.read(self._timeout)
             logging.debug(f'recv raw data: {response}')
@@ -94,17 +118,36 @@ class Client:
             raise RPCError('Invalid Message ID')
         return result
 
-    def register(self, func: Callable):
+    async def call_by_text(self, method: str, *args: Any) -> Any:
+        msg_id: int = await self._request(method, *args)
+        return await self._response(msg_id)
+
+    async def call(self, func: Callable, *args: Any) -> Any:
+        return self.call_by_text(func.__name__, *args)
+
+    async def iterator_call(self, method: str, *args: Any) -> Any:
+        msg_id: int = await self._request(method, *args)
+        async for result in AsyncIteratorCall(method, self._request, self._response, msg_id, *args):
+            yield result
+
+    def register(self, func: Callable) -> Any:
         if inspect.iscoroutinefunction(func):
             return self.async_register(func)
         elif inspect.isasyncgenfunction(func):
-            pass
+            return self.async_gen_register(func)
 
     def async_register(self, func: Callable):
         @wraps(func)
-        async def wrapper(*args, **kwargs):
-            return await self.call(func.__name__, *args)
-        return wrapper
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            return await self.call_by_text(func.__name__, *args)
+        return cast(Callable, wrapper)
+
+    def async_gen_register(self, func: Callable):
+        @wraps(func)
+        async def wrapper(*args, **kwargs) -> Any:
+            async for result in self.iterator_call(func.__name__, *args):
+                yield result
+        return cast(Callable, wrapper)
 
     @staticmethod
     def _parse_response(response: RESPONSE_TYPE) -> Tuple[int, Any]:
@@ -118,7 +161,12 @@ class Client:
             raise ProtocolError()
         if error:
             if len(error) == 2:
-                raise RpcRunTimeError(*error)
+                error_name, error_info = error
+                exc = getattr(rap_exc, error_name, None)
+                if not exc:
+                    exc = globals()['__builtins__'][error[0]]
+                raise exc(error_info)
+                # raise getattr(__builtins__, error[0])(error[1])
             else:
                 raise RPCError(str(error))
         return msg_id, result
