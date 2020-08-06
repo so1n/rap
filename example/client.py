@@ -3,13 +3,15 @@ import asyncio
 from rap.client import Client
 
 
-async def do(cli):
-    ret = await cli.call('sum_num', 1, 1)
-    print(f"result: {ret}")
+client = Client()
+
+
+@client.register
+async def sum_num(a: int, b: int, c: int = 4) -> int:
+    pass
 
 
 loop = asyncio.get_event_loop()
-client = Client()
 loop.run_until_complete(client.connect())
-loop.run_until_complete(do(client))
+print('result:', loop.run_until_complete(sum_num(1, 2)))
 client.close()

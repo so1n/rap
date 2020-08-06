@@ -1,8 +1,12 @@
 import asyncio
+import inspect
 import logging
 import msgpack
 
-from typing import Any, Optional, Tuple
+from functools import wraps
+from typing import Any, Callable, Optional, Tuple
+
+from asgiref.sync import async_to_sync
 
 from rap.conn.connection import Connection
 from rap.exceptions import (
@@ -14,7 +18,10 @@ from rap.types import (
     REQUEST_TYPE,
     RESPONSE_TYPE
 )
-from rap.utlis import Constant
+from rap.utlis import (
+    Constant,
+    get_event_loop
+)
 
 
 __all__ = ['Client']
@@ -52,7 +59,7 @@ class Client:
         await self._conn.connect(self._host, self._port)
         logging.debug(f"Connection to {self._connection_info}...")
 
-    async def call(self, method: str, *args: Tuple, _close: bool = False) -> Any:
+    async def call(self, method: str, *args: Tuple) -> Any:
         msg_id: int = self._msg_id + 1
         self._msg_id = msg_id
 
@@ -86,6 +93,18 @@ class Client:
         if response_msg_id != msg_id:
             raise RPCError('Invalid Message ID')
         return result
+
+    def register(self, func: Callable):
+        if inspect.iscoroutinefunction(func):
+            return self.async_register(func)
+        elif inspect.isasyncgenfunction(func):
+            pass
+
+    def async_register(self, func: Callable):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            return await self.call(func.__name__, *args)
+        return wrapper
 
     @staticmethod
     def _parse_response(response: RESPONSE_TYPE) -> Tuple[int, Any]:
