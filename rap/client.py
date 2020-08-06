@@ -4,10 +4,11 @@ import logging
 import msgpack
 
 from functools import wraps
-from typing import Any, Callable, cast, Optional, Tuple
+from typing import Any, Callable, cast, Optional, Union, Tuple
 
 from rap import exceptions as rap_exc
 from rap.conn.connection import Connection
+from rap.conn.pool import Pool
 from rap.exceptions import (
     RPCError,
     ProtocolError,
@@ -28,41 +29,40 @@ class AsyncIteratorCall:
     def __init__(
             self,
             method: str,
-            request: 'Client._request',
-            response: 'Client._response',
+            client: 'Client',
             *args: Tuple
     ):
         self._method: str = method
         self._call_id: Optional[int] = None
         self._args = args
-        self._request: 'Client._request' = request
-        self._response: 'Client._response' = response
+        self._client: 'Client' = client
 
     def __aiter__(self):
         return self
 
     async def __anext__(self):
-        msg_id, call_id = await self._request(self._method, *self._args, call_id=self._call_id)
-        if not self._call_id:
-            self._call_id = call_id
-        value = await self._response(msg_id)
-        return value
+        conn = await self._client._conn.acquire()
+        try:
+            msg_id, call_id = await self._client._request(
+                conn,
+                self._method,
+                *self._args,
+                call_id=self._call_id
+            )
+            if not self._call_id:
+                self._call_id = call_id
+            value = await self._client._response(conn, msg_id)
+            return value
+        finally:
+            await self._client._conn.release(conn)
 
 
 class Client:
 
-    def __init__(
-            self,
-            host: str = 'localhost',
-            port: int = 9000,
-            timeout: int = 3
-    ):
-        self._host: str = host
-        self._port: int = port
+    def __init__(self, timeout: int = 3):
         self._timeout: int = timeout
-        self._connection_info: str = f'{host}:{port}'
 
-        self._conn: Optional[Connection] = None
+        self._conn: Union[Connection, Pool, None] = None
         self._msg_id: int = 0
 
     def close(self):
@@ -73,43 +73,70 @@ class Client:
         except AttributeError:
             pass
 
-    async def connect(self):
+    async def connect(self, host: str = 'localhost', port: int = 9000):
+        if self._conn and not self._conn.is_closed():
+            raise ConnectionError(f'Client already connected')
         self._conn = Connection(
             msgpack.Unpacker(raw=False, use_list=False),
             self._timeout
         )
-        await self._conn.connect(self._host, self._port)
-        logging.debug(f"Connection to {self._connection_info}...")
+        await self._conn.connect(host, port)
+        logging.debug(f"Connection to {self._conn.connection_info}...")
 
-    async def _request(self, method: str, *args: Any, call_id: Optional[int] = None) -> Tuple[int, int]:
+    async def create_pool(
+            self,
+            host: str = 'localhost',
+            port: int = 9000,
+            min_size: int = 1,
+            max_size: int = 10
+    ):
+        if self._conn and not self._conn.is_closed():
+            raise ConnectionError(f'Client already connected')
+        self._conn = Pool(
+            host,
+            port,
+            msgpack.Unpacker(raw=False, use_list=False),
+            self._timeout,
+            max_size=max_size,
+            min_size=min_size,
+        )
+        await self._conn.connect()
+        logging.debug(f"Connection to {self._conn.connection_info}...")
+
+    async def _request(
+            self,
+            conn: 'Connection',
+            method: str,
+            *args: Any,
+            call_id: Optional[int] = None
+    ) -> Tuple[int, int]:
         msg_id: int = self._msg_id + 1
         self._msg_id = msg_id
         if not call_id:
             call_id = msg_id
-
-        if self._conn is None or self._conn.is_closed():
+        if conn is None or self._conn.is_closed():
             raise ConnectionError('Connection not create')
         request: REQUEST_TYPE = (Constant.REQUEST, msg_id, call_id, 0, method, args)
         try:
-            await self._conn.write(request, self._timeout)
-            logging.debug(f'send:{request} to {self._connection_info}')
+            await conn.write(request, self._timeout)
+            logging.debug(f'send:{request} to {conn.connection_info}')
         except asyncio.TimeoutError as e:
-            logging.error(f"send to {self._connection_info} timeout, drop data:{request}")
+            logging.error(f"send to {conn.connection_info} timeout, drop data:{request}")
             raise e
         except Exception as e:
             raise e
         return msg_id, call_id
 
-    async def _response(self, msg_id: int) -> Any:
+    async def _response(self, conn: 'Connection', msg_id: int) -> Any:
         try:
-            response: Optional[RESPONSE_TYPE] = await self._conn.read(self._timeout)
+            response: Optional[RESPONSE_TYPE] = await conn.read(self._timeout)
             logging.debug(f'recv raw data: {response}')
         except asyncio.TimeoutError as e:
-            logging.error(f"recv response from {self._connection_info} timeout")
-            self._conn.set_reader_exc(e)
+            logging.error(f"recv response from {conn.connection_info} timeout")
+            conn.set_reader_exc(e)
             raise e
         except Exception as e:
-            self._conn.set_reader_exc(e)
+            conn.set_reader_exc(e)
             raise e
 
         if response is None:
@@ -120,14 +147,18 @@ class Client:
         return result
 
     async def call_by_text(self, method: str, *args: Any) -> Any:
-        msg_id, call_id = await self._request(method, *args)
-        return await self._response(msg_id)
+        conn: 'Connection' = await self._conn.acquire()
+        try:
+            msg_id, call_id = await self._request(conn, method, *args)
+            return await self._response(conn, msg_id)
+        finally:
+            await self._conn.release(conn)
 
     async def call(self, func: Callable, *args: Any) -> Any:
         return await self.call_by_text(func.__name__, *args)
 
     async def iterator_call(self, method: str, *args: Any) -> Any:
-        async for result in AsyncIteratorCall(method, self._request, self._response, *args):
+        async for result in AsyncIteratorCall(method, self, *args):
             yield result
 
     def register(self, func: Callable) -> Any:

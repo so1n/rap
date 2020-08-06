@@ -30,7 +30,13 @@ async def main():
         print(f"async gen result:{i}")
 
 
+async def main1():
+    await asyncio.wait([main() for i in range(100)])
+
 loop = asyncio.get_event_loop()
-loop.run_until_complete(client.connect())
-loop.run_until_complete(main())
+loop.run_until_complete(client.create_pool())
+import time
+s = time.time()
+loop.run_until_complete(main1())
+print(time.time() - s)
 client.close()

@@ -7,7 +7,8 @@ def sync_sum(a: int, b: int):
     return a + b
 
 
-def async_sum(a: int, b: int):
+async def async_sum(a: int, b: int):
+    await asyncio.sleep(0.5)
     return a + b
 
 

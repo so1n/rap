@@ -26,13 +26,13 @@ __all__ = ['Server']
 
 
 _func_dict: Dict[str, Callable] = dict()
+_generator_dict: dict = {}
 
 
 class RequestHandle(object):
     def __init__(self, conn: ServerConnection, timeout: int):
         self._conn: ServerConnection = conn
         self._timeout: int = timeout
-        self._generator_dict: dict = {}
 
     async def response_to_conn(
             self,
@@ -81,15 +81,16 @@ class RequestHandle(object):
 
         status: bool = False
         try:
-            if call_id in self._generator_dict:
+            if call_id in _generator_dict:
                 try:
-                    ret = self._generator_dict[call_id]
+                    ret = _generator_dict[call_id]
                     if inspect.isgenerator(ret):
                         ret = next(ret)
                     elif inspect.isasyncgen(ret):
                         ret = await ret.__anext__()
                     await self.response_to_conn(msg_id, call_id, None, ret)
-                except StopAsyncIteration as e:
+                except (StopAsyncIteration, StopIteration) as e:
+                    del _generator_dict[call_id]
                     await self.response_to_conn(msg_id, call_id, e, None)
             else:
                 if asyncio.iscoroutinefunction(method):
@@ -98,10 +99,10 @@ class RequestHandle(object):
                     ret: Any = await get_event_loop().run_in_executor(None, method, *args)
                 status = True
                 if inspect.isgenerator(ret):
-                    self._generator_dict[call_id] = ret
+                    _generator_dict[call_id] = ret
                     ret = next(ret)
                 elif inspect.isasyncgen(ret):
-                    self._generator_dict[call_id] = ret
+                    _generator_dict[call_id] = ret
                     ret = await ret.__anext__()
                 await self.response_to_conn(msg_id, call_id, None, ret)
         except Exception as e:
