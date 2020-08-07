@@ -43,16 +43,15 @@ class AsyncIteratorCall:
     async def __anext__(self):
         conn = await self._client._conn.acquire()
         try:
-            msg_id, call_id = await self._client._request(
+            msg_id = await self._client._request(
                 conn,
                 self._method,
                 *self._args,
                 call_id=self._call_id
             )
-            if not self._call_id:
-                self._call_id = call_id
-            value = await self._client._response(conn, msg_id)
-            return value
+            result, call_id = await self._client._response(conn, msg_id)
+            self._call_id = call_id
+            return result
         finally:
             self._client._conn.release(conn)
 
@@ -109,7 +108,7 @@ class Client:
             method: str,
             *args: Any,
             call_id: Optional[int] = None
-    ) -> Tuple[int, int]:
+    ) -> int:
         msg_id: int = self._msg_id + 1
         self._msg_id = msg_id
         if not call_id:
@@ -125,7 +124,7 @@ class Client:
             raise e
         except Exception as e:
             raise e
-        return msg_id, call_id
+        return msg_id
 
     async def _response(self, conn: 'Connection', msg_id: int) -> Any:
         try:
@@ -141,16 +140,17 @@ class Client:
 
         if response is None:
             raise ConnectionError("Connection closed")
-        response_msg_id, result = self._parse_response(response)
+        response_msg_id, call_id, result = self._parse_response(response)
         if response_msg_id != msg_id:
             raise RPCError('Invalid Message ID')
-        return result
+        return result, call_id
 
     async def call_by_text(self, method: str, *args: Any) -> Any:
         conn: 'Connection' = await self._conn.acquire()
         try:
-            msg_id, call_id = await self._request(conn, method, *args)
-            return await self._response(conn, msg_id)
+            msg_id = await self._request(conn, method, *args)
+            result, _ = await self._response(conn, msg_id)
+            return result
         finally:
             self._conn.release(conn)
 
@@ -181,7 +181,7 @@ class Client:
         return cast(Callable, wrapper)
 
     @staticmethod
-    def _parse_response(response: RESPONSE_TYPE) -> Tuple[int, Any]:
+    def _parse_response(response: RESPONSE_TYPE) -> Tuple[int, int, Any]:
         if len(response) != 6 or response[0] != Constant.RESPONSE:
             logging.debug(f'Protocol error, received unexpected data: {response}')
             raise ProtocolError()
@@ -200,7 +200,7 @@ class Client:
                 # raise getattr(__builtins__, error[0])(error[1])
             else:
                 raise RPCError(str(error))
-        return msg_id, result
+        return msg_id, call_id, result
 
     async def __aenter__(self):
         await self.connect()
