@@ -20,7 +20,8 @@ def sync_sum(a: int, b: int):
     return a + b
 
 
-def async_sum(a: int, b: int):
+async def async_sum(a: int, b: int):
+    await asyncio.sleep(1)  # mock io time
     return a + b
 
 
@@ -47,6 +48,7 @@ except KeyboardInterrupt:
 For the client, there is no difference between `async def` and `def`. In fact, `rap` is still called by the method of `call_by_text`. Using `async def` can be decorated by `client.register` and can also be written with the help of IDE Correct code
 ```Python
 import asyncio
+import time
 
 from rap.client import Client
 
@@ -70,19 +72,31 @@ async def async_gen(a: int):
     yield
 
 
-async def main():
+async def run_once():
     print(f"sync result: {await client.call(sync_sum, 1, 2)}")
     print(f"sync result: {await client.call_by_text('sync_sum', 1, 2)}")
-    
-    # client.register
     print(f"async result: {await async_sum(1, 3)}")
     async for i in async_gen(10):
         print(f"async gen result:{i}")
 
 
-loop = asyncio.get_event_loop()
-loop.run_until_complete(client.connect())
-loop.run_until_complete(main())
-client.close()
+async def conn():
+    s_t = time.time()
+    await client.connect()
+    await asyncio.wait([run_once() for i in range(100)])
+    print(time.time() - s_t)
+    client.close()
 
+
+async def pool():
+    s_t = time.time()
+    await client.create_pool()
+    await asyncio.wait([run_once() for i in range(100)])
+    print(time.time() - s_t)
+    client.close()
+
+
+loop = asyncio.get_event_loop()
+loop.run_until_complete(conn())
+loop.run_until_complete(pool())
 ```
