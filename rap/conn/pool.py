@@ -139,7 +139,7 @@ class Pool(object):
         if conn not in self._used_set:
             raise RuntimeError("connection not in user pool")
         self._used_set.remove(conn)
-        if conn.is_closed:
+        if conn.is_closed():
             asyncio.ensure_future(self._wakeup(conn))
         elif self.free_size < self._max_size:
             self._pool.append(conn)
