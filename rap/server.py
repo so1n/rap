@@ -83,28 +83,31 @@ class RequestHandle(object):
         try:
             if call_id in _generator_dict:
                 try:
-                    ret = _generator_dict[call_id]
-                    if inspect.isgenerator(ret):
-                        ret = next(ret)
-                    elif inspect.isasyncgen(ret):
-                        ret = await ret.__anext__()
-                    await self.response_to_conn(msg_id, call_id, None, ret)
+                    result = _generator_dict[call_id]
+                    if inspect.isgenerator(result):
+                        result = next(result)
+                    elif inspect.isasyncgen(result):
+                        result = await result.__anext__()
+                    await self.response_to_conn(msg_id, call_id, None, result)
                 except (StopAsyncIteration, StopIteration) as e:
                     del _generator_dict[call_id]
-                    await self.response_to_conn(msg_id, call_id, e, None)
+                    await self.response_to_conn(msg_id, None, e, None)
             else:
                 if asyncio.iscoroutinefunction(method):
-                    ret: Any = await asyncio.wait_for(method(*args), self._timeout)
+                    result: Any = await asyncio.wait_for(method(*args), self._timeout)
                 else:
-                    ret: Any = await get_event_loop().run_in_executor(None, method, *args)
-                status = True
-                if inspect.isgenerator(ret):
-                    _generator_dict[call_id] = ret
-                    ret = next(ret)
-                elif inspect.isasyncgen(ret):
-                    _generator_dict[call_id] = ret
-                    ret = await ret.__anext__()
-                await self.response_to_conn(msg_id, call_id, None, ret)
+                    result: Any = await get_event_loop().run_in_executor(None, method, *args)
+
+                if inspect.isgenerator(result):
+                    call_id = id(result)
+                    _generator_dict[call_id] = result
+                    result = next(result)
+                elif inspect.isasyncgen(result):
+                    call_id = id(result)
+                    _generator_dict[call_id] = result
+                    result = await result.__anext__()
+                await self.response_to_conn(msg_id, call_id, None, result)
+            status = True
         except Exception as e:
             logging.error(f"run:{method_name} error:{e}. peer:{self._conn.peer} request:{request}")
             await self.response_to_conn(msg_id, call_id, ServerError('execute func error'), None)
