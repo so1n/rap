@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from rap.client import Client
 
@@ -22,7 +23,7 @@ async def async_gen(a: int):
     yield
 
 
-async def main():
+async def run_once():
     print(f"sync result: {await client.call(sync_sum, 1, 2)}")
     print(f"sync result: {await client.call_by_text('sync_sum', 1, 2)}")
     print(f"async result: {await async_sum(1, 3)}")
@@ -30,13 +31,22 @@ async def main():
         print(f"async gen result:{i}")
 
 
-async def main1():
-    await asyncio.wait([main() for i in range(100)])
+async def conn():
+    s_t = time.time()
+    await client.connect()
+    await asyncio.wait([run_once() for i in range(100)])
+    print(time.time() - s_t)
+    client.close()
+
+
+async def pool():
+    s_t = time.time()
+    await client.create_pool()
+    await asyncio.wait([run_once() for i in range(100)])
+    print(time.time() - s_t)
+    client.close()
+
 
 loop = asyncio.get_event_loop()
-loop.run_until_complete(client.create_pool())
-import time
-s = time.time()
-loop.run_until_complete(main1())
-print(time.time() - s)
-client.close()
+# loop.run_until_complete(conn())
+loop.run_until_complete(pool())
