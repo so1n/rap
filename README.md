@@ -1,4 +1,4 @@
-# pait
+# rap
 rap(par[::-1]) is a simple and fast python async rpc
 
 > Refer to the design of [aiorpc](https://github.com/choleraehyq/aiorpc)
