@@ -8,7 +8,7 @@ def sync_sum(a: int, b: int):
 
 
 async def async_sum(a: int, b: int):
-    await asyncio.sleep(0.5)  # mock io time
+    await asyncio.sleep(1)  # mock io time
     return a + b
 
 
