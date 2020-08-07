@@ -41,7 +41,7 @@ class AsyncIteratorCall:
         return self
 
     async def __anext__(self):
-        conn = await self._client._conn.acquire()
+        conn = await self._client.conn.acquire()
         try:
             msg_id = await self._client._request(
                 conn,
@@ -53,12 +53,12 @@ class AsyncIteratorCall:
             self._call_id = call_id
             return result
         finally:
-            self._client._conn.release(conn)
+            self._client.conn.release(conn)
 
 
 class Client:
 
-    def __init__(self, timeout: int = 3):
+    def __init__(self, timeout: int = 9):
         self._timeout: int = timeout
 
         self._conn: Union[Connection, Pool, None] = None
@@ -208,3 +208,7 @@ class Client:
 
     async def __aexit__(self, *args: Tuple):
         self.close()
+
+    @property
+    def conn(self):
+        return self._conn
