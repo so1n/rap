@@ -54,7 +54,7 @@ class AsyncIteratorCall:
             value = await self._client._response(conn, msg_id)
             return value
         finally:
-            await self._client._conn.release(conn)
+            self._client._conn.release(conn)
 
 
 class Client:
@@ -152,7 +152,7 @@ class Client:
             msg_id, call_id = await self._request(conn, method, *args)
             return await self._response(conn, msg_id)
         finally:
-            await self._conn.release(conn)
+            self._conn.release(conn)
 
     async def call(self, func: Callable, *args: Any) -> Any:
         return await self.call_by_text(func.__name__, *args)

@@ -135,7 +135,7 @@ class Pool(object):
                 else:
                     await self._cond.wait()
 
-    async def release(self, conn: Connection):
+    def release(self, conn: Connection):
         if conn not in self._used_set:
             raise RuntimeError("connection not in user pool")
         self._used_set.remove(conn)

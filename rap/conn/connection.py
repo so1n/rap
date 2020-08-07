@@ -88,8 +88,8 @@ class Connection(BaseConnection):
     ):
         super().__init__(unpacker, timeout, pack_param, loop)
         self.connection_info: Optional[str] = None
-        self._cond: asyncio.Condition = asyncio.Condition()
         self._future: Optional[asyncio.Future] = None
+        self._lock: 'asyncio.Lock' = asyncio.Lock()
 
     async def connect(self, host: str, port: int):
         self.connection_info: str = f'{host}:{port}'
@@ -98,17 +98,12 @@ class Connection(BaseConnection):
         self._is_closed = False
 
     async def acquire(self) -> 'Connection':
-        async with self._cond:
-            if self._future:
-                await self._cond.wait()
-            self._future = asyncio.Future()
-            return self
+        await self._lock.acquire()
+        return self
 
-    async def release(self, conn: 'Connection'):
-        async with self._cond:
-            self._future.set_result(None)
-            self._cond.notify()
-            return
+    def release(self, conn: 'Connection'):
+        self._lock.release()
+        return
 
 
 class ServerConnection(Connection):
