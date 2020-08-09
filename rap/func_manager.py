@@ -3,7 +3,7 @@ import importlib
 import logging
 import os
 
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 from rap.exceptions import RegisteredError
 
@@ -15,6 +15,7 @@ class FuncManager(object):
         self.generator_dict: dict = {}
         self.register(self.load, '_root_load')
         self.register(self.reload, '_root_reload')
+        self.register(self.get_register_func, '_root_list')
 
     def register(self, func: Optional[Callable], name: Optional[str] = None):
         if inspect.isfunction(func) or inspect.ismethod(func):
@@ -43,6 +44,15 @@ class FuncManager(object):
             raise RegisteredError(f"{func_str} is not a callable object")
         self.func_dict[func_str] = func
         return f"reload {func_str} from {path} success"
+
+    def get_register_func(self) -> List[Tuple[str, str, str]]:
+        register_list: List[Tuple[str, str, str]] = []
+        for key, value in self.func_dict.items():
+            module = inspect.getmodule(value)
+            module_name: str = module.__name__
+            module_file: str = module.__file__
+            register_list.append((key, module_name, module_file))
+        return register_list
 
 
 func_manager = FuncManager()
