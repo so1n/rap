@@ -1,3 +1,6 @@
+### 0.3.1
+ - Feature: load and reload fun in running
+
 ## 0.3
  - Feature: support aes
 
