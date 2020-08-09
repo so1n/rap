@@ -32,9 +32,15 @@ _generator_dict: dict = {}
 
 
 class RequestHandle(object):
-    def __init__(self, conn: ServerConnection, timeout: int, secret: Optional[str] = None):
+    def __init__(
+            self,
+            conn: ServerConnection,
+            timeout: int,
+            run_timeout: int,
+            secret: Optional[str] = None):
         self._conn: ServerConnection = conn
         self._timeout: int = timeout
+        self._run_timeout: int = run_timeout
         self._crypto: Optional[Crypto] = None
         if secret is not None:
             self._crypto = Crypto(secret)
@@ -146,6 +152,8 @@ class Server(object):
             host: str = 'localhost',
             port: int = 9000,
             timeout: int = 9,
+            keep_alive: int = 1200,
+            run_timeout: int = 9,
             secret: Optional[str] = None
     ):
         self._func_dict: Dict[str, Callable] = dict()
@@ -153,6 +161,8 @@ class Server(object):
         self._host: str = host
         self._port: int = port
         self._timeout: int = timeout
+        self._keep_alive: int = keep_alive
+        self._run_timeout: int = run_timeout
         self._secret: Optional[str] = secret
 
     def register(self, func: Optional[Callable], name: Optional[str] = None):
@@ -175,11 +185,11 @@ class Server(object):
             self._timeout,
             pack_param={'use_bin_type': False},
         )
-        request_handle = RequestHandle(conn, self._timeout, secret=self._secret)
+        request_handle = RequestHandle(conn, self._timeout, self._run_timeout, secret=self._secret)
         logging.debug(f'new connection: {conn.peer}')
         while not conn.is_closed():
             try:
-                request: Optional[REQUEST_TYPE] = await conn.read(self._timeout)
+                request: Optional[REQUEST_TYPE] = await conn.read(self._keep_alive)
             except asyncio.TimeoutError:
                 await asyncio.sleep(3)
                 logging.error(f"recv data from {conn.peer} timeout...")
