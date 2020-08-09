@@ -9,6 +9,6 @@ WRITER_TYPE = asyncio.streams.StreamWriter
 UNPACKER_TYPE = msgpack.Unpacker
 
 # ('request num: 0', 'msg id', 'call id', 'is encrypt (0 false 1 true)', 'func name', 'param')
-REQUEST_TYPE = Tuple[int, int, int, int, str, Tuple[Any, ...]]
+REQUEST_TYPE = Tuple[int, int, int, int, Union[bytes, str, None], Union[Tuple[Any, ...], bytes]]
 # ('response num: 1', '消息id', 'call id', 'is encrypt (0 false 1 true)', 'exc', 'result')
-RESPONSE_TYPE = Tuple[int, int, int, int, Union[Tuple[str, str], None], Any]
+RESPONSE_TYPE = Tuple[int, int, int, int, Union[bytes, Tuple[str, str], None], Any]
