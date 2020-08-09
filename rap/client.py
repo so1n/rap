@@ -2,14 +2,17 @@ import asyncio
 import inspect
 import logging
 import msgpack
+import pickle
 
 from functools import wraps
 from typing import Any, Callable, cast, Optional, Union, Tuple
 
 from rap import exceptions as rap_exc
+from rap.aes import Crypto
 from rap.conn.connection import Connection
 from rap.conn.pool import Pool
 from rap.exceptions import (
+    AuthError,
     RPCError,
     ProtocolError,
 )
@@ -58,11 +61,14 @@ class AsyncIteratorCall:
 
 class Client:
 
-    def __init__(self, timeout: int = 9):
+    def __init__(self, timeout: int = 9, secret: Optional[str] = None):
         self._timeout: int = timeout
-
         self._conn: Union[Connection, Pool, None] = None
         self._msg_id: int = 0
+
+        self._crypto: 'Optional[Crypto]' = None
+        if secret is not None:
+            self._crypto: 'Crypto' = Crypto(secret)
 
     def close(self):
         if not self._conn or self._conn.is_closed():
@@ -115,7 +121,17 @@ class Client:
             call_id = msg_id
         if conn is None or self._conn.is_closed():
             raise ConnectionError('Connection not create')
-        request: REQUEST_TYPE = (Constant.REQUEST, msg_id, call_id, 0, method, args)
+        if self._crypto is not None:
+            request: REQUEST_TYPE = (
+                Constant.REQUEST,
+                msg_id,
+                call_id,
+                1,
+                self._crypto.encrypt(method),
+                self._crypto.encrypt_object(args)
+            )
+        else:
+            request: REQUEST_TYPE = (Constant.REQUEST, msg_id, call_id, 0, method, args)
         try:
             await conn.write(request, self._timeout)
             logging.debug(f'send:{request} to {conn.connection_info}')
@@ -180,8 +196,7 @@ class Client:
                 yield result
         return cast(Callable, wrapper)
 
-    @staticmethod
-    def _parse_response(response: RESPONSE_TYPE) -> Tuple[int, int, Any]:
+    def _parse_response(self, response: RESPONSE_TYPE) -> Tuple[int, int, Any]:
         if len(response) != 6 or response[0] != Constant.RESPONSE:
             logging.debug(f'Protocol error, received unexpected data: {response}')
             raise ProtocolError()
@@ -190,6 +205,13 @@ class Client:
         except Exception:
             logging.debug(f'Protocol error, received unexpected data: {response}')
             raise ProtocolError()
+        if is_encrypt:
+            try:
+                error = self._crypto.decrypt_object(error)
+                result = self._crypto.decrypt_object(result)
+            except Exception:
+                raise AuthError()
+
         if error:
             if len(error) == 2:
                 error_name, error_info = error
