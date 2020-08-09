@@ -1,5 +1,11 @@
+try:
+    import ujson as json
+except ModuleNotFoundError:
+    import json
+
 from Crypto.Cipher import AES
 from binascii import b2a_hex, a2b_hex
+from typing import Any
 
 
 class Crypto(object):
@@ -23,6 +29,12 @@ class Crypto(object):
         new_crypto: 'AES.new' = AES.new(self._key, self._mode, self._key)
         decrypt_pt: str = new_crypto.decrypt(a2b_hex(raw_byte)).decode()
         return decrypt_pt.rstrip('\0')
+
+    def encrypt_object(self, _object: Any) -> bytes:
+        return self.encrypt(json.dumps(_object))
+
+    def decrypt_object(self, raw_byte: bytes) -> Any:
+        return json.loads(self.decrypt(raw_byte))
 
 
 if __name__ == '__main__':
