@@ -1,3 +1,6 @@
+## 0.3
+ - Feature: support aes
+
 ### 0.2.2 
  - Refactor: modify server iterator design
 
