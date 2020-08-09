@@ -15,7 +15,7 @@ from rap.exceptions import (
     ProtocolError,
     ServerError,
 )
-from rap.func_manager import FuncManager
+from rap.func_manager import func_manager
 from rap.types import (
     READER_TYPE,
     WRITER_TYPE,
@@ -31,12 +31,10 @@ class RequestHandle(object):
     def __init__(
             self,
             conn: ServerConnection,
-            fun_manager: 'FuncManager',
             timeout: int,
             run_timeout: int,
             secret: Optional[str] = None):
         self._conn: ServerConnection = conn
-        self._func_manager: 'FuncManager' = fun_manager
         self._timeout: int = timeout
         self._run_timeout: int = run_timeout
         self._crypto: Optional[Crypto] = None
@@ -87,7 +85,7 @@ class RequestHandle(object):
             method_name = self._crypto.decrypt(method_name)
             args = self._crypto.decrypt_object(args)
 
-        method = self._func_manager.func_dict.get(method_name)
+        method = func_manager.func_dict.get(method_name)
         if not method:
             raise FuncNotFoundError("No such method {}".format(method_name))
         return msg_id, call_id, is_encrypt, method, args, method_name
@@ -109,16 +107,16 @@ class RequestHandle(object):
 
         status: bool = False
         try:
-            if call_id in self._func_manager.generator_dict:
+            if call_id in func_manager.generator_dict:
                 try:
-                    result = self._func_manager.generator_dict[call_id]
+                    result = func_manager.generator_dict[call_id]
                     if inspect.isgenerator(result):
                         result = next(result)
                     elif inspect.isasyncgen(result):
                         result = await result.__anext__()
                     await self.response_to_conn(msg_id, call_id, None, result, is_auth=is_encrypt)
                 except (StopAsyncIteration, StopIteration) as e:
-                    del self._func_manager.generator_dict[call_id]
+                    del func_manager.generator_dict[call_id]
                     await self.response_to_conn(msg_id, None, e, None, is_auth=is_encrypt)
             else:
                 if asyncio.iscoroutinefunction(method):
@@ -128,11 +126,11 @@ class RequestHandle(object):
 
                 if inspect.isgenerator(result):
                     call_id = id(result)
-                    self._func_manager.generator_dict[call_id] = result
+                    func_manager.generator_dict[call_id] = result
                     result = next(result)
                 elif inspect.isasyncgen(result):
                     call_id = id(result)
-                    self._func_manager.generator_dict[call_id] = result
+                    func_manager.generator_dict[call_id] = result
                     result = await result.__anext__()
                 await self.response_to_conn(msg_id, call_id, None, result, is_auth=is_encrypt)
             status = True
@@ -154,8 +152,6 @@ class Server(object):
             run_timeout: int = 9,
             secret: Optional[str] = None
     ):
-        self._func_manager: 'FuncManager' = FuncManager()
-
         self._host: str = host
         self._port: int = port
         self._timeout: int = timeout
@@ -163,8 +159,9 @@ class Server(object):
         self._run_timeout: int = run_timeout
         self._secret: Optional[str] = secret
 
-    def register(self, func: Optional[Callable], name: Optional[str] = None):
-        self._func_manager.register(func, name)
+    @staticmethod
+    def register(func: Optional[Callable], name: Optional[str] = None):
+        func_manager.register(func, name)
 
     async def create_server(self) -> asyncio.AbstractServer:
         return await asyncio.start_server(self.conn_handle, self._host, self._port)
@@ -179,7 +176,6 @@ class Server(object):
         )
         request_handle = RequestHandle(
             conn,
-            self._func_manager,
             self._timeout,
             self._run_timeout,
             secret=self._secret

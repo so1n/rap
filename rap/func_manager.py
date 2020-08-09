@@ -43,3 +43,6 @@ class FuncManager(object):
             raise RegisteredError(f"{func_str} is not a callable object")
         self.func_dict[func_str] = func
         return f"reload {func_str} from {path} success"
+
+
+func_manager = FuncManager()
