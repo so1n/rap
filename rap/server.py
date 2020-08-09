@@ -5,7 +5,7 @@ import logging
 import msgpack
 import time
 
-from typing import Any, Dict, Callable, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
 
 from rap.aes import Crypto
 from rap.conn.connection import ServerConnection
@@ -14,8 +14,8 @@ from rap.exceptions import (
     FuncNotFoundError,
     ProtocolError,
     ServerError,
-    RegisteredError
 )
+from rap.func_manager import FuncManager
 from rap.types import (
     READER_TYPE,
     WRITER_TYPE,
@@ -27,18 +27,16 @@ from rap.utlis import Constant, get_event_loop
 __all__ = ['Server']
 
 
-_func_dict: Dict[str, Callable] = dict()
-_generator_dict: dict = {}
-
-
 class RequestHandle(object):
     def __init__(
             self,
             conn: ServerConnection,
+            fun_manager: 'FuncManager',
             timeout: int,
             run_timeout: int,
             secret: Optional[str] = None):
         self._conn: ServerConnection = conn
+        self._func_manager: 'FuncManager' = fun_manager
         self._timeout: int = timeout
         self._run_timeout: int = run_timeout
         self._crypto: Optional[Crypto] = None
@@ -89,7 +87,7 @@ class RequestHandle(object):
             method_name = self._crypto.decrypt(method_name)
             args = self._crypto.decrypt_object(args)
 
-        method = _func_dict.get(method_name)
+        method = self._func_manager.func_dict.get(method_name)
         if not method:
             raise FuncNotFoundError("No such method {}".format(method_name))
         return msg_id, call_id, is_encrypt, method, args, method_name
@@ -111,16 +109,16 @@ class RequestHandle(object):
 
         status: bool = False
         try:
-            if call_id in _generator_dict:
+            if call_id in self._func_manager.generator_dict:
                 try:
-                    result = _generator_dict[call_id]
+                    result = self._func_manager.generator_dict[call_id]
                     if inspect.isgenerator(result):
                         result = next(result)
                     elif inspect.isasyncgen(result):
                         result = await result.__anext__()
                     await self.response_to_conn(msg_id, call_id, None, result, is_auth=is_encrypt)
                 except (StopAsyncIteration, StopIteration) as e:
-                    del _generator_dict[call_id]
+                    del self._func_manager.generator_dict[call_id]
                     await self.response_to_conn(msg_id, None, e, None, is_auth=is_encrypt)
             else:
                 if asyncio.iscoroutinefunction(method):
@@ -130,11 +128,11 @@ class RequestHandle(object):
 
                 if inspect.isgenerator(result):
                     call_id = id(result)
-                    _generator_dict[call_id] = result
+                    self._func_manager.generator_dict[call_id] = result
                     result = next(result)
                 elif inspect.isasyncgen(result):
                     call_id = id(result)
-                    _generator_dict[call_id] = result
+                    self._func_manager.generator_dict[call_id] = result
                     result = await result.__anext__()
                 await self.response_to_conn(msg_id, call_id, None, result, is_auth=is_encrypt)
             status = True
@@ -156,7 +154,7 @@ class Server(object):
             run_timeout: int = 9,
             secret: Optional[str] = None
     ):
-        self._func_dict: Dict[str, Callable] = dict()
+        self._func_manager: 'FuncManager' = FuncManager()
 
         self._host: str = host
         self._port: int = port
@@ -166,13 +164,7 @@ class Server(object):
         self._secret: Optional[str] = secret
 
     def register(self, func: Optional[Callable], name: Optional[str] = None):
-        name: str = name if name else func.__name__
-        if inspect.isfunction(func):
-            if not hasattr(func, "__call__"):
-                raise RegisteredError(f"{name} is not a callable object")
-            if func in self._func_dict:
-                raise RegisteredError(f"Name {name} has already been used")
-            _func_dict[name] = func
+        self._func_manager.register(func, name)
 
     async def create_server(self) -> asyncio.AbstractServer:
         return await asyncio.start_server(self.conn_handle, self._host, self._port)
@@ -185,7 +177,13 @@ class Server(object):
             self._timeout,
             pack_param={'use_bin_type': False},
         )
-        request_handle = RequestHandle(conn, self._timeout, self._run_timeout, secret=self._secret)
+        request_handle = RequestHandle(
+            conn,
+            self._func_manager,
+            self._timeout,
+            self._run_timeout,
+            secret=self._secret
+        )
         logging.debug(f'new connection: {conn.peer}')
         while not conn.is_closed():
             try:
