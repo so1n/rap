@@ -18,7 +18,7 @@ async def async_gen(a):
 
 
 loop = asyncio.new_event_loop()
-rpc_server = Server()
+rpc_server = Server(secret='keyskeyskeyskeys')
 rpc_server.register(sync_sum)
 rpc_server.register(async_sum)
 rpc_server.register(async_gen)
