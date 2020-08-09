@@ -11,17 +11,16 @@ from typing import Any
 class Crypto(object):
     def __init__(self, key: str):
         self._length = 16
-        self._key = key
-        self._mode = AES.MODE_CBC
+        self._key: str = key
+        self._mode: 'AES.MODE_CBC' = AES.MODE_CBC
 
     def encrypt(self, raw_data: str) -> bytes:
         new_crypto: 'AES.new' = AES.new(self._key, self._mode, self._key)
-        count = len(raw_data)
+        count: int = len(raw_data)
+        salt: int = 0
         if count % self._length != 0:
             salt = self._length - (count % self._length)
-        else:
-            salt = 0
-        raw_data = raw_data + ('\0' * salt)
+        raw_data: str = raw_data + ('\0' * salt)
         encrypt_str: str = new_crypto.encrypt(raw_data)
         return b2a_hex(encrypt_str)
 
