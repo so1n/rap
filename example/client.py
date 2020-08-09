@@ -25,7 +25,12 @@ async def async_gen(a: int):
 
 async def run_once():
     print(f"sync result: {await client.call(sync_sum, 1, 2)}")
+    print(f"reload :{ await client.call_by_text('_root_reload', 'test_module', 'sync_sum')}")
     print(f"sync result: {await client.call_by_text('sync_sum', 1, 2)}")
+    print(f"sync result: {await client.call_by_text('sync_sum', 1, 2)}")
+    print(f"sync result: {await client.call_by_text('sync_sum', 1, 2)}")
+    print(f"sync result: {await client.call_by_text('sync_sum', 1, 2)}")
+
     print(f"async result: {await async_sum(1, 3)}")
     async for i in async_gen(10):
         print(f"async gen result:{i}")
@@ -42,11 +47,18 @@ async def conn():
 async def pool():
     s_t = time.time()
     await client.create_pool()
-    await asyncio.wait([run_once() for i in range(100)])
+    await asyncio.wait([run_once() for i in range(1)])
     print(time.time() - s_t)
     client.close()
 
 
-loop = asyncio.get_event_loop()
-loop.run_until_complete(conn())
-loop.run_until_complete(pool())
+if __name__ == '__main__':
+    import logging
+    logging.basicConfig(
+        format='[%(asctime)s %(levelname)s] %(message)s',
+        datefmt='%y-%m-%d %H:%M:%S',
+        level=logging.DEBUG)
+
+    loop = asyncio.get_event_loop()
+    # loop.run_until_complete(conn())
+    loop.run_until_complete(pool())
