@@ -1,3 +1,8 @@
+class AuthError(Exception):
+    def __init__(self, message: str = 'Auth Error'):
+        super().__init__(message)
+
+
 class ProtocolError(Exception):
     def __init__(self, message: str = 'Invalid protocol'):
         super().__init__(message)
