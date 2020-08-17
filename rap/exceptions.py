@@ -1,33 +1,35 @@
-class AuthError(Exception):
+class BaseRapError(Exception):
+    pass
+
+
+class AuthError(BaseRapError):
     def __init__(self, message: str = 'Auth Error'):
         super().__init__(message)
 
 
-class FuncNotFoundError(Exception):
+class FuncNotFoundError(BaseRapError):
     pass
 
 
-class ProtocolError(Exception):
+class ProtocolError(BaseRapError):
     def __init__(self, message: str = 'Invalid protocol'):
         super().__init__(message)
 
 
-class RegisteredError(Exception):
+class RegisteredError(BaseRapError):
     pass
 
 
-class RPCError(Exception):
+class RPCError(BaseRapError):
     def __init__(self, message: str):
         super().__init__(message)
 
 
-class RpcRunTimeError(Exception):
+class RpcRunTimeError(BaseRapError):
     def __init__(self, parent, message):
-        self.parent = parent
-        self.message = message
-        Exception.__init__(self, "{0}: {1}".format(parent, message))
+        super().__init__(self, f"{parent}: {message}")
 
 
-class ServerError(Exception):
+class ServerError(BaseRapError):
     def __init__(self, message: str = 'Server Error'):
         super().__init__(message)
