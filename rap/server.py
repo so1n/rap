@@ -15,7 +15,7 @@ from rap.exceptions import (
     ProtocolError,
     ServerError,
 )
-from rap.func_manager import func_manager
+from rap.manager.func_manager import func_manager
 from rap.types import (
     READER_TYPE,
     WRITER_TYPE,
@@ -100,14 +100,16 @@ class RequestHandle(object):
             return
         try:
             msg_id, call_id, is_encrypt, method, args, method_name = self._parse_request(request)
-        except Exception:
+        except Exception as e:
             await self.response_to_conn(None, None, ProtocolError(), None)
-            logging.error(f"parse request data: {request} from {self._conn.peer}  error")
+            logging.error(f"parse request data: {request} from {self._conn.peer}  error:{e}")
             return
 
         status: bool = False
         try:
-            if call_id in func_manager.generator_dict:
+            if method_name.startswith('_root_') and self._conn.peer.split(':')[0] != '127.0.0.1':
+                raise FuncNotFoundError
+            elif call_id in func_manager.generator_dict:
                 try:
                     result = func_manager.generator_dict[call_id]
                     if inspect.isgenerator(result):
@@ -174,6 +176,7 @@ class Server(object):
             self._timeout,
             pack_param={'use_bin_type': False},
         )
+        # TODO 连接中间件
         request_handle = RequestHandle(
             conn,
             self._timeout,
