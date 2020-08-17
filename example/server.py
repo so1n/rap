@@ -22,7 +22,9 @@ if __name__ == '__main__':
     logging.basicConfig(
         format='[%(asctime)s %(levelname)s] %(message)s',
         datefmt='%y-%m-%d %H:%M:%S',
-        level=logging.DEBUG)
+        level=logging.DEBUG
+    )
+
     loop = asyncio.new_event_loop()
     rpc_server = Server(secret='keyskeyskeyskeys')
     rpc_server.register(sync_sum)
