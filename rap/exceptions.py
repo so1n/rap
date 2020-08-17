@@ -3,22 +3,21 @@ class AuthError(Exception):
         super().__init__(message)
 
 
+class FuncNotFoundError(Exception):
+    pass
+
+
 class ProtocolError(Exception):
     def __init__(self, message: str = 'Invalid protocol'):
         super().__init__(message)
 
 
-class FuncNotFoundError(Exception):
+class RegisteredError(Exception):
     pass
 
 
 class RPCError(Exception):
     def __init__(self, message: str):
-        super().__init__(message)
-
-
-class ServerError(Exception):
-    def __init__(self, message: str = 'Server Error'):
         super().__init__(message)
 
 
@@ -29,5 +28,6 @@ class RpcRunTimeError(Exception):
         Exception.__init__(self, "{0}: {1}".format(parent, message))
 
 
-class RegisteredError(Exception):
-    pass
+class ServerError(Exception):
+    def __init__(self, message: str = 'Server Error'):
+        super().__init__(message)
