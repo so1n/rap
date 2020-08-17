@@ -107,7 +107,7 @@ class RequestHandle(object):
 
         status: bool = False
         try:
-            if method_name.startswith('_root_') and self._conn.peer.split(':')[0] != '127.0.0.1':
+            if method_name.startswith('_root_') and self._conn.peer[0] != '127.0.0.1':
                 raise FuncNotFoundError
             elif call_id in func_manager.generator_dict:
                 try:
