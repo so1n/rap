@@ -5,7 +5,7 @@ import logging
 import msgpack
 import time
 
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 from rap.aes import Crypto
 from rap.conn.connection import ServerConnection
@@ -16,6 +16,10 @@ from rap.exceptions import (
     ServerError,
 )
 from rap.manager.func_manager import func_manager
+from rap.middleware import (
+    BaseConnMiddleware,
+    IpLimitMiddleware
+)
 from rap.types import (
     READER_TYPE,
     WRITER_TYPE,
@@ -160,6 +164,7 @@ class Server(object):
         self._keep_alive: int = keep_alive
         self._run_timeout: int = run_timeout
         self._secret: Optional[str] = secret
+        self._conn_middleware: List[BaseConnMiddleware] = [IpLimitMiddleware()]
 
     @staticmethod
     def register(func: Optional[Callable], name: Optional[str] = None):
@@ -176,7 +181,6 @@ class Server(object):
             self._timeout,
             pack_param={'use_bin_type': False},
         )
-        # TODO 连接中间件
         request_handle = RequestHandle(
             conn,
             self._timeout,
@@ -184,6 +188,10 @@ class Server(object):
             secret=self._secret
         )
         logging.debug(f'new connection: {conn.peer}')
+
+        for middleware in self._conn_middleware:
+            await middleware.dispatch(conn)
+
         while not conn.is_closed():
             try:
                 request: Optional[REQUEST_TYPE] = await conn.read(self._keep_alive)
