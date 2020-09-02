@@ -47,6 +47,7 @@ class Server(object):
         func_manager.register(func, name)
 
     async def create_server(self) -> asyncio.AbstractServer:
+        logging.info(f'server running on {self._host}:{self._port}')
         return await asyncio.start_server(self.conn_handle, self._host, self._port)
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE):
@@ -57,22 +58,21 @@ class Server(object):
             self._timeout,
             pack_param={'use_bin_type': False},
         )
+        logging.debug(f'new connection: {conn.peer}')
+        for middleware in self._conn_middleware:
+            await middleware.dispatch(conn)
+
         request_handle = Request(
             conn,
             self._timeout,
             self._run_timeout,
             secret=self._secret
         )
-        logging.debug(f'new connection: {conn.peer}')
-
-        for middleware in self._conn_middleware:
-            await middleware.dispatch(conn)
 
         while not conn.is_closed():
             try:
                 request: Optional[REQUEST_TYPE] = await conn.read(self._keep_alive)
             except asyncio.TimeoutError:
-                await asyncio.sleep(3)
                 logging.error(f"recv data from {conn.peer} timeout...")
                 break
             except IOError as e:

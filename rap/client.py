@@ -4,7 +4,7 @@ import logging
 import msgpack
 
 from functools import wraps
-from typing import Any, Callable, cast, Optional, Union, Tuple
+from typing import Any, Callable, cast, List, Optional, Union, Tuple
 
 from rap import exceptions as rap_exc
 from rap.aes import Crypto
@@ -52,6 +52,9 @@ class AsyncIteratorCall:
                 call_id=self._call_id
             )
             result, call_id = await self._client._response(conn, msg_id)
+            # The server will return the call id of the generator function,
+            # and the client can continue to get data based on the call id.
+            # If no data, the server will return StopAsyncIteration or StopIteration error.
             self._call_id = call_id
             return result
         finally:
@@ -71,6 +74,7 @@ class Client:
             self._crypto: 'Optional[Crypto]' = None
 
     def close(self):
+        """close client conn"""
         if not self._conn or self._conn.is_closed():
             raise RuntimeError('Connection already closed')
         try:
@@ -79,6 +83,7 @@ class Client:
             pass
 
     async def connect(self, host: str = 'localhost', port: int = 9000):
+        """Create connection and connect"""
         if self._conn and not self._conn.is_closed():
             raise ConnectionError(f'Client already connected')
         self._conn = Connection(
@@ -95,6 +100,7 @@ class Client:
             min_size: int = 1,
             max_size: int = 10
     ):
+        """Create conn pool and connect"""
         if self._conn and not self._conn.is_closed():
             raise ConnectionError(f'Client already connected')
         self._conn = Pool(
@@ -115,12 +121,14 @@ class Client:
             *args: Any,
             call_id: Optional[int] = None
     ) -> int:
-        msg_id: int = self._msg_id + 1
-        self._msg_id = msg_id
-        if not call_id:
-            call_id = msg_id
+        """gen request body and send,return request msg id"""
         if conn is None or self._conn.is_closed():
             raise ConnectionError('Connection not create')
+
+        msg_id: int = self._msg_id + 1
+        self._msg_id = msg_id
+        call_id = call_id if call_id is not None else msg_id
+
         if self._crypto is not None:
             request: REQUEST_TYPE = (
                 Constant.REQUEST,
@@ -142,7 +150,8 @@ class Client:
             raise e
         return msg_id
 
-    async def _response(self, conn: 'Connection', msg_id: int) -> Any:
+    async def _response(self, conn: 'Connection', msg_id: int) -> Tuple[Any, int]:
+        """read response data and return rpc result, call id"""
         try:
             response: Optional[RESPONSE_TYPE] = await conn.read(self._timeout)
             logging.debug(f'recv raw data: {response}')
@@ -162,6 +171,7 @@ class Client:
         return result, call_id
 
     async def call_by_text(self, method: str, *args: Any) -> Any:
+        """rpc client base call method"""
         conn: 'Connection' = await self._conn.acquire()
         try:
             msg_id = await self._request(conn, method, *args)
@@ -171,25 +181,31 @@ class Client:
             self._conn.release(conn)
 
     async def call(self, func: Callable, *args: Any) -> Any:
+        """automatically resolve function names and call call_by_text"""
         return await self.call_by_text(func.__name__, *args)
 
     async def iterator_call(self, method: str, *args: Any) -> Any:
+        """Python-specific generator call"""
         async for result in AsyncIteratorCall(method, self, *args):
             yield result
 
     def register(self, func: Callable) -> Any:
+        """Using this method to decorate a fake function can help you use it better.
+        (such as ide completion, ide reconstruction and type hints)"""
         if inspect.iscoroutinefunction(func):
-            return self.async_register(func)
+            return self._async_register(func)
         elif inspect.isasyncgenfunction(func):
-            return self.async_gen_register(func)
+            return self._async_gen_register(func)
 
-    def async_register(self, func: Callable):
+    def _async_register(self, func: Callable):
+        """Decorate normal function"""
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             return await self.call_by_text(func.__name__, *args)
         return cast(Callable, wrapper)
 
-    def async_gen_register(self, func: Callable):
+    def _async_gen_register(self, func: Callable):
+        """Decoration generator function"""
         @wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
             async for result in self.iterator_call(func.__name__, *args):
@@ -197,6 +213,8 @@ class Client:
         return cast(Callable, wrapper)
 
     def _parse_response(self, response: RESPONSE_TYPE) -> Tuple[int, int, Any]:
+        """Parse the response data according to the rap protocol,
+        if there is an exception, throw a python exception, otherwise return the normal rpc result data"""
         if len(response) != 6 or response[0] != Constant.RESPONSE:
             logging.debug(f'Protocol error, received unexpected data: {response}')
             raise ProtocolError()
@@ -224,6 +242,7 @@ class Client:
                 raise RPCError(str(error))
         return msg_id, call_id, result
 
+    # async with support
     async def __aenter__(self):
         await self.connect()
         return self
