@@ -13,6 +13,7 @@ class FuncManager(object):
         self._cwd: str = os.getcwd()
         self.func_dict: Dict[str, Callable] = dict()
         self.generator_dict: dict = {}
+
         self.register(self._load, '_root_load')
         self.register(self._reload, '_root_reload')
         self.register(self._get_register_func, '_root_list')
@@ -27,9 +28,9 @@ class FuncManager(object):
         if name in self.func_dict:
             raise RegisteredError(f"Name {name} has already been used")
         self.func_dict[name] = func
-        if name.startswith('_root_'):
-            logging.debug(f"register root func:{name}")
-        else:
+
+        # not display log before called logging.basicConfig
+        if not name.startswith('_root_'):
             logging.info(f"register func:{name}")
 
     def _load(self, path: str, func_str: str) -> str:
