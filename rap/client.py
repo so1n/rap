@@ -2,7 +2,6 @@ import asyncio
 import inspect
 import logging
 import msgpack
-import pickle
 
 from functools import wraps
 from typing import Any, Callable, cast, Optional, Union, Tuple
@@ -66,9 +65,10 @@ class Client:
         self._conn: Union[Connection, Pool, None] = None
         self._msg_id: int = 0
 
-        self._crypto: 'Optional[Crypto]' = None
         if secret is not None:
             self._crypto: 'Crypto' = Crypto(secret)
+        else:
+            self._crypto: 'Optional[Crypto]' = None
 
     def close(self):
         if not self._conn or self._conn.is_closed():
