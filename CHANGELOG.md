@@ -1,5 +1,8 @@
+### 0.3.3
+ - Feature: add called limit middleware
+
 ### 0.3.2
- - Feature: add ip limit middleware
+ - Feature: add ip limit conn middleware
  - Refactor: split RequestHandle to request and response
 
 ### 0.3.1
