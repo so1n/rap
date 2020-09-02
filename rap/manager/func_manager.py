@@ -27,7 +27,10 @@ class FuncManager(object):
         if name in self.func_dict:
             raise RegisteredError(f"Name {name} has already been used")
         self.func_dict[name] = func
-        logging.info(f"register func:{name}")
+        if name.startswith('_root_'):
+            logging.debug(f"register root func:{name}")
+        else:
+            logging.info(f"register func:{name}")
 
     def _load(self, path: str, func_str: str) -> str:
         try:
