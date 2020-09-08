@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from dataclasses import dataclass
 from typing import Any, Tuple, Optional
 
 from rap.aes import Crypto
@@ -7,6 +8,18 @@ from rap.conn.connection import ServerConnection
 from rap.exceptions import AuthError
 from rap.types import RESPONSE_TYPE
 from rap.utlis import Constant
+
+
+@dataclass()
+class Response(object):
+    conn: ServerConnection
+    timeout: int
+    crypto: Optional[Crypto] = None
+    msg_id: Optional[int] = None
+    call_id: Optional[int] = None
+    exception: Optional[Exception] = None
+    result: Optional[Any] = None
+    is_auth: int = True
 
 
 def parse_error(exception: Optional[Exception]) -> Optional[Tuple[str, str]]:
