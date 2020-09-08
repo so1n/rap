@@ -10,7 +10,7 @@ from rap.exceptions import ServerError
 from rap.manager.func_manager import func_manager
 from rap.middleware import (
     BaseConnMiddleware,
-    IpLimitMiddleware
+    IpBlockMiddleware
 )
 from rap.requests import Request
 from rap.response import response
@@ -40,7 +40,7 @@ class Server(object):
         self._keep_alive: int = keep_alive
         self._run_timeout: int = run_timeout
         self._secret: Optional[str] = secret
-        self._conn_middleware: List[BaseConnMiddleware] = [IpLimitMiddleware()]
+        self._conn_middleware: List[BaseConnMiddleware] = [IpBlockMiddleware()]
 
     @staticmethod
     def register(func: Optional[Callable], name: Optional[str] = None):
