@@ -2,10 +2,10 @@ from typing import Set
 from rap.conn.connection import ServerConnection
 from rap.manager.func_manager import func_manager
 
-from .base_middleware import BaseConnMiddleware
+from rap.middleware.base_middleware import BaseConnMiddleware
 
 
-class IpLimitMiddleware(BaseConnMiddleware):
+class IpBlockMiddleware(BaseConnMiddleware):
     def __init__(self):
         self.block_set: Set[str] = set()
         self.allow_set: Set[str] = set()

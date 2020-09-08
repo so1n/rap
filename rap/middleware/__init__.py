@@ -1,2 +1,2 @@
 from .base_middleware import BaseConnMiddleware
-from .ip_limit_middleware import IpLimitMiddleware
+from rap.middleware.conn.ip_block import IpBlockMiddleware
