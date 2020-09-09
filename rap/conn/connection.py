@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import ssl
 
 from typing import Optional
 
@@ -84,16 +85,26 @@ class Connection(BaseConnection):
             unpacker: UNPACKER_TYPE,
             timeout: int,
             pack_param: Optional[dict] = None,
-            loop: Optional[LOOP_TYPE] = None
+            loop: Optional[LOOP_TYPE] = None,
+            ssl_crt_path: Optional[str] = None,
     ):
         super().__init__(unpacker, timeout, pack_param, loop)
         self.connection_info: Optional[str] = None
         self._future: Optional[asyncio.Future] = None
         self._lock: 'asyncio.Lock' = asyncio.Lock()
+        self._ssl_crt_path: Optional[str] = ssl_crt_path
 
     async def connect(self, host: str, port: int):
         self.connection_info: str = f'{host}:{port}'
-        self._reader, self._writer = await asyncio.open_connection(host, port, loop=self._loop)
+
+        ssl_context: Optional[ssl.SSLContext] = None
+        if self._ssl_crt_path:
+            ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, )
+            ssl_context.check_hostname = False
+            ssl_context.load_verify_locations(self._ssl_crt_path)
+            logging.info(f"connection enable ssl")
+
+        self._reader, self._writer = await asyncio.open_connection(host, port, loop=self._loop, ssl=ssl_context)
         self.peer = self._writer.get_extra_info('peername')
         self._is_closed = False
 

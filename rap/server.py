@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import ssl
 
 import msgpack
 
@@ -32,6 +33,8 @@ class Server(object):
             timeout: int = 9,
             keep_alive: int = 1200,
             run_timeout: int = 9,
+            ssl_crt_path: Optional[str] = None,
+            ssl_key_path: Optional[str] = None,
             secret: Optional[str] = None
     ):
         self._host: str = host
@@ -40,6 +43,8 @@ class Server(object):
         self._keep_alive: int = keep_alive
         self._run_timeout: int = run_timeout
         self._secret: Optional[str] = secret
+        self._ssl_crt_path: Optional[str] = ssl_crt_path
+        self._ssl_key_path: Optional[str] = ssl_key_path
         self._conn_middleware: List[BaseConnMiddleware] = [IpBlockMiddleware()]
 
     @staticmethod
@@ -47,8 +52,16 @@ class Server(object):
         func_manager.register(func, name)
 
     async def create_server(self) -> asyncio.AbstractServer:
+
+        ssl_context: Optional[ssl.SSLContext] = None
+        if self._ssl_crt_path and self._ssl_key_path:
+            ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            ssl_context.check_hostname = False
+            ssl_context.load_cert_chain(self._ssl_crt_path, self._ssl_key_path)
+            logging.info(f"server enable ssl")
+
         logging.info(f'server running on {self._host}:{self._port}')
-        return await asyncio.start_server(self.conn_handle, self._host, self._port)
+        return await asyncio.start_server(self.conn_handle, self._host, self._port, ssl=ssl_context)
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE):
         conn: ServerConnection = ServerConnection(

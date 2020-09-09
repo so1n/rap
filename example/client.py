@@ -44,7 +44,7 @@ async def conn():
 async def pool():
     s_t = time.time()
     await client.create_pool()
-    await asyncio.wait([run_once() for i in range(1)])
+    await asyncio.wait([run_once() for i in range(100)])
     print(time.time() - s_t)
     client.close()
 
@@ -58,5 +58,5 @@ if __name__ == '__main__':
     )
 
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(conn())
+    # loop.run_until_complete(conn())
     loop.run_until_complete(pool())
