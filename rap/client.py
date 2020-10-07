@@ -82,13 +82,14 @@ class Client:
         except AttributeError:
             pass
 
-    async def connect(self, host: str = 'localhost', port: int = 9000):
+    async def connect(self, host: str = 'localhost', port: int = 9000, ssl_crt_path: Optional[str] = None):
         """Create connection and connect"""
         if self._conn and not self._conn.is_closed():
             raise ConnectionError(f'Client already connected')
         self._conn = Connection(
             msgpack.Unpacker(raw=False, use_list=False),
-            self._timeout
+            self._timeout,
+            ssl_crt_path=ssl_crt_path
         )
         await self._conn.connect(host, port)
         logging.debug(f"Connection to {self._conn.connection_info}...")
@@ -98,7 +99,8 @@ class Client:
             host: str = 'localhost',
             port: int = 9000,
             min_size: int = 1,
-            max_size: int = 10
+            max_size: int = 10,
+            ssl_crt_path: Optional[str] = None,
     ):
         """Create conn pool and connect"""
         if self._conn and not self._conn.is_closed():
@@ -110,6 +112,7 @@ class Client:
             self._timeout,
             max_size=max_size,
             min_size=min_size,
+            ssl_crt_path=ssl_crt_path
         )
         await self._conn.connect()
         logging.debug(f"Connection to {self._conn.connection_info}...")
