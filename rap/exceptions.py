@@ -1,40 +1,42 @@
+from typing import Optional
+
+
 class BaseRapError(Exception):
-    pass
+    message: str = 'Error'
+
+    def __init__(self, message: Optional[str] = None):
+        if message is None:
+            message = self.message
+        super().__init__(message)
 
 
 class AuthError(BaseRapError):
-    def __init__(self, message: str = 'Auth Error'):
-        super().__init__(message)
+    message: str = 'Auth Error'
 
 
 class FuncNotFoundError(BaseRapError):
-    pass
+    message: str = 'Func not found'
 
 
 class LifeCycleError(BaseRapError):
-    def __init__(self, message: str = 'life cycle error'):
-        super().__init__(message)
+    message: str = 'Life cycle error'
 
 
 class ProtocolError(BaseRapError):
-    def __init__(self, message: str = 'Invalid protocol'):
-        super().__init__(message)
+    message: str = 'Invalid protocol'
 
 
 class RegisteredError(BaseRapError):
-    pass
+    message: str = 'Register Error'
 
 
 class RPCError(BaseRapError):
-    def __init__(self, message: str):
-        super().__init__(message)
+    message: str = 'Rpc error'
 
 
 class RpcRunTimeError(BaseRapError):
-    def __init__(self, parent, message):
-        super().__init__(self, f"{parent}: {message}")
+    message: str = 'Rpc run time error'
 
 
 class ServerError(BaseRapError):
-    def __init__(self, message: str = 'Server Error'):
-        super().__init__(message)
+    message: str = 'Server error'
