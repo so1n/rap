@@ -1,7 +1,7 @@
 import asyncio
 import sys
 
-__all__ = ["get_event_loop", "Constant"]
+__all__ = ["get_event_loop", "Constant", "MISS_OBJECT"]
 
 
 class Constant(object):
@@ -18,3 +18,4 @@ def _get_event_loop():
 
 
 get_event_loop = _get_event_loop()
+MISS_OBJECT = object()
