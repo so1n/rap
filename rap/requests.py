@@ -5,6 +5,7 @@ import time
 import random
 
 from dataclasses import dataclass
+from enum import auto, Enum
 from typing import Any, Optional, Tuple
 
 from rap.aes import Crypto
@@ -13,6 +14,7 @@ from rap.exceptions import (
     AuthError,
     BaseRapError,
     FuncNotFoundError,
+    LifeStateError,
     ProtocolError,
     ServerError,
 )
@@ -21,6 +23,13 @@ from rap.manager.client_manager import client_manager
 from rap.manager.func_manager import func_manager
 from rap.types import BASE_REQUEST_TYPE
 from rap.utlis import MISS_OBJECT, get_event_loop
+
+
+class LifeEnum(Enum):
+    new: auto()
+    init: auto()
+    msg: auto()
+    drop: auto()
 
 
 @dataclass()
@@ -42,6 +51,7 @@ class Request(object):
         self._timeout: int = timeout
         self._run_timeout: int = run_timeout
         self.crypto: Optional[Crypto] = None
+        self._state: 'LifeEnum' = LifeEnum.new
 
     @staticmethod
     def _request_handle(request: BASE_REQUEST_TYPE) -> Tuple[int, int, Any]:
@@ -63,6 +73,10 @@ class Request(object):
 
         type_id: int = request[0]
         if type_id == 10:
+            if self._state != LifeEnum.new:
+                raise LifeStateError()
+            self._state = LifeEnum.init
+
             client_id: str = self._gen_client_id()
 
             # init crypto and encrypt msg
@@ -79,6 +93,11 @@ class Request(object):
             client_manager.create_client_info()
             return RequestModel(request_num=11, msg_id=msg_id, result=(client_id, msg))
         elif type_id == 20:
+            if self._state == LifeEnum.init:
+                self._state = LifeEnum.msg
+            if self._state != LifeEnum.msg:
+                raise LifeStateError()
+
             call_id, client_id, method_name, param = self.crypto.encrypt_object(result)
             result: Any = await self.msg_handle(call_id, client_id, method_name, param)
             if isinstance(result, Exception):
@@ -86,11 +105,15 @@ class Request(object):
             else:
                 return RequestModel(request_num=11, msg_id=msg_id, result=(call_id, client_id, method_name, result))
         elif type_id == 0:
+            if self._state == LifeEnum.drop:
+                raise ServerError('The life cycle is already a drop')
+            self._state = LifeEnum.drop
             call_id, client_id, drop_msg = self.crypto.encrypt_object(result)
             # TODO drop conn
             return RequestModel(request_num=11, msg_id=msg_id, result=(call_id, client_id, 1))
         else:
             logging.error(f"parse request data: {request} from {self._conn.peer} error")
+            raise ServerError('type_id error')
 
     async def msg_handle(self, call_id: str, client_id: str, method_name: str, param: str):
         # really msg handle

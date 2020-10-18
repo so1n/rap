@@ -11,6 +11,11 @@ class FuncNotFoundError(BaseRapError):
     pass
 
 
+class LifeStateError(BaseRapError):
+    def __init__(self, message: str = 'life state error'):
+        super().__init__(message)
+
+
 class ProtocolError(BaseRapError):
     def __init__(self, message: str = 'Invalid protocol'):
         super().__init__(message)
