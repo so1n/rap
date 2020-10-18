@@ -76,11 +76,7 @@ class Server(object):
         for middleware in self._conn_middleware:
             await middleware.dispatch(conn)
 
-        request_handle = Request(
-            conn,
-            self._timeout,
-            self._run_timeout,
-        )
+        request_handle = Request(conn, self._timeout, self._run_timeout)
 
         while not conn.is_closed():
             try:

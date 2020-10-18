@@ -37,7 +37,7 @@ MSG_REQUEST_TYPE = Tuple[int, int, Union[Tuple[int, int, str, Any], bytes]]
 MSG_RESPONSE_TYPE = Tuple[int, int, Union[Tuple[int, int, str, Any], bytes]]
 # DROP(Clear the relevant information on the server and exit)
 #   client send msg
-#   ('requests num: 0', 'msg id', '(call id, client id, hello msg')
+#   ('requests num: 0', 'msg id', '(call id, client id, drop msg')
 #   server send msg
 #   ('requests num: 1', 'msg id', '(call id, client id, result 0 false 1 true')
 DROP_REQUEST_TYPE = Tuple[int, int, Union[Tuple[int, int, str], bytes]]

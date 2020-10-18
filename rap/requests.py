@@ -86,7 +86,9 @@ class Request(object):
             else:
                 return RequestModel(request_num=11, msg_id=msg_id, result=(call_id, client_id, method_name, result))
         elif type_id == 0:
-            pass
+            call_id, client_id, drop_msg = self.crypto.encrypt_object(result)
+            # TODO drop conn
+            return RequestModel(request_num=11, msg_id=msg_id, result=(call_id, client_id, 1))
         else:
             logging.error(f"parse request data: {request} from {self._conn.peer} error")
 
