@@ -49,11 +49,13 @@ class Pool(object):
             timeout: int,
             min_size: int = 1,
             max_size: int = 10,
+            ssl_crt_path: Optional[str] = None,
     ):
         self._host: str = host
         self._port: int = port
         self._unpacker: UNPACKER_TYPE = unpacker
         self._timeout: int = timeout
+        self._ssl_srt_path: Optional[str] = ssl_crt_path
 
         self._min_size = min_size
         self._max_size = max_size
@@ -117,6 +119,7 @@ class Pool(object):
                 conn = Connection(
                     self._unpacker,
                     self._timeout,
+                    ssl_crt_path=self._ssl_srt_path
                 )
                 await conn.connect(self._host, self._port)
                 self._pool.append(conn)
