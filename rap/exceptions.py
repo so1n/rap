@@ -11,8 +11,8 @@ class FuncNotFoundError(BaseRapError):
     pass
 
 
-class LifeStateError(BaseRapError):
-    def __init__(self, message: str = 'life state error'):
+class LifeCycleError(BaseRapError):
+    def __init__(self, message: str = 'life cycle error'):
         super().__init__(message)
 
 
