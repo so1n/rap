@@ -16,10 +16,11 @@ from rap.exceptions import (
     FuncNotFoundError,
     LifeCycleError,
     ProtocolError,
+    RPCError,
     ServerError,
 )
 from rap.manager.aes_manager import aes_manager
-from rap.manager.client_manager import client_manager
+from rap.manager.client_manager import client_manager, ClientModel
 from rap.manager.func_manager import func_manager
 from rap.types import BASE_REQUEST_TYPE
 from rap.utlis import MISS_OBJECT, get_event_loop
@@ -76,7 +77,10 @@ class Request(object):
                 raise LifeCycleError()
             self._state = LifeCycleEnum.msg
 
-            client_id: str = self._gen_client_id()
+            while True:
+                client_id: str = self._gen_client_id()
+                if client_manager.exist(client_id):
+                    break
 
             # init crypto and encrypt msg
             key, msg = result
@@ -87,16 +91,20 @@ class Request(object):
                 msg: str = crypto.decrypt(result)
             except Exception:
                 raise AuthError('decrypt error')
+            client_manager.create_client_info(client_id, ClientModel(client_id=client_id, crypto=crypto))
             self.crypto = crypto
 
-            client_manager.create_client_info()
             return ResultModel(request_num=11, msg_id=msg_id, result=(client_id, msg))
         elif type_id == 20:
             if self._state != LifeCycleEnum.msg:
                 raise LifeCycleError()
 
             call_id, client_id, method_name, param = self.crypto.encrypt_object(result)
-            result: Any = await self.msg_handle(call_id, client_id, method_name, param)
+            client_model = client_manager.get_client_info(client_id)
+            if client_model is MISS_OBJECT:
+                return ResultModel(request_num=11, msg_id=msg_id, exception=RPCError('client_id error'))
+
+            result: Any = await self.msg_handle(call_id, method_name, param, client_model)
             if isinstance(result, Exception):
                 return ResultModel(request_num=11, msg_id=msg_id, exception=result)
             else:
@@ -112,7 +120,7 @@ class Request(object):
             logging.error(f"parse request data: {request} from {self._conn.peer} error")
             raise ServerError('type_id error')
 
-    async def msg_handle(self, call_id: str, client_id: str, method_name: str, param: str):
+    async def msg_handle(self, call_id: int, method_name: str, param: str, client_model: 'ClientModel'):
         # really msg handle
 
         # TODO middleware before
@@ -123,15 +131,15 @@ class Request(object):
             if method_name.startswith('_root_') and self._conn.peer[0] != '127.0.0.1':
                 # root func only called by local client
                 raise FuncNotFoundError
-            elif call_id in func_manager.generator_dict:
+            elif call_id in client_model.generator_dict:
                 try:
-                    result = func_manager.generator_dict[call_id]
+                    result = client_model.generator_dict[call_id]
                     if inspect.isgenerator(result):
                         result = next(result)
                     elif inspect.isasyncgen(result):
                         result = await result.__anext__()
                 except (StopAsyncIteration, StopIteration) as e:
-                    del func_manager.generator_dict[call_id]
+                    del client_model.generator_dict[call_id]
                     result = e
             else:
                 if asyncio.iscoroutinefunction(method):
@@ -141,11 +149,11 @@ class Request(object):
 
                 if inspect.isgenerator(result):
                     call_id = id(result)
-                    func_manager.generator_dict[call_id] = result
+                    client_model.generator_dict[call_id] = result
                     result = next(result)
                 elif inspect.isasyncgen(result):
                     call_id = id(result)
-                    func_manager.generator_dict[call_id] = result
+                    client_model.generator_dict[call_id] = result
                     result = await result.__anext__()
             status = True
         except Exception as e:
