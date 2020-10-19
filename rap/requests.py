@@ -26,14 +26,13 @@ from rap.utlis import MISS_OBJECT, get_event_loop
 
 
 class LifeCycleEnum(Enum):
-    new: auto()
     init: auto()
     msg: auto()
     drop: auto()
 
 
 @dataclass()
-class RequestModel(object):
+class ResultModel(object):
     request_num: int
     msg_id: int
     result: Optional[Tuple] = None
@@ -51,7 +50,7 @@ class Request(object):
         self._timeout: int = timeout
         self._run_timeout: int = run_timeout
         self.crypto: Optional[Crypto] = None
-        self._state: 'LifeCycleEnum' = LifeCycleEnum.new
+        self._state: 'LifeCycleEnum' = LifeCycleEnum.init
 
     @staticmethod
     def _request_handle(request: BASE_REQUEST_TYPE) -> Tuple[int, int, Any]:
@@ -73,9 +72,9 @@ class Request(object):
 
         type_id: int = request[0]
         if type_id == 10:
-            if self._state != LifeCycleEnum.new:
+            if self._state != LifeCycleEnum.init:
                 raise LifeCycleError()
-            self._state = LifeCycleEnum.init
+            self._state = LifeCycleEnum.msg
 
             client_id: str = self._gen_client_id()
 
@@ -91,26 +90,24 @@ class Request(object):
             self.crypto = crypto
 
             client_manager.create_client_info()
-            return RequestModel(request_num=11, msg_id=msg_id, result=(client_id, msg))
+            return ResultModel(request_num=11, msg_id=msg_id, result=(client_id, msg))
         elif type_id == 20:
-            if self._state == LifeCycleEnum.init:
-                self._state = LifeCycleEnum.msg
             if self._state != LifeCycleEnum.msg:
                 raise LifeCycleError()
 
             call_id, client_id, method_name, param = self.crypto.encrypt_object(result)
             result: Any = await self.msg_handle(call_id, client_id, method_name, param)
             if isinstance(result, Exception):
-                return RequestModel(request_num=11, msg_id=msg_id, exception=result)
+                return ResultModel(request_num=11, msg_id=msg_id, exception=result)
             else:
-                return RequestModel(request_num=11, msg_id=msg_id, result=(call_id, client_id, method_name, result))
+                return ResultModel(request_num=11, msg_id=msg_id, result=(call_id, method_name, result))
         elif type_id == 0:
             if self._state == LifeCycleEnum.drop:
                 raise ServerError('The life cycle is already a drop')
             self._state = LifeCycleEnum.drop
             call_id, client_id, drop_msg = self.crypto.encrypt_object(result)
             # TODO drop conn
-            return RequestModel(request_num=11, msg_id=msg_id, result=(call_id, client_id, 1))
+            return ResultModel(request_num=11, msg_id=msg_id, result=(call_id, client_id, 1))
         else:
             logging.error(f"parse request data: {request} from {self._conn.peer} error")
             raise ServerError('type_id error')

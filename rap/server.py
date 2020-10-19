@@ -16,7 +16,7 @@ from rap.middleware import (
     BaseConnMiddleware,
     IpBlockMiddleware
 )
-from rap.requests import Request, RequestModel
+from rap.requests import Request, ResultModel
 from rap.response import response
 from rap.types import (
     READER_TYPE,
@@ -102,7 +102,7 @@ class Server(object):
                 conn.set_reader_exc(e)
                 raise e
             try:
-                request_model: RequestModel = await request_handle.dispatch(request)
+                request_model: ResultModel = await request_handle.dispatch(request)
                 await response(
                     conn,
                     self._timeout,

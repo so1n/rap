@@ -30,18 +30,18 @@ INIT_RESPONSE_TYPE = Tuple[int, int, Union[str, bytes]]
 #   client send msg
 #   ('requests num: 20', 'msg id', '(call id, client id, func name, param)')
 #   server send success msg
-#   ('response num: 21', 'msg id', '(call id, client id, func name, result)')
+#   ('response num: 21', 'msg id', '(call id, func name, result)')
 #   server send error msg
-#   ('response num: 21', 'msg id', '(call id, client id, exc, exc info')
-MSG_REQUEST_TYPE = Tuple[int, int, Union[Tuple[int, int, str, Any], bytes]]
-MSG_RESPONSE_TYPE = Tuple[int, int, Union[Tuple[int, int, str, Any], bytes]]
+#   ('response num: 21', 'msg id', '(exc, exc info')
+MSG_REQUEST_TYPE = Tuple[int, int, Union[Tuple[int, str, Any], bytes]]
+MSG_RESPONSE_TYPE = Tuple[int, int, Union[Tuple[str, Any], bytes]]
 # DROP(Clear the relevant information on the server and exit)
 #   client send msg
 #   ('requests num: 0', 'msg id', '(call id, client id, drop msg')
 #   server send msg
-#   ('requests num: 1', 'msg id', '(call id, client id, result 0 false 1 true')
+#   ('requests num: 1', 'msg id', '(call id, result 0 false 1 true')
 DROP_REQUEST_TYPE = Tuple[int, int, Union[Tuple[int, int, str], bytes]]
-DROP_RESPONSE_TYPE = Tuple[int, int, Union[Tuple[int, int, int], bytes]]
+DROP_RESPONSE_TYPE = Tuple[int, int, Union[Tuple[int, int], bytes]]
 
 # param description
 #   hello msg: When encrypt is enabled, the server verifies whether the same secret key is by decrypting hello msg
