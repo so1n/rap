@@ -83,22 +83,13 @@ class Server(object):
                 request: Optional[BASE_REQUEST_TYPE] = await conn.read(self._keep_alive)
             except asyncio.TimeoutError:
                 logging.error(f"recv data from {conn.peer} timeout...")
+                await response(conn, self._timeout, event=('close conn', 'read msg timeout'))
                 break
             except IOError as e:
-                await response(
-                    conn, self._timeout, crypto=request_handle.crypto, request_num=1, msg_id=-2, result=(1, )
-                )
                 logging.debug(f"close conn:{conn.peer} info:{e}")
                 break
             except Exception as e:
-                await response(
-                    conn,
-                    self._timeout,
-                    crypto=request_handle.crypto,
-                    request_num=21,
-                    msg_id=-1,
-                    exception=ServerError('recv error')
-                )
+                await response(conn, self._timeout, event=('close conn', 'recv error'))
                 conn.set_reader_exc(e)
                 raise e
             try:
@@ -106,7 +97,7 @@ class Server(object):
                 await response(
                     conn,
                     self._timeout,
-                    crypto=request_handle.crypto,
+                    crypto=request_model.crypto,
                     request_num=request_model.request_num,
                     msg_id=request_model.msg_id,
                     exception=request_model.exception,
@@ -115,7 +106,7 @@ class Server(object):
             except Exception as e:
                 if not isinstance(e, BaseRapError):
                     e = ServerError('request handle error')
-                await response(conn, self._timeout, crypto=request_handle.crypto, request_num=1, msg_id=-1, exception=e)
+                await response(conn, self._timeout, request_num=1, exception=e)
 
         if not conn.is_closed():
             conn.close()

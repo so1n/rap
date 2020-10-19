@@ -2,7 +2,6 @@ import asyncio
 import inspect
 import logging
 import time
-import random
 
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple
@@ -22,14 +21,15 @@ from rap.manager.aes_manager import aes_manager
 from rap.manager.client_manager import client_manager, ClientModel, LifeCycleEnum
 from rap.manager.func_manager import func_manager
 from rap.types import BASE_REQUEST_TYPE
-from rap.utlis import MISS_OBJECT, get_event_loop
+from rap.utlis import MISS_OBJECT, gen_id, get_event_loop, parse_error
 
 
 @dataclass()
 class ResultModel(object):
     request_num: int
     msg_id: int
-    result: Optional[Tuple] = None
+    crypto: Optional[Crypto] = None
+    result: Optional[dict] = None
     exception: Optional[Exception] = None
 
 
@@ -46,68 +46,101 @@ class Request(object):
         self.crypto: Optional[Crypto] = None
 
     @staticmethod
-    def _request_handle(request: BASE_REQUEST_TYPE) -> Tuple[int, int, Any]:
+    def _request_handle(request: BASE_REQUEST_TYPE) -> Tuple[int, int, str, bytes]:
         try:
-            request_num, msg_id, result = request
-            return request_num, msg_id, result
+            request_num, msg_id, client_id, result = request
+            return request_num, msg_id, client_id, result
         except Exception:
             raise ProtocolError()
 
-    def _gen_client_id(self) -> str:
-        return f'{self._conn.connection_info}_{str(random.randrange(1000, 9999))}'
+    @staticmethod
+    def _check_timeout(timestamp: int) -> bool:
+        return (int(time.time()) - timestamp) > 60
+
+    def _body_handle(self, body: dict, client_model: ClientModel):
+        if self._check_timeout(body.get('timestamp', 0)):
+            raise ServerError('timeout')
+        nonce: str = body.get('nonce', '')
+        if nonce in client_model.nonce_set:
+            raise ServerError('nonce error')
+        else:
+            client_model.nonce_set.add(nonce)
 
     async def dispatch(self, request: BASE_REQUEST_TYPE):
         logging.debug(f'get request data:{request} from {self._conn.peer}')
         if not isinstance(request, (tuple, list)):
             raise ProtocolError()
 
-        request_num, msg_id, result = self._request_handle(request)
+        request_num, msg_id, client_id, result = self._request_handle(request)
 
         type_id: int = request[0]
         if type_id == 10:
-            while True:
-                client_id: str = self._gen_client_id()
-                if client_manager.exist(client_id):
-                    break
-
             # init crypto and encrypt msg
-            key, msg = result
-            crypto: Crypto = aes_manager.get_aed(key)
+            crypto: Crypto = aes_manager.get_aed(client_id)
+            client_model: 'ClientModel' = ClientModel(crypto=crypto)
             if crypto == MISS_OBJECT:
                 raise AuthError('aes key error')
             try:
-                msg: str = crypto.decrypt(result)
+                decrypt_result: dict = crypto.decrypt_object(result)
             except Exception:
                 raise AuthError('decrypt error')
-            client_model: 'ClientModel' = ClientModel(client_id=client_id, crypto=crypto)
+            self._body_handle(decrypt_result, client_model)
+
             if client_model.life_cycle != LifeCycleEnum.init:
                 raise LifeCycleError()
             client_model.life_cycle = LifeCycleEnum.msg
-            client_manager.create_client_info(client_id, client_model)
-            return ResultModel(request_num=11, msg_id=msg_id, result=(client_id, msg))
+            client_manager.create_client_model(client_model)
+            return ResultModel(
+                request_num=11,
+                msg_id=msg_id,
+                crypto=crypto,
+                result={'client': client_model.client_id}
+            )
         elif type_id == 20:
-            call_id, client_id, method_name, param = self.crypto.encrypt_object(result)
-            client_model = client_manager.get_client_info(client_id)
+            client_model = client_manager.get_client_model(client_id)
             if client_model is MISS_OBJECT:
-                return ResultModel(request_num=11, msg_id=msg_id, exception=RPCError('client_id error'))
+                raise RPCError('client_id error')
             if client_model.life_cycle != LifeCycleEnum.msg:
                 raise LifeCycleError()
-
+            try:
+                decrypt_result: dict = client_model.crypto.decrypt_object(result)
+            except Exception:
+                raise AuthError('decrypt error')
+            self._body_handle(decrypt_result, client_model)
+            call_id: int = decrypt_result['call_id']
+            method_name: str = decrypt_result['method_name']
+            param: str = decrypt_result['param']
             result: Any = await self.msg_handle(call_id, method_name, param, client_model)
             if isinstance(result, Exception):
-                return ResultModel(request_num=11, msg_id=msg_id, exception=result)
+                exc, exc_info = parse_error(result)
+                return ResultModel(
+                    request_num=11,
+                    msg_id=msg_id,
+                    crypto=client_model.crypto,
+                    result={'exc': exc, 'exc_info': exc_info}
+                )
             else:
-                return ResultModel(request_num=11, msg_id=msg_id, result=(call_id, method_name, result))
+                return ResultModel(
+                    request_num=11,
+                    msg_id=msg_id,
+                    crypto=client_model.crypto,
+                    result={'call_id': call_id, 'method_name': method_name, 'result': result}
+                )
         elif type_id == 0:
             call_id, client_id, drop_msg = self.crypto.encrypt_object(result)
-            client_model = client_manager.get_client_info(client_id)
+            client_model = client_manager.get_client_model(client_id)
             if client_model is MISS_OBJECT:
-                return ResultModel(request_num=11, msg_id=msg_id, exception=RPCError('client_id error'))
+                raise RPCError('client_id error')
             if client_model.life_cycle == LifeCycleEnum.drop:
                 raise ServerError('The life cycle is already a drop')
             client_model.life_cycle = LifeCycleEnum.drop
             # TODO drop conn
-            return ResultModel(request_num=11, msg_id=msg_id, result=(call_id, client_id, 1))
+            return ResultModel(
+                request_num=11,
+                msg_id=msg_id,
+                crypto=client_model.crypto,
+                result={'call_id': call_id, 'result': 1}
+            )
         else:
             logging.error(f"parse request data: {request} from {self._conn.peer} error")
             raise ServerError('type_id error')
