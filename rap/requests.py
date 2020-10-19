@@ -5,7 +5,6 @@ import time
 import random
 
 from dataclasses import dataclass
-from enum import auto, Enum
 from typing import Any, Optional, Tuple
 
 from rap.aes import Crypto
@@ -20,16 +19,10 @@ from rap.exceptions import (
     ServerError,
 )
 from rap.manager.aes_manager import aes_manager
-from rap.manager.client_manager import client_manager, ClientModel
+from rap.manager.client_manager import client_manager, ClientModel, LifeCycleEnum
 from rap.manager.func_manager import func_manager
 from rap.types import BASE_REQUEST_TYPE
 from rap.utlis import MISS_OBJECT, get_event_loop
-
-
-class LifeCycleEnum(Enum):
-    init: auto()
-    msg: auto()
-    drop: auto()
 
 
 @dataclass()
@@ -51,7 +44,6 @@ class Request(object):
         self._timeout: int = timeout
         self._run_timeout: int = run_timeout
         self.crypto: Optional[Crypto] = None
-        self._state: 'LifeCycleEnum' = LifeCycleEnum.init
 
     @staticmethod
     def _request_handle(request: BASE_REQUEST_TYPE) -> Tuple[int, int, Any]:
@@ -73,10 +65,6 @@ class Request(object):
 
         type_id: int = request[0]
         if type_id == 10:
-            if self._state != LifeCycleEnum.init:
-                raise LifeCycleError()
-            self._state = LifeCycleEnum.msg
-
             while True:
                 client_id: str = self._gen_client_id()
                 if client_manager.exist(client_id):
@@ -91,18 +79,19 @@ class Request(object):
                 msg: str = crypto.decrypt(result)
             except Exception:
                 raise AuthError('decrypt error')
-            client_manager.create_client_info(client_id, ClientModel(client_id=client_id, crypto=crypto))
-            self.crypto = crypto
-
+            client_model: 'ClientModel' = ClientModel(client_id=client_id, crypto=crypto)
+            if client_model.life_cycle != LifeCycleEnum.init:
+                raise LifeCycleError()
+            client_model.life_cycle = LifeCycleEnum.msg
+            client_manager.create_client_info(client_id, client_model)
             return ResultModel(request_num=11, msg_id=msg_id, result=(client_id, msg))
         elif type_id == 20:
-            if self._state != LifeCycleEnum.msg:
-                raise LifeCycleError()
-
             call_id, client_id, method_name, param = self.crypto.encrypt_object(result)
             client_model = client_manager.get_client_info(client_id)
             if client_model is MISS_OBJECT:
                 return ResultModel(request_num=11, msg_id=msg_id, exception=RPCError('client_id error'))
+            if client_model.life_cycle != LifeCycleEnum.msg:
+                raise LifeCycleError()
 
             result: Any = await self.msg_handle(call_id, method_name, param, client_model)
             if isinstance(result, Exception):
@@ -110,10 +99,13 @@ class Request(object):
             else:
                 return ResultModel(request_num=11, msg_id=msg_id, result=(call_id, method_name, result))
         elif type_id == 0:
-            if self._state == LifeCycleEnum.drop:
-                raise ServerError('The life cycle is already a drop')
-            self._state = LifeCycleEnum.drop
             call_id, client_id, drop_msg = self.crypto.encrypt_object(result)
+            client_model = client_manager.get_client_info(client_id)
+            if client_model is MISS_OBJECT:
+                return ResultModel(request_num=11, msg_id=msg_id, exception=RPCError('client_id error'))
+            if client_model.life_cycle == LifeCycleEnum.drop:
+                raise ServerError('The life cycle is already a drop')
+            client_model.life_cycle = LifeCycleEnum.drop
             # TODO drop conn
             return ResultModel(request_num=11, msg_id=msg_id, result=(call_id, client_id, 1))
         else:
