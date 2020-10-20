@@ -23,7 +23,7 @@ async def response(
     conn: ServerConnection,
     timeout: int,
     crypto: Optional[Crypto] = None,
-    request_num: int = 21,
+    response_num: int = 21,
     msg_id: int = -1,
     exception: Optional[Exception] = None,
     result: Optional[dict] = None,
@@ -31,17 +31,17 @@ async def response(
 ):
     if exception is not None:
         error_response: Optional[Tuple[str, str]] = parse_error(exception)
-        response_msg: BASE_RESPONSE_TYPE = (request_num, msg_id, *error_response)
+        response_msg: BASE_RESPONSE_TYPE = (32, msg_id, *error_response)
     elif result is not None:
         result.update(dict(timestamp=int(time.time()), nonce=gen_id(10)))
         response_msg: BASE_RESPONSE_TYPE = (
-            request_num, msg_id, crypto.encrypt_object(result) if crypto else result
+            response_num, msg_id, crypto.encrypt_object(result) if crypto else result
         )
     elif event is not None:
-        response_msg: BASE_RESPONSE_TYPE = (32, msg_id, event)
+        response_msg: BASE_RESPONSE_TYPE = (31, msg_id, event)
     else:
         error_response: Optional[Tuple[str, str]] = parse_error(ServerError('not response'))
-        response_msg: BASE_RESPONSE_TYPE = (request_num, msg_id, *error_response)
+        response_msg: BASE_RESPONSE_TYPE = (32, msg_id, *error_response)
 
     try:
         await conn.write(response_msg, timeout)

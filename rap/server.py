@@ -92,21 +92,22 @@ class Server(object):
                 await response(conn, self._timeout, event=('close conn', 'recv error'))
                 conn.set_reader_exc(e)
                 raise e
+
             try:
                 request_model: ResultModel = await request_handle.dispatch(request)
                 await response(
                     conn,
                     self._timeout,
                     crypto=request_model.crypto,
-                    request_num=request_model.request_num,
+                    response_num=request_model.response_num,
                     msg_id=request_model.msg_id,
                     exception=request_model.exception,
                     result=request_model.result
                 )
             except Exception as e:
                 if not isinstance(e, BaseRapError):
-                    e = ServerError('request handle error')
-                await response(conn, self._timeout, request_num=1, exception=e)
+                    e = ServerError(f'request handle error:{str(e)}')
+                await response(conn, self._timeout, exception=e)
 
         if not conn.is_closed():
             conn.close()

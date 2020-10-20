@@ -22,6 +22,10 @@ class LifeCycleError(BaseRapError):
     message: str = 'Life cycle error'
 
 
+class ParseError(BaseRapError):
+    message: str = 'Parse error'
+
+
 class ProtocolError(BaseRapError):
     message: str = 'Invalid protocol'
 
