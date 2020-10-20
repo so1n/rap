@@ -14,8 +14,8 @@ REQUEST_TYPE = Tuple[int, int, int, int, Union[bytes, str, None], Union[Tuple[An
 RESPONSE_TYPE = Tuple[int, int, int, int, Union[bytes, Tuple[str, str], None], Any]
 
 
-BASE_REQUEST_TYPE = Tuple[int, int, str, Union[Tuple, bytes]]
-BASE_RESPONSE_TYPE = Tuple[int, int, Union[Tuple, bytes]]
+BASE_REQUEST_TYPE = Tuple[int, int, dict, Any]
+BASE_RESPONSE_TYPE = Tuple[int, int, dict, Any]
 
 
 # init(Verify encryption key and obtain client id)
