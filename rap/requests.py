@@ -22,7 +22,7 @@ from rap.manager.aes_manager import aes_manager
 from rap.manager.client_manager import client_manager, ClientModel, LifeCycleEnum
 from rap.manager.func_manager import func_manager
 from rap.types import BASE_REQUEST_TYPE
-from rap.utlis import MISS_OBJECT, gen_id, get_event_loop, parse_error
+from rap.utlis import Constant, MISS_OBJECT, gen_id, get_event_loop, parse_error
 
 
 @dataclass()
@@ -75,10 +75,10 @@ class Request(object):
         request_num, msg_id, client_id, result = self._request_handle(request)
 
         request_num: int = request[0]
-        if request_num == 10:
+        if request_num == Constant.INIT_REQUEST:
             # init crypto and encrypt msg
             result_model: 'ResultModel' = ResultModel(
-                response_num=11,
+                response_num=Constant.INIT_RESPONSE,
                 msg_id=msg_id,
             )
             crypto: Crypto = aes_manager.get_aed(client_id)
@@ -106,9 +106,9 @@ class Request(object):
             result_model.crypto = crypto
             result_model.result = {'client': client_model.client_id}
             return result_model
-        elif request_num == 20:
+        elif request_num == Constant.MSG_REQUEST:
             result_model: 'ResultModel' = ResultModel(
-                response_num=21,
+                response_num=Constant.MSG_RESPONSE,
                 msg_id=msg_id,
             )
             client_model = client_manager.get_client_model(client_id)
@@ -146,13 +146,23 @@ class Request(object):
             else:
                 result_model.result = {'call_id': call_id, 'method_name': method_name, 'result': result}
             return result_model
-        elif request_num == 0:
+        elif request_num == Constant.DROP_REQUEST:
             result_model: 'ResultModel' = ResultModel(
-                response_num=1,
+                response_num=Constant.DROP_RESPONSE,
                 msg_id=msg_id,
             )
-            call_id, client_id, drop_msg = self.crypto.encrypt_object(result)
             client_model = client_manager.get_client_model(client_id)
+            try:
+                decrypt_result: dict = client_model.crypto.decrypt_object(result)
+            except Exception:
+                result_model.exception = AuthError('decrypt error')
+                return result_model
+
+            exception: 'Optional[Exception]' = self._body_handle(decrypt_result, client_model)
+            if exception is not None:
+                result_model.exception = exception
+                return result_model
+            call_id = decrypt_result['call_id']
             if client_model is MISS_OBJECT:
                 result_model.exception = RPCError('client_id error')
                 return result_model
@@ -166,7 +176,7 @@ class Request(object):
         else:
             logging.error(f"parse request data: {request} from {self._conn.peer} error")
             return ResultModel(
-                response_num=32,
+                response_num=Constant.SERVER_ERROR_RESPONSE,
                 msg_id=msg_id,
                 exception=ServerError('type_id error')
             )

@@ -17,6 +17,16 @@ class Constant(object):
     RESPONSE: int = 1
     SOCKET_RECV_SIZE: int = 1024 ** 1
 
+    INIT_REQUEST: int = 101
+    INIT_RESPONSE: int = 201
+    MSG_REQUEST: int = 102
+    MSG_RESPONSE: int = 202
+    DROP_REQUEST: int = 103
+    DROP_RESPONSE: int = 203
+    SERVER_EVENT: int = 301
+    CLIENT_EVENT_RESPONSE: int = 401
+    SERVER_ERROR_RESPONSE: int = 501
+
 
 def _get_event_loop():
     if sys.version_info >= (3, 7):

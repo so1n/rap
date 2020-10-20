@@ -8,7 +8,7 @@ from rap.aes import Crypto
 from rap.conn.connection import ServerConnection
 from rap.exceptions import ServerError
 from rap.types import BASE_RESPONSE_TYPE
-from rap.utlis import parse_error, gen_id
+from rap.utlis import Constant, parse_error, gen_id
 
 
 @dataclass()
@@ -23,7 +23,7 @@ async def response(
     conn: ServerConnection,
     timeout: int,
     crypto: Optional[Crypto] = None,
-    response_num: int = 21,
+    response_num: int = Constant.MSG_RESPONSE,
     msg_id: int = -1,
     exception: Optional[Exception] = None,
     result: Optional[dict] = None,
@@ -31,17 +31,17 @@ async def response(
 ):
     if exception is not None:
         error_response: Optional[Tuple[str, str]] = parse_error(exception)
-        response_msg: BASE_RESPONSE_TYPE = (32, msg_id, *error_response)
+        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, msg_id, *error_response)
     elif result is not None:
         result.update(dict(timestamp=int(time.time()), nonce=gen_id(10)))
         response_msg: BASE_RESPONSE_TYPE = (
             response_num, msg_id, crypto.encrypt_object(result) if crypto else result
         )
     elif event is not None:
-        response_msg: BASE_RESPONSE_TYPE = (31, msg_id, event)
+        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_EVENT, msg_id, event)
     else:
         error_response: Optional[Tuple[str, str]] = parse_error(ServerError('not response'))
-        response_msg: BASE_RESPONSE_TYPE = (32, msg_id, *error_response)
+        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, msg_id, *error_response)
 
     try:
         await conn.write(response_msg, timeout)
