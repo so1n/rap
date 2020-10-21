@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import traceback
 import ssl
 
 import msgpack
@@ -7,18 +8,18 @@ import msgpack
 from typing import Callable, List, Optional
 
 from rap.conn.connection import ServerConnection
-from rap.exceptions import ServerError
+from rap.manager.aes_manager import aes_manager
 from rap.manager.func_manager import func_manager
 from rap.middleware import (
     BaseConnMiddleware,
     IpBlockMiddleware
 )
-from rap.requests import Request
+from rap.requests import Request, ResultModel
 from rap.response import response
 from rap.types import (
     READER_TYPE,
     WRITER_TYPE,
-    REQUEST_TYPE
+    BASE_REQUEST_TYPE
 )
 
 __all__ = ['Server']
@@ -33,19 +34,21 @@ class Server(object):
             timeout: int = 9,
             keep_alive: int = 1200,
             run_timeout: int = 9,
+            secret_list: Optional[List[str]] = None,
             ssl_crt_path: Optional[str] = None,
             ssl_key_path: Optional[str] = None,
-            secret: Optional[str] = None
     ):
         self._host: str = host
         self._port: int = port
         self._timeout: int = timeout
         self._keep_alive: int = keep_alive
         self._run_timeout: int = run_timeout
-        self._secret: Optional[str] = secret
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._ssl_key_path: Optional[str] = ssl_key_path
         self._conn_middleware: List[BaseConnMiddleware] = [IpBlockMiddleware()]
+        if secret_list is not None:
+            for secret in secret_list:
+                aes_manager.add_aes(secret)
 
     @staticmethod
     def register(func: Optional[Callable], name: Optional[str] = None):
@@ -75,27 +78,37 @@ class Server(object):
         for middleware in self._conn_middleware:
             await middleware.dispatch(conn)
 
-        request_handle = Request(
-            conn,
-            self._timeout,
-            self._run_timeout,
-            secret=self._secret
-        )
+        request_handle = Request(conn, self._run_timeout)
 
         while not conn.is_closed():
             try:
-                request: Optional[REQUEST_TYPE] = await conn.read(self._keep_alive)
+                request: Optional[BASE_REQUEST_TYPE] = await conn.read(self._keep_alive)
             except asyncio.TimeoutError:
                 logging.error(f"recv data from {conn.peer} timeout...")
+                await response(conn, self._timeout, event=('close conn', 'read msg timeout'))
                 break
             except IOError as e:
                 logging.debug(f"close conn:{conn.peer} info:{e}")
                 break
             except Exception as e:
-                await response(conn, self._timeout, exception=ServerError(), is_auth=False)
+                await response(conn, self._timeout, event=('close conn', 'recv error'))
                 conn.set_reader_exc(e)
                 raise e
-            await request_handle.msg_handle(request)
+
+            try:
+                request_model: ResultModel = await request_handle.dispatch(request)
+                await response(
+                    conn,
+                    self._timeout,
+                    crypto=request_model.crypto,
+                    response_num=request_model.response_num,
+                    msg_id=request_model.msg_id,
+                    exception=request_model.exception,
+                    result=request_model.result
+                )
+            except Exception as e:
+                logging.error(traceback.format_exc())
+                await response(conn, self._timeout, exception=e)
 
         if not conn.is_closed():
             conn.close()

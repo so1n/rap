@@ -12,7 +12,6 @@ class FuncManager(object):
     def __init__(self):
         self._cwd: str = os.getcwd()
         self.func_dict: Dict[str, Callable] = dict()
-        self.generator_dict: dict = {}
 
         self.register(self._load, '_root_load')
         self.register(self._reload, '_root_reload')
@@ -65,4 +64,4 @@ class FuncManager(object):
         return register_list
 
 
-func_manager = FuncManager()
+func_manager: 'FuncManager' = FuncManager()

@@ -1,66 +1,49 @@
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any, Tuple, Optional
 
 from rap.aes import Crypto
 from rap.conn.connection import ServerConnection
-from rap.exceptions import AuthError
-from rap.types import RESPONSE_TYPE
-from rap.utlis import Constant
+from rap.exceptions import ServerError
+from rap.types import BASE_RESPONSE_TYPE
+from rap.utlis import Constant, parse_error, gen_id
 
 
 @dataclass()
 class Response(object):
-    conn: ServerConnection
-    timeout: int
-    crypto: Optional[Crypto] = None
+    request_num: Optional[int] = None
     msg_id: Optional[int] = None
-    call_id: Optional[int] = None
     exception: Optional[Exception] = None
     result: Optional[Any] = None
-    is_auth: int = True
-
-
-def parse_error(exception: Optional[Exception]) -> Optional[Tuple[str, str]]:
-    error_response: Optional[Tuple[str, str]] = None
-    if exception:
-        error_response = (type(exception).__name__, str(exception))
-    return error_response
 
 
 async def response(
     conn: ServerConnection,
     timeout: int,
     crypto: Optional[Crypto] = None,
-    msg_id: Optional[int] = None,
-    call_id: Optional[int] = None,
+    response_num: int = Constant.MSG_RESPONSE,
+    msg_id: int = -1,
     exception: Optional[Exception] = None,
-    result: Optional[Any] = None,
-    is_auth: int = True
+    result: Optional[dict] = None,
+    header: Optional[dict] = None,
+    event: Optional[Tuple[str, Any]] = None
 ):
-    error_response: Optional[Tuple[str, str]] = parse_error(exception)
-    if is_auth == 0 and crypto is None:
-        response_msg: RESPONSE_TYPE = (Constant.RESPONSE, msg_id, call_id, 0, error_response, result)
-    elif is_auth == 1 and crypto is not None:
-        response_msg: RESPONSE_TYPE = (
-            Constant.RESPONSE,
-            msg_id,
-            call_id,
-            1,
-            crypto.encrypt_object(error_response),
-            crypto.encrypt_object(result)
+    if exception is not None:
+        error_response: Optional[Tuple[str, str]] = parse_error(exception)
+        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, msg_id, header, error_response)
+    elif result is not None:
+        result.update(dict(timestamp=int(time.time()), nonce=gen_id(10)))
+        response_msg: BASE_RESPONSE_TYPE = (
+            response_num, msg_id, header, crypto.encrypt_object(result) if crypto else result
         )
+    elif event is not None:
+        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_EVENT, msg_id, header, event)
     else:
-        error_response: Optional[Tuple[str, str]] = parse_error(AuthError())
-        response_msg: RESPONSE_TYPE = (
-            Constant.RESPONSE,
-            msg_id,
-            call_id,
-            0,
-            error_response,
-            None
-        )
+        error_response: Optional[Tuple[str, str]] = parse_error(ServerError('not response'))
+        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, msg_id, header, error_response)
+
     try:
         await conn.write(response_msg, timeout)
     except asyncio.TimeoutError:

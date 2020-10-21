@@ -10,12 +10,12 @@ from typing import Any
 
 class Crypto(object):
     def __init__(self, key: str):
+        self.key: str = key
         self._length = 16
-        self._key: str = key
         self._mode: 'AES.MODE_CBC' = AES.MODE_CBC
 
     def encrypt(self, raw_data: str) -> bytes:
-        new_crypto: 'AES.new' = AES.new(self._key, self._mode, self._key)
+        new_crypto: 'AES.new' = AES.new(self.key, self._mode, self.key)
         count: int = len(raw_data)
         salt: int = 0
         if count % self._length != 0:
@@ -25,7 +25,7 @@ class Crypto(object):
         return b2a_hex(encrypt_str)
 
     def decrypt(self, raw_byte: bytes) -> str:
-        new_crypto: 'AES.new' = AES.new(self._key, self._mode, self._key)
+        new_crypto: 'AES.new' = AES.new(self.key, self._mode, self.key)
         decrypt_pt: str = new_crypto.decrypt(a2b_hex(raw_byte)).decode()
         return decrypt_pt.rstrip('\0')
 
