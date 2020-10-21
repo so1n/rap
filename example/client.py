@@ -4,7 +4,7 @@ import time
 from rap.client import Client
 
 
-client = Client()
+client = Client(secret='keyskeyskeyskeys')
 
 
 def sync_sum(a: int, b: int) -> int:

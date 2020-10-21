@@ -53,6 +53,7 @@ class AsyncIteratorCall:
                 call_id=self._call_id
             )
             call_id, _, result = await self._client._response(conn, msg_id)
+            print(call_id)
             # The server will return the call id of the generator function,
             # and the client can continue to get data based on the call id.
             # If no data, the server will return StopAsyncIteration or StopIteration error.

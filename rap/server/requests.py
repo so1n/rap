@@ -123,8 +123,9 @@ class Request(object):
             except Exception:
                 result_model.exception = AuthError('decrypt error')
                 return result_model
+        else:
+            decrypt_body = body
 
-        decrypt_body = body
         if type(body) is dict:
             # check body
             exception: 'Optional[Exception]' = self._body_handle(decrypt_body, client_model)
@@ -149,12 +150,12 @@ class Request(object):
                 result_model.exception = ParseError()
                 return result_model
 
-            result: Any = await self.msg_handle(call_id, method_name, param, client_model)
+            new_call_id, result = await self.msg_handle(call_id, method_name, param, client_model)
             if isinstance(result, Exception):
                 exc, exc_info = parse_error(result)
                 result_model.result = {'exc': exc, 'exc_info': exc_info}
             else:
-                result_model.result = {'call_id': call_id, 'method_name': method_name, 'result': result}
+                result_model.result = {'call_id': new_call_id, 'method_name': method_name, 'result': result}
             return result_model
         elif request_num == Constant.DROP_REQUEST:
             call_id = decrypt_body['call_id']
@@ -207,4 +208,4 @@ class Request(object):
                 result = ServerError('execute func error')
         # TODO middleware after
         logging.info(f"Method:{method_name}, time:{time.time() - start_time}, status:{status}")
-        return result
+        return call_id, result
