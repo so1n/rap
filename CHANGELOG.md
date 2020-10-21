@@ -1,5 +1,8 @@
-### 0.3.3
+### 0.5.5
  - Feature: add called limit middleware
+
+### 0.5.0
+ - Refactor: new protocol
 
 ### 0.3.2
  - Feature: add ip limit conn middleware
