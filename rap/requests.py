@@ -53,7 +53,7 @@ class Request(object):
         }
 
     @staticmethod
-    def _request_handle(request: BASE_REQUEST_TYPE) -> Tuple[int, int, dict, bytes]:
+    def _request_handle(request: BASE_REQUEST_TYPE) -> Tuple[int, int, dict, Any]:
         try:
             request_num, msg_id, header, body = request
             return request_num, msg_id, header, body
@@ -106,27 +106,29 @@ class Request(object):
                 result_model.exception = AuthError('error client_id')
                 return result_model
 
-        # check crypto
-        if client_model.crypto == MISS_OBJECT:
-            result_model.exception = AuthError('aes key error')
-            return result_model
-
         # check life_cycle
         if client_model.life_cycle not in self._life_cycle_dict.get(response_num, set()):
             result_model.exception = LifeCycleError()
             return result_model
 
-        try:
-            decrypt_body: dict = client_model.crypto.decrypt_object(body)
-        except Exception:
-            result_model.exception = AuthError('decrypt error')
-            return result_model
+        if type(body) is bytes:
+            # check crypto
+            if client_model.crypto == MISS_OBJECT:
+                result_model.exception = AuthError('aes key error')
+                return result_model
+            try:
+                decrypt_body: dict = client_model.crypto.decrypt_object(body)
+            except Exception:
+                result_model.exception = AuthError('decrypt error')
+                return result_model
 
-        # check body
-        exception: 'Optional[Exception]' = self._body_handle(decrypt_body, client_model)
-        if exception is not None:
-            result_model.exception = exception
-            return result_model
+            # check body
+            exception: 'Optional[Exception]' = self._body_handle(decrypt_body, client_model)
+            if exception is not None:
+                result_model.exception = exception
+                return result_model
+        else:
+            decrypt_body = body
 
         # dispatch
         if response_num == Constant.INIT_RESPONSE:
@@ -180,7 +182,7 @@ class Request(object):
                     result = e
             else:
                 if asyncio.iscoroutinefunction(method):
-                    result: Any = await asyncio.wait_for(method(*param), self._timeout)
+                    result: Any = await asyncio.wait_for(method(*param), self._run_timeout)
                 else:
                     result: Any = await get_event_loop().run_in_executor(None, method, *param)
 
