@@ -8,7 +8,7 @@ from rap.common.aes import Crypto
 from rap.conn.connection import ServerConnection
 from rap.common.exceptions import ServerError
 from rap.common.types import BASE_RESPONSE_TYPE
-from rap.common.utlis import Constant, parse_error, gen_id
+from rap.common.utlis import Constant, parse_error, gen_id, MISS_OBJECT
 
 
 @dataclass()
@@ -36,7 +36,7 @@ async def response(
     elif result is not None:
         result.update(dict(timestamp=int(time.time()), nonce=gen_id(10)))
         response_msg: BASE_RESPONSE_TYPE = (
-            response_num, msg_id, header, crypto.encrypt_object(result) if crypto else result
+            response_num, msg_id, header, crypto.encrypt_object(result) if crypto is not MISS_OBJECT else result
         )
     elif event is not None:
         response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_EVENT, msg_id, header, event)

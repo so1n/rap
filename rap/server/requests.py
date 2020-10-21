@@ -66,7 +66,7 @@ class Request(object):
 
     def _body_handle(self, body: dict, client_model: ClientModel) -> Optional[Exception]:
         if self._check_timeout(body.get('timestamp', 0)):
-            return ServerError('timeout')
+            return ServerError('timeout error')
         nonce: str = body.get('nonce', '')
         if nonce in client_model.nonce_set:
             return ServerError('nonce error')
@@ -124,8 +124,8 @@ class Request(object):
                 result_model.exception = AuthError('decrypt error')
                 return result_model
 
-        else:
-            decrypt_body = body
+        decrypt_body = body
+        if type(body) is dict:
             # check body
             exception: 'Optional[Exception]' = self._body_handle(decrypt_body, client_model)
             if exception is not None:
@@ -136,7 +136,8 @@ class Request(object):
         if response_num == Constant.DECLARE_RESPONSE:
             client_model.life_cycle = LifeCycleEnum.msg
             client_manager.create_client_model(client_model)
-            client_model.crypto = aes_manager.add_aes(client_model.client_id)
+            if client_model.crypto is not MISS_OBJECT:
+                client_model.crypto = aes_manager.add_aes(client_model.client_id)
             result_model.result = {'client_id': client_model.client_id}
             return result_model
         elif response_num == Constant.MSG_RESPONSE:

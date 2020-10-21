@@ -26,7 +26,7 @@ if __name__ == '__main__':
     )
 
     loop = asyncio.new_event_loop()
-    rpc_server = Server(secret_list=['keyskeyskeyskeys'])
+    rpc_server = Server()
     rpc_server.register(sync_sum)
     rpc_server.register(async_sum)
     rpc_server.register(async_gen)

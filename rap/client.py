@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import logging
 import msgpack
+import time
 
 from functools import wraps
 from typing import Any, Callable, cast, Optional, Union, Tuple
@@ -20,6 +21,7 @@ from rap.common.types import (
 )
 from rap.common.utlis import (
     Constant,
+    gen_id
 )
 
 
@@ -84,8 +86,10 @@ class Client:
 
         if secret is not None:
             self._crypto: 'Crypto' = Crypto(secret)
+            self._client_id: str = secret
         else:
             self._crypto: 'Optional[Crypto]' = None
+            self._client_id: str = gen_id(4)
 
     def close(self):
         """close client conn"""
@@ -140,7 +144,10 @@ class Client:
             if client_id is None:
                 raise RPCError('declare error, get client id error')
             if self._crypto is not None:
+                self._client_id = client_id
                 self._crypto = Crypto(client_id)
+            else:
+                self._client_id = client_id
             logging.info('declare success')
         finally:
             self._conn.release(conn)
@@ -153,7 +160,7 @@ class Client:
         self._msg_id = msg_id
 
         if 'client_id' not in header:
-            header['client_id'] = self._crypto.key
+            header['client_id'] = self._client_id
         if self._crypto is not None:
             body = self._crypto.encrypt_object(body)
 
@@ -201,7 +208,10 @@ class Client:
             conn,
             Constant.MSG_REQUEST,
             {},
-            {'call_id': call_id, 'method_name': method, 'param': args}
+            {
+                'call_id': call_id, 'method_name': method, 'param': args, 'timestamp': int(time.time()),
+                'nonce': gen_id(10)
+            }
         )
 
     async def _response(self, conn, raw_msg_id):
