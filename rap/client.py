@@ -17,7 +17,9 @@ from rap.exceptions import (
 )
 from rap.types import (
     REQUEST_TYPE,
-    RESPONSE_TYPE
+    RESPONSE_TYPE,
+    BASE_REQUEST_TYPE,
+    BASE_RESPONSE_TYPE
 )
 from rap.utlis import (
     Constant,
@@ -70,8 +72,8 @@ class Client:
             host: str = 'localhost',
             port: int = 9000,
             ssl_crt_path: Optional[str] = None,
-            min_size: int = 1,
-            max_size: int = 10
+            min_size: Optional[int] = None,
+            max_size: Optional[int] = None
     ):
         self._conn: Union[Connection, Pool, None] = None
         self._msg_id: int = 0
@@ -80,8 +82,8 @@ class Client:
         self._host: str = host
         self._port: int = port
         self._ssl_crt_path: Optional[str] = ssl_crt_path
-        self._min_size: int = min_size
-        self._max_size: int = max_size
+        self._min_size: Optional[int] = min_size
+        self._max_size: Optional[int] = max_size
 
         if secret is not None:
             self._crypto: 'Crypto' = Crypto(secret)
@@ -120,6 +122,67 @@ class Client:
             )
             await self._conn.connect(host, port)
         logging.debug(f"Connection to {self._conn.connection_info}...")
+        await self._declare()
+
+    async def _declare(self):
+        header: dict = {'client_id': self._crypto.key}
+        conn: 'Connection' = await self._conn.acquire()
+        raw_body: str = 'mock_fack_msg'
+        raw_msg_id = await self._base_request(conn, Constant.DECLARE_REQUEST, header, raw_body)
+        response_num, msg_id, header, body = await self._base_response(conn)
+        if response_num != Constant.DECLARE_RESPONSE and raw_msg_id != msg_id and body != body:
+            raise RPCError('declare error')
+        client_id = body.get('client_id')
+        if client_id is None:
+            raise RPCError('declare error, get client id error')
+        if self._crypto is not None:
+            self._crypto = Crypto(client_id)
+        logging.info('declare success')
+
+    async def _base_request(self, conn: 'Connection', request_num: int, header: dict, body: Any):
+        if conn is None or self._conn.is_closed():
+            raise ConnectionError('Connection not create')
+
+        msg_id: int = self._msg_id + 1
+        self._msg_id = msg_id
+        if self._crypto is not None:
+            body = self._crypto.encrypt_object(body)
+
+        request: BASE_REQUEST_TYPE = (request_num, msg_id, header, body)
+        try:
+            await conn.write(request, self._timeout)
+            logging.debug(f'send:{request} to {conn.connection_info}')
+        except asyncio.TimeoutError as e:
+            logging.error(f"send to {conn.connection_info} timeout, drop data:{request}")
+            raise e
+        except Exception as e:
+            raise e
+        return msg_id
+
+    async def _base_response(self, conn: 'Connection') -> Tuple[int, int, dict, Any]:
+        try:
+            response: Optional[BASE_RESPONSE_TYPE] = await conn.read(self._timeout)
+            logging.debug(f'recv raw data: {response}')
+        except asyncio.TimeoutError as e:
+            logging.error(f"recv response from {conn.connection_info} timeout")
+            conn.set_reader_exc(e)
+            raise e
+        except Exception as e:
+            conn.set_reader_exc(e)
+            raise e
+
+        if response is None:
+            raise ConnectionError("Connection closed")
+        try:
+            response_num, msg_id, header, body = response
+        except ValueError:
+            raise ProtocolError(f"Can't parse response:{response}")
+        if self._crypto is not None:
+            try:
+                body = self._crypto.decrypt_object(body)
+            except Exception:
+                raise ProtocolError(f"Can't decrypt body.")
+        return response_num, msg_id, header, body
 
     async def _request(
             self,

@@ -10,9 +10,9 @@ from rap.utlis import gen_id, MISS_OBJECT
 
 
 class LifeCycleEnum(Enum):
-    init: auto()
-    msg: auto()
-    drop: auto()
+    declare = auto()
+    msg = auto()
+    drop = auto()
 
 
 @dataclass()
@@ -20,8 +20,8 @@ class ClientModel(object):
     client_id: Optional[str] = None
     crypto: Optional[Crypto] = None
     generator_dict: Dict[int, Generator] = field(default_factory=dict)
-    life_cycle: 'LifeCycleEnum' = LifeCycleEnum.init
-    nonce_set: Set[str] = field(default_factory=set())
+    life_cycle: 'LifeCycleEnum' = LifeCycleEnum.declare
+    nonce_set: Set[str] = field(default_factory=set)
 
 
 class ClientManager(object):

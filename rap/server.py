@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import traceback
 import ssl
 
 import msgpack
@@ -7,10 +8,7 @@ import msgpack
 from typing import Callable, List, Optional
 
 from rap.conn.connection import ServerConnection
-from rap.exceptions import (
-    BaseRapError,
-    ServerError
-)
+from rap.manager.aes_manager import aes_manager
 from rap.manager.func_manager import func_manager
 from rap.middleware import (
     BaseConnMiddleware,
@@ -36,6 +34,7 @@ class Server(object):
             timeout: int = 9,
             keep_alive: int = 1200,
             run_timeout: int = 9,
+            secret_list: Optional[List[str]] = None,
             ssl_crt_path: Optional[str] = None,
             ssl_key_path: Optional[str] = None,
     ):
@@ -47,6 +46,9 @@ class Server(object):
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._ssl_key_path: Optional[str] = ssl_key_path
         self._conn_middleware: List[BaseConnMiddleware] = [IpBlockMiddleware()]
+        if secret_list is not None:
+            for secret in secret_list:
+                aes_manager.add_aes(secret)
 
     @staticmethod
     def register(func: Optional[Callable], name: Optional[str] = None):
@@ -105,6 +107,7 @@ class Server(object):
                     result=request_model.result
                 )
             except Exception as e:
+                logging.error(traceback.format_exc())
                 await response(conn, self._timeout, exception=e)
 
         if not conn.is_closed():

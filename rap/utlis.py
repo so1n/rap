@@ -17,8 +17,8 @@ class Constant(object):
     RESPONSE: int = 1
     SOCKET_RECV_SIZE: int = 1024 ** 1
 
-    INIT_REQUEST: int = 101
-    INIT_RESPONSE: int = 201
+    DECLARE_REQUEST: int = 101
+    DECLARE_RESPONSE: int = 201
     MSG_REQUEST: int = 102
     MSG_RESPONSE: int = 202
     DROP_REQUEST: int = 103

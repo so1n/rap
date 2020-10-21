@@ -23,7 +23,7 @@ async def async_gen(a: int):
     yield
 
 
-async def run_once():
+async def _run_once():
     print(f"sync result: {await client.call(sync_sum, 1, 2)}")
     print(f"reload :{ await client.call_by_text('_root_reload', 'test_module', 'sync_sum')}")
     print(f"sync result: {await client.call_by_text('sync_sum', 1, 2)}")
@@ -32,11 +32,16 @@ async def run_once():
     async for i in async_gen(10):
         print(f"async gen result:{i}")
 
+async def run_once():
+    s_t = time.time()
+    await client.connect()
+    print(time.time() - s_t)
+    client.close()
 
 async def conn():
     s_t = time.time()
     await client.connect()
-    await asyncio.wait([run_once() for i in range(100)])
+    await asyncio.wait([_run_once() for i in range(100)])
     print(time.time() - s_t)
     client.close()
 
@@ -44,7 +49,7 @@ async def conn():
 async def pool():
     s_t = time.time()
     await client.create_pool()
-    await asyncio.wait([run_once() for i in range(100)])
+    await asyncio.wait([_run_once() for i in range(100)])
     print(time.time() - s_t)
     client.close()
 
@@ -58,5 +63,4 @@ if __name__ == '__main__':
     )
 
     loop = asyncio.get_event_loop()
-    # loop.run_until_complete(conn())
-    loop.run_until_complete(pool())
+    loop.run_until_complete(run_once())

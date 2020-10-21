@@ -42,14 +42,14 @@ class Request(object):
         self._conn: ServerConnection = conn
         self._run_timeout: int = run_timeout
         self._response_num_dict: Dict[int, int] = {
-            Constant.INIT_REQUEST: Constant.INIT_RESPONSE,
+            Constant.DECLARE_REQUEST: Constant.DECLARE_RESPONSE,
             Constant.MSG_REQUEST: Constant.MSG_RESPONSE,
             Constant.DROP_REQUEST: Constant.DROP_RESPONSE
         }
         self._life_cycle_dict: Dict[int, Set[LifeCycleEnum]] = {
-            Constant.INIT_RESPONSE: {LifeCycleEnum.init},
+            Constant.DECLARE_RESPONSE: {LifeCycleEnum.declare},
             Constant.MSG_RESPONSE: {LifeCycleEnum.msg},
-            Constant.DROP_RESPONSE: {LifeCycleEnum.init, LifeCycleEnum.msg}
+            Constant.DROP_RESPONSE: {LifeCycleEnum.declare, LifeCycleEnum.msg}
         }
 
     @staticmethod
@@ -97,7 +97,7 @@ class Request(object):
             return result_model
 
         # check crypto
-        if request_num == Constant.INIT_RESPONSE:
+        if response_num == Constant.DECLARE_RESPONSE:
             crypto: Crypto = aes_manager.get_aed(client_id)
             client_model: 'ClientModel' = ClientModel(crypto=crypto)
         else:
@@ -105,6 +105,8 @@ class Request(object):
             if client_model is MISS_OBJECT:
                 result_model.exception = AuthError('error client_id')
                 return result_model
+
+        result_model.crypto = client_model.crypto
 
         # check life_cycle
         if client_model.life_cycle not in self._life_cycle_dict.get(response_num, set()):
@@ -122,19 +124,19 @@ class Request(object):
                 result_model.exception = AuthError('decrypt error')
                 return result_model
 
+        else:
+            decrypt_body = body
             # check body
             exception: 'Optional[Exception]' = self._body_handle(decrypt_body, client_model)
             if exception is not None:
                 result_model.exception = exception
                 return result_model
-        else:
-            decrypt_body = body
 
         # dispatch
-        if response_num == Constant.INIT_RESPONSE:
+        if response_num == Constant.DECLARE_RESPONSE:
             client_model.life_cycle = LifeCycleEnum.msg
             client_manager.create_client_model(client_model)
-            result_model.result = {'client': client_model.client_id}
+            result_model.result = {'client_id': client_model.client_id}
             return result_model
         elif response_num == Constant.MSG_RESPONSE:
             try:
