@@ -15,14 +15,13 @@ from rap.exceptions import (
     LifeCycleError,
     ParseError,
     ProtocolError,
-    RPCError,
     ServerError,
 )
 from rap.manager.aes_manager import aes_manager
 from rap.manager.client_manager import client_manager, ClientModel, LifeCycleEnum
 from rap.manager.func_manager import func_manager
 from rap.types import BASE_REQUEST_TYPE
-from rap.utlis import Constant, MISS_OBJECT, gen_id, get_event_loop, parse_error
+from rap.utlis import Constant, MISS_OBJECT, get_event_loop, parse_error
 
 
 @dataclass()
@@ -38,11 +37,9 @@ class Request(object):
     def __init__(
             self,
             conn: ServerConnection,
-            timeout: int,
             run_timeout: int,
     ):
         self._conn: ServerConnection = conn
-        self._timeout: int = timeout
         self._run_timeout: int = run_timeout
         self._response_num_dict: Dict[int, int] = {
             Constant.INIT_REQUEST: Constant.INIT_RESPONSE,
@@ -85,10 +82,7 @@ class Request(object):
         response_num: Optional[int] = self._response_num_dict.get(request_num, Constant.SERVER_ERROR_RESPONSE)
 
         # create result_model
-        result_model: 'ResultModel' = ResultModel(
-            response_num=response_num,
-            msg_id=msg_id,
-        )
+        result_model: 'ResultModel' = ResultModel(response_num=response_num, msg_id=msg_id)
 
         # check type_id
         if request_num is Constant.SERVER_ERROR_RESPONSE:
@@ -108,16 +102,20 @@ class Request(object):
             client_model: 'ClientModel' = ClientModel(crypto=crypto)
         else:
             client_model = client_manager.get_client_model(client_id)
+            if client_model is MISS_OBJECT:
+                result_model.exception = AuthError('error client_id')
+                return result_model
+
+        # check crypto
+        if client_model.crypto == MISS_OBJECT:
+            result_model.exception = AuthError('aes key error')
+            return result_model
 
         # check life_cycle
         if client_model.life_cycle not in self._life_cycle_dict.get(response_num, set()):
             result_model.exception = LifeCycleError()
             return result_model
 
-        # check crypto
-        if client_model.crypto == MISS_OBJECT:
-            result_model.exception = AuthError('aes key error')
-            return result_model
         try:
             decrypt_body: dict = client_model.crypto.decrypt_object(body)
         except Exception:

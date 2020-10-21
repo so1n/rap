@@ -76,7 +76,7 @@ class Server(object):
         for middleware in self._conn_middleware:
             await middleware.dispatch(conn)
 
-        request_handle = Request(conn, self._timeout, self._run_timeout)
+        request_handle = Request(conn, self._run_timeout)
 
         while not conn.is_closed():
             try:
@@ -105,8 +105,6 @@ class Server(object):
                     result=request_model.result
                 )
             except Exception as e:
-                if not isinstance(e, BaseRapError):
-                    e = ServerError(f'request handle error:{str(e)}')
                 await response(conn, self._timeout, exception=e)
 
         if not conn.is_closed():
