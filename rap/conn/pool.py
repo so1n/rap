@@ -8,7 +8,7 @@ from collections import deque
 from typing import Coroutine, Deque, List, Set, Optional
 
 from rap.conn.connection import Connection
-from rap.types import (
+from rap.common.types import (
     UNPACKER_TYPE,
 )
 

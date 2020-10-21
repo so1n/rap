@@ -6,11 +6,11 @@ from typing import Optional
 
 import msgpack
 
-from rap.utlis import (
+from rap.common.utlis import (
     Constant,
     get_event_loop
 )
-from rap.types import (
+from rap.common.types import (
     LOOP_TYPE,
     READER_TYPE,
     WRITER_TYPE,

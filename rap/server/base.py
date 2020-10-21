@@ -14,9 +14,9 @@ from rap.middleware import (
     BaseConnMiddleware,
     IpBlockMiddleware
 )
-from rap.requests import Request, ResultModel
-from rap.response import response
-from rap.types import (
+from rap.server.requests import Request, ResultModel
+from rap.server.response import response
+from rap.common.types import (
     READER_TYPE,
     WRITER_TYPE,
     BASE_REQUEST_TYPE

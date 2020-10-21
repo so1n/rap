@@ -4,24 +4,21 @@ import logging
 import msgpack
 
 from functools import wraps
-from typing import Any, Callable, cast, List, Optional, Union, Tuple
+from typing import Any, Callable, cast, Optional, Union, Tuple
 
-from rap import exceptions as rap_exc
-from rap.aes import Crypto
+from rap.common import exceptions as rap_exc
+from rap.common.aes import Crypto
 from rap.conn.connection import Connection
 from rap.conn.pool import Pool
-from rap.exceptions import (
-    AuthError,
+from rap.common.exceptions import (
     RPCError,
     ProtocolError,
 )
-from rap.types import (
-    REQUEST_TYPE,
-    RESPONSE_TYPE,
+from rap.common.types import (
     BASE_REQUEST_TYPE,
     BASE_RESPONSE_TYPE
 )
-from rap.utlis import (
+from rap.common.utlis import (
     Constant,
 )
 
@@ -256,36 +253,6 @@ class Client:
             async for result in self.iterator_call(func.__name__, *args):
                 yield result
         return cast(Callable, wrapper)
-
-    def _parse_response(self, response: RESPONSE_TYPE) -> Tuple[int, int, Any]:
-        """Parse the response data according to the rap protocol,
-        if there is an exception, throw a python exception, otherwise return the normal rpc result data"""
-        if len(response) != 6 or response[0] != Constant.RESPONSE:
-            logging.debug(f'Protocol error, received unexpected data: {response}')
-            raise ProtocolError()
-        try:
-            (_, msg_id, call_id, is_encrypt, error, result) = response
-        except Exception:
-            logging.debug(f'Protocol error, received unexpected data: {response}')
-            raise ProtocolError()
-        if is_encrypt:
-            try:
-                error = self._crypto.decrypt_object(error)
-                result = self._crypto.decrypt_object(result)
-            except Exception:
-                raise AuthError()
-
-        if error:
-            if len(error) == 2:
-                error_name, error_info = error
-                exc = getattr(rap_exc, error_name, None)
-                if not exc:
-                    exc = globals()['__builtins__'][error[0]]
-                raise exc(error_info)
-                # raise getattr(__builtins__, error[0])(error[1])
-            else:
-                raise RPCError(str(error))
-        return msg_id, call_id, result
 
     # async with support
     async def __aenter__(self):

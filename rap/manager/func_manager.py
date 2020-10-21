@@ -5,7 +5,7 @@ import os
 
 from typing import Callable, Dict, List, Optional, Tuple
 
-from rap.exceptions import RegisteredError
+from rap.common.exceptions import RegisteredError
 
 
 class FuncManager(object):
