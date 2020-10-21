@@ -63,10 +63,25 @@ class AsyncIteratorCall:
 
 class Client:
 
-    def __init__(self, timeout: int = 9, secret: Optional[str] = None):
-        self._timeout: int = timeout
+    def __init__(
+            self,
+            timeout: int = 9,
+            secret: Optional[str] = None,
+            host: str = 'localhost',
+            port: int = 9000,
+            ssl_crt_path: Optional[str] = None,
+            min_size: int = 1,
+            max_size: int = 10
+    ):
         self._conn: Union[Connection, Pool, None] = None
         self._msg_id: int = 0
+
+        self._timeout: int = timeout
+        self._host: str = host
+        self._port: int = port
+        self._ssl_crt_path: Optional[str] = ssl_crt_path
+        self._min_size: int = min_size
+        self._max_size: int = max_size
 
         if secret is not None:
             self._crypto: 'Crypto' = Crypto(secret)
@@ -86,35 +101,24 @@ class Client:
         """Create connection and connect"""
         if self._conn and not self._conn.is_closed():
             raise ConnectionError(f'Client already connected')
-        self._conn = Connection(
-            msgpack.Unpacker(raw=False, use_list=False),
-            self._timeout,
-            ssl_crt_path=ssl_crt_path
-        )
-        await self._conn.connect(host, port)
-        logging.debug(f"Connection to {self._conn.connection_info}...")
-
-    async def create_pool(
-            self,
-            host: str = 'localhost',
-            port: int = 9000,
-            min_size: int = 1,
-            max_size: int = 10,
-            ssl_crt_path: Optional[str] = None,
-    ):
-        """Create conn pool and connect"""
-        if self._conn and not self._conn.is_closed():
-            raise ConnectionError(f'Client already connected')
-        self._conn = Pool(
-            host,
-            port,
-            msgpack.Unpacker(raw=False, use_list=False),
-            self._timeout,
-            max_size=max_size,
-            min_size=min_size,
-            ssl_crt_path=ssl_crt_path
-        )
-        await self._conn.connect()
+        if self._min_size and self._max_size:
+            self._conn = Pool(
+                host,
+                port,
+                msgpack.Unpacker(raw=False, use_list=False),
+                self._timeout,
+                max_size=self._max_size,
+                min_size=self._min_size,
+                ssl_crt_path=ssl_crt_path
+            )
+            await self._conn.connect()
+        else:
+            self._conn = Connection(
+                msgpack.Unpacker(raw=False, use_list=False),
+                self._timeout,
+                ssl_crt_path=ssl_crt_path
+            )
+            await self._conn.connect(host, port)
         logging.debug(f"Connection to {self._conn.connection_info}...")
 
     async def _request(
