@@ -136,6 +136,7 @@ class Request(object):
         if response_num == Constant.DECLARE_RESPONSE:
             client_model.life_cycle = LifeCycleEnum.msg
             client_manager.create_client_model(client_model)
+            client_model.crypto = aes_manager.add_aes(client_model.client_id)
             result_model.result = {'client_id': client_model.client_id}
             return result_model
         elif response_num == Constant.MSG_RESPONSE:

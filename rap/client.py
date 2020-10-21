@@ -53,7 +53,7 @@ class AsyncIteratorCall:
                 *self._args,
                 call_id=self._call_id
             )
-            result, call_id = await self._client._response(conn, msg_id)
+            call_id, _, result = await self._client._response(conn, msg_id)
             # The server will return the call id of the generator function,
             # and the client can continue to get data based on the call id.
             # If no data, the server will return StopAsyncIteration or StopIteration error.
@@ -124,20 +124,29 @@ class Client:
         logging.debug(f"Connection to {self._conn.connection_info}...")
         await self._declare()
 
+    @staticmethod
+    def raise_error(exc_name: str, exc_info: str = ''):
+        exc = getattr(rap_exc, exc_name, None)
+        if not exc:
+            exc = globals()['__builtins__'][exc_name]
+        raise exc(exc_info)
+
     async def _declare(self):
-        header: dict = {'client_id': self._crypto.key}
         conn: 'Connection' = await self._conn.acquire()
-        raw_body: str = 'mock_fack_msg'
-        raw_msg_id = await self._base_request(conn, Constant.DECLARE_REQUEST, header, raw_body)
-        response_num, msg_id, header, body = await self._base_response(conn)
-        if response_num != Constant.DECLARE_RESPONSE and raw_msg_id != msg_id and body != body:
-            raise RPCError('declare error')
-        client_id = body.get('client_id')
-        if client_id is None:
-            raise RPCError('declare error, get client id error')
-        if self._crypto is not None:
-            self._crypto = Crypto(client_id)
-        logging.info('declare success')
+        try:
+            raw_body: str = 'mock_fack_msg'
+            raw_msg_id = await self._base_request(conn, Constant.DECLARE_REQUEST, {}, raw_body)
+            response_num, msg_id, header, body = await self._base_response(conn)
+            if response_num != Constant.DECLARE_RESPONSE and raw_msg_id != msg_id and body != body:
+                raise RPCError('declare error')
+            client_id = body.get('client_id')
+            if client_id is None:
+                raise RPCError('declare error, get client id error')
+            if self._crypto is not None:
+                self._crypto = Crypto(client_id)
+            logging.info('declare success')
+        finally:
+            self._conn.release(conn)
 
     async def _base_request(self, conn: 'Connection', request_num: int, header: dict, body: Any):
         if conn is None or self._conn.is_closed():
@@ -145,6 +154,9 @@ class Client:
 
         msg_id: int = self._msg_id + 1
         self._msg_id = msg_id
+
+        if 'client_id' not in header:
+            header['client_id'] = self._crypto.key
         if self._crypto is not None:
             body = self._crypto.encrypt_object(body)
 
@@ -177,6 +189,9 @@ class Client:
             response_num, msg_id, header, body = response
         except ValueError:
             raise ProtocolError(f"Can't parse response:{response}")
+        if response_num == Constant.SERVER_ERROR_RESPONSE:
+            self.raise_error(body[0], body[1])
+
         if self._crypto is not None:
             try:
                 body = self._crypto.decrypt_object(body)
@@ -184,68 +199,28 @@ class Client:
                 raise ProtocolError(f"Can't decrypt body.")
         return response_num, msg_id, header, body
 
-    async def _request(
-            self,
-            conn: 'Connection',
-            method: str,
-            *args: Any,
-            call_id: Optional[int] = None
-    ) -> int:
-        """gen request body and send,return request msg id"""
-        if conn is None or self._conn.is_closed():
-            raise ConnectionError('Connection not create')
+    async def _request(self, conn, method, *args, call_id=-1) -> int:
+        return await self._base_request(
+            conn,
+            Constant.MSG_REQUEST,
+            {},
+            {'call_id': call_id, 'method_name': method, 'param': args}
+        )
 
-        msg_id: int = self._msg_id + 1
-        self._msg_id = msg_id
-        call_id = call_id if call_id is not None else msg_id
-
-        if self._crypto is not None:
-            request: REQUEST_TYPE = (
-                Constant.REQUEST,
-                msg_id,
-                call_id,
-                1,
-                self._crypto.encrypt(method),
-                self._crypto.encrypt_object(args)
-            )
-        else:
-            request: REQUEST_TYPE = (Constant.REQUEST, msg_id, call_id, 0, method, args)
-        try:
-            await conn.write(request, self._timeout)
-            logging.debug(f'send:{request} to {conn.connection_info}')
-        except asyncio.TimeoutError as e:
-            logging.error(f"send to {conn.connection_info} timeout, drop data:{request}")
-            raise e
-        except Exception as e:
-            raise e
-        return msg_id
-
-    async def _response(self, conn: 'Connection', msg_id: int) -> Tuple[Any, int]:
-        """read response data and return rpc result, call id"""
-        try:
-            response: Optional[RESPONSE_TYPE] = await conn.read(self._timeout)
-            logging.debug(f'recv raw data: {response}')
-        except asyncio.TimeoutError as e:
-            logging.error(f"recv response from {conn.connection_info} timeout")
-            conn.set_reader_exc(e)
-            raise e
-        except Exception as e:
-            conn.set_reader_exc(e)
-            raise e
-
-        if response is None:
-            raise ConnectionError("Connection closed")
-        response_msg_id, call_id, result = self._parse_response(response)
-        if response_msg_id != msg_id:
-            raise RPCError('Invalid Message ID')
-        return result, call_id
+    async def _response(self, conn, raw_msg_id):
+        response_num, msg_id, header, body = await self._base_response(conn)
+        if response_num != Constant.MSG_RESPONSE or msg_id != raw_msg_id:
+            raise RPCError('msg error')
+        if 'exc' in body:
+            self.raise_error(body['exc'], body.get('exc_info', ''))
+        return body['call_id'], body['method_name'], body['result']
 
     async def call_by_text(self, method: str, *args: Any) -> Any:
         """rpc client base call method"""
         conn: 'Connection' = await self._conn.acquire()
         try:
             msg_id = await self._request(conn, method, *args)
-            result, _ = await self._response(conn, msg_id)
+            _, _, result = await self._response(conn, msg_id)
             return result
         finally:
             self._conn.release(conn)

@@ -32,7 +32,7 @@ async def response(
 ):
     if exception is not None:
         error_response: Optional[Tuple[str, str]] = parse_error(exception)
-        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, msg_id, header, *error_response)
+        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, msg_id, header, error_response)
     elif result is not None:
         result.update(dict(timestamp=int(time.time()), nonce=gen_id(10)))
         response_msg: BASE_RESPONSE_TYPE = (
@@ -42,7 +42,7 @@ async def response(
         response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_EVENT, msg_id, header, event)
     else:
         error_response: Optional[Tuple[str, str]] = parse_error(ServerError('not response'))
-        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, msg_id, header, *error_response)
+        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, msg_id, header, error_response)
 
     try:
         await conn.write(response_msg, timeout)

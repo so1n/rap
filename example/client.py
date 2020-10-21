@@ -35,6 +35,7 @@ async def _run_once():
 async def run_once():
     s_t = time.time()
     await client.connect()
+    await _run_once()
     print(time.time() - s_t)
     client.close()
 
