@@ -32,19 +32,21 @@ async def _run_once():
     async for i in async_gen(10):
         print(f"async gen result:{i}")
 
+
 async def run_once():
     s_t = time.time()
     await client.connect()
     await _run_once()
     print(time.time() - s_t)
-    client.close()
+    await client.wait_close()
+
 
 async def conn():
     s_t = time.time()
     await client.connect()
     await asyncio.wait([_run_once() for i in range(100)])
     print(time.time() - s_t)
-    client.close()
+    await client.wait_close()
 
 
 async def pool():
@@ -52,7 +54,7 @@ async def pool():
     await client.create_pool()
     await asyncio.wait([_run_once() for i in range(100)])
     print(time.time() - s_t)
-    client.close()
+    await client.wait_close()
 
 
 if __name__ == '__main__':

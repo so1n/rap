@@ -6,9 +6,9 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Set, Tuple
 
-from rap.aes import Crypto
+from rap.common.aes import Crypto
 from rap.conn.connection import ServerConnection
-from rap.exceptions import (
+from rap.common.exceptions import (
     AuthError,
     BaseRapError,
     FuncNotFoundError,
@@ -20,8 +20,8 @@ from rap.exceptions import (
 from rap.manager.aes_manager import aes_manager
 from rap.manager.client_manager import client_manager, ClientModel, LifeCycleEnum
 from rap.manager.func_manager import func_manager
-from rap.types import BASE_REQUEST_TYPE
-from rap.utlis import Constant, MISS_OBJECT, get_event_loop, parse_error
+from rap.common.types import BASE_REQUEST_TYPE
+from rap.common.utlis import Constant, MISS_OBJECT, get_event_loop, parse_error
 
 
 @dataclass()
@@ -46,11 +46,12 @@ class Request(object):
             Constant.MSG_REQUEST: Constant.MSG_RESPONSE,
             Constant.DROP_REQUEST: Constant.DROP_RESPONSE
         }
-        self._life_cycle_dict: Dict[int, Set[LifeCycleEnum]] = {
-            Constant.DECLARE_RESPONSE: {LifeCycleEnum.declare},
-            Constant.MSG_RESPONSE: {LifeCycleEnum.msg},
-            Constant.DROP_RESPONSE: {LifeCycleEnum.declare, LifeCycleEnum.msg}
+        self._life_cycle_dict: Dict[int, LifeCycleEnum] = {
+            Constant.DECLARE_RESPONSE: LifeCycleEnum.msg,
+            Constant.MSG_RESPONSE: LifeCycleEnum.msg,
+            Constant.DROP_RESPONSE: LifeCycleEnum.drop,
         }
+        self.client_model: 'Optional[ClientModel]' = None
 
     @staticmethod
     def _request_handle(request: BASE_REQUEST_TYPE) -> Tuple[int, int, dict, Any]:
@@ -66,7 +67,7 @@ class Request(object):
 
     def _body_handle(self, body: dict, client_model: ClientModel) -> Optional[Exception]:
         if self._check_timeout(body.get('timestamp', 0)):
-            return ServerError('timeout')
+            return ServerError('timeout error')
         nonce: str = body.get('nonce', '')
         if nonce in client_model.nonce_set:
             return ServerError('nonce error')
@@ -103,15 +104,23 @@ class Request(object):
         else:
             client_model = client_manager.get_client_model(client_id)
             if client_model is MISS_OBJECT:
-                result_model.exception = AuthError('error client_id')
+                result_model.exception = AuthError('error client id')
                 return result_model
+
+        # check handle client_model & client_model from client_manager
+        if self.client_model is None:
+            self.client_model = client_model
+        elif self.client_model != client_model:
+            raise AuthError('error client id')
 
         result_model.crypto = client_model.crypto
 
         # check life_cycle
-        if client_model.life_cycle not in self._life_cycle_dict.get(response_num, set()):
+        if not client_model.modify_life_cycle(self._life_cycle_dict.get(response_num, MISS_OBJECT)):
             result_model.exception = LifeCycleError()
             return result_model
+
+        client_model.keep_alive_timestamp = int(time.time())
 
         if type(body) is bytes:
             # check crypto
@@ -124,19 +133,18 @@ class Request(object):
                 result_model.exception = AuthError('decrypt error')
                 return result_model
 
-        else:
-            decrypt_body = body
-            # check body
             exception: 'Optional[Exception]' = self._body_handle(decrypt_body, client_model)
             if exception is not None:
                 result_model.exception = exception
                 return result_model
+        else:
+            decrypt_body = body
 
         # dispatch
         if response_num == Constant.DECLARE_RESPONSE:
-            client_model.life_cycle = LifeCycleEnum.msg
             client_manager.create_client_model(client_model)
-            client_model.crypto = aes_manager.add_aes(client_model.client_id)
+            if client_model.crypto is not MISS_OBJECT:
+                client_model.crypto = aes_manager.add_aes(client_model.client_id)
             result_model.result = {'client_id': client_model.client_id}
             return result_model
         elif response_num == Constant.MSG_RESPONSE:
@@ -148,17 +156,17 @@ class Request(object):
                 result_model.exception = ParseError()
                 return result_model
 
-            result: Any = await self.msg_handle(call_id, method_name, param, client_model)
+            new_call_id, result = await self.msg_handle(call_id, method_name, param, client_model)
             if isinstance(result, Exception):
                 exc, exc_info = parse_error(result)
                 result_model.result = {'exc': exc, 'exc_info': exc_info}
             else:
-                result_model.result = {'call_id': call_id, 'method_name': method_name, 'result': result}
+                result_model.result = {'call_id': new_call_id, 'method_name': method_name, 'result': result}
             return result_model
         elif request_num == Constant.DROP_REQUEST:
             call_id = decrypt_body['call_id']
-            client_model.life_cycle = LifeCycleEnum.drop
             result_model.crypto = client_model.crypto
+            client_manager.destroy_client_model(client_model.client_id)
             result_model.result = {'call_id': call_id, 'result': 1}
             return result_model
 
@@ -206,4 +214,4 @@ class Request(object):
                 result = ServerError('execute func error')
         # TODO middleware after
         logging.info(f"Method:{method_name}, time:{time.time() - start_time}, status:{status}")
-        return result
+        return call_id, result

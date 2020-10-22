@@ -2,27 +2,27 @@ import asyncio
 import inspect
 import logging
 import msgpack
+import time
 
 from functools import wraps
-from typing import Any, Callable, cast, List, Optional, Union, Tuple
+from typing import Any, Callable, cast, Optional, Union, Tuple
 
-from rap import exceptions as rap_exc
-from rap.aes import Crypto
+from rap.common import exceptions as rap_exc
+from rap.common.aes import Crypto
 from rap.conn.connection import Connection
 from rap.conn.pool import Pool
-from rap.exceptions import (
+from rap.common.exceptions import (
     AuthError,
     RPCError,
     ProtocolError,
 )
-from rap.types import (
-    REQUEST_TYPE,
-    RESPONSE_TYPE,
+from rap.common.types import (
     BASE_REQUEST_TYPE,
     BASE_RESPONSE_TYPE
 )
-from rap.utlis import (
+from rap.common.utlis import (
     Constant,
+    gen_id
 )
 
 
@@ -87,13 +87,16 @@ class Client:
 
         if secret is not None:
             self._crypto: 'Crypto' = Crypto(secret)
+            self._client_id: str = secret
         else:
             self._crypto: 'Optional[Crypto]' = None
+            self._client_id: str = gen_id(4)
 
-    def close(self):
+    async def wait_close(self):
         """close client conn"""
         if not self._conn or self._conn.is_closed():
             raise RuntimeError('Connection already closed')
+        await self._drop()
         try:
             self._conn.close()
         except AttributeError:
@@ -134,8 +137,7 @@ class Client:
     async def _declare(self):
         conn: 'Connection' = await self._conn.acquire()
         try:
-            raw_body: str = 'mock_fack_msg'
-            raw_msg_id = await self._base_request(conn, Constant.DECLARE_REQUEST, {}, raw_body)
+            raw_msg_id = await self._base_request(conn, Constant.DECLARE_REQUEST, {}, {})
             response_num, msg_id, header, body = await self._base_response(conn)
             if response_num != Constant.DECLARE_RESPONSE and raw_msg_id != msg_id and body != body:
                 raise RPCError('declare error')
@@ -143,12 +145,27 @@ class Client:
             if client_id is None:
                 raise RPCError('declare error, get client id error')
             if self._crypto is not None:
+                self._client_id = client_id
                 self._crypto = Crypto(client_id)
+            else:
+                self._client_id = client_id
             logging.info('declare success')
         finally:
             self._conn.release(conn)
 
-    async def _base_request(self, conn: 'Connection', request_num: int, header: dict, body: Any):
+    async def _drop(self):
+        conn: 'Connection' = await self._conn.acquire()
+        try:
+            call_id: str = gen_id(4)
+            raw_msg_id = await self._base_request(conn, Constant.DROP_REQUEST, {}, {'call_id': call_id})
+            response_num, msg_id, header, body = await self._base_response(conn)
+            if response_num != Constant.DROP_RESPONSE and raw_msg_id != msg_id and body.get('call_id', '') != call_id:
+                raise RPCError('drop error')
+            logging.info('drop success')
+        finally:
+            self._conn.release(conn)
+
+    async def _base_request(self, conn: 'Connection', request_num: int, header: dict, body: Any) -> int:
         if conn is None or self._conn.is_closed():
             raise ConnectionError('Connection not create')
 
@@ -156,8 +173,12 @@ class Client:
         self._msg_id = msg_id
 
         if 'client_id' not in header:
-            header['client_id'] = self._crypto.key
+            header['client_id'] = self._client_id
         if self._crypto is not None:
+            if type(body) is not dict:
+                raise AuthError('crypto body must be dict')
+            body['timestamp'] = int(time.time())
+            body['nonce'] = gen_id(10)
             body = self._crypto.encrypt_object(body)
 
         request: BASE_REQUEST_TYPE = (request_num, msg_id, header, body)
@@ -204,7 +225,9 @@ class Client:
             conn,
             Constant.MSG_REQUEST,
             {},
-            {'call_id': call_id, 'method_name': method, 'param': args}
+            {
+                'call_id': call_id, 'method_name': method, 'param': args,
+            }
         )
 
     async def _response(self, conn, raw_msg_id):
@@ -257,43 +280,13 @@ class Client:
                 yield result
         return cast(Callable, wrapper)
 
-    def _parse_response(self, response: RESPONSE_TYPE) -> Tuple[int, int, Any]:
-        """Parse the response data according to the rap protocol,
-        if there is an exception, throw a python exception, otherwise return the normal rpc result data"""
-        if len(response) != 6 or response[0] != Constant.RESPONSE:
-            logging.debug(f'Protocol error, received unexpected data: {response}')
-            raise ProtocolError()
-        try:
-            (_, msg_id, call_id, is_encrypt, error, result) = response
-        except Exception:
-            logging.debug(f'Protocol error, received unexpected data: {response}')
-            raise ProtocolError()
-        if is_encrypt:
-            try:
-                error = self._crypto.decrypt_object(error)
-                result = self._crypto.decrypt_object(result)
-            except Exception:
-                raise AuthError()
-
-        if error:
-            if len(error) == 2:
-                error_name, error_info = error
-                exc = getattr(rap_exc, error_name, None)
-                if not exc:
-                    exc = globals()['__builtins__'][error[0]]
-                raise exc(error_info)
-                # raise getattr(__builtins__, error[0])(error[1])
-            else:
-                raise RPCError(str(error))
-        return msg_id, call_id, result
-
     # async with support
     async def __aenter__(self):
         await self.connect()
         return self
 
     async def __aexit__(self, *args: Tuple):
-        self.close()
+        await self.wait_close()
 
     @property
     def conn(self):
