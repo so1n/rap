@@ -46,11 +46,12 @@ class Request(object):
             Constant.MSG_REQUEST: Constant.MSG_RESPONSE,
             Constant.DROP_REQUEST: Constant.DROP_RESPONSE
         }
-        self._life_cycle_dict: Dict[int, Set[LifeCycleEnum]] = {
-            Constant.DECLARE_RESPONSE: {LifeCycleEnum.declare},
-            Constant.MSG_RESPONSE: {LifeCycleEnum.msg},
-            Constant.DROP_RESPONSE: {LifeCycleEnum.declare, LifeCycleEnum.msg}
+        self._life_cycle_dict: Dict[int, LifeCycleEnum] = {
+            Constant.DECLARE_RESPONSE: LifeCycleEnum.msg,
+            Constant.MSG_RESPONSE: LifeCycleEnum.msg,
+            Constant.DROP_RESPONSE: LifeCycleEnum.drop,
         }
+        self.client_model: 'Optional[ClientModel]' = None
 
     @staticmethod
     def _request_handle(request: BASE_REQUEST_TYPE) -> Tuple[int, int, dict, Any]:
@@ -103,15 +104,23 @@ class Request(object):
         else:
             client_model = client_manager.get_client_model(client_id)
             if client_model is MISS_OBJECT:
-                result_model.exception = AuthError('error client_id')
+                result_model.exception = AuthError('error client id')
                 return result_model
+
+        # check handle client_model & client_model from client_manager
+        if self.client_model is None:
+            self.client_model = client_model
+        elif self.client_model != client_model:
+            raise AuthError('error client id')
 
         result_model.crypto = client_model.crypto
 
         # check life_cycle
-        if client_model.life_cycle not in self._life_cycle_dict.get(response_num, set()):
+        if not client_model.modify_life_cycle(self._life_cycle_dict.get(response_num, MISS_OBJECT)):
             result_model.exception = LifeCycleError()
             return result_model
+
+        client_model.keep_alive_timestamp = int(time.time())
 
         if type(body) is bytes:
             # check crypto
@@ -123,19 +132,16 @@ class Request(object):
             except Exception:
                 result_model.exception = AuthError('decrypt error')
                 return result_model
-        else:
-            decrypt_body = body
 
-        if type(body) is dict:
-            # check body
             exception: 'Optional[Exception]' = self._body_handle(decrypt_body, client_model)
             if exception is not None:
                 result_model.exception = exception
                 return result_model
+        else:
+            decrypt_body = body
 
         # dispatch
         if response_num == Constant.DECLARE_RESPONSE:
-            client_model.life_cycle = LifeCycleEnum.msg
             client_manager.create_client_model(client_model)
             if client_model.crypto is not MISS_OBJECT:
                 client_model.crypto = aes_manager.add_aes(client_model.client_id)
@@ -159,8 +165,8 @@ class Request(object):
             return result_model
         elif request_num == Constant.DROP_REQUEST:
             call_id = decrypt_body['call_id']
-            client_model.life_cycle = LifeCycleEnum.drop
             result_model.crypto = client_model.crypto
+            client_manager.destroy_client_model(client_model.client_id)
             result_model.result = {'call_id': call_id, 'result': 1}
             return result_model
 

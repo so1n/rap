@@ -9,6 +9,7 @@ from typing import Callable, List, Optional
 
 from rap.conn.connection import ServerConnection
 from rap.manager.aes_manager import aes_manager
+from rap.manager.client_manager import client_manager
 from rap.manager.func_manager import func_manager
 from rap.middleware import (
     BaseConnMiddleware,
@@ -64,6 +65,7 @@ class Server(object):
             logging.info(f"server enable ssl")
 
         logging.info(f'server running on {self._host}:{self._port}')
+        asyncio.ensure_future(client_manager.introspection())
         return await asyncio.start_server(self.conn_handle, self._host, self._port, ssl=ssl_context)
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE):

@@ -12,6 +12,7 @@ from rap.common.aes import Crypto
 from rap.conn.connection import Connection
 from rap.conn.pool import Pool
 from rap.common.exceptions import (
+    AuthError,
     RPCError,
     ProtocolError,
 )
@@ -53,7 +54,6 @@ class AsyncIteratorCall:
                 call_id=self._call_id
             )
             call_id, _, result = await self._client._response(conn, msg_id)
-            print(call_id)
             # The server will return the call id of the generator function,
             # and the client can continue to get data based on the call id.
             # If no data, the server will return StopAsyncIteration or StopIteration error.
@@ -92,10 +92,11 @@ class Client:
             self._crypto: 'Optional[Crypto]' = None
             self._client_id: str = gen_id(4)
 
-    def close(self):
+    async def wait_close(self):
         """close client conn"""
         if not self._conn or self._conn.is_closed():
             raise RuntimeError('Connection already closed')
+        await self._drop()
         try:
             self._conn.close()
         except AttributeError:
@@ -136,8 +137,7 @@ class Client:
     async def _declare(self):
         conn: 'Connection' = await self._conn.acquire()
         try:
-            raw_body: str = 'mock_fack_msg'
-            raw_msg_id = await self._base_request(conn, Constant.DECLARE_REQUEST, {}, raw_body)
+            raw_msg_id = await self._base_request(conn, Constant.DECLARE_REQUEST, {}, {})
             response_num, msg_id, header, body = await self._base_response(conn)
             if response_num != Constant.DECLARE_RESPONSE and raw_msg_id != msg_id and body != body:
                 raise RPCError('declare error')
@@ -153,7 +153,19 @@ class Client:
         finally:
             self._conn.release(conn)
 
-    async def _base_request(self, conn: 'Connection', request_num: int, header: dict, body: Any):
+    async def _drop(self):
+        conn: 'Connection' = await self._conn.acquire()
+        try:
+            call_id: str = gen_id(4)
+            raw_msg_id = await self._base_request(conn, Constant.DROP_REQUEST, {}, {'call_id': call_id})
+            response_num, msg_id, header, body = await self._base_response(conn)
+            if response_num != Constant.DROP_RESPONSE and raw_msg_id != msg_id and body.get('call_id', '') != call_id:
+                raise RPCError('drop error')
+            logging.info('drop success')
+        finally:
+            self._conn.release(conn)
+
+    async def _base_request(self, conn: 'Connection', request_num: int, header: dict, body: Any) -> int:
         if conn is None or self._conn.is_closed():
             raise ConnectionError('Connection not create')
 
@@ -163,6 +175,10 @@ class Client:
         if 'client_id' not in header:
             header['client_id'] = self._client_id
         if self._crypto is not None:
+            if type(body) is not dict:
+                raise AuthError('crypto body must be dict')
+            body['timestamp'] = int(time.time())
+            body['nonce'] = gen_id(10)
             body = self._crypto.encrypt_object(body)
 
         request: BASE_REQUEST_TYPE = (request_num, msg_id, header, body)
@@ -210,8 +226,7 @@ class Client:
             Constant.MSG_REQUEST,
             {},
             {
-                'call_id': call_id, 'method_name': method, 'param': args, 'timestamp': int(time.time()),
-                'nonce': gen_id(10)
+                'call_id': call_id, 'method_name': method, 'param': args,
             }
         )
 
@@ -271,7 +286,7 @@ class Client:
         return self
 
     async def __aexit__(self, *args: Tuple):
-        self.close()
+        await self.wait_close()
 
     @property
     def conn(self):

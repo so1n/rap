@@ -5,6 +5,7 @@ from rap.common.utlis import MISS_OBJECT
 
 
 class AesManager(object):
+    # FIXME split key and secret
     def __init__(self):
         self._aes_dict: Dict[str, 'Crypto'] = {}
 
