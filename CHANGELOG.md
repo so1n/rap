@@ -1,7 +1,15 @@
-### 0.5.5
+### 0.5.3
  - Feature: add called limit middleware
 
-### 0.5.0
+### 0.5.2
+ - Feature: Temporarily remove connection pool
+ - Feature: support version
+ - Feature: Server check register return annotation
+
+### 0.5.1
+ - Feature: add server config
+
+### 0.5[NOW]
  - Refactor: new protocol
 
 ### 0.3.2
@@ -10,7 +18,7 @@
 
 ### 0.3.1
  - Feature: load and reload fun in running
- - Feature: add local client and support rap call \_root_fun
+ - Feature: add local client and support rap call _root_fun
 
 ## 0.3
  - Feature: support aes
