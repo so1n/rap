@@ -1,4 +1,4 @@
-from typing import Set
+from typing import Callable, Coroutine, Optional, Set
 from rap.conn.connection import ServerConnection
 from rap.manager.func_manager import func_manager
 
@@ -35,7 +35,7 @@ class IpBlockMiddleware(BaseConnMiddleware):
     def _get_block_ip(self):
         return self.block_set
 
-    async def dispatch(self, conn: ServerConnection):
+    async def dispatch(self, conn: ServerConnection, callback: Optional[Coroutine[Callable]] = None):
         ip: str = conn.peer[0]
         if self.allow_set:
             if ip not in self.allow_set:
