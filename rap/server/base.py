@@ -12,8 +12,11 @@ from rap.manager.aes_manager import aes_manager
 from rap.manager.client_manager import client_manager
 from rap.manager.func_manager import func_manager
 from rap.middleware import (
+    AccessMiddleware,
     BaseConnMiddleware,
-    IpBlockMiddleware
+    BaseRequestMiddleware,
+    IpBlockMiddleware,
+
 )
 from rap.server.requests import Request, ResultModel
 from rap.server.response import response
@@ -35,6 +38,7 @@ class Server(object):
             timeout: int = 9,
             keep_alive: int = 1200,
             run_timeout: int = 9,
+            backlog: int = 1024,
             secret_list: Optional[List[str]] = None,
             ssl_crt_path: Optional[str] = None,
             ssl_key_path: Optional[str] = None,
@@ -44,9 +48,11 @@ class Server(object):
         self._timeout: int = timeout
         self._keep_alive: int = keep_alive
         self._run_timeout: int = run_timeout
+        self._backlog: int = backlog
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._ssl_key_path: Optional[str] = ssl_key_path
         self._conn_middleware: List[BaseConnMiddleware] = [IpBlockMiddleware()]
+        self._access_middleware: List[BaseRequestMiddleware] = [AccessMiddleware()]
         if secret_list is not None:
             for secret in secret_list:
                 aes_manager.add_aes(secret)
@@ -66,7 +72,9 @@ class Server(object):
 
         logging.info(f'server running on {self._host}:{self._port}')
         asyncio.ensure_future(client_manager.introspection())
-        return await asyncio.start_server(self.conn_handle, self._host, self._port, ssl=ssl_context)
+        return await asyncio.start_server(
+            self.conn_handle, self._host, self._port, ssl=ssl_context, backlog=self._backlog
+        )
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE):
         conn: ServerConnection = ServerConnection(
