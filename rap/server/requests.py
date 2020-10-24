@@ -171,7 +171,7 @@ class Request(object):
             return result_model
 
     async def msg_handle(self, call_id: int, method_name: str, param: str, client_model: 'ClientModel'):
-        # really msg handle
+        # really request handle
 
         # TODO middleware before
         start_time: float = time.time()

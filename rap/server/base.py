@@ -13,8 +13,8 @@ from rap.manager.client_manager import client_manager
 from rap.manager.func_manager import func_manager
 from rap.middleware import (
     AccessMiddleware,
-    BaseConnMiddleware,
-    BaseRequestMiddleware,
+    AccessConnMiddleware,
+    BaseMiddleware,
     IpBlockMiddleware,
 
 )
@@ -51,8 +51,14 @@ class Server(object):
         self._backlog: int = backlog
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._ssl_key_path: Optional[str] = ssl_key_path
-        self._conn_middleware: List[BaseConnMiddleware] = [IpBlockMiddleware()]
-        self._access_middleware: List[BaseRequestMiddleware] = [AccessMiddleware()]
+
+        _middleware = self._conn_handle
+        for middleware in reversed([IpBlockMiddleware(), AccessConnMiddleware()]):
+            middleware.load_sub_middleware(_middleware)
+            _middleware = middleware
+        self._middleware = _middleware
+
+
         if secret_list is not None:
             for secret in secret_list:
                 aes_manager.add_aes(secret)
@@ -84,18 +90,17 @@ class Server(object):
             self._timeout,
             pack_param={'use_bin_type': False},
         )
+        await self._middleware.dispatch(conn)
+
+    async def _conn_handle(self, conn: ServerConnection):
         logging.debug(f'new connection: {conn.peer}')
-        for middleware in self._conn_middleware:
-            await middleware.dispatch(conn)
-
         request_handle = Request(conn, self._run_timeout)
-
         while not conn.is_closed():
             try:
                 request: Optional[BASE_REQUEST_TYPE] = await conn.read(self._keep_alive)
             except asyncio.TimeoutError:
                 logging.error(f"recv data from {conn.peer} timeout...")
-                await response(conn, self._timeout, event=('close conn', 'read msg timeout'))
+                await response(conn, self._timeout, event=('close conn', 'read request timeout'))
                 break
             except IOError as e:
                 logging.debug(f"close conn:{conn.peer} info:{e}")
@@ -123,3 +128,4 @@ class Server(object):
         if not conn.is_closed():
             conn.close()
             logging.debug(f"close connection: {conn.peer}")
+
