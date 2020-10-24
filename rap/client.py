@@ -233,7 +233,7 @@ class Client:
     async def _response(self, conn, raw_msg_id):
         response_num, msg_id, header, body = await self._base_response(conn)
         if response_num != Constant.MSG_RESPONSE or msg_id != raw_msg_id:
-            raise RPCError('msg error')
+            raise RPCError('request error')
         if 'exc' in body:
             self.raise_error(body['exc'], body.get('exc_info', ''))
         return body['call_id'], body['method_name'], body['result']

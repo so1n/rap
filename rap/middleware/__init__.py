@@ -1,3 +1,4 @@
-from .base_middleware import BaseConnMiddleware, BaseRequestMiddleware
+from .base_middleware import BaseMiddleware
+from rap.middleware.conn.ip_access import AccessConnMiddleware
 from rap.middleware.conn.ip_block import IpBlockMiddleware
-from rap.middleware.msg.access import AccessMiddleware
+from rap.middleware.request.access import AccessMiddleware

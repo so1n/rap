@@ -1,11 +1,11 @@
-from typing import Callable, Coroutine, Optional, Set
+from typing import Set
 from rap.conn.connection import ServerConnection
 from rap.manager.func_manager import func_manager
 
-from rap.middleware.base_middleware import BaseConnMiddleware
+from rap.middleware.base_middleware import BaseMiddleware
 
 
-class IpBlockMiddleware(BaseConnMiddleware):
+class IpBlockMiddleware(BaseMiddleware):
     def __init__(self):
         self.block_set: Set[str] = set()
         self.allow_set: Set[str] = set()
@@ -16,6 +16,7 @@ class IpBlockMiddleware(BaseConnMiddleware):
         func_manager.register(self._remove_block_ip, '_root_remove_block_ip')
         func_manager.register(self._get_allow_ip, '_root_get_allow_ip')
         func_manager.register(self._get_block_ip, '_root_get_block_ip')
+        super().__init__()
 
     def _add_allow_ip(self, ip: str):
         self.allow_set.add(ip)
@@ -35,7 +36,7 @@ class IpBlockMiddleware(BaseConnMiddleware):
     def _get_block_ip(self):
         return self.block_set
 
-    async def dispatch(self, conn: ServerConnection, callback: Optional[Coroutine[Callable]] = None):
+    async def dispatch(self, conn: ServerConnection):
         ip: str = conn.peer[0]
         if self.allow_set:
             if ip not in self.allow_set:
@@ -43,3 +44,5 @@ class IpBlockMiddleware(BaseConnMiddleware):
         else:
             if ip in self.block_set:
                 await conn.await_close()
+        result = await self.call_next(conn)
+        return result
