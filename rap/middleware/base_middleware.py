@@ -1,9 +1,14 @@
 from typing import Any, Callable, Union
 
+from rap.conn.connection import ServerConnection
+from rap.common.types import BASE_REQUEST_TYPE
+from rap.manager.client_manager import ClientModel
+from rap.server.requests import ResultModel
+
 
 class BaseMiddleware(object):
 
-    async def dispatch(self, value: Any):
+    async def dispatch(self, *args: Any):
         raise NotImplementedError
 
     def load_sub_middleware(self, call_next: 'Union[Callable, BaseMiddleware]'):
@@ -14,3 +19,22 @@ class BaseMiddleware(object):
 
     async def call_next(self, value: Any):
         ...
+
+
+class BaseConnMiddleware(BaseMiddleware):
+
+    async def dispatch(self, conn: ServerConnection):
+        raise NotImplementedError
+
+
+class BaseRequestMiddleware(BaseMiddleware):
+
+    async def dispatch(self, request: BASE_REQUEST_TYPE) -> ResultModel:
+        raise NotImplementedError
+
+
+class BaseMsgMiddleware(BaseMiddleware):
+    async def dispatch(
+            self, call_id: int, method_name: str, param: str, client_model: 'ClientModel'
+    ) -> Union[dict, Exception]:
+        raise NotImplementedError

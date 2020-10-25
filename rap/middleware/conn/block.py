@@ -2,10 +2,10 @@ from typing import Set
 from rap.conn.connection import ServerConnection
 from rap.manager.func_manager import func_manager
 
-from rap.middleware.base_middleware import BaseMiddleware
+from rap.middleware.base_middleware import BaseConnMiddleware
 
 
-class IpBlockMiddleware(BaseMiddleware):
+class IpBlockMiddleware(BaseConnMiddleware):
     def __init__(self):
         self.block_set: Set[str] = set()
         self.allow_set: Set[str] = set()
@@ -44,5 +44,4 @@ class IpBlockMiddleware(BaseMiddleware):
         else:
             if ip in self.block_set:
                 await conn.await_close()
-        result = await self.call_next(conn)
-        return result
+        await self.call_next(conn)

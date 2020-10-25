@@ -11,14 +11,12 @@ from rap.conn.connection import ServerConnection
 from rap.manager.aes_manager import aes_manager
 from rap.manager.client_manager import client_manager
 from rap.manager.func_manager import func_manager
-from rap.middleware import (
-    AccessMiddleware,
-    AccessConnMiddleware,
-    BaseMiddleware,
-    IpBlockMiddleware,
-
+from rap.middleware.base_middleware import (
+    BaseConnMiddleware,
+    BaseMsgMiddleware,
+    BaseRequestMiddleware
 )
-from rap.server.requests import Request, ResultModel
+from rap.server.requests import Request, RequestModel, ResultModel
 from rap.server.response import response
 from rap.common.types import (
     READER_TYPE,
@@ -39,6 +37,9 @@ class Server(object):
             keep_alive: int = 1200,
             run_timeout: int = 9,
             backlog: int = 1024,
+            conn_middleware_list: Optional[List[BaseConnMiddleware]] = None,
+            msg_middleware_list: Optional[List[BaseMsgMiddleware]] = None,
+            request_middleware_list: Optional[List[BaseRequestMiddleware]] = None,
             secret_list: Optional[List[str]] = None,
             ssl_crt_path: Optional[str] = None,
             ssl_key_path: Optional[str] = None,
@@ -47,17 +48,22 @@ class Server(object):
         self._port: int = port
         self._timeout: int = timeout
         self._keep_alive: int = keep_alive
-        self._run_timeout: int = run_timeout
         self._backlog: int = backlog
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._ssl_key_path: Optional[str] = ssl_key_path
+        self._request_handle = Request(run_timeout)
 
-        _middleware = self._conn_handle
-        for middleware in reversed([IpBlockMiddleware(), AccessConnMiddleware()]):
-            middleware.load_sub_middleware(_middleware)
-            _middleware = middleware
-        self._middleware = _middleware
+        _conn_middleware = self._conn_handle
+        for conn_middleware in reversed(conn_middleware_list):
+            conn_middleware.load_sub_middleware(_conn_middleware)
+            _conn_middleware = conn_middleware
+        self._conn_middleware = _conn_middleware
 
+        _request_middleware = self._request_handle.dispatch
+        for request_middleware in reversed(request_middleware_list):
+            request_middleware.load_sub_middleware(_request_middleware)
+            _request_middleware = request_middleware
+        self._request_middleware = _request_middleware
 
         if secret_list is not None:
             for secret in secret_list:
@@ -90,11 +96,10 @@ class Server(object):
             self._timeout,
             pack_param={'use_bin_type': False},
         )
-        await self._middleware.dispatch(conn)
+        await self._conn_middleware.dispatch(conn)
 
     async def _conn_handle(self, conn: ServerConnection):
         logging.debug(f'new connection: {conn.peer}')
-        request_handle = Request(conn, self._run_timeout)
         while not conn.is_closed():
             try:
                 request: Optional[BASE_REQUEST_TYPE] = await conn.read(self._keep_alive)
@@ -109,17 +114,26 @@ class Server(object):
                 await response(conn, self._timeout, event=('close conn', 'recv error'))
                 conn.set_reader_exc(e)
                 raise e
-
+            if request is None:
+                await response(conn, self._timeout, event=('close conn', 'request is empty'))
             try:
-                request_model: ResultModel = await request_handle.dispatch(request)
+                request_num, msg_id, header, body = request
+                request_model: RequestModel = RequestModel(request_num, msg_id, header, body, conn)
+            except Exception:
+                await response(conn, self._timeout, event=('close conn', 'protocol error'))
+                break
+
+            request_model.header['_host'] = conn.peer
+            try:
+                result_model: ResultModel = await self._request_middleware(request_model)
                 await response(
                     conn,
                     self._timeout,
-                    crypto=request_model.crypto,
-                    response_num=request_model.response_num,
-                    msg_id=request_model.msg_id,
-                    exception=request_model.exception,
-                    result=request_model.result
+                    crypto=result_model.crypto,
+                    response_num=result_model.response_num,
+                    msg_id=result_model.msg_id,
+                    exception=result_model.exception,
+                    result=result_model.result
                 )
             except Exception as e:
                 logging.error(traceback.format_exc())
