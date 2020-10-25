@@ -20,8 +20,16 @@ from rap.common.exceptions import (
 from rap.manager.aes_manager import aes_manager
 from rap.manager.client_manager import client_manager, ClientModel, LifeCycleEnum
 from rap.manager.func_manager import func_manager
-from rap.common.types import BASE_REQUEST_TYPE
 from rap.common.utlis import Constant, MISS_OBJECT, get_event_loop, parse_error
+
+
+@dataclass()
+class RequestModel(object):
+    request_num: int
+    msg_id: int
+    header: dict
+    body: Any
+    conn: ServerConnection
 
 
 @dataclass()
@@ -36,10 +44,8 @@ class ResultModel(object):
 class Request(object):
     def __init__(
             self,
-            conn: ServerConnection,
             run_timeout: int,
     ):
-        self._conn: ServerConnection = conn
         self._run_timeout: int = run_timeout
         self._response_num_dict: Dict[int, int] = {
             Constant.DECLARE_REQUEST: Constant.DECLARE_RESPONSE,
@@ -54,14 +60,6 @@ class Request(object):
         self.client_model: 'Optional[ClientModel]' = None
 
     @staticmethod
-    def _request_handle(request: BASE_REQUEST_TYPE) -> Tuple[int, int, dict, Any]:
-        try:
-            request_num, msg_id, header, body = request
-            return request_num, msg_id, header, body
-        except Exception:
-            raise ProtocolError()
-
-    @staticmethod
     def _check_timeout(timestamp: int) -> bool:
         return (int(time.time()) - timestamp) > 60
 
@@ -74,25 +72,22 @@ class Request(object):
         else:
             client_model.nonce_set.add(nonce)
 
-    async def dispatch(self, request: BASE_REQUEST_TYPE) -> ResultModel:
-        logging.debug(f'get request data:{request} from {self._conn.peer}')
-        if not isinstance(request, (tuple, list)):
-            raise ProtocolError()
+    async def dispatch(self, request: RequestModel) -> ResultModel:
+        logging.debug(f'get request data:{request} from {request.conn.peer}')
 
-        request_num, msg_id, header, body = self._request_handle(request)
-        response_num: Optional[int] = self._response_num_dict.get(request_num, Constant.SERVER_ERROR_RESPONSE)
+        response_num: Optional[int] = self._response_num_dict.get(request.request_num, Constant.SERVER_ERROR_RESPONSE)
 
         # create result_model
-        result_model: 'ResultModel' = ResultModel(response_num=response_num, msg_id=msg_id)
+        result_model: 'ResultModel' = ResultModel(response_num=response_num, msg_id=request.msg_id)
 
         # check type_id
-        if request_num is Constant.SERVER_ERROR_RESPONSE:
-            logging.error(f"parse request data: {request} from {self._conn.peer} error")
+        if request.request_num is Constant.SERVER_ERROR_RESPONSE:
+            logging.error(f"parse request data: {request} from {request.conn.peer} error")
             result_model.exception = ServerError('type_id error')
             return result_model
 
         # check header
-        client_id = header.get('client_id', None)
+        client_id = request.header.get('client_id', None)
         if client_id is None:
             result_model.exception = ProtocolError('header not found client id')
             return result_model
@@ -122,13 +117,13 @@ class Request(object):
 
         client_model.keep_alive_timestamp = int(time.time())
 
-        if type(body) is bytes:
+        if type(request.body) is bytes:
             # check crypto
             if client_model.crypto == MISS_OBJECT:
                 result_model.exception = AuthError('aes key error')
                 return result_model
             try:
-                decrypt_body: dict = client_model.crypto.decrypt_object(body)
+                decrypt_body: dict = client_model.crypto.decrypt_object(request.body)
             except Exception:
                 result_model.exception = AuthError('decrypt error')
                 return result_model
@@ -138,7 +133,7 @@ class Request(object):
                 result_model.exception = exception
                 return result_model
         else:
-            decrypt_body = body
+            decrypt_body = request.body
 
         # dispatch
         if response_num == Constant.DECLARE_RESPONSE:
@@ -156,6 +151,10 @@ class Request(object):
                 result_model.exception = ParseError()
                 return result_model
 
+            if method_name.startswith('_root_') and request.conn.peer[0] != '127.0.0.1':
+                # root func only called by local client
+                exc, exc_info = parse_error(FuncNotFoundError())
+                result_model.result = {'exc': exc, 'exc_info': exc_info}
             new_call_id, result = await self.msg_handle(call_id, method_name, param, client_model)
             if isinstance(result, Exception):
                 exc, exc_info = parse_error(result)
@@ -163,7 +162,7 @@ class Request(object):
             else:
                 result_model.result = {'call_id': new_call_id, 'method_name': method_name, 'result': result}
             return result_model
-        elif request_num == Constant.DROP_REQUEST:
+        elif request.request_num == Constant.DROP_REQUEST:
             call_id = decrypt_body['call_id']
             result_model.crypto = client_model.crypto
             client_manager.destroy_client_model(client_model.client_id)
@@ -178,10 +177,7 @@ class Request(object):
         status: bool = False
         method = func_manager.func_dict.get(method_name)
         try:
-            if method_name.startswith('_root_') and self._conn.peer[0] != '127.0.0.1':
-                # root func only called by local client
-                raise FuncNotFoundError
-            elif call_id in client_model.generator_dict:
+            if call_id in client_model.generator_dict:
                 try:
                     result = client_model.generator_dict[call_id]
                     if inspect.isgenerator(result):
