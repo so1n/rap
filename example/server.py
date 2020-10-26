@@ -1,6 +1,9 @@
 import asyncio
 
 from rap.server import Server
+from rap.middleware.conn.access import AccessConnMiddleware
+from rap.middleware.msg.access import AccessMsgMiddleware
+from rap.middleware.request.access import AccessMiddleware
 
 
 def sync_sum(a: int, b: int):
@@ -26,7 +29,12 @@ if __name__ == '__main__':
     )
 
     loop = asyncio.new_event_loop()
-    rpc_server = Server(secret_list=['keyskeyskeyskeys'])
+    rpc_server = Server(
+        secret_list=['keyskeyskeyskeys'],
+        conn_middleware_list=[AccessConnMiddleware()],
+        msg_middleware_list=[AccessMsgMiddleware()],
+        request_middleware_list=[AccessMiddleware()]
+    )
     rpc_server.register(sync_sum)
     rpc_server.register(async_sum)
     rpc_server.register(async_gen)

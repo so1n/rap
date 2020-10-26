@@ -102,12 +102,6 @@ class Request(object):
                 result_model.exception = AuthError('error client id')
                 return result_model
 
-        # check handle client_model & client_model from client_manager
-        if self.client_model is None:
-            self.client_model = client_model
-        elif self.client_model != client_model:
-            raise AuthError('error client id')
-
         result_model.crypto = client_model.crypto
 
         # check life_cycle
@@ -171,10 +165,6 @@ class Request(object):
 
     async def msg_handle(self, call_id: int, method_name: str, param: str, client_model: 'ClientModel'):
         # really request handle
-
-        # TODO middleware before
-        start_time: float = time.time()
-        status: bool = False
         method = func_manager.func_dict.get(method_name)
         try:
             if call_id in client_model.generator_dict:
@@ -201,13 +191,10 @@ class Request(object):
                     call_id = id(result)
                     client_model.generator_dict[call_id] = result
                     result = await result.__anext__()
-            status = True
         except Exception as e:
             if isinstance(e, BaseRapError):
                 result = e
             else:
-                logging.error(f"run:{method_name} param:{param} error:{e}. peer:{self._conn.peer}")
+                logging.error(f"run:{method_name} param:{param} error:{e}.")
                 result = ServerError('execute func error')
-        # TODO middleware after
-        logging.info(f"Method:{method_name}, time:{time.time() - start_time}, status:{status}")
         return call_id, result

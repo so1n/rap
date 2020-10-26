@@ -121,7 +121,7 @@ class Client:
             self._conn = Connection(
                 msgpack.Unpacker(raw=False, use_list=False),
                 self._timeout,
-                ssl_crt_path=ssl_crt_path
+                ssl_crt_path=ssl_crt_path,
             )
             await self._conn.connect(host, port)
         logging.debug(f"Connection to {self._conn.connection_info}...")
@@ -213,11 +213,15 @@ class Client:
         if response_num == Constant.SERVER_ERROR_RESPONSE:
             self.raise_error(body[0], body[1])
 
-        if self._crypto is not None:
+        if self._crypto is not None and type(body) is bytes:
             try:
                 body = self._crypto.decrypt_object(body)
             except Exception:
                 raise ProtocolError(f"Can't decrypt body.")
+        if response_num == Constant.SERVER_EVENT:
+            event, event_info = body
+            if event == 'close conn':
+                raise RuntimeError(f'recv close conn event, event info:{event_info}')
         return response_num, msg_id, header, body
 
     async def _request(self, conn, method, *args, call_id=-1) -> int:

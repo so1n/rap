@@ -8,6 +8,9 @@ from rap.server.requests import ResultModel
 
 class BaseMiddleware(object):
 
+    async def __call__(self, *args, **kwargs):
+        return await self.dispatch(*args)
+
     async def dispatch(self, *args: Any):
         raise NotImplementedError
 
