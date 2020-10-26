@@ -68,7 +68,7 @@ class Client:
     def __init__(
             self,
             timeout: int = 9,
-            secret: Optional[str] = None,
+            secret_tuple: Optional[Tuple[str, str]] = None,
             host: str = 'localhost',
             port: int = 9000,
             ssl_crt_path: Optional[str] = None,
@@ -85,9 +85,9 @@ class Client:
         self._min_size: Optional[int] = min_size
         self._max_size: Optional[int] = max_size
 
-        if secret is not None:
-            self._crypto: 'Crypto' = Crypto(secret)
-            self._client_id: str = secret
+        if secret_tuple is not None:
+            self._crypto: 'Crypto' = Crypto(secret_tuple[1])
+            self._client_id: str = secret_tuple[0]
         else:
             self._crypto: 'Optional[Crypto]' = None
             self._client_id: str = gen_id(4)

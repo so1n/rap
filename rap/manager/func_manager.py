@@ -17,13 +17,15 @@ class FuncManager(object):
         self.register(self._reload, '_root_reload')
         self.register(self._get_register_func, '_root_list')
 
-    def register(self, func: Optional[Callable], name: Optional[str] = None):
+    def register(self, func: Optional[Callable], name: Optional[str] = None, is_root: bool = False):
         if inspect.isfunction(func) or inspect.ismethod(func):
             name: str = name if name else func.__name__
         else:
             raise RegisteredError("func must be func or method")
         if not hasattr(func, "__call__"):
             raise RegisteredError(f"{name} is not a callable object")
+        if is_root and not name.startswith('_root_'):
+            name = '_root_' + name
         if name in self.func_dict:
             raise RegisteredError(f"Name {name} has already been used")
         self.func_dict[name] = func

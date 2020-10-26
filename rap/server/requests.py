@@ -81,7 +81,7 @@ class Request(object):
         result_model: 'ResultModel' = ResultModel(response_num=response_num, msg_id=request.msg_id)
 
         # check type_id
-        if request.request_num is Constant.SERVER_ERROR_RESPONSE:
+        if response_num is Constant.SERVER_ERROR_RESPONSE:
             logging.error(f"parse request data: {request} from {request.conn.peer} error")
             result_model.exception = ServerError('type_id error')
             return result_model
@@ -92,9 +92,9 @@ class Request(object):
             result_model.exception = ProtocolError('header not found client id')
             return result_model
 
-        # check crypto
+        # check client_model
         if response_num == Constant.DECLARE_RESPONSE:
-            crypto: Crypto = aes_manager.get_aed(client_id)
+            crypto: Crypto = aes_manager.get_crypto(client_id)
             client_model: 'ClientModel' = ClientModel(crypto=crypto)
         else:
             client_model = client_manager.get_client_model(client_id)
@@ -133,7 +133,7 @@ class Request(object):
         if response_num == Constant.DECLARE_RESPONSE:
             client_manager.create_client_model(client_model)
             if client_model.crypto is not MISS_OBJECT:
-                client_model.crypto = aes_manager.add_aes(client_model.client_id)
+                client_model.crypto = aes_manager.add_crypto(client_model.client_id)
             result_model.result = {'client_id': client_model.client_id}
             return result_model
         elif response_num == Constant.MSG_RESPONSE:
@@ -145,8 +145,8 @@ class Request(object):
                 result_model.exception = ParseError()
                 return result_model
 
+            # root func only called by local client
             if method_name.startswith('_root_') and request.conn.peer[0] != '127.0.0.1':
-                # root func only called by local client
                 exc, exc_info = parse_error(FuncNotFoundError())
                 result_model.result = {'exc': exc, 'exc_info': exc_info}
             new_call_id, result = await self.msg_handle(call_id, method_name, param, client_model)
@@ -158,8 +158,8 @@ class Request(object):
             return result_model
         elif request.request_num == Constant.DROP_REQUEST:
             call_id = decrypt_body['call_id']
-            result_model.crypto = client_model.crypto
             client_manager.destroy_client_model(client_model.client_id)
+            result_model.crypto = client_model.crypto
             result_model.result = {'call_id': call_id, 'result': 1}
             return result_model
 
@@ -195,6 +195,6 @@ class Request(object):
             if isinstance(e, BaseRapError):
                 result = e
             else:
-                logging.error(f"run:{method_name} param:{param} error:{e}.")
+                logging.exception(f"run:{method_name} param:{param} error:{e}.")
                 result = ServerError('execute func error')
         return call_id, result

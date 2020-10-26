@@ -1,11 +1,10 @@
 import asyncio
 import logging
-import traceback
 import ssl
 
 import msgpack
 
-from typing import Callable, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 from rap.conn.connection import ServerConnection
 from rap.manager.aes_manager import aes_manager
@@ -44,7 +43,7 @@ class Server(object):
             conn_middleware_list: Optional[List[BaseConnMiddleware]] = None,
             msg_middleware_list: Optional[List[BaseMsgMiddleware]] = None,
             request_middleware_list: Optional[List[BaseRequestMiddleware]] = None,
-            secret_list: Optional[List[str]] = None,
+            secret_dict: Optional[Dict[str, str]] = None,
             ssl_crt_path: Optional[str] = None,
             ssl_key_path: Optional[str] = None,
     ):
@@ -56,6 +55,9 @@ class Server(object):
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._ssl_key_path: Optional[str] = ssl_key_path
         self._request_handle: Request = Request(run_timeout)
+
+        if secret_dict is not None:
+            aes_manager.load_aes_key_dict(secret_dict)
 
         # replace func -> *_middleware
         if conn_middleware_list is not None:
@@ -78,10 +80,6 @@ class Server(object):
                 msg_middleware.load_sub_middleware(_msg_middleware)
                 _msg_middleware = msg_middleware
             self._request_handle.msg_handle = _msg_middleware
-
-        if secret_list is not None:
-            for secret in secret_list:
-                aes_manager.add_aes(secret)
 
     @staticmethod
     def register(func: Optional[Callable], name: Optional[str] = None):
@@ -147,7 +145,7 @@ class Server(object):
                     result=result_model.result
                 )
             except Exception as e:
-                logging.error(traceback.format_exc())
+                logging.exception(f'request handle error e')
                 await response(conn, exception=e)
 
         if not conn.is_closed():
