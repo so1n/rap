@@ -1,44 +1,39 @@
 import asyncio
 import logging
-import time
 from dataclasses import dataclass
 from typing import Any, Tuple, Optional
 
-from rap.common.aes import Crypto
 from rap.conn.connection import ServerConnection
 from rap.common.exceptions import ServerError
 from rap.common.types import BASE_RESPONSE_TYPE
-from rap.common.utlis import Constant, parse_error, gen_id, MISS_OBJECT
+from rap.common.utlis import Constant, parse_error
 
 
-async def response(
-    conn: ServerConnection,
-    timeout: Optional[int] = None,
-    crypto: Optional[Crypto] = None,
-    response_num: int = Constant.MSG_RESPONSE,
-    msg_id: int = -1,
-    exception: Optional[Exception] = None,
-    result: Optional[dict] = None,
-    header: Optional[dict] = None,
+@dataclass()
+class ResponseModel(object):
+    response_num: int = Constant.MSG_RESPONSE
+    msg_id: int = -1
+    header: Optional[dict] = None
+    result: Optional[dict] = None
+    exception: Optional[Exception] = None
     event: Optional[Tuple[str, Any]] = None
-):
-    if exception is not None:
-        error_response: Optional[Tuple[str, str]] = parse_error(exception)
-        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, msg_id, header, error_response)
-    elif result is not None:
-        result.update(dict(timestamp=int(time.time()), nonce=gen_id(10)))
-        response_msg: BASE_RESPONSE_TYPE = (
-            response_num, msg_id, header, crypto.encrypt_object(result) if crypto is not MISS_OBJECT else result
-        )
-    elif event is not None:
-        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_EVENT, msg_id, header, event)
+
+
+async def response(conn: ServerConnection, resp: ResponseModel, timeout: Optional[int] = None):
+    if resp.exception is not None:
+        error_response: Optional[Tuple[str, str]] = parse_error(resp.exception)
+        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, resp.msg_id, resp.header, error_response)
+    elif resp.result is not None:
+        response_msg: BASE_RESPONSE_TYPE = (resp.response_num, resp.msg_id, resp.header, resp.result)
+    elif resp.event is not None:
+        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_EVENT, resp.msg_id, resp.header, resp.event)
     else:
         error_response: Optional[Tuple[str, str]] = parse_error(ServerError('not response'))
-        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, msg_id, header, error_response)
+        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, resp.msg_id, resp.header, error_response)
 
     try:
         await conn.write(response_msg, timeout)
     except asyncio.TimeoutError:
-        logging.error(f"response to {conn.peer} timeout. result:{result}, error:{exception}")
+        logging.error(f"response to {conn.peer} timeout. result:{resp.result}, error:{resp.exception}")
     except Exception as e:
-        logging.error(f"response to {conn.peer} error: {e}. result:{result}, error:{exception}")
+        logging.error(f"response to {conn.peer} error: {e}. result:{resp.result}, error:{resp.exception}")

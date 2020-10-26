@@ -17,10 +17,9 @@ from rap.middleware.base_middleware import (
 )
 from rap.server.requests import (
     Request,
-    RequestModel,
-    ResultModel
+    RequestModel
 )
-from rap.server.response import response
+from rap.server.response import response, ResponseModel
 from rap.common.types import (
     READER_TYPE,
     WRITER_TYPE,
@@ -115,38 +114,31 @@ class Server(object):
                 request: Optional[BASE_REQUEST_TYPE] = await conn.read(self._keep_alive)
             except asyncio.TimeoutError:
                 logging.error(f"recv data from {conn.peer} timeout...")
-                await response(conn, event=('close conn', 'read request timeout'))
+                await response(conn, ResponseModel(event=('close conn', 'read request timeout')))
                 break
             except IOError as e:
                 logging.debug(f"close conn:{conn.peer} info:{e}")
                 break
             except Exception as e:
-                await response(conn, event=('close conn', 'recv error'))
+                await response(conn, ResponseModel(event=('close conn', 'recv error')))
                 conn.set_reader_exc(e)
                 raise e
             if request is None:
-                await response(conn, event=('close conn', 'request is empty'))
+                await response(conn, ResponseModel(event=('close conn', 'request is empty')))
             try:
                 request_num, msg_id, header, body = request
                 request_model: RequestModel = RequestModel(request_num, msg_id, header, body, conn)
             except Exception:
-                await response(conn, event=('close conn', 'protocol error'))
+                await response(conn, ResponseModel(event=('close conn', 'protocol error')))
                 break
 
             request_model.header['_host'] = conn.peer
             try:
-                result_model: ResultModel = await self._request_handle.dispatch(request_model)
-                await response(
-                    conn,
-                    crypto=result_model.crypto,
-                    response_num=result_model.response_num,
-                    msg_id=result_model.msg_id,
-                    exception=result_model.exception,
-                    result=result_model.result
-                )
+                resp_model: ResponseModel = await self._request_handle.dispatch(request_model)
+                await response(conn, resp_model)
             except Exception as e:
                 logging.exception(f'request handle error e')
-                await response(conn, exception=e)
+                await response(conn, ResponseModel(exception=e))
 
         if not conn.is_closed():
             conn.close()

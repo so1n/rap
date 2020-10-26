@@ -1,10 +1,9 @@
 import asyncio
-import inspect
 import logging
 import time
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any, Dict, Optional
 
 from rap.common.aes import Crypto
 from rap.conn.connection import ServerConnection
@@ -18,9 +17,20 @@ from rap.common.exceptions import (
     ServerError,
 )
 from rap.manager.aes_manager import aes_manager
-from rap.manager.client_manager import client_manager, ClientModel, LifeCycleEnum
+from rap.manager.client_manager import (
+    client_manager,
+    ClientModel,
+    LifeCycleEnum
+)
 from rap.manager.func_manager import func_manager
-from rap.common.utlis import Constant, MISS_OBJECT, get_event_loop, parse_error
+from rap.common.utlis import (
+    Constant,
+    MISS_OBJECT,
+    get_event_loop,
+    gen_id,
+    parse_error,
+)
+from rap.server.response import ResponseModel
 
 
 @dataclass()
@@ -30,15 +40,6 @@ class RequestModel(object):
     header: dict
     body: Any
     conn: ServerConnection
-
-
-@dataclass()
-class ResultModel(object):
-    response_num: int
-    msg_id: int
-    crypto: Optional[Crypto] = None
-    result: Optional[dict] = None
-    exception: Optional[Exception] = None
 
 
 class Request(object):
@@ -72,25 +73,25 @@ class Request(object):
         else:
             client_model.nonce_set.add(nonce)
 
-    async def dispatch(self, request: RequestModel) -> ResultModel:
+    async def dispatch(self, request: RequestModel) -> ResponseModel:
         logging.debug(f'get request data:{request} from {request.conn.peer}')
 
         response_num: Optional[int] = self._response_num_dict.get(request.request_num, Constant.SERVER_ERROR_RESPONSE)
 
         # create result_model
-        result_model: 'ResultModel' = ResultModel(response_num=response_num, msg_id=request.msg_id)
+        resp_model: 'ResponseModel' = ResponseModel(response_num=response_num, msg_id=request.msg_id)
 
         # check type_id
         if response_num is Constant.SERVER_ERROR_RESPONSE:
             logging.error(f"parse request data: {request} from {request.conn.peer} error")
-            result_model.exception = ServerError('type_id error')
-            return result_model
+            resp_model.exception = ServerError('type_id error')
+            return resp_model
 
         # check header
         client_id = request.header.get('client_id', None)
         if client_id is None:
-            result_model.exception = ProtocolError('header not found client id')
-            return result_model
+            resp_model.exception = ProtocolError('header not found client id')
+            return resp_model
 
         # check client_model
         if response_num == Constant.DECLARE_RESPONSE:
@@ -99,69 +100,69 @@ class Request(object):
         else:
             client_model = client_manager.get_client_model(client_id)
             if client_model is MISS_OBJECT:
-                result_model.exception = AuthError('error client id')
-                return result_model
-
-        result_model.crypto = client_model.crypto
+                resp_model.exception = AuthError('error client id')
+                return resp_model
 
         # check life_cycle
         if not client_model.modify_life_cycle(self._life_cycle_dict.get(response_num, MISS_OBJECT)):
-            result_model.exception = LifeCycleError()
-            return result_model
+            resp_model.exception = LifeCycleError()
+            return resp_model
 
         client_model.keep_alive_timestamp = int(time.time())
 
         if type(request.body) is bytes:
             # check crypto
             if client_model.crypto == MISS_OBJECT:
-                result_model.exception = AuthError('aes key error')
-                return result_model
+                resp_model.exception = AuthError('aes key error')
+                return resp_model
             try:
                 decrypt_body: dict = client_model.crypto.decrypt_object(request.body)
             except Exception:
-                result_model.exception = AuthError('decrypt error')
-                return result_model
+                resp_model.exception = AuthError('decrypt error')
+                return resp_model
 
             exception: 'Optional[Exception]' = self._body_handle(decrypt_body, client_model)
             if exception is not None:
-                result_model.exception = exception
-                return result_model
+                resp_model.exception = exception
+                return resp_model
         else:
             decrypt_body = request.body
 
         # dispatch
         if response_num == Constant.DECLARE_RESPONSE:
             client_manager.create_client_model(client_model)
+            resp_model.result = client_model.crypto.encrypt_object({'client_id': client_model.client_id})
             if client_model.crypto is not MISS_OBJECT:
+                # replace crypto
                 client_model.crypto = aes_manager.add_crypto(client_model.client_id)
-            result_model.result = {'client_id': client_model.client_id}
-            return result_model
         elif response_num == Constant.MSG_RESPONSE:
             try:
                 call_id: int = decrypt_body['call_id']
                 method_name: str = decrypt_body['method_name']
                 param: str = decrypt_body['param']
             except Exception:
-                result_model.exception = ParseError()
-                return result_model
+                resp_model.exception = ParseError()
+                return resp_model
 
             # root func only called by local client
             if method_name.startswith('_root_') and request.conn.peer[0] != '127.0.0.1':
                 exc, exc_info = parse_error(FuncNotFoundError())
-                result_model.result = {'exc': exc, 'exc_info': exc_info}
+                resp_model.result = {'exc': exc, 'exc_info': exc_info}
             new_call_id, result = await self.msg_handle(call_id, method_name, param, client_model)
             if isinstance(result, Exception):
                 exc, exc_info = parse_error(result)
-                result_model.result = {'exc': exc, 'exc_info': exc_info}
+                resp_model.result = {'exc': exc, 'exc_info': exc_info}
             else:
-                result_model.result = {'call_id': new_call_id, 'method_name': method_name, 'result': result}
-            return result_model
+                resp_model.result = {'call_id': new_call_id, 'method_name': method_name, 'result': result}
         elif request.request_num == Constant.DROP_REQUEST:
             call_id = decrypt_body['call_id']
             client_manager.destroy_client_model(client_model.client_id)
-            result_model.crypto = client_model.crypto
-            result_model.result = {'call_id': call_id, 'result': 1}
-            return result_model
+            resp_model.result = {'call_id': call_id, 'result': 1}
+
+        if client_model.crypto is not MISS_OBJECT and type(resp_model.result) is dict:
+            resp_model.result.update(dict(timestamp=int(time.time()), nonce=gen_id(10)))
+            resp_model.result = client_model.crypto.encrypt_object(resp_model.result)
+        return resp_model
 
     async def msg_handle(self, call_id: int, method_name: str, param: str, client_model: 'ClientModel'):
         # really request handle

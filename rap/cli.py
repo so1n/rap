@@ -23,15 +23,14 @@ if __name__ == '__main__':
         help="func param"
     )
     args, unknown = parser.parse_known_args()
-    secret_key = args.secret_key
+    secret_key: str = args.secret_key
     display_func_list = args.list
-    run = args.run
-    arg = args.arg
+    run: str = args.run
+    arg: str = args.arg
 
     loop = asyncio.get_event_loop()
-    client = Client(secret=secret_key)
+    client = Client(secret_tuple=tuple(secret_key.split(',')))
     loop.run_until_complete(client.connect())
-    print(loop.run_until_complete(client.call_by_text('_root_list')))
     if display_func_list:
         loop.run_until_complete(client.call_by_text('_root_list'))
     elif run and arg:
@@ -39,6 +38,6 @@ if __name__ == '__main__':
     elif run:
         loop.run_until_complete(client.call_by_text(run))
     else:
-        client.close()
+        loop.run_until_complete(client.wait_close())
         sys.exit('you should use -l or -r and -a')
-    client.close()
+    loop.run_until_complete(client.wait_close())
