@@ -3,7 +3,7 @@ from typing import Any, Callable, Union
 from rap.conn.connection import ServerConnection
 from rap.common.types import BASE_REQUEST_TYPE
 from rap.manager.client_manager import ClientModel
-from rap.server.requests import ResultModel
+from rap.server.response import ResponseModel
 
 
 class BaseMiddleware(object):
@@ -32,7 +32,7 @@ class BaseConnMiddleware(BaseMiddleware):
 
 class BaseRequestMiddleware(BaseMiddleware):
 
-    async def dispatch(self, request: BASE_REQUEST_TYPE) -> ResultModel:
+    async def dispatch(self, request: BASE_REQUEST_TYPE) -> ResponseModel:
         raise NotImplementedError
 
 

@@ -9,10 +9,7 @@ from typing import Any, Callable, cast, Optional, Union, Tuple
 
 from rap.common import exceptions as rap_exc
 from rap.common.aes import Crypto
-from rap.conn.connection import Connection
-from rap.conn.pool import Pool
 from rap.common.exceptions import (
-    AuthError,
     RPCError,
     ProtocolError,
 )
@@ -24,6 +21,8 @@ from rap.common.utlis import (
     Constant,
     gen_id
 )
+from rap.conn.connection import Connection
+from rap.conn.pool import Pool
 
 
 __all__ = ['Client']
@@ -68,7 +67,7 @@ class Client:
     def __init__(
             self,
             timeout: int = 9,
-            secret_tuple: Optional[Tuple[str, str]] = None,
+            secret_tuple: Optional[Tuple[str, ...]] = None,
             host: str = 'localhost',
             port: int = 9000,
             ssl_crt_path: Optional[str] = None,
@@ -97,10 +96,7 @@ class Client:
         if not self._conn or self._conn.is_closed():
             raise RuntimeError('Connection already closed')
         await self._drop()
-        try:
-            self._conn.close()
-        except AttributeError:
-            pass
+        self._conn.close()
 
     async def connect(self, host: str = 'localhost', port: int = 9000, ssl_crt_path: Optional[str] = None):
         """Create connection and connect"""
@@ -176,14 +172,14 @@ class Client:
             header['client_id'] = self._client_id
         if self._crypto is not None:
             if type(body) is not dict:
-                raise AuthError('crypto body must be dict')
+                body = {'body': body}
             body['timestamp'] = int(time.time())
             body['nonce'] = gen_id(10)
             body = self._crypto.encrypt_object(body)
 
         request: BASE_REQUEST_TYPE = (request_num, msg_id, header, body)
         try:
-            await conn.write(request, self._timeout)
+            await conn.write(request)
             logging.debug(f'send:{request} to {conn.connection_info}')
         except asyncio.TimeoutError as e:
             logging.error(f"send to {conn.connection_info} timeout, drop data:{request}")
@@ -212,7 +208,6 @@ class Client:
             raise ProtocolError(f"Can't parse response:{response}")
         if response_num == Constant.SERVER_ERROR_RESPONSE:
             self.raise_error(body[0], body[1])
-
         if self._crypto is not None and type(body) is bytes:
             try:
                 body = self._crypto.decrypt_object(body)
@@ -229,9 +224,7 @@ class Client:
             conn,
             Constant.MSG_REQUEST,
             {},
-            {
-                'call_id': call_id, 'method_name': method, 'param': args,
-            }
+            {'call_id': call_id, 'method_name': method, 'param': args}
         )
 
     async def _response(self, conn, raw_msg_id):
