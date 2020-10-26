@@ -5,7 +5,7 @@ import ssl
 
 import msgpack
 
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Union
 
 from rap.conn.connection import ServerConnection
 from rap.manager.aes_manager import aes_manager
@@ -16,7 +16,11 @@ from rap.middleware.base_middleware import (
     BaseMsgMiddleware,
     BaseRequestMiddleware
 )
-from rap.server.requests import Request, RequestModel, ResultModel
+from rap.server.requests import (
+    Request,
+    RequestModel,
+    ResultModel
+)
 from rap.server.response import response
 from rap.common.types import (
     READER_TYPE,
@@ -51,19 +55,29 @@ class Server(object):
         self._backlog: int = backlog
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._ssl_key_path: Optional[str] = ssl_key_path
-        self._request_handle = Request(run_timeout)
+        self._request_handle: Request = Request(run_timeout)
 
-        _conn_middleware = self._conn_handle
-        for conn_middleware in reversed(conn_middleware_list):
-            conn_middleware.load_sub_middleware(_conn_middleware)
-            _conn_middleware = conn_middleware
-        self._conn_middleware = _conn_middleware
+        # replace func -> *_middleware
+        if conn_middleware_list is not None:
+            _conn_middleware: Union[Callable, BaseConnMiddleware] = self._conn_handle
+            for conn_middleware in reversed(conn_middleware_list):
+                conn_middleware.load_sub_middleware(_conn_middleware)
+                _conn_middleware = conn_middleware
+            self._conn_handle = _conn_middleware
 
-        _request_middleware = self._request_handle.dispatch
-        for request_middleware in reversed(request_middleware_list):
-            request_middleware.load_sub_middleware(_request_middleware)
-            _request_middleware = request_middleware
-        self._request_middleware = _request_middleware
+        if request_middleware_list is not None:
+            _request_middleware: Union[Callable, BaseRequestMiddleware] = self._request_handle.dispatch
+            for request_middleware in reversed(request_middleware_list):
+                request_middleware.load_sub_middleware(_request_middleware)
+                _request_middleware = request_middleware
+            self._request_handle.dispatch = _request_middleware
+
+        if msg_middleware_list is not None:
+            _msg_middleware: Union[Callable, BaseMsgMiddleware] = self._request_handle.msg_handle
+            for msg_middleware in reversed(msg_middleware_list):
+                msg_middleware.load_sub_middleware(_msg_middleware)
+                _msg_middleware = msg_middleware
+            self._request_handle.msg_handle = _msg_middleware
 
         if secret_list is not None:
             for secret in secret_list:
@@ -92,43 +106,40 @@ class Server(object):
         conn: ServerConnection = ServerConnection(
             reader,
             writer,
-            msgpack.Unpacker(use_list=False),
+            msgpack.Unpacker(raw=False, use_list=False),
             self._timeout,
-            pack_param={'use_bin_type': False},
         )
-        await self._conn_middleware.dispatch(conn)
+        await self._conn_handle(conn)
 
     async def _conn_handle(self, conn: ServerConnection):
-        logging.debug(f'new connection: {conn.peer}')
         while not conn.is_closed():
             try:
                 request: Optional[BASE_REQUEST_TYPE] = await conn.read(self._keep_alive)
             except asyncio.TimeoutError:
                 logging.error(f"recv data from {conn.peer} timeout...")
-                await response(conn, self._timeout, event=('close conn', 'read request timeout'))
+                await response(conn, event=('close conn', 'read request timeout'))
                 break
             except IOError as e:
                 logging.debug(f"close conn:{conn.peer} info:{e}")
                 break
             except Exception as e:
-                await response(conn, self._timeout, event=('close conn', 'recv error'))
+                await response(conn, event=('close conn', 'recv error'))
                 conn.set_reader_exc(e)
                 raise e
             if request is None:
-                await response(conn, self._timeout, event=('close conn', 'request is empty'))
+                await response(conn, event=('close conn', 'request is empty'))
             try:
                 request_num, msg_id, header, body = request
                 request_model: RequestModel = RequestModel(request_num, msg_id, header, body, conn)
             except Exception:
-                await response(conn, self._timeout, event=('close conn', 'protocol error'))
+                await response(conn, event=('close conn', 'protocol error'))
                 break
 
             request_model.header['_host'] = conn.peer
             try:
-                result_model: ResultModel = await self._request_middleware(request_model)
+                result_model: ResultModel = await self._request_handle.dispatch(request_model)
                 await response(
                     conn,
-                    self._timeout,
                     crypto=result_model.crypto,
                     response_num=result_model.response_num,
                     msg_id=result_model.msg_id,
@@ -137,9 +148,8 @@ class Server(object):
                 )
             except Exception as e:
                 logging.error(traceback.format_exc())
-                await response(conn, self._timeout, exception=e)
+                await response(conn, exception=e)
 
         if not conn.is_closed():
             conn.close()
             logging.debug(f"close connection: {conn.peer}")
-

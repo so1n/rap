@@ -11,17 +11,9 @@ from rap.common.types import BASE_RESPONSE_TYPE
 from rap.common.utlis import Constant, parse_error, gen_id, MISS_OBJECT
 
 
-@dataclass()
-class Response(object):
-    request_num: Optional[int] = None
-    msg_id: Optional[int] = None
-    exception: Optional[Exception] = None
-    result: Optional[Any] = None
-
-
 async def response(
     conn: ServerConnection,
-    timeout: int,
+    timeout: Optional[int] = None,
     crypto: Optional[Crypto] = None,
     response_num: int = Constant.MSG_RESPONSE,
     msg_id: int = -1,
