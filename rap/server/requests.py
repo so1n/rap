@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import logging
 import time
 
@@ -6,7 +7,6 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from rap.common.aes import Crypto
-from rap.conn.connection import ServerConnection
 from rap.common.exceptions import (
     AuthError,
     BaseRapError,
@@ -16,13 +16,6 @@ from rap.common.exceptions import (
     ProtocolError,
     ServerError,
 )
-from rap.manager.aes_manager import aes_manager
-from rap.manager.client_manager import (
-    client_manager,
-    ClientModel,
-    LifeCycleEnum
-)
-from rap.manager.func_manager import func_manager
 from rap.common.utlis import (
     Constant,
     MISS_OBJECT,
@@ -30,6 +23,14 @@ from rap.common.utlis import (
     gen_id,
     parse_error,
 )
+from rap.conn.connection import ServerConnection
+from rap.manager.aes_manager import aes_manager
+from rap.manager.client_manager import (
+    client_manager,
+    ClientModel,
+    LifeCycleEnum
+)
+from rap.manager.func_manager import func_manager
 from rap.server.response import ResponseModel
 
 
@@ -131,9 +132,11 @@ class Request(object):
         # dispatch
         if response_num == Constant.DECLARE_RESPONSE:
             client_manager.create_client_model(client_model)
-            resp_model.result = client_model.crypto.encrypt_object({'client_id': client_model.client_id})
             if client_model.crypto is not MISS_OBJECT:
-                # replace crypto
+                # declare will gen new crypto and replace
+                resp_model.result = client_model.crypto.encrypt_object({
+                    'timestamp': int(time.time()), 'nonce': gen_id(10), 'client_id': client_model.client_id
+                })
                 client_model.crypto = aes_manager.add_crypto(client_model.client_id)
         elif response_num == Constant.MSG_RESPONSE:
             try:
