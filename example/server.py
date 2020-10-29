@@ -1,4 +1,5 @@
 import asyncio
+from typing import Iterator
 
 from rap.server import Server
 from rap.middleware.conn.access import AccessConnMiddleware
@@ -6,16 +7,16 @@ from rap.middleware.msg.access import AccessMsgMiddleware
 from rap.middleware.request.access import AccessMiddleware
 
 
-def sync_sum(a: int, b: int):
+def sync_sum(a: int, b: int) -> int:
     return a + b
 
 
-async def async_sum(a: int, b: int):
+async def async_sum(a: int, b: int) -> int:
     await asyncio.sleep(1)  # mock io time
     return a + b
 
 
-async def async_gen(a):
+async def async_gen(a: int) -> Iterator[int]:
     for i in range(a):
         yield i
 

@@ -1,5 +1,6 @@
 import asyncio
 import msgpack
+from collections.abc import Iterator
 
 from typing import Any, List, Tuple, Type, Set, Union, _GenericAlias
 
@@ -34,8 +35,13 @@ def parse_typing(_type: Type) -> Union[List[Type], Type]:
         origin: type = _type.__origin__
         if origin is Union:
             return [parse_typing(i) for i in _type.__args__]
+        elif origin == Iterator:
+            return _type.__args__[0]
         return origin
-    return _type
+    elif _type in _CAN_JSON_TYPE_SET:
+        return _type
+    else:
+        raise RuntimeError(f'Can not parse {_type} origin type')
 
 
 def check_is_json_type(_type: Type) -> bool:
