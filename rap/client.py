@@ -170,6 +170,8 @@ class Client:
 
         if 'client_id' not in header:
             header['client_id'] = self._client_id
+        header['version'] = Constant.VERSION
+        header['programming_language'] = Constant.PROGRAMMING_LANGUAGE
         if self._crypto is not None:
             if type(body) is not dict:
                 body = {'body': body}

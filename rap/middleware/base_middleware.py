@@ -38,6 +38,6 @@ class BaseRequestMiddleware(BaseMiddleware):
 
 class BaseMsgMiddleware(BaseMiddleware):
     async def dispatch(
-            self, call_id: int, method_name: str, param: str, client_model: 'ClientModel'
+            self, header: dict, call_id: int, method_name: str, param: str, client_model: 'ClientModel'
     ) -> Union[dict, Exception]:
         raise NotImplementedError
