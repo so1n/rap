@@ -2,14 +2,18 @@
  - Feature: add called limit middleware
 
 ### 0.5.2
+ - Feature: add server config
  - Feature: Temporarily remove connection pool
  - Feature: support version
  - Feature: Server check register return annotation
 
-### 0.5.1
- - Feature: add server config
+### 0.5.1[Now]
+ - Refactor: server response
+ - Refactor: server middleware
+ - Fix: Aes bug
+ - Fix: declare life cycle response not timeout&nonce param
 
-### 0.5[NOW]
+### 0.5
  - Refactor: new protocol
 
 ### 0.3.2
