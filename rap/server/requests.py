@@ -4,7 +4,7 @@ import logging
 import time
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from rap.common.aes import Crypto
 from rap.common.exceptions import (
@@ -151,7 +151,7 @@ class Request(object):
             if method_name.startswith('_root_') and request.conn.peer[0] != '127.0.0.1':
                 exc, exc_info = parse_error(FuncNotFoundError())
                 resp_model.result = {'exc': exc, 'exc_info': exc_info}
-            new_call_id, result = await self.msg_handle(call_id, method_name, param, client_model)
+            new_call_id, result = await self.msg_handle(request.header, call_id, method_name, param, client_model)
             if isinstance(result, Exception):
                 exc, exc_info = parse_error(result)
                 resp_model.result = {'exc': exc, 'exc_info': exc_info}
@@ -167,9 +167,12 @@ class Request(object):
             resp_model.result = client_model.crypto.encrypt_object(resp_model.result)
         return resp_model
 
-    async def msg_handle(self, call_id: int, method_name: str, param: str, client_model: 'ClientModel'):
+    async def msg_handle(self, header: dict, call_id: int, method_name: str, param: str, client_model: 'ClientModel'):
         # really request handle
-        method = func_manager.func_dict.get(method_name)
+        method: Callable = func_manager.func_dict.get(method_name)
+        version: str = header.get('version')
+        programming_language: str = header.get('programming_language')
+        print(version, programming_language)
         try:
             if call_id in client_model.generator_dict:
                 try:
@@ -188,13 +191,19 @@ class Request(object):
                     result: Any = await get_event_loop().run_in_executor(None, method, *param)
 
                 if inspect.isgenerator(result):
-                    call_id = id(result)
-                    client_model.generator_dict[call_id] = result
-                    result = next(result)
+                    if programming_language != Constant.PROGRAMMING_LANGUAGE:
+                        result = ProtocolError(f'{programming_language} not support generator')
+                    else:
+                        call_id = id(result)
+                        client_model.generator_dict[call_id] = result
+                        result = next(result)
                 elif inspect.isasyncgen(result):
-                    call_id = id(result)
-                    client_model.generator_dict[call_id] = result
-                    result = await result.__anext__()
+                    if programming_language != Constant.PROGRAMMING_LANGUAGE:
+                        result = ProtocolError(f'{programming_language} not support generator')
+                    else:
+                        call_id = id(result)
+                        client_model.generator_dict[call_id] = result
+                        result = await result.__anext__()
         except Exception as e:
             if isinstance(e, BaseRapError):
                 result = e

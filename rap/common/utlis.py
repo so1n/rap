@@ -13,8 +13,8 @@ _STR_LD = string.ascii_letters + string.digits
 
 
 class Constant(object):
-    REQUEST: int = 0
-    RESPONSE: int = 1
+    VERSION: str = '0.5.1'
+    PROGRAMMING_LANGUAGE: str = 'Python3'
     SOCKET_RECV_SIZE: int = 1024 ** 1
 
     DECLARE_REQUEST: int = 101
