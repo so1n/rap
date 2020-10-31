@@ -15,6 +15,7 @@ from rap.common.exceptions import (
     ParseError,
     ProtocolError,
     ServerError,
+    RpcRunTimeError
 )
 from rap.common.utlis import (
     Constant,
@@ -91,7 +92,7 @@ class Request(object):
         # check header
         client_id = request.header.get('client_id', None)
         if client_id is None:
-            resp_model.exception = ProtocolError('header not found client id')
+            resp_model.exception = ProtocolError('Can not found client id from header')
             return resp_model
 
         # check client_model
@@ -101,7 +102,7 @@ class Request(object):
         else:
             client_model = client_manager.get_client_model(client_id)
             if client_model is MISS_OBJECT:
-                resp_model.exception = AuthError('error client id')
+                resp_model.exception = AuthError('The current client id has not been registered')
                 return resp_model
 
         # check life_cycle
@@ -119,7 +120,7 @@ class Request(object):
             try:
                 decrypt_body: dict = client_model.crypto.decrypt_object(request.body)
             except Exception:
-                resp_model.exception = AuthError('decrypt error')
+                resp_model.exception = AuthError('decrypt body error')
                 return resp_model
 
             exception: 'Optional[Exception]' = self._body_handle(decrypt_body, client_model)
@@ -149,12 +150,20 @@ class Request(object):
 
             # root func only called by local client
             if method_name.startswith('_root_') and request.conn.peer[0] != '127.0.0.1':
-                exc, exc_info = parse_error(FuncNotFoundError())
-                resp_model.result = {'exc': exc, 'exc_info': exc_info}
+                if request.header.get('programming_language') == Constant.PROGRAMMING_LANGUAGE:
+                    exc, exc_info = parse_error(FuncNotFoundError())
+                    resp_model.header['status_code'] = FuncNotFoundError.status_code
+                    resp_model.result = {'exc': exc, 'exc_info': exc_info}
+                else:
+                    resp_model.exception = FuncNotFoundError()
             new_call_id, result = await self.msg_handle(request.header, call_id, method_name, param, client_model)
             if isinstance(result, Exception):
-                exc, exc_info = parse_error(result)
-                resp_model.result = {'exc': exc, 'exc_info': exc_info}
+                if request.header.get('programming_language') == Constant.PROGRAMMING_LANGUAGE:
+                    exc, exc_info = parse_error(result)
+                    resp_model.header['status_code'] = RpcRunTimeError.status_code
+                    resp_model.result = {'exc': exc, 'exc_info': exc_info}
+                else:
+                    resp_model.exception = RpcRunTimeError(str(result))
             else:
                 resp_model.result = {'call_id': new_call_id, 'method_name': method_name, 'result': result}
         elif request.request_num == Constant.DROP_REQUEST:
@@ -172,7 +181,6 @@ class Request(object):
         method: Callable = func_manager.func_dict.get(method_name)
         version: str = header.get('version')
         programming_language: str = header.get('programming_language')
-        print(version, programming_language)
         try:
             if call_id in client_model.generator_dict:
                 try:

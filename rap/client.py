@@ -11,7 +11,7 @@ from rap.common import exceptions as rap_exc
 from rap.common.aes import Crypto
 from rap.common.exceptions import (
     RPCError,
-    ProtocolError,
+    ProtocolError
 )
 from rap.common.types import (
     BASE_REQUEST_TYPE,
@@ -136,10 +136,10 @@ class Client:
             raw_msg_id = await self._base_request(conn, Constant.DECLARE_REQUEST, {}, {})
             response_num, msg_id, header, body = await self._base_response(conn)
             if response_num != Constant.DECLARE_RESPONSE and raw_msg_id != msg_id and body != body:
-                raise RPCError('declare error')
+                raise RPCError('declare response error')
             client_id = body.get('client_id')
             if client_id is None:
-                raise RPCError('declare error, get client id error')
+                raise RPCError('declare response error, Can not get client id from body')
             if self._crypto is not None:
                 self._client_id = client_id
                 self._crypto = Crypto(client_id)
@@ -156,8 +156,8 @@ class Client:
             raw_msg_id = await self._base_request(conn, Constant.DROP_REQUEST, {}, {'call_id': call_id})
             response_num, msg_id, header, body = await self._base_response(conn)
             if response_num != Constant.DROP_RESPONSE and raw_msg_id != msg_id and body.get('call_id', '') != call_id:
-                raise RPCError('drop error')
-            logging.info('drop success')
+                raise RPCError('drop response error')
+            logging.info('drop response success')
         finally:
             self._conn.release(conn)
 
@@ -209,7 +209,10 @@ class Client:
         except ValueError:
             raise ProtocolError(f"Can't parse response:{response}")
         if response_num == Constant.SERVER_ERROR_RESPONSE:
-            self.raise_error(body[0], body[1])
+            if header.get('programming_language') == Constant.PROGRAMMING_LANGUAGE:
+                self.raise_error(body[0], body[1])
+            else:
+                raise RuntimeError(body[1])
         if self._crypto is not None and type(body) is bytes:
             try:
                 body = self._crypto.decrypt_object(body)
@@ -232,9 +235,12 @@ class Client:
     async def _response(self, conn, raw_msg_id):
         response_num, msg_id, header, body = await self._base_response(conn)
         if response_num != Constant.MSG_RESPONSE or msg_id != raw_msg_id:
-            raise RPCError('request error')
-        if 'exc' in body:
-            self.raise_error(body['exc'], body.get('exc_info', ''))
+            raise RPCError('request num or msg id error')
+        if header.get('status_code', 200) != 200:
+            if 'exc' in body:
+                self.raise_error(body['exc'], body.get('exc_info', ''))
+            else:
+                raise RuntimeError(body.get('ext_info', ''))
         return body['call_id'], body['method_name'], body['result']
 
     async def call_by_text(self, method: str, *args: Any) -> Any:
