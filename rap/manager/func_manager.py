@@ -37,7 +37,7 @@ class FuncManager(object):
         if is_root and not name.startswith('_root_'):
             name = '_root_' + name
         if name in self.func_dict:
-            raise RegisteredError(f"Name {name} has already been used")
+            raise RegisteredError(f"Name: {name} has already been used")
         self.func_dict[name] = func
 
         # not display log before called logging.basicConfig
@@ -51,7 +51,7 @@ class FuncManager(object):
             self.register(func)
             return f"load {func_str} from {path} success"
         except Exception as e:
-            raise RegisteredError(str(e))
+            raise RegisteredError(f'load {func_str} from {path} fail, {str(e)}')
 
     def _reload(self, path: str, func_str: str) -> str:
         try:
@@ -64,7 +64,7 @@ class FuncManager(object):
             self.func_dict[func_str] = func
             return f"reload {func_str} from {path} success"
         except Exception as e:
-            raise RegisteredError(str(e))
+            raise RegisteredError(f'reload {func_str} from {path} fail, {str(e)}')
 
     def _get_register_func(self) -> List[Tuple[str, str, str]]:
         register_list: List[Tuple[str, str, str]] = []

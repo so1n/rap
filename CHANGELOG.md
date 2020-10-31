@@ -8,6 +8,7 @@
 ### 0.5.1[Now]
  - Refactor: server response
  - Refactor: server middleware
+ - Refactor: exceptions
  - Fix: Aes bug
  - Fix: declare life cycle response not timeout&nonce param
  - Feature: Server check register func return param&param  annotation

@@ -20,11 +20,14 @@ from rap.server.requests import (
     RequestModel
 )
 from rap.server.response import response, ResponseModel
+from rap.common.exceptions import RpcRunTimeError
 from rap.common.types import (
     READER_TYPE,
     WRITER_TYPE,
     BASE_REQUEST_TYPE
 )
+from rap.common.utlis import Constant
+
 
 __all__ = ['Server']
 
@@ -127,6 +130,8 @@ class Server(object):
                 await response(conn, ResponseModel(event=('close conn', 'request is empty')))
             try:
                 request_num, msg_id, header, body = request
+                header['version'] = Constant.VERSION
+                header['programming_language'] = Constant.PROGRAMMING_LANGUAGE
                 request_model: RequestModel = RequestModel(request_num, msg_id, header, body, conn)
             except Exception:
                 await response(conn, ResponseModel(event=('close conn', 'protocol error')))
@@ -138,7 +143,7 @@ class Server(object):
                 await response(conn, resp_model)
             except Exception as e:
                 logging.exception(f'request handle error e')
-                await response(conn, ResponseModel(exception=e))
+                await response(conn, ResponseModel(exception=RpcRunTimeError(str(e))))
 
         if not conn.is_closed():
             conn.close()
