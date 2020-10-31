@@ -139,6 +139,8 @@ class Request(object):
                     'timestamp': int(time.time()), 'nonce': gen_id(10), 'client_id': client_model.client_id
                 })
                 client_model.crypto = aes_manager.add_crypto(client_model.client_id)
+            else:
+                resp_model.result = {'client_id': client_model.client_id}
         elif response_num == Constant.MSG_RESPONSE:
             try:
                 call_id: int = decrypt_body['call_id']

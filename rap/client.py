@@ -243,7 +243,7 @@ class Client:
                 raise RuntimeError(body.get('ext_info', ''))
         return body['call_id'], body['method_name'], body['result']
 
-    async def call_by_text(self, method: str, *args: Any) -> Any:
+    async def raw_call(self, method: str, *args: Any) -> Any:
         """rpc client base call method"""
         conn: 'Connection' = await self._conn.acquire()
         try:
@@ -255,7 +255,7 @@ class Client:
 
     async def call(self, func: Callable, *args: Any) -> Any:
         """automatically resolve function names and call call_by_text"""
-        return await self.call_by_text(func.__name__, *args)
+        return await self.raw_call(func.__name__, *args)
 
     async def iterator_call(self, method: str, *args: Any) -> Any:
         """Python-specific generator call"""
@@ -274,7 +274,7 @@ class Client:
         """Decorate normal function"""
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            return await self.call_by_text(func.__name__, *args)
+            return await self.raw_call(func.__name__, *args)
         return cast(Callable, wrapper)
 
     def _async_gen_register(self, func: Callable):

@@ -32,11 +32,11 @@ if __name__ == '__main__':
     client = Client(secret_tuple=tuple(secret_key.split(',')))
     loop.run_until_complete(client.connect())
     if display_func_list:
-        loop.run_until_complete(client.call_by_text('_root_list'))
+        loop.run_until_complete(client.raw_call('_root_list'))
     elif run and arg:
-        loop.run_until_complete(client.call_by_text(run, arg))
+        loop.run_until_complete(client.raw_call(run, arg))
     elif run:
-        loop.run_until_complete(client.call_by_text(run))
+        loop.run_until_complete(client.raw_call(run))
     else:
         loop.run_until_complete(client.wait_close())
         sys.exit('you should use -l or -r and -a')

@@ -74,7 +74,7 @@ async def async_gen(a: int):
 
 async def run_once():
     print(f"sync result: {await client.call(sync_sum, 1, 2)}")
-    print(f"sync result: {await client.call_by_text('sync_sum', 1, 2)}")
+    print(f"sync result: {await client.raw_call('sync_sum', 1, 2)}")
     print(f"async result: {await async_sum(1, 3)}")
     async for i in async_gen(10):
         print(f"async gen result:{i}")
