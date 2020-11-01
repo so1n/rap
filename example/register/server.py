@@ -38,3 +38,9 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         server.close()
         loop.run_until_complete(server.wait_closed())
+
+    # fail register example
+    def fail_register(a, b):
+        return a + b
+
+    rpc_server.register(fail_register)
