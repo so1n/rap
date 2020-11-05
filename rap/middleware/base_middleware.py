@@ -7,14 +7,13 @@ from rap.server.response import ResponseModel
 
 
 class BaseMiddleware(object):
-
     async def __call__(self, *args, **kwargs):
         return await self.dispatch(*args)
 
     async def dispatch(self, *args: Any):
         raise NotImplementedError
 
-    def load_sub_middleware(self, call_next: 'Union[Callable, BaseMiddleware]'):
+    def load_sub_middleware(self, call_next: "Union[Callable, BaseMiddleware]"):
         if isinstance(call_next, BaseMiddleware):
             self.call_next = call_next.call_next
         else:
@@ -25,19 +24,17 @@ class BaseMiddleware(object):
 
 
 class BaseConnMiddleware(BaseMiddleware):
-
     async def dispatch(self, conn: ServerConnection):
         raise NotImplementedError
 
 
 class BaseRequestMiddleware(BaseMiddleware):
-
     async def dispatch(self, request: BASE_REQUEST_TYPE) -> ResponseModel:
         raise NotImplementedError
 
 
 class BaseMsgMiddleware(BaseMiddleware):
     async def dispatch(
-            self, header: dict, call_id: int, method_name: str, param: str, client_model: 'ClientModel'
+        self, header: dict, call_id: int, method_name: str, param: str, client_model: "ClientModel"
     ) -> Union[dict, Exception]:
         raise NotImplementedError

@@ -41,15 +41,16 @@ class CloseEvent:
 
 class Pool(object):
     """Simple connection pool, design like aioredis.pool"""
+
     def __init__(
-            self,
-            host: str,
-            port: int,
-            unpacker: UNPACKER_TYPE,
-            timeout: int,
-            min_size: int = 1,
-            max_size: int = 10,
-            ssl_crt_path: Optional[str] = None,
+        self,
+        host: str,
+        port: int,
+        unpacker: UNPACKER_TYPE,
+        timeout: int,
+        min_size: int = 1,
+        max_size: int = 10,
+        ssl_crt_path: Optional[str] = None,
     ):
         self._host: str = host
         self._port: int = port
@@ -65,7 +66,7 @@ class Pool(object):
         self._close_state = CloseEvent(self._do_close)
         self._pool: Deque[Connection] = deque(maxlen=max_size)
         self._used_set: Set[Connection] = set()
-        self.connection_info: str = f'{host}:{port}'
+        self.connection_info: str = f"{host}:{port}"
 
     @property
     def free_size(self):
@@ -116,11 +117,7 @@ class Pool(object):
         self._drop_closed()
         while self.size < self._max_size:
             try:
-                conn = Connection(
-                    self._unpacker,
-                    self._timeout,
-                    ssl_crt_path=self._ssl_srt_path
-                )
+                conn = Connection(self._unpacker, self._timeout, ssl_crt_path=self._ssl_srt_path)
                 await conn.connect(self._host, self._port)
                 self._pool.append(conn)
             finally:

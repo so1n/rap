@@ -15,7 +15,7 @@ from rap.common.exceptions import (
     ParseError,
     ProtocolError,
     ServerError,
-    RpcRunTimeError
+    RpcRunTimeError,
 )
 from rap.common.utlis import (
     Constant,
@@ -26,11 +26,7 @@ from rap.common.utlis import (
 )
 from rap.conn.connection import ServerConnection
 from rap.manager.aes_manager import aes_manager
-from rap.manager.client_manager import (
-    client_manager,
-    ClientModel,
-    LifeCycleEnum
-)
+from rap.manager.client_manager import client_manager, ClientModel, LifeCycleEnum
 from rap.manager.func_manager import func_manager
 from rap.server.response import ResponseModel
 
@@ -46,63 +42,63 @@ class RequestModel(object):
 
 class Request(object):
     def __init__(
-            self,
-            run_timeout: int,
+        self,
+        run_timeout: int,
     ):
         self._run_timeout: int = run_timeout
         self._response_num_dict: Dict[int, int] = {
             Constant.DECLARE_REQUEST: Constant.DECLARE_RESPONSE,
             Constant.MSG_REQUEST: Constant.MSG_RESPONSE,
-            Constant.DROP_REQUEST: Constant.DROP_RESPONSE
+            Constant.DROP_REQUEST: Constant.DROP_RESPONSE,
         }
         self._life_cycle_dict: Dict[int, LifeCycleEnum] = {
             Constant.DECLARE_RESPONSE: LifeCycleEnum.msg,
             Constant.MSG_RESPONSE: LifeCycleEnum.msg,
             Constant.DROP_RESPONSE: LifeCycleEnum.drop,
         }
-        self.client_model: 'Optional[ClientModel]' = None
+        self.client_model: "Optional[ClientModel]" = None
 
     @staticmethod
     def _check_timeout(timestamp: int) -> bool:
         return (int(time.time()) - timestamp) > 60
 
     def _body_handle(self, body: dict, client_model: ClientModel) -> Optional[Exception]:
-        if self._check_timeout(body.get('timestamp', 0)):
-            return ServerError('timeout error')
-        nonce: str = body.get('nonce', '')
+        if self._check_timeout(body.get("timestamp", 0)):
+            return ServerError("timeout error")
+        nonce: str = body.get("nonce", "")
         if nonce in client_model.nonce_set:
-            return ServerError('nonce error')
+            return ServerError("nonce error")
         else:
             client_model.nonce_set.add(nonce)
 
     async def dispatch(self, request: RequestModel) -> ResponseModel:
-        logging.debug(f'get request data:{request} from {request.conn.peer}')
+        logging.debug(f"get request data:{request} from {request.conn.peer}")
 
         response_num: Optional[int] = self._response_num_dict.get(request.request_num, Constant.SERVER_ERROR_RESPONSE)
 
         # create result_model
-        resp_model: 'ResponseModel' = ResponseModel(response_num=response_num, msg_id=request.msg_id)
+        resp_model: "ResponseModel" = ResponseModel(response_num=response_num, msg_id=request.msg_id)
 
         # check type_id
         if response_num is Constant.SERVER_ERROR_RESPONSE:
             logging.error(f"parse request data: {request} from {request.conn.peer} error")
-            resp_model.exception = ServerError('type_id error')
+            resp_model.exception = ServerError("type_id error")
             return resp_model
 
         # check header
-        client_id = request.header.get('client_id', None)
+        client_id = request.header.get("client_id", None)
         if client_id is None:
-            resp_model.exception = ProtocolError('Can not found client id from header')
+            resp_model.exception = ProtocolError("Can not found client id from header")
             return resp_model
 
         # check client_model
         if response_num == Constant.DECLARE_RESPONSE:
             crypto: Crypto = aes_manager.get_crypto(client_id)
-            client_model: 'ClientModel' = ClientModel(crypto=crypto)
+            client_model: "ClientModel" = ClientModel(crypto=crypto)
         else:
             client_model = client_manager.get_client_model(client_id)
             if client_model is MISS_OBJECT:
-                resp_model.exception = AuthError('The current client id has not been registered')
+                resp_model.exception = AuthError("The current client id has not been registered")
                 return resp_model
 
         # check life_cycle
@@ -115,15 +111,15 @@ class Request(object):
         if type(request.body) is bytes:
             # check crypto
             if client_model.crypto == MISS_OBJECT:
-                resp_model.exception = AuthError('aes key error')
+                resp_model.exception = AuthError("aes key error")
                 return resp_model
             try:
                 decrypt_body: dict = client_model.crypto.decrypt_object(request.body)
             except Exception:
-                resp_model.exception = AuthError('decrypt body error')
+                resp_model.exception = AuthError("decrypt body error")
                 return resp_model
 
-            exception: 'Optional[Exception]' = self._body_handle(decrypt_body, client_model)
+            exception: "Optional[Exception]" = self._body_handle(decrypt_body, client_model)
             if exception is not None:
                 resp_model.exception = exception
                 return resp_model
@@ -135,54 +131,54 @@ class Request(object):
             client_manager.create_client_model(client_model)
             if client_model.crypto is not MISS_OBJECT:
                 # declare will gen new crypto and replace
-                resp_model.result = client_model.crypto.encrypt_object({
-                    'timestamp': int(time.time()), 'nonce': gen_id(10), 'client_id': client_model.client_id
-                })
+                resp_model.result = client_model.crypto.encrypt_object(
+                    {"timestamp": int(time.time()), "nonce": gen_id(10), "client_id": client_model.client_id}
+                )
                 client_model.crypto = aes_manager.add_crypto(client_model.client_id)
             else:
-                resp_model.result = {'client_id': client_model.client_id}
+                resp_model.result = {"client_id": client_model.client_id}
         elif response_num == Constant.MSG_RESPONSE:
             try:
-                call_id: int = decrypt_body['call_id']
-                method_name: str = decrypt_body['method_name']
-                param: str = decrypt_body['param']
+                call_id: int = decrypt_body["call_id"]
+                method_name: str = decrypt_body["method_name"]
+                param: str = decrypt_body["param"]
             except Exception:
                 resp_model.exception = ParseError()
                 return resp_model
 
             # root func only called by local client
-            if method_name.startswith('_root_') and request.conn.peer[0] != '127.0.0.1':
-                if request.header.get('programming_language') == Constant.PROGRAMMING_LANGUAGE:
+            if method_name.startswith("_root_") and request.conn.peer[0] != "127.0.0.1":
+                if request.header.get("programming_language") == Constant.PROGRAMMING_LANGUAGE:
                     exc, exc_info = parse_error(FuncNotFoundError())
-                    resp_model.header['status_code'] = FuncNotFoundError.status_code
-                    resp_model.result = {'exc': exc, 'exc_info': exc_info}
+                    resp_model.header["status_code"] = FuncNotFoundError.status_code
+                    resp_model.result = {"exc": exc, "exc_info": exc_info}
                 else:
                     resp_model.exception = FuncNotFoundError()
             new_call_id, result = await self.msg_handle(request.header, call_id, method_name, param, client_model)
             if isinstance(result, Exception):
-                if request.header.get('programming_language') == Constant.PROGRAMMING_LANGUAGE:
+                if request.header.get("programming_language") == Constant.PROGRAMMING_LANGUAGE:
                     exc, exc_info = parse_error(result)
-                    resp_model.header['status_code'] = RpcRunTimeError.status_code
-                    resp_model.result = {'exc': exc, 'exc_info': exc_info}
+                    resp_model.header["status_code"] = RpcRunTimeError.status_code
+                    resp_model.result = {"exc": exc, "exc_info": exc_info}
                 else:
                     resp_model.exception = RpcRunTimeError(str(result))
             else:
-                resp_model.result = {'call_id': new_call_id, 'method_name': method_name, 'result': result}
+                resp_model.result = {"call_id": new_call_id, "method_name": method_name, "result": result}
         elif request.request_num == Constant.DROP_REQUEST:
-            call_id = decrypt_body['call_id']
+            call_id = decrypt_body["call_id"]
             client_manager.destroy_client_model(client_model.client_id)
-            resp_model.result = {'call_id': call_id, 'result': 1}
+            resp_model.result = {"call_id": call_id, "result": 1}
 
         if client_model.crypto is not MISS_OBJECT and type(resp_model.result) is dict:
             resp_model.result.update(dict(timestamp=int(time.time()), nonce=gen_id(10)))
             resp_model.result = client_model.crypto.encrypt_object(resp_model.result)
         return resp_model
 
-    async def msg_handle(self, header: dict, call_id: int, method_name: str, param: str, client_model: 'ClientModel'):
+    async def msg_handle(self, header: dict, call_id: int, method_name: str, param: str, client_model: "ClientModel"):
         # really request handle
         method: Callable = func_manager.func_dict.get(method_name)
-        version: str = header.get('version')
-        programming_language: str = header.get('programming_language')
+        version: str = header.get("version")
+        programming_language: str = header.get("programming_language")
         try:
             if call_id in client_model.generator_dict:
                 try:
@@ -202,14 +198,14 @@ class Request(object):
 
                 if inspect.isgenerator(result):
                     if programming_language != Constant.PROGRAMMING_LANGUAGE:
-                        result = ProtocolError(f'{programming_language} not support generator')
+                        result = ProtocolError(f"{programming_language} not support generator")
                     else:
                         call_id = id(result)
                         client_model.generator_dict[call_id] = result
                         result = next(result)
                 elif inspect.isasyncgen(result):
                     if programming_language != Constant.PROGRAMMING_LANGUAGE:
-                        result = ProtocolError(f'{programming_language} not support generator')
+                        result = ProtocolError(f"{programming_language} not support generator")
                     else:
                         call_id = id(result)
                         client_model.generator_dict[call_id] = result
@@ -219,5 +215,5 @@ class Request(object):
                 result = e
             else:
                 logging.exception(f"run:{method_name} param:{param} error:{e}.")
-                result = ServerError('execute func error')
+                result = ServerError("execute func error")
         return call_id, result

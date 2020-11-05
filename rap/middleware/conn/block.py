@@ -10,12 +10,12 @@ class IpBlockMiddleware(BaseConnMiddleware):
         self.block_set: Set[str] = block_set if block_set else None
         self.allow_set: Set[str] = allow_set if allow_set else None
 
-        func_manager.register(self._add_allow_ip, '_root_add_allow_ip')
-        func_manager.register(self._add_block_ip, '_root_add_block_ip')
-        func_manager.register(self._remove_allow_ip, '_root_remove_allow_ip')
-        func_manager.register(self._remove_block_ip, '_root_remove_block_ip')
-        func_manager.register(self._get_allow_ip, '_root_get_allow_ip')
-        func_manager.register(self._get_block_ip, '_root_get_block_ip')
+        func_manager.register(self._add_allow_ip, "_root_add_allow_ip")
+        func_manager.register(self._add_block_ip, "_root_add_block_ip")
+        func_manager.register(self._remove_allow_ip, "_root_remove_allow_ip")
+        func_manager.register(self._remove_block_ip, "_root_remove_block_ip")
+        func_manager.register(self._get_allow_ip, "_root_get_allow_ip")
+        func_manager.register(self._get_block_ip, "_root_get_block_ip")
         super().__init__()
 
     def _add_allow_ip(self, ip: str):

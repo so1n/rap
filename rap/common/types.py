@@ -41,7 +41,7 @@ def parse_typing(_type: Type) -> Union[List[Type], Type]:
     elif _type in _CAN_JSON_TYPE_SET:
         return _type
     else:
-        raise RuntimeError(f'Can not parse {_type} origin type')
+        raise RuntimeError(f"Can not parse {_type} origin type")
 
 
 def check_is_json_type(_type: Type) -> bool:

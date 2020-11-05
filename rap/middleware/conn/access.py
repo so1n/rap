@@ -14,11 +14,13 @@ class AccessConnMiddleware(BaseConnMiddleware):
         self._conn_count += 1
         try:
             if self._conn_count > self._max_conn:
-                logging.error(f'Currently exceeding the maximum number of connections limit, close {conn.peer}')
-                await response(conn, event=('close conn', 'Currently exceeding the maximum number of connections limit'))
+                logging.error(f"Currently exceeding the maximum number of connections limit, close {conn.peer}")
+                await response(
+                    conn, event=("close conn", "Currently exceeding the maximum number of connections limit")
+                )
                 await conn.await_close()
             else:
-                logging.info(f'new conn:{conn.peer}')
+                logging.info(f"new conn:{conn.peer}")
                 await self.call_next(conn)
         finally:
             self._conn_count -= 1

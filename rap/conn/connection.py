@@ -6,10 +6,7 @@ from typing import Optional
 
 import msgpack
 
-from rap.common.utlis import (
-    Constant,
-    get_event_loop
-)
+from rap.common.utlis import Constant, get_event_loop
 from rap.common.types import (
     LOOP_TYPE,
     READER_TYPE,
@@ -17,16 +14,12 @@ from rap.common.types import (
     UNPACKER_TYPE,
 )
 
-__all__ = ['Connection', 'ServerConnection']
+__all__ = ["Connection", "ServerConnection"]
 
 
 class BaseConnection:
     def __init__(
-            self,
-            unpacker: UNPACKER_TYPE,
-            timeout: int,
-            pack_param: Optional[dict] = None,
-            loop: Optional[LOOP_TYPE] = None
+        self, unpacker: UNPACKER_TYPE, timeout: int, pack_param: Optional[dict] = None, loop: Optional[LOOP_TYPE] = None
     ):
         self._reader: Optional[READER_TYPE] = None
         self._writer: Optional[WRITER_TYPE] = None
@@ -39,7 +32,7 @@ class BaseConnection:
         self.connection_info: Optional[str] = None
 
     async def write(self, data: tuple, timeout: Optional[int] = None):
-        logging.debug(f'sending {data} to {self.peer}')
+        logging.debug(f"sending {data} to {self.peer}")
         self._writer.write(msgpack.packb(data, **self._pack_param))
         timeout = timeout if timeout else self.timeout
         await asyncio.wait_for(self._writer.drain(), timeout)
@@ -49,9 +42,9 @@ class BaseConnection:
         response = None
         while True:
             data = await asyncio.wait_for(self._reader.read(Constant.SOCKET_RECV_SIZE), timeout)
-            logging.debug(f'recv data {data} from {self.peer}')
+            logging.debug(f"recv data {data} from {self.peer}")
             if not data:
-                raise ConnectionError(f'Connection to {self.peer} closed')
+                raise ConnectionError(f"Connection to {self.peer} closed")
             self.unpacker.feed(data)
             try:
                 response = next(self.unpacker)
@@ -81,55 +74,56 @@ class BaseConnection:
 
 class Connection(BaseConnection):
     def __init__(
-            self,
-            unpacker: UNPACKER_TYPE,
-            timeout: int,
-            pack_param: Optional[dict] = None,
-            loop: Optional[LOOP_TYPE] = None,
-            ssl_crt_path: Optional[str] = None,
+        self,
+        unpacker: UNPACKER_TYPE,
+        timeout: int,
+        pack_param: Optional[dict] = None,
+        loop: Optional[LOOP_TYPE] = None,
+        ssl_crt_path: Optional[str] = None,
     ):
         super().__init__(unpacker, timeout, pack_param, loop)
         self.connection_info: Optional[str] = None
         self._future: Optional[asyncio.Future] = None
-        self._lock: 'asyncio.Lock' = asyncio.Lock()
+        self._lock: "asyncio.Lock" = asyncio.Lock()
         self._ssl_crt_path: Optional[str] = ssl_crt_path
 
     async def connect(self, host: str, port: int):
-        self.connection_info: str = f'{host}:{port}'
+        self.connection_info: str = f"{host}:{port}"
 
         ssl_context: Optional[ssl.SSLContext] = None
         if self._ssl_crt_path:
-            ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, )
+            ssl_context = ssl.create_default_context(
+                ssl.Purpose.SERVER_AUTH,
+            )
             ssl_context.check_hostname = False
             ssl_context.load_verify_locations(self._ssl_crt_path)
             logging.info(f"connection enable ssl")
 
         self._reader, self._writer = await asyncio.open_connection(host, port, loop=self._loop, ssl=ssl_context)
-        self.peer = self._writer.get_extra_info('peername')
+        self.peer = self._writer.get_extra_info("peername")
         self._is_closed = False
 
-    async def acquire(self) -> 'Connection':
+    async def acquire(self) -> "Connection":
         await self._lock.acquire()
         return self
 
-    def release(self, conn: 'Connection'):
+    def release(self, conn: "Connection"):
         self._lock.release()
         return
 
 
 class ServerConnection(Connection):
-
     def __init__(
-            self,
-            reader: READER_TYPE,
-            writer: WRITER_TYPE,
-            unpacker: UNPACKER_TYPE,
-            timeout: int,
-            pack_param: Optional[dict] = None,
-            loop: Optional[LOOP_TYPE] = None
+        self,
+        reader: READER_TYPE,
+        writer: WRITER_TYPE,
+        unpacker: UNPACKER_TYPE,
+        timeout: int,
+        pack_param: Optional[dict] = None,
+        loop: Optional[LOOP_TYPE] = None,
     ):
         super().__init__(unpacker, timeout, pack_param, loop)
         self._reader = reader
         self._writer = writer
-        self.peer = self._writer.get_extra_info('peername')
+        self.peer = self._writer.get_extra_info("peername")
         self._is_closed = False

@@ -6,7 +6,6 @@ from rap.server.response import ResponseModel
 
 
 class AccessMiddleware(BaseRequestMiddleware):
-
     async def dispatch(self, request: RequestModel) -> ResponseModel:
-        logging.debug(f'get request data:{request} from {request.conn.peer}')
+        logging.debug(f"get request data:{request} from {request.conn.peer}")
         return await self.call_next(request)

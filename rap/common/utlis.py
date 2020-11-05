@@ -13,8 +13,8 @@ _STR_LD = string.ascii_letters + string.digits
 
 
 class Constant(object):
-    VERSION: str = '0.5.1'
-    PROGRAMMING_LANGUAGE: str = 'Python3'
+    VERSION: str = "0.5.1"
+    PROGRAMMING_LANGUAGE: str = "Python3"
     SOCKET_RECV_SIZE: int = 1024 ** 1
 
     DECLARE_REQUEST: int = 101
@@ -36,7 +36,7 @@ def _get_event_loop():
 
 
 def gen_id(num: int = 8) -> str:
-    return str(int(time.time() * 1000))[-10:] + ''.join(random.choice(_STR_LD) for i in range(num))
+    return str(int(time.time() * 1000))[-10:] + "".join(random.choice(_STR_LD) for i in range(num))
 
 
 get_event_loop = _get_event_loop()
