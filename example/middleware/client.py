@@ -4,7 +4,7 @@ import time
 from rap.client import Client
 
 
-client = Client(secret_tuple=('test', 'keyskeyskeyskeys'))
+client = Client(secret_tuple=("test", "keyskeyskeyskeys"))
 
 
 def sync_sum(a: int, b: int) -> int:
@@ -34,12 +34,11 @@ async def main():
         print(f"async gen result:{i}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import logging
+
     logging.basicConfig(
-        format='[%(asctime)s %(levelname)s] %(message)s',
-        datefmt='%y-%m-%d %H:%M:%S',
-        level=logging.DEBUG
+        format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.DEBUG
     )
 
     loop = asyncio.get_event_loop()

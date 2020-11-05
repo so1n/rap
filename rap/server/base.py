@@ -10,44 +10,32 @@ from rap.conn.connection import ServerConnection
 from rap.manager.aes_manager import aes_manager
 from rap.manager.client_manager import client_manager
 from rap.manager.func_manager import func_manager
-from rap.middleware.base_middleware import (
-    BaseConnMiddleware,
-    BaseMsgMiddleware,
-    BaseRequestMiddleware
-)
-from rap.server.requests import (
-    Request,
-    RequestModel
-)
+from rap.middleware.base_middleware import BaseConnMiddleware, BaseMsgMiddleware, BaseRequestMiddleware
+from rap.server.requests import Request, RequestModel
 from rap.server.response import response, ResponseModel
 from rap.common.exceptions import RpcRunTimeError
-from rap.common.types import (
-    READER_TYPE,
-    WRITER_TYPE,
-    BASE_REQUEST_TYPE
-)
+from rap.common.types import READER_TYPE, WRITER_TYPE, BASE_REQUEST_TYPE
 from rap.common.utlis import Constant
 
 
-__all__ = ['Server']
+__all__ = ["Server"]
 
 
 class Server(object):
-
     def __init__(
-            self,
-            host: str = 'localhost',
-            port: int = 9000,
-            timeout: int = 9,
-            keep_alive: int = 1200,
-            run_timeout: int = 9,
-            backlog: int = 1024,
-            conn_middleware_list: Optional[List[BaseConnMiddleware]] = None,
-            msg_middleware_list: Optional[List[BaseMsgMiddleware]] = None,
-            request_middleware_list: Optional[List[BaseRequestMiddleware]] = None,
-            secret_dict: Optional[Dict[str, str]] = None,
-            ssl_crt_path: Optional[str] = None,
-            ssl_key_path: Optional[str] = None,
+        self,
+        host: str = "localhost",
+        port: int = 9000,
+        timeout: int = 9,
+        keep_alive: int = 1200,
+        run_timeout: int = 9,
+        backlog: int = 1024,
+        conn_middleware_list: Optional[List[BaseConnMiddleware]] = None,
+        msg_middleware_list: Optional[List[BaseMsgMiddleware]] = None,
+        request_middleware_list: Optional[List[BaseRequestMiddleware]] = None,
+        secret_dict: Optional[Dict[str, str]] = None,
+        ssl_crt_path: Optional[str] = None,
+        ssl_key_path: Optional[str] = None,
     ):
         self._host: str = host
         self._port: int = port
@@ -96,7 +84,7 @@ class Server(object):
             ssl_context.load_cert_chain(self._ssl_crt_path, self._ssl_key_path)
             logging.info(f"server enable ssl")
 
-        logging.info(f'server running on {self._host}:{self._port}')
+        logging.info(f"server running on {self._host}:{self._port}")
         asyncio.ensure_future(client_manager.introspection())
         return await asyncio.start_server(
             self.conn_handle, self._host, self._port, ssl=ssl_context, backlog=self._backlog
@@ -117,32 +105,32 @@ class Server(object):
                 request: Optional[BASE_REQUEST_TYPE] = await conn.read(self._keep_alive)
             except asyncio.TimeoutError:
                 logging.error(f"recv data from {conn.peer} timeout...")
-                await response(conn, ResponseModel(event=('close conn', 'read request timeout')))
+                await response(conn, ResponseModel(event=("close conn", "read request timeout")))
                 break
             except IOError as e:
                 logging.debug(f"close conn:{conn.peer} info:{e}")
                 break
             except Exception as e:
-                await response(conn, ResponseModel(event=('close conn', 'recv error')))
+                await response(conn, ResponseModel(event=("close conn", "recv error")))
                 conn.set_reader_exc(e)
                 raise e
             if request is None:
-                await response(conn, ResponseModel(event=('close conn', 'request is empty')))
+                await response(conn, ResponseModel(event=("close conn", "request is empty")))
             try:
                 request_num, msg_id, header, body = request
-                header['version'] = Constant.VERSION
-                header['programming_language'] = Constant.PROGRAMMING_LANGUAGE
+                header["version"] = Constant.VERSION
+                header["programming_language"] = Constant.PROGRAMMING_LANGUAGE
                 request_model: RequestModel = RequestModel(request_num, msg_id, header, body, conn)
             except Exception:
-                await response(conn, ResponseModel(event=('close conn', 'protocol error')))
+                await response(conn, ResponseModel(event=("close conn", "protocol error")))
                 break
 
-            request_model.header['_host'] = conn.peer
+            request_model.header["_host"] = conn.peer
             try:
                 resp_model: ResponseModel = await self._request_handle.dispatch(request_model)
                 await response(conn, resp_model)
             except Exception as e:
-                logging.exception(f'request handle error e')
+                logging.exception(f"request handle error e")
                 await response(conn, ResponseModel(exception=RpcRunTimeError(str(e))))
 
         if not conn.is_closed():

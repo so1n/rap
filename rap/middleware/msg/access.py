@@ -8,9 +8,8 @@ from rap.middleware.base_middleware import BaseMsgMiddleware
 
 
 class AccessMsgMiddleware(BaseMsgMiddleware):
-
     async def dispatch(
-            self, header: dict, call_id: int, method_name: str, param: str, client_model: 'ClientModel'
+        self, header: dict, call_id: int, method_name: str, param: str, client_model: "ClientModel"
     ) -> Tuple[int, Union[dict, Exception]]:
         start_time: float = time.time()
         status: bool = False
@@ -20,7 +19,7 @@ class AccessMsgMiddleware(BaseMsgMiddleware):
             status = True
         except Exception as e:
             logging.exception(e)
-            result = ServerError('execute func error')
+            result = ServerError("execute func error")
         if isinstance(result, Exception):
             status = False
         logging.info(f"Method:{method_name}, time:{time.time() - start_time}, status:{status}")

@@ -20,19 +20,19 @@ class ResponseModel(object):
 
 
 async def response(conn: ServerConnection, resp: ResponseModel, timeout: Optional[int] = None):
-    logging.debug(f'resp:{resp}')
+    logging.debug(f"resp:{resp}")
     if resp.exception is not None:
         error_response: Optional[Tuple[str, str]] = parse_error(resp.exception)
-        resp.header['status_code'] = resp.exception.status_code
+        resp.header["status_code"] = resp.exception.status_code
         response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, resp.msg_id, resp.header, error_response)
     elif resp.result is not None:
         response_msg: BASE_RESPONSE_TYPE = (resp.response_num, resp.msg_id, resp.header, resp.result)
     elif resp.event is not None:
         response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_EVENT, resp.msg_id, resp.header, resp.event)
     else:
-        exception: BaseRapError = ServerError('not response data')
+        exception: BaseRapError = ServerError("not response data")
         error_response: Optional[Tuple[str, str]] = parse_error(exception)
-        resp.header['status_code'] = exception.status_code
+        resp.header["status_code"] = exception.status_code
         response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, resp.msg_id, resp.header, error_response)
 
     try:

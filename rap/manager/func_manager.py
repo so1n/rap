@@ -14,19 +14,20 @@ class FuncManager(object):
         self._cwd: str = os.getcwd()
         self.func_dict: Dict[str, Callable] = dict()
 
-        self.register(self._load, '_root_load')
-        self.register(self._reload, '_root_reload')
-        self.register(self._get_register_func, '_root_list')
+        self.register(self._load, "_root_load")
+        self.register(self._reload, "_root_reload")
+        self.register(self._get_register_func, "_root_list")
 
     def register(self, func: Optional[Callable], name: Optional[str] = None, is_root: bool = False):
-        sig: 'inspect.Signature' = inspect.signature(func)
+        sig: "inspect.Signature" = inspect.signature(func)
         if not check_is_json_type(sig.return_annotation) or sig.return_annotation is sig.empty:
             from rap.common.types import parse_typing
+
             print(parse_typing(sig.return_annotation))
-            raise RegisteredError(f'{func.__name__} return type:{sig.return_annotation} is not json type')
+            raise RegisteredError(f"{func.__name__} return type:{sig.return_annotation} is not json type")
         for param in sig.parameters.values():
             if not check_is_json_type(param.annotation) or param.annotation is sig.empty:
-                raise RegisteredError(f'{func.__name__} param:{param.name} type:{param.annotation} is not json type')
+                raise RegisteredError(f"{func.__name__} param:{param.name} type:{param.annotation} is not json type")
 
         if inspect.isfunction(func) or inspect.ismethod(func):
             name: str = name if name else func.__name__
@@ -34,14 +35,14 @@ class FuncManager(object):
             raise RegisteredError("func must be func or method")
         if not hasattr(func, "__call__"):
             raise RegisteredError(f"{name} is not a callable object")
-        if is_root and not name.startswith('_root_'):
-            name = '_root_' + name
+        if is_root and not name.startswith("_root_"):
+            name = "_root_" + name
         if name in self.func_dict:
             raise RegisteredError(f"Name: {name} has already been used")
         self.func_dict[name] = func
 
         # not display log before called logging.basicConfig
-        if not name.startswith('_root_'):
+        if not name.startswith("_root_"):
             logging.info(f"register func:{name}")
 
     def _load(self, path: str, func_str: str) -> str:
@@ -51,7 +52,7 @@ class FuncManager(object):
             self.register(func)
             return f"load {func_str} from {path} success"
         except Exception as e:
-            raise RegisteredError(f'load {func_str} from {path} fail, {str(e)}')
+            raise RegisteredError(f"load {func_str} from {path} fail, {str(e)}")
 
     def _reload(self, path: str, func_str: str) -> str:
         try:
@@ -64,7 +65,7 @@ class FuncManager(object):
             self.func_dict[func_str] = func
             return f"reload {func_str} from {path} success"
         except Exception as e:
-            raise RegisteredError(f'reload {func_str} from {path} fail, {str(e)}')
+            raise RegisteredError(f"reload {func_str} from {path} fail, {str(e)}")
 
     def _get_register_func(self) -> List[Tuple[str, str, str]]:
         register_list: List[Tuple[str, str, str]] = []
@@ -76,4 +77,4 @@ class FuncManager(object):
         return register_list
 
 
-func_manager: 'FuncManager' = FuncManager()
+func_manager: "FuncManager" = FuncManager()

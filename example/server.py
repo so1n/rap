@@ -21,20 +21,19 @@ async def async_gen(a: int) -> Iterator[int]:
         yield i
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import logging
+
     logging.basicConfig(
-        format='[%(asctime)s %(levelname)s] %(message)s',
-        datefmt='%y-%m-%d %H:%M:%S',
-        level=logging.DEBUG
+        format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.DEBUG
     )
 
     loop = asyncio.new_event_loop()
     rpc_server = Server(
-        secret_dict={'test': 'keyskeyskeyskeys'},
+        secret_dict={"test": "keyskeyskeyskeys"},
         conn_middleware_list=[AccessConnMiddleware()],
         msg_middleware_list=[AccessMsgMiddleware()],
-        request_middleware_list=[AccessMiddleware()]
+        request_middleware_list=[AccessMiddleware()],
     )
     rpc_server.register(sync_sum)
     rpc_server.register(async_sum)

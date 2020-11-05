@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 
-with open('requirements.txt') as f:
+with open("requirements.txt") as f:
     requirements = [l for l in f.read().splitlines() if l]
 
 
