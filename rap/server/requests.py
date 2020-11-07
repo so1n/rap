@@ -24,7 +24,7 @@ from rap.common.utlis import (
     gen_random_time_id,
     parse_error,
 )
-from rap.conn.connection import ServerConnection
+from rap.common.conn import ServerConnection
 from rap.manager.aes_manager import aes_manager
 from rap.manager.client_manager import client_manager, ClientModel, LifeCycleEnum
 from rap.manager.func_manager import func_manager

@@ -1,8 +1,8 @@
 import logging
 
-from rap.conn.connection import ServerConnection
+from rap.common.conn import ServerConnection
 from rap.middleware.base_middleware import BaseConnMiddleware
-from rap.server.response import response
+from rap.server.response import ResponseModel, response
 
 
 class AccessConnMiddleware(BaseConnMiddleware):
@@ -16,7 +16,8 @@ class AccessConnMiddleware(BaseConnMiddleware):
             if self._conn_count > self._max_conn:
                 logging.error(f"Currently exceeding the maximum number of connections limit, close {conn.peer}")
                 await response(
-                    conn, event=("close conn", "Currently exceeding the maximum number of connections limit")
+                    conn,
+                    ResponseModel(event=("close conn", "Currently exceeding the maximum number of connections limit"))
                 )
                 await conn.await_close()
             else:

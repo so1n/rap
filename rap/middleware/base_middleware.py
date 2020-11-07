@@ -1,6 +1,6 @@
 from typing import Any, Callable, Union
 
-from rap.conn.connection import ServerConnection
+from rap.common.conn import ServerConnection
 from rap.common.types import BASE_REQUEST_TYPE
 from rap.manager.client_manager import ClientModel
 from rap.server.response import ResponseModel

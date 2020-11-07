@@ -19,16 +19,15 @@ class FuncManager(object):
         self.register(self._get_register_func, "_root_list")
 
     def register(self, func: Optional[Callable], name: Optional[str] = None, is_root: bool = False):
+        # check func param&return value type hint
         sig: "inspect.Signature" = inspect.signature(func)
         if not check_is_json_type(sig.return_annotation) or sig.return_annotation is sig.empty:
-            from rap.common.types import parse_typing
-
-            print(parse_typing(sig.return_annotation))
             raise RegisteredError(f"{func.__name__} return type:{sig.return_annotation} is not json type")
         for param in sig.parameters.values():
             if not check_is_json_type(param.annotation) or param.annotation is sig.empty:
                 raise RegisteredError(f"{func.__name__} param:{param.name} type:{param.annotation} is not json type")
 
+        # func name handle
         if inspect.isfunction(func) or inspect.ismethod(func):
             name: str = name if name else func.__name__
         else:

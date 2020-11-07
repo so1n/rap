@@ -1,5 +1,5 @@
 from typing import Set, Optional
-from rap.conn.connection import ServerConnection
+from rap.common.conn import ServerConnection
 from rap.manager.func_manager import func_manager
 
 from rap.middleware.base_middleware import BaseConnMiddleware

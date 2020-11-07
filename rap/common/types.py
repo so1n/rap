@@ -5,14 +5,12 @@ from collections.abc import Iterator
 from typing import Any, List, Tuple, Type, Set, Union, _GenericAlias
 
 
+BASE_REQUEST_TYPE = Tuple[int, int, dict, Any]
+BASE_RESPONSE_TYPE = Tuple[int, int, dict, Any]
 LOOP_TYPE = asyncio.get_event_loop
 READER_TYPE = asyncio.streams.StreamReader
 WRITER_TYPE = asyncio.streams.StreamWriter
 UNPACKER_TYPE = msgpack.Unpacker
-
-
-BASE_REQUEST_TYPE = Tuple[int, int, dict, Any]
-BASE_RESPONSE_TYPE = Tuple[int, int, dict, Any]
 
 _CAN_JSON_TYPE_SET: Set[type] = {bool, dict, float, int, list, str, tuple, type(None)}
 
