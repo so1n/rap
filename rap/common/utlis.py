@@ -43,10 +43,6 @@ def gen_random_time_id(length: int = 8, time_length: int = 10) -> str:
     return str(int(time.time()))[-time_length:] + "".join(random.choice(_STR_LD) for i in range(length))
 
 
-def gen_id(num: int = 8) -> str:
-    pass
-
-
 get_event_loop = _get_event_loop()
 
 

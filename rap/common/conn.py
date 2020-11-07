@@ -19,39 +19,42 @@ __all__ = ["Connection", "ServerConnection"]
 
 class BaseConnection:
     def __init__(
-        self, unpacker: UNPACKER_TYPE, timeout: int, pack_param: Optional[dict] = None, loop: Optional[LOOP_TYPE] = None
+            self, unpacker: UNPACKER_TYPE, timeout: int, pack_param: Optional[dict] = None,
+            loop: Optional[LOOP_TYPE] = None
     ):
-        self._reader: Optional[READER_TYPE] = None
-        self._writer: Optional[WRITER_TYPE] = None
-        self._pack_param: dict = pack_param if pack_param else dict()
-        self.unpacker: UNPACKER_TYPE = unpacker
         self._is_closed: bool = True
-        self.timeout: int = timeout
-        self.peer: Optional[str] = None
         self._loop: LOOP_TYPE = loop if loop else get_event_loop()
+        self._pack_param: dict = pack_param if pack_param else dict()
+        self._reader: Optional[READER_TYPE] = None
+        self._timeout: int = timeout
+        self._unpacker: UNPACKER_TYPE = unpacker
+        self._writer: Optional[WRITER_TYPE] = None
+
+        self.peer: Optional[str] = None
         self.connection_info: Optional[str] = None
 
     async def write(self, data: tuple, timeout: Optional[int] = None):
         logging.debug(f"sending {data} to {self.peer}")
         self._writer.write(msgpack.packb(data, **self._pack_param))
-        timeout = timeout if timeout else self.timeout
+        timeout = timeout if timeout else self._timeout
         await asyncio.wait_for(self._writer.drain(), timeout)
 
-    async def read(self, timeout=None) -> tuple:
-        timeout = timeout if timeout else self.timeout
+    async def read(self, timeout: Optional[int] = None) -> tuple:
         try:
-            response = next(self.unpacker)
+            response = next(self._unpacker)
         except StopIteration:
             response = None
 
-        while not response:
+        timeout = timeout if timeout else self._timeout
+        while True:
             data = await asyncio.wait_for(self._reader.read(Constant.SOCKET_RECV_SIZE), timeout)
             logging.debug(f"recv data {data} from {self.peer}")
             if not data:
                 raise ConnectionError(f"Connection to {self.peer} closed")
-            self.unpacker.feed(data)
+            self._unpacker.feed(data)
             try:
-                response = next(self.unpacker)
+                response = next(self._unpacker)
+                break
             except StopIteration:
                 continue
         return response
@@ -77,16 +80,15 @@ class BaseConnection:
 
 class Connection(BaseConnection):
     def __init__(
-        self,
-        unpacker: UNPACKER_TYPE,
-        timeout: int,
-        pack_param: Optional[dict] = None,
-        loop: Optional[LOOP_TYPE] = None,
-        ssl_crt_path: Optional[str] = None,
+            self,
+            unpacker: UNPACKER_TYPE,
+            timeout: int,
+            pack_param: Optional[dict] = None,
+            loop: Optional[LOOP_TYPE] = None,
+            ssl_crt_path: Optional[str] = None,
     ):
         super().__init__(unpacker, timeout, pack_param, loop)
         self.connection_info: Optional[str] = None
-        self._future: Optional[asyncio.Future] = None
         self._ssl_crt_path: Optional[str] = ssl_crt_path
 
     async def connect(self, host: str, port: int):
@@ -94,9 +96,7 @@ class Connection(BaseConnection):
 
         ssl_context: Optional[ssl.SSLContext] = None
         if self._ssl_crt_path:
-            ssl_context = ssl.create_default_context(
-                ssl.Purpose.SERVER_AUTH,
-            )
+            ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
             ssl_context.check_hostname = False
             ssl_context.load_verify_locations(self._ssl_crt_path)
             logging.info(f"connection enable ssl")
@@ -108,13 +108,13 @@ class Connection(BaseConnection):
 
 class ServerConnection(Connection):
     def __init__(
-        self,
-        reader: READER_TYPE,
-        writer: WRITER_TYPE,
-        unpacker: UNPACKER_TYPE,
-        timeout: int,
-        pack_param: Optional[dict] = None,
-        loop: Optional[LOOP_TYPE] = None,
+            self,
+            reader: READER_TYPE,
+            writer: WRITER_TYPE,
+            unpacker: UNPACKER_TYPE,
+            timeout: int,
+            pack_param: Optional[dict] = None,
+            loop: Optional[LOOP_TYPE] = None,
     ):
         super().__init__(unpacker, timeout, pack_param, loop)
         self._reader = reader

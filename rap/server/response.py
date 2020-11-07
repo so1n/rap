@@ -3,7 +3,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Tuple, Optional
 
-from rap.conn.connection import ServerConnection
+from rap.common.conn import ServerConnection
 from rap.common.exceptions import BaseRapError, ServerError
 from rap.common.types import BASE_RESPONSE_TYPE
 from rap.common.utlis import Constant, parse_error

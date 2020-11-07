@@ -9,11 +9,11 @@ from functools import wraps
 from typing import Any, Callable, cast, Dict, Optional, Tuple
 
 from rap.common import exceptions as rap_exc
+from rap.common.conn import Connection
 from rap.common.aes import Crypto
 from rap.common.exceptions import RPCError, ProtocolError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.common.utlis import Constant, gen_random_str_id, gen_random_time_id
-from rap.conn.connection import Connection
 
 
 __all__ = ["Client"]
