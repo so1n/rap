@@ -119,7 +119,7 @@ class Server(object):
             try:
                 request_num, msg_id, header, body = request
                 header["version"] = Constant.VERSION
-                header["programming_language"] = Constant.PROGRAMMING_LANGUAGE
+                header["programming_language"] = Constant.USER_AGENT
                 request_model: RequestModel = RequestModel(request_num, msg_id, header, body, conn)
             except Exception:
                 await response(conn, ResponseModel(event=("close conn", "protocol error")))
