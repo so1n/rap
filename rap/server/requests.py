@@ -21,7 +21,7 @@ from rap.common.utlis import (
     Constant,
     MISS_OBJECT,
     get_event_loop,
-    gen_id,
+    gen_random_time_id,
     parse_error,
 )
 from rap.conn.connection import ServerConnection
@@ -132,7 +132,7 @@ class Request(object):
             if client_model.crypto is not MISS_OBJECT:
                 # declare will gen new crypto and replace
                 resp_model.result = client_model.crypto.encrypt_object(
-                    {"timestamp": int(time.time()), "nonce": gen_id(10), "client_id": client_model.client_id}
+                    {"timestamp": int(time.time()), "nonce": gen_random_time_id(), "client_id": client_model.client_id}
                 )
                 client_model.crypto = aes_manager.add_crypto(client_model.client_id)
             else:
@@ -170,7 +170,7 @@ class Request(object):
             resp_model.result = {"call_id": call_id, "result": 1}
 
         if client_model.crypto is not MISS_OBJECT and type(resp_model.result) is dict:
-            resp_model.result.update(dict(timestamp=int(time.time()), nonce=gen_id(10)))
+            resp_model.result.update(dict(timestamp=int(time.time()), nonce=gen_random_time_id()))
             resp_model.result = client_model.crypto.encrypt_object(resp_model.result)
         return resp_model
 

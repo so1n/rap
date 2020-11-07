@@ -6,7 +6,7 @@ from enum import Enum, auto
 from typing import Dict, Generator, Optional, Set
 
 from rap.common.aes import Crypto
-from rap.common.utlis import gen_id, MISS_OBJECT
+from rap.common.utlis import gen_random_time_id, MISS_OBJECT
 
 
 class LifeCycleEnum(Enum):
@@ -46,7 +46,7 @@ class ClientManager(object):
 
     def create_client_model(self, client_model: "ClientModel"):
         while True:
-            client_id: str = gen_id(6)
+            client_id: str = gen_random_time_id()
             if client_id not in self._client_dict:
                 self._client_dict[client_id] = client_model
             break

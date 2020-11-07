@@ -4,7 +4,7 @@ import string
 import sys
 import time
 
-__all__ = ["get_event_loop", "Constant", "MISS_OBJECT", "gen_id", "parse_error"]
+__all__ = ["get_event_loop", "Constant", "MISS_OBJECT", "gen_random_time_id", "gen_random_str_id", "parse_error"]
 
 from typing import Optional, Tuple
 
@@ -35,8 +35,16 @@ def _get_event_loop():
     return asyncio.get_event_loop
 
 
+def gen_random_str_id(length: int = 8) -> str:
+    return "".join(random.choice(_STR_LD) for i in range(length))
+
+
+def gen_random_time_id(length: int = 8, time_length: int = 10) -> str:
+    return str(int(time.time()))[-time_length:] + "".join(random.choice(_STR_LD) for i in range(length))
+
+
 def gen_id(num: int = 8) -> str:
-    return str(int(time.time() * 1000))[-10:] + "".join(random.choice(_STR_LD) for i in range(num))
+    pass
 
 
 get_event_loop = _get_event_loop()
