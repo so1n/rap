@@ -177,8 +177,8 @@ class Request(object):
     async def msg_handle(self, header: dict, call_id: int, method_name: str, param: str, client_model: "ClientModel"):
         # really request handle
         method: Callable = func_manager.func_dict.get(method_name)
-        version: str = header.get("version")
-        programming_language: str = header.get("programming_language")
+        # version: str = header.get("version")
+        user_agent: str = header.get("user_agent")
         try:
             if call_id in client_model.generator_dict:
                 try:
@@ -197,15 +197,15 @@ class Request(object):
                     result: Any = await get_event_loop().run_in_executor(None, method, *param)
 
                 if inspect.isgenerator(result):
-                    if programming_language != Constant.USER_AGENT:
-                        result = ProtocolError(f"{programming_language} not support generator")
+                    if user_agent != Constant.USER_AGENT:
+                        result = ProtocolError(f"{user_agent} not support generator")
                     else:
                         call_id = id(result)
                         client_model.generator_dict[call_id] = result
                         result = next(result)
                 elif inspect.isasyncgen(result):
-                    if programming_language != Constant.USER_AGENT:
-                        result = ProtocolError(f"{programming_language} not support generator")
+                    if user_agent != Constant.USER_AGENT:
+                        result = ProtocolError(f"{user_agent} not support generator")
                     else:
                         call_id = id(result)
                         client_model.generator_dict[call_id] = result
