@@ -138,7 +138,7 @@ class Client:
         try:
             while not self._is_close:
                 await self._base_response()
-        except asyncio.CancelledError as e:
+        except asyncio.CancelledError:
             pass
         except Exception as e:
             logging.error(f'listen status:{self._is_close} error: {e}, close conn:{self._conn}')
@@ -183,7 +183,7 @@ class Client:
             header["client_id"] = self._client_id
         header["version"] = Constant.VERSION
         # TODO
-        header["programming_language"] = Constant.PROGRAMMING_LANGUAGE
+        header["user_agent"] = Constant.USER_AGENT
         if self._crypto is not None:
             if type(body) is not dict:
                 body = {"body": body}
@@ -230,7 +230,7 @@ class Client:
             raise ProtocolError(f"Can't parse response:{response}")
         # server error response handle
         if response_num == Constant.SERVER_ERROR_RESPONSE:
-            if header.get("programming_language") == Constant.PROGRAMMING_LANGUAGE:
+            if header.get("user_agent") == Constant.USER_AGENT:
                 self.raise_error(body[0], body[1])
             else:
                 raise RuntimeError(body[1])
@@ -261,7 +261,7 @@ class Client:
         if response.num != Constant.MSG_RESPONSE:
             raise RPCError("request num error")
         if response.header.get("status_code", 200) != 200:
-            if response.header.get("programming_language") == Constant.PROGRAMMING_LANGUAGE and "exc" in response.body:
+            if response.header.get("user_agent") == Constant.USER_AGENT and "exc" in response.body:
                 self.raise_error(response.body["exc"], response.body.get("exc_info", ""))
             else:
                 raise RuntimeError(response.body.get("ext_info", ""))
