@@ -39,8 +39,12 @@ class BaseConnection:
 
     async def read(self, timeout=None) -> tuple:
         timeout = timeout if timeout else self.timeout
-        response = None
-        while True:
+        try:
+            response = next(self.unpacker)
+        except StopIteration:
+            response = None
+
+        while not response:
             data = await asyncio.wait_for(self._reader.read(Constant.SOCKET_RECV_SIZE), timeout)
             logging.debug(f"recv data {data} from {self.peer}")
             if not data:
@@ -48,7 +52,6 @@ class BaseConnection:
             self.unpacker.feed(data)
             try:
                 response = next(self.unpacker)
-                break
             except StopIteration:
                 continue
         return response
