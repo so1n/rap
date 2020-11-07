@@ -126,13 +126,17 @@ class Server(object):
                 break
 
             request_model.header["_host"] = conn.peer
-            try:
-                resp_model: ResponseModel = await self._request_handle.dispatch(request_model)
-                await response(conn, resp_model)
-            except Exception as e:
-                logging.exception(f"request handle error e")
-                await response(conn, ResponseModel(exception=RpcRunTimeError(str(e))))
+            asyncio.ensure_future(self.request_handle(conn, request_model))
 
+        # TODO await handle finish
         if not conn.is_closed():
             conn.close()
             logging.debug(f"close connection: {conn.peer}")
+
+    async def request_handle(self, conn: ServerConnection, request_model: RequestModel):
+        try:
+            resp_model: ResponseModel = await self._request_handle.dispatch(request_model)
+            await response(conn, resp_model)
+        except Exception as e:
+            logging.exception(f"request handle error e")
+            await response(conn, ResponseModel(exception=RpcRunTimeError(str(e))))

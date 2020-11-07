@@ -84,7 +84,6 @@ class Connection(BaseConnection):
         super().__init__(unpacker, timeout, pack_param, loop)
         self.connection_info: Optional[str] = None
         self._future: Optional[asyncio.Future] = None
-        self._lock: "asyncio.Lock" = asyncio.Lock()
         self._ssl_crt_path: Optional[str] = ssl_crt_path
 
     async def connect(self, host: str, port: int):
@@ -102,14 +101,6 @@ class Connection(BaseConnection):
         self._reader, self._writer = await asyncio.open_connection(host, port, loop=self._loop, ssl=ssl_context)
         self.peer = self._writer.get_extra_info("peername")
         self._is_closed = False
-
-    async def acquire(self) -> "Connection":
-        await self._lock.acquire()
-        return self
-
-    def release(self, conn: "Connection"):
-        self._lock.release()
-        return
 
 
 class ServerConnection(Connection):
