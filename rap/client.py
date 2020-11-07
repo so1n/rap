@@ -12,7 +12,7 @@ from rap.common import exceptions as rap_exc
 from rap.common.aes import Crypto
 from rap.common.exceptions import RPCError, ProtocolError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
-from rap.common.utlis import Constant, gen_id
+from rap.common.utlis import Constant, gen_random_str_id, gen_random_time_id
 from rap.conn.connection import Connection
 
 
@@ -76,7 +76,7 @@ class Client:
             self._client_id: str = secret_tuple[0]
         else:
             self._crypto: "Optional[Crypto]" = None
-            self._client_id: str = gen_id(4)
+            self._client_id: str = gen_random_str_id(8)
 
     # async with support
 
@@ -164,8 +164,7 @@ class Client:
 
     async def _drop_life_cycle(self):
         """send drop msg"""
-        # TODO
-        call_id: str = gen_id(4)
+        call_id: str = gen_random_str_id(8)
         response = await self._base_request(Constant.DROP_REQUEST, {}, {"call_id": call_id})
         if response.num != Constant.DROP_RESPONSE and response.body.get("call_id", "") != call_id:
             raise RPCError("drop response error")
@@ -182,14 +181,13 @@ class Client:
         if "client_id" not in header:
             header["client_id"] = self._client_id
         header["version"] = Constant.VERSION
-        # TODO
         header["user_agent"] = Constant.USER_AGENT
         if self._crypto is not None:
             if type(body) is not dict:
                 body = {"body": body}
             # set crypto param in body
             body["timestamp"] = int(time.time())
-            body["nonce"] = gen_id(10)
+            body["nonce"] = gen_random_time_id()
             body = self._crypto.encrypt_object(body)
 
         request: BASE_REQUEST_TYPE = (request_num, msg_id, header, body)
