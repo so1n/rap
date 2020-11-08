@@ -4,7 +4,7 @@ import logging
 import time
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Coroutine, Dict, Optional
 
 from rap.common.aes import Crypto
 from rap.common.exceptions import (
@@ -154,16 +154,17 @@ class Request(object):
                     resp_model.result = {"exc": exc, "exc_info": exc_info}
                 else:
                     resp_model.exception = FuncNotFoundError()
-            new_call_id, result = await self.msg_handle(request.header, call_id, method_name, param, client_model)
-            if isinstance(result, Exception):
-                if request.header.get("programming_language") == Constant.USER_AGENT:
-                    exc, exc_info = parse_error(result)
-                    resp_model.header["status_code"] = RpcRunTimeError.status_code
-                    resp_model.result = {"exc": exc, "exc_info": exc_info}
-                else:
-                    resp_model.exception = RpcRunTimeError(str(result))
             else:
-                resp_model.result = {"call_id": new_call_id, "method_name": method_name, "result": result}
+                new_call_id, result = await self.msg_handle(request.header, call_id, method_name, param, client_model)
+                if isinstance(result, Exception):
+                    if request.header.get("programming_language") == Constant.USER_AGENT:
+                        exc, exc_info = parse_error(result)
+                        resp_model.header["status_code"] = RpcRunTimeError.status_code
+                        resp_model.result = {"exc": exc, "exc_info": exc_info}
+                    else:
+                        resp_model.exception = RpcRunTimeError(str(result))
+                else:
+                    resp_model.result = {"call_id": new_call_id, "method_name": method_name, "result": result}
         elif request.request_num == Constant.DROP_REQUEST:
             call_id = decrypt_body["call_id"]
             client_manager.destroy_client_model(client_model.client_id)
@@ -192,9 +193,10 @@ class Request(object):
                     result = e
             else:
                 if asyncio.iscoroutinefunction(method):
-                    result: Any = await asyncio.wait_for(method(*param), self._run_timeout)
+                    coroutine: Coroutine = method(*param)
                 else:
-                    result: Any = await get_event_loop().run_in_executor(None, method, *param)
+                    coroutine: Coroutine = get_event_loop().run_in_executor(None, method, *param)
+                result: Any = await asyncio.wait_for(coroutine, self._run_timeout)
 
                 if inspect.isgenerator(result):
                     if user_agent != Constant.USER_AGENT:
