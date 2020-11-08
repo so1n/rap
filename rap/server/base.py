@@ -42,9 +42,13 @@ class Server(object):
         self._timeout: int = timeout
         self._keep_alive: int = keep_alive
         self._backlog: int = backlog
-        self._ssl_crt_path: Optional[str] = ssl_crt_path
-        self._ssl_key_path: Optional[str] = ssl_key_path
         self._request_handle: Request = Request(run_timeout)
+
+        self._ssl_context: Optional[ssl.SSLContext] = None
+        if ssl_crt_path and ssl_key_path:
+            ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            ssl_context.check_hostname = False
+            ssl_context.load_cert_chain(ssl_crt_path, ssl_key_path)
 
         if secret_dict is not None:
             aes_manager.load_aes_key_dict(secret_dict)
@@ -76,18 +80,10 @@ class Server(object):
         func_manager.register(func, name)
 
     async def create_server(self) -> asyncio.AbstractServer:
-
-        ssl_context: Optional[ssl.SSLContext] = None
-        if self._ssl_crt_path and self._ssl_key_path:
-            ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-            ssl_context.check_hostname = False
-            ssl_context.load_cert_chain(self._ssl_crt_path, self._ssl_key_path)
-            logging.info(f"server enable ssl")
-
-        logging.info(f"server running on {self._host}:{self._port}")
+        logging.info(f"server running on {self._host}:{self._port}. use ssl:{bool(self._ssl_context)}")
         asyncio.ensure_future(client_manager.introspection())
         return await asyncio.start_server(
-            self.conn_handle, self._host, self._port, ssl=ssl_context, backlog=self._backlog
+            self.conn_handle, self._host, self._port, ssl=self._ssl_context, backlog=self._backlog
         )
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE):
@@ -104,14 +100,14 @@ class Server(object):
             try:
                 request: Optional[BASE_REQUEST_TYPE] = await conn.read(self._keep_alive)
             except asyncio.TimeoutError:
-                logging.error(f"recv data from {conn.peer} timeout...")
-                await response(conn, ResponseModel(event=("close conn", "read request timeout")))
+                logging.error(f"recv data from {conn.peer} timeout. close conn")
+                await response(conn, ResponseModel(event=("close conn", "keep alive timeout")))
                 break
             except IOError as e:
                 logging.debug(f"close conn:{conn.peer} info:{e}")
                 break
             except Exception as e:
-                await response(conn, ResponseModel(event=("close conn", "recv error")))
+                logging.error(f"recv data from {conn.peer} error:{e}, conn has been closed")
                 conn.set_reader_exc(e)
                 raise e
             if request is None:
@@ -121,14 +117,14 @@ class Server(object):
                 header["version"] = Constant.VERSION
                 header["programming_language"] = Constant.USER_AGENT
                 request_model: RequestModel = RequestModel(request_num, msg_id, header, body, conn)
-            except Exception:
+            except Exception as e:
+                logging.error(f"{conn.peer} send bad msg:{request}, error:{e}")
                 await response(conn, ResponseModel(event=("close conn", "protocol error")))
                 break
 
             request_model.header["_host"] = conn.peer
             asyncio.ensure_future(self.request_handle(conn, request_model))
 
-        # TODO await handle finish
         if not conn.is_closed():
             conn.close()
             logging.debug(f"close connection: {conn.peer}")
