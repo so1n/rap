@@ -41,10 +41,7 @@ class RequestModel(object):
 
 
 class Request(object):
-    def __init__(
-        self,
-        run_timeout: int,
-    ):
+    def __init__(self,run_timeout: int):
         self._run_timeout: int = run_timeout
         self._response_num_dict: Dict[int, int] = {
             Constant.DECLARE_REQUEST: Constant.DECLARE_RESPONSE,

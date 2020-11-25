@@ -9,7 +9,6 @@ from typing import Callable, Dict, List, Optional, Union
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import RpcRunTimeError
 from rap.common.types import READER_TYPE, WRITER_TYPE, BASE_REQUEST_TYPE
-from rap.common.utlis import Constant
 from rap.manager.aes_manager import aes_manager
 from rap.manager.client_manager import client_manager
 from rap.manager.func_manager import func_manager
@@ -46,9 +45,9 @@ class Server(object):
 
         self._ssl_context: Optional[ssl.SSLContext] = None
         if ssl_crt_path and ssl_key_path:
-            ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-            ssl_context.check_hostname = False
-            ssl_context.load_cert_chain(ssl_crt_path, ssl_key_path)
+            self._ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            self._ssl_context.check_hostname = False
+            self._ssl_context.load_cert_chain(ssl_crt_path, ssl_key_path)
 
         if secret_dict is not None:
             aes_manager.load_aes_key_dict(secret_dict)
@@ -112,18 +111,16 @@ class Server(object):
                 raise e
             if request is None:
                 await response(conn, ResponseModel(event=("close conn", "request is empty")))
+                continue
             try:
                 request_num, msg_id, header, body = request
-                header["version"] = Constant.VERSION
-                header["programming_language"] = Constant.USER_AGENT
                 request_model: RequestModel = RequestModel(request_num, msg_id, header, body, conn)
+                request_model.header["_host"] = conn.peer
+                asyncio.ensure_future(self.request_handle(conn, request_model))
             except Exception as e:
                 logging.error(f"{conn.peer} send bad msg:{request}, error:{e}")
                 await response(conn, ResponseModel(event=("close conn", "protocol error")))
                 break
-
-            request_model.header["_host"] = conn.peer
-            asyncio.ensure_future(self.request_handle(conn, request_model))
 
         if not conn.is_closed():
             conn.close()
