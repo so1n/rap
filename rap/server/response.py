@@ -20,7 +20,10 @@ class ResponseModel(object):
 
 
 async def response(conn: ServerConnection, resp: ResponseModel, timeout: Optional[int] = None):
+    resp.header["version"] = Constant.VERSION
+    resp.header["programming_language"] = Constant.USER_AGENT
     logging.debug(f"resp:{resp}")
+
     if resp.exception is not None:
         error_response: Optional[Tuple[str, str]] = parse_error(resp.exception)
         resp.header["status_code"] = resp.exception.status_code

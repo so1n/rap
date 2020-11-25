@@ -167,8 +167,9 @@ class Client:
         call_id: str = gen_random_str_id(8)
         response = await self._base_request(Constant.DROP_REQUEST, {}, {"call_id": call_id})
         if response.num != Constant.DROP_RESPONSE and response.body.get("call_id", "") != call_id:
-            raise RPCError("drop response error")
-        logging.info("drop response success")
+            logging.warning("drop response error")
+        else:
+            logging.info("drop response success")
 
     # request&response
     async def _base_request(self, request_num: int, header: dict, body: Any) -> Response:
