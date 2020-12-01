@@ -10,7 +10,13 @@
  - Feature: client support HA strategy
  - Feature: client support load balance
 
-### 0.5.2[now]
+### 0.5.2.1[now]
+ - description: hotfix
+ - Fix: server conn read recv data bug
+ - Fix: crypto error when client reconnect 
+ - Fix: When the log level is not debug, the debug information will be calculated
+
+### 0.5.2
  - description: Faster&Humanize
  - Feature: client&server support conn multiplexing(Faster~)
  - Fix: read recv data bug
