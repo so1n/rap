@@ -145,7 +145,7 @@ class Request(object):
 
             # root func only called by local client
             if method_name.startswith("_root_") and request.conn.peer[0] != "127.0.0.1":
-                if request.header.get("programming_language") == Constant.USER_AGENT:
+                if request.header.get("user_agent") == Constant.USER_AGENT:
                     exc, exc_info = parse_error(FuncNotFoundError())
                     resp_model.header["status_code"] = FuncNotFoundError.status_code
                     resp_model.result = {"exc": exc, "exc_info": exc_info}
@@ -154,7 +154,7 @@ class Request(object):
             else:
                 new_call_id, result = await self.msg_handle(request.header, call_id, method_name, param, client_model)
                 if isinstance(result, Exception):
-                    if request.header.get("programming_language") == Constant.USER_AGENT:
+                    if request.header.get("user_agent") == Constant.USER_AGENT:
                         exc, exc_info = parse_error(result)
                         resp_model.header["status_code"] = RpcRunTimeError.status_code
                         resp_model.result = {"exc": exc, "exc_info": exc_info}

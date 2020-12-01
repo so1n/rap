@@ -46,7 +46,7 @@ class ClientManager(object):
 
     def create_client_model(self, client_model: "ClientModel"):
         while True:
-            client_id: str = gen_random_time_id()
+            client_id: str = gen_random_time_id(length=6)
             if client_id not in self._client_dict:
                 self._client_dict[client_id] = client_model
             break
