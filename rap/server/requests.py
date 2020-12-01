@@ -69,7 +69,7 @@ class Request(object):
             client_model.nonce_set.add(nonce)
 
     async def dispatch(self, request: RequestModel) -> ResponseModel:
-        logging.debug(f"get request data:{request} from {request.conn.peer}")
+        logging.debug(f"get request data:%s from %s", request, request.conn.peer)
 
         response_num: Optional[int] = self._response_num_dict.get(request.request_num, Constant.SERVER_ERROR_RESPONSE)
 

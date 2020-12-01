@@ -34,7 +34,7 @@ class BaseConnection:
         self.connection_info: Optional[str] = None
 
     async def write(self, data: tuple, timeout: Optional[int] = None):
-        logging.debug(f"sending {data} to {self.peer}")
+        logging.debug(f"sending %s to %s", data, self.peer)
         self._writer.write(msgpack.packb(data, **self._pack_param))
         timeout = timeout if timeout else self._timeout
         await asyncio.wait_for(self._writer.drain(), timeout)
@@ -48,9 +48,9 @@ class BaseConnection:
         timeout = timeout if timeout else self._timeout
         while True:
             data = await asyncio.wait_for(self._reader.read(Constant.SOCKET_RECV_SIZE), timeout)
-            logging.debug(f"recv data {data} from {self.peer}")
+            logging.debug(f"recv data %s from %s", data, self.peer)
             if not data:
-                raise ConnectionError(f"Connection to {self.peer} closed")
+                raise ConnectionError(f"Connection to %s closed", self.peer)
             self._unpacker.feed(data)
             try:
                 return next(self._unpacker)
