@@ -25,7 +25,7 @@ async def async_gen(a: int):
 
 async def _run_once():
     print(f"sync result: {await client.call(sync_sum, 1, 2)}")
-    print(f"reload :{ await client.raw_call('_root_reload', 'test_module', 'sync_sum')}")
+    # print(f"reload :{ await client.raw_call('_root_reload', 'test_module', 'sync_sum')}")
     print(f"sync result: {await client.raw_call('sync_sum', 1, 2)}")
 
     print(f"async result: {await async_sum(1, 3)}")

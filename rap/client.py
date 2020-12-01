@@ -6,7 +6,7 @@ import time
 
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, cast, Dict, Optional, Tuple
+from typing import Any, Callable, cast, Dict, Optional, Tuple, Type
 
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
@@ -78,6 +78,8 @@ class Client:
             self._crypto: "Optional[Crypto]" = None
             self._client_id: str = gen_random_str_id(8)
 
+        self.rap_exc_dict = self._get_rap_exc_dict()
+
     # async with support
 
     async def __aenter__(self):
@@ -131,6 +133,17 @@ class Client:
         if not exc:
             exc = globals()["__builtins__"][exc_name]
         raise exc(exc_info)
+
+    @staticmethod
+    def _get_rap_exc_dict():
+        exc_dict: Dict[int, Type[rap_exc.BaseRapError]] = {}
+        for exc_name in dir(rap_exc):
+            class_ = getattr(rap_exc, exc_name)
+            if inspect.isclass(class_) \
+                    and issubclass(class_, rap_exc.BaseRapError)\
+                    and class_.__name__ != rap_exc.BaseRapError.__class__.__name__:
+                exc_dict[class_.status_code] = class_
+        return exc_dict
 
     async def _listen(self):
         """listen server msg"""
@@ -229,10 +242,9 @@ class Client:
             raise ProtocolError(f"Can't parse response:{response}")
         # server error response handle
         if response_num == Constant.SERVER_ERROR_RESPONSE:
-            if header.get("user_agent") == Constant.USER_AGENT:
-                self.raise_error(body[0], body[1])
-            else:
-                raise RuntimeError(body[1])
+            status_code: int = header.get('status_code', 500)
+            exc: Type['rap_exc.BaseRapError'] = self._get_rap_exc_dict().get(status_code)
+            raise exc(body)
 
         # body crypto handle
         if self._crypto is not None and type(body) is bytes:
