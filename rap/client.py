@@ -77,6 +77,8 @@ class Client:
         else:
             self._crypto: "Optional[Crypto]" = None
             self._client_id: str = gen_random_str_id(8)
+        self._declare_client_id: str = self._client_id
+        self._declare_crypto: "Crypto" = self._crypto
 
         self.rap_exc_dict = self._get_rap_exc_dict()
 
@@ -161,7 +163,9 @@ class Client:
     # life cycle
     async def _declare_life_cycle(self):
         """send declare msg and init client id"""
-        body = {}
+        body: dict = {}
+        self._client_id = self._declare_client_id
+        self._crypto = self._declare_crypto  # reload crypto
         response = await self._base_request(Constant.DECLARE_REQUEST, {}, body)
         if response.num != Constant.DECLARE_RESPONSE and response.body != body:
             raise RPCError("declare response error")
@@ -217,7 +221,7 @@ class Client:
             self._future_dict[msg_id] = asyncio.Future()
             try:
                 return await asyncio.wait_for(self._future_dict[msg_id], self._timeout)
-            except asyncio.TimeoutError as e:
+            except asyncio.TimeoutError:
                 raise asyncio.TimeoutError(f'msg_id:{msg_id} request timeout')
         finally:
             if msg_id in self._future_dict:
