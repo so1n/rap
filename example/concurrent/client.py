@@ -53,7 +53,7 @@ if __name__ == "__main__":
     import logging
 
     logging.basicConfig(
-        format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.DEBUG
+        format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.INFO
     )
 
     loop = asyncio.get_event_loop()

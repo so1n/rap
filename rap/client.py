@@ -122,7 +122,7 @@ class Client:
             ssl_crt_path=ssl_crt_path,
         )
         await self._conn.connect(host, port)
-        logging.debug(f"Connection to {self._conn.connection_info}...")
+        logging.debug(f"Connection to %s...", self._conn.connection_info)
         self._is_close = False
         self._listen_future = asyncio.ensure_future(self._listen())
         await self._declare_life_cycle()
@@ -149,7 +149,7 @@ class Client:
 
     async def _listen(self):
         """listen server msg"""
-        logging.debug(f'listen:{self._conn} start')
+        logging.debug(f'listen:%s start', self._conn)
         try:
             while not self._is_close:
                 await self._base_response()
@@ -211,9 +211,9 @@ class Client:
         request: BASE_REQUEST_TYPE = (request_num, msg_id, header, body)
         try:
             await self._conn.write(request)
-            logging.debug(f"send:{request} to {self._conn.connection_info}")
+            logging.debug(f"send:%s to %s", request, self._conn.connection_info)
         except asyncio.TimeoutError as e:
-            logging.error(f"send to {self._conn.connection_info} timeout, drop data:{request}")
+            logging.error(f"send to %s timeout, drop data:%s", self._conn.connection_info, request)
             raise e
         except Exception as e:
             raise e
@@ -231,7 +231,7 @@ class Client:
         """recv server msg handle"""
         try:
             response: Optional[BASE_RESPONSE_TYPE] = await self._conn.read(self._keep_alive_time)
-            logging.debug(f"recv raw data: {response}")
+            logging.debug(f"recv raw data: %s", response)
         except asyncio.TimeoutError as e:
             logging.error(f"recv response from {self._conn.connection_info} timeout")
             self._conn.set_reader_exc(e)

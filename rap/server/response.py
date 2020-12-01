@@ -22,7 +22,7 @@ class ResponseModel(object):
 async def response(conn: ServerConnection, resp: ResponseModel, timeout: Optional[int] = None):
     resp.header["version"] = Constant.VERSION
     resp.header["user_agent"] = Constant.USER_AGENT
-    logging.debug(f"resp:{resp}")
+    logging.debug(f"resp: %s", resp)
 
     if resp.exception is not None:
         error_response: Optional[Tuple[str, str]] = parse_error(resp.exception)

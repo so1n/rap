@@ -103,7 +103,7 @@ class Server(object):
                 await response(conn, ResponseModel(event=("close conn", "keep alive timeout")))
                 break
             except IOError as e:
-                logging.debug(f"close conn:{conn.peer} info:{e}")
+                logging.debug(f"close conn:%s info:%s", conn.peer, e)
                 break
             except Exception as e:
                 logging.error(f"recv data from {conn.peer} error:{e}, conn has been closed")
@@ -124,7 +124,7 @@ class Server(object):
 
         if not conn.is_closed():
             conn.close()
-            logging.debug(f"close connection: {conn.peer}")
+            logging.debug(f"close connection: %s", conn.peer)
 
     async def request_handle(self, conn: ServerConnection, request_model: RequestModel):
         try:
