@@ -215,7 +215,10 @@ class Client:
             raise e
         try:
             self._future_dict[msg_id] = asyncio.Future()
-            return await asyncio.wait_for(self._future_dict[msg_id], self._timeout)
+            try:
+                return await asyncio.wait_for(self._future_dict[msg_id], self._timeout)
+            except asyncio.TimeoutError as e:
+                raise asyncio.TimeoutError(f'msg_id:{msg_id} request timeout')
         finally:
             if msg_id in self._future_dict:
                 del self._future_dict[msg_id]
