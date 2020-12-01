@@ -39,11 +39,11 @@ class BaseConnection:
         timeout = timeout if timeout else self._timeout
         await asyncio.wait_for(self._writer.drain(), timeout)
 
-    async def read(self, timeout: Optional[int] = None) -> tuple:
+    async def read(self, timeout: Optional[int] = None) -> Optional[tuple]:
         try:
-            response = next(self._unpacker)
+            return next(self._unpacker)
         except StopIteration:
-            response = None
+            pass
 
         timeout = timeout if timeout else self._timeout
         while True:
@@ -53,11 +53,10 @@ class BaseConnection:
                 raise ConnectionError(f"Connection to {self.peer} closed")
             self._unpacker.feed(data)
             try:
-                response = next(self._unpacker)
-                break
+                return next(self._unpacker)
             except StopIteration:
                 continue
-        return response
+        return None
 
     def set_reader_exc(self, exc: Exception):
         self._reader.set_exception(exc)
