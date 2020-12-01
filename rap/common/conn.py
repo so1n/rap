@@ -19,8 +19,7 @@ __all__ = ["Connection", "ServerConnection"]
 
 class BaseConnection:
     def __init__(
-            self, unpacker: UNPACKER_TYPE, timeout: int, pack_param: Optional[dict] = None,
-            loop: Optional[LOOP_TYPE] = None
+        self, unpacker: UNPACKER_TYPE, timeout: int, pack_param: Optional[dict] = None, loop: Optional[LOOP_TYPE] = None
     ):
         self._is_closed: bool = True
         self._loop: LOOP_TYPE = loop if loop else get_event_loop()
@@ -79,12 +78,12 @@ class BaseConnection:
 
 class Connection(BaseConnection):
     def __init__(
-            self,
-            unpacker: UNPACKER_TYPE,
-            timeout: int,
-            pack_param: Optional[dict] = None,
-            loop: Optional[LOOP_TYPE] = None,
-            ssl_crt_path: Optional[str] = None,
+        self,
+        unpacker: UNPACKER_TYPE,
+        timeout: int,
+        pack_param: Optional[dict] = None,
+        loop: Optional[LOOP_TYPE] = None,
+        ssl_crt_path: Optional[str] = None,
     ):
         super().__init__(unpacker, timeout, pack_param, loop)
         self.connection_info: Optional[str] = None
@@ -107,13 +106,13 @@ class Connection(BaseConnection):
 
 class ServerConnection(Connection):
     def __init__(
-            self,
-            reader: READER_TYPE,
-            writer: WRITER_TYPE,
-            unpacker: UNPACKER_TYPE,
-            timeout: int,
-            pack_param: Optional[dict] = None,
-            loop: Optional[LOOP_TYPE] = None,
+        self,
+        reader: READER_TYPE,
+        writer: WRITER_TYPE,
+        unpacker: UNPACKER_TYPE,
+        timeout: int,
+        pack_param: Optional[dict] = None,
+        loop: Optional[LOOP_TYPE] = None,
     ):
         super().__init__(unpacker, timeout, pack_param, loop)
         self._reader = reader

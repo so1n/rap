@@ -17,7 +17,7 @@ class AccessConnMiddleware(BaseConnMiddleware):
                 logging.error(f"Currently exceeding the maximum number of connections limit, close {conn.peer}")
                 await response(
                     conn,
-                    ResponseModel(event=("close conn", "Currently exceeding the maximum number of connections limit"))
+                    ResponseModel(event=("close conn", "Currently exceeding the maximum number of connections limit")),
                 )
                 await conn.await_close()
             else:
