@@ -20,8 +20,8 @@ __all__ = ["Client"]
 
 
 class AsyncIteratorCall:
-    """client support async iterator
-    """
+    """client support async iterator"""
+
     def __init__(self, method: str, client: "Client", *args: Tuple):
         self._method: str = method
         self._call_id: Optional[int] = None
@@ -38,8 +38,8 @@ class AsyncIteratorCall:
         If no data, the server will return StopAsyncIteration or StopIteration error.
         """
         response: Response = await self._client.msg_request(self._method, *self._args, call_id=self._call_id)
-        self._call_id = response.body['call_id']
-        return response.body['result']
+        self._call_id = response.body["call_id"]
+        return response.body["result"]
 
 
 @dataclass()
@@ -141,22 +141,24 @@ class Client:
         exc_dict: Dict[int, Type[rap_exc.BaseRapError]] = {}
         for exc_name in dir(rap_exc):
             class_ = getattr(rap_exc, exc_name)
-            if inspect.isclass(class_) \
-                    and issubclass(class_, rap_exc.BaseRapError)\
-                    and class_.__name__ != rap_exc.BaseRapError.__class__.__name__:
+            if (
+                inspect.isclass(class_)
+                and issubclass(class_, rap_exc.BaseRapError)
+                and class_.__name__ != rap_exc.BaseRapError.__class__.__name__
+            ):
                 exc_dict[class_.status_code] = class_
         return exc_dict
 
     async def _listen(self):
         """listen server msg"""
-        logging.debug(f'listen:%s start', self._conn)
+        logging.debug(f"listen:%s start", self._conn)
         try:
             while not self._is_close:
                 await self._base_response()
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            logging.error(f'listen status:{self._is_close} error: {e}, close conn:{self._conn}')
+            logging.error(f"listen status:{self._is_close} error: {e}, close conn:{self._conn}")
             if self._conn and not self._conn.is_closed():
                 self._conn.close()
 
@@ -222,7 +224,7 @@ class Client:
             try:
                 return await asyncio.wait_for(self._future_dict[msg_id], self._timeout)
             except asyncio.TimeoutError:
-                raise asyncio.TimeoutError(f'msg_id:{msg_id} request timeout')
+                raise asyncio.TimeoutError(f"msg_id:{msg_id} request timeout")
         finally:
             if msg_id in self._future_dict:
                 del self._future_dict[msg_id]
@@ -249,8 +251,8 @@ class Client:
             raise ProtocolError(f"Can't parse response:{response}")
         # server error response handle
         if response_num == Constant.SERVER_ERROR_RESPONSE:
-            status_code: int = header.get('status_code', 500)
-            exc: Type['rap_exc.BaseRapError'] = self._get_rap_exc_dict().get(status_code)
+            status_code: int = header.get("status_code", 500)
+            exc: Type["rap_exc.BaseRapError"] = self._get_rap_exc_dict().get(status_code)
             raise exc(body)
 
         # body crypto handle
@@ -309,7 +311,7 @@ class Client:
     async def raw_call(self, method: str, *args: Any) -> Any:
         """rpc client base call method"""
         response = await self.msg_request(method, *args)
-        return response.body['result']
+        return response.body["result"]
 
     async def call(self, func: Callable, *args: Any) -> Any:
         """automatically resolve function names and call call_by_text"""
