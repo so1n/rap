@@ -6,9 +6,8 @@ from typing import Optional
 
 import msgpack
 
-from rap.common.utlis import Constant, get_event_loop
+from rap.common.utlis import Constant
 from rap.common.types import (
-    LOOP_TYPE,
     READER_TYPE,
     WRITER_TYPE,
     UNPACKER_TYPE,
@@ -19,10 +18,9 @@ __all__ = ["Connection", "ServerConnection"]
 
 class BaseConnection:
     def __init__(
-        self, unpacker: UNPACKER_TYPE, timeout: int, pack_param: Optional[dict] = None, loop: Optional[LOOP_TYPE] = None
+        self, unpacker: UNPACKER_TYPE, timeout: int, pack_param: Optional[dict] = None
     ):
         self._is_closed: bool = True
-        self._loop: LOOP_TYPE = loop if loop else get_event_loop()
         self._pack_param: dict = pack_param if pack_param else dict()
         self._reader: Optional[READER_TYPE] = None
         self._timeout: int = timeout
@@ -63,10 +61,18 @@ class BaseConnection:
     def close(self):
         self._reader.feed_eof()
         self._writer.close()
+
+        self._reader = None
+        self._writer = None
+        self.connection_info = None
+        self.peer = None
         self._is_closed = True
 
     def is_closed(self) -> bool:
-        return self._is_closed and self._writer.is_closing()
+        if self._writer:
+            return self._is_closed and self._writer.is_closing()
+        else:
+            return self._is_closed
 
     async def wait_closed(self):
         await self._writer.wait_closed()
@@ -82,10 +88,9 @@ class Connection(BaseConnection):
         unpacker: UNPACKER_TYPE,
         timeout: int,
         pack_param: Optional[dict] = None,
-        loop: Optional[LOOP_TYPE] = None,
         ssl_crt_path: Optional[str] = None,
     ):
-        super().__init__(unpacker, timeout, pack_param, loop)
+        super().__init__(unpacker, timeout, pack_param)
         self.connection_info: Optional[str] = None
         self._ssl_crt_path: Optional[str] = ssl_crt_path
 
@@ -99,7 +104,7 @@ class Connection(BaseConnection):
             ssl_context.load_verify_locations(self._ssl_crt_path)
             logging.info(f"connection enable ssl")
 
-        self._reader, self._writer = await asyncio.open_connection(host, port, loop=self._loop, ssl=ssl_context)
+        self._reader, self._writer = await asyncio.open_connection(host, port, ssl=ssl_context)
         self.peer = self._writer.get_extra_info("peername")
         self._is_closed = False
 
@@ -112,9 +117,8 @@ class ServerConnection(Connection):
         unpacker: UNPACKER_TYPE,
         timeout: int,
         pack_param: Optional[dict] = None,
-        loop: Optional[LOOP_TYPE] = None,
     ):
-        super().__init__(unpacker, timeout, pack_param, loop)
+        super().__init__(unpacker, timeout, pack_param)
         self._reader = reader
         self._writer = writer
         self.peer = self._writer.get_extra_info("peername")

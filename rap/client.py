@@ -112,6 +112,7 @@ class Client:
         if not self._listen_future.cancelled():
             self._listen_future.cancel()
         self._listen_future = None
+        logging.debug(f"close conn:{self._conn}")
         self._conn.close()
 
     async def connect(self, host: str = "localhost", port: int = 9000):
@@ -163,7 +164,7 @@ class Client:
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            logging.error(f"listen status:{self._is_close} error: {e}, close conn:{self._conn}")
+            logging.exception(f"listen status:{self._is_close} error: {e}, close conn:{self._conn}")
             if not self._conn.is_closed():
                 self._conn.close()
 
@@ -247,6 +248,8 @@ class Client:
             logging.error(f"recv response from {self._conn.connection_info} timeout")
             self._conn.set_reader_exc(e)
             raise e
+        except asyncio.CancelledError:
+            return 
         except Exception as e:
             self._conn.set_reader_exc(e)
             raise e
