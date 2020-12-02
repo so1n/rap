@@ -247,20 +247,23 @@ class Client:
         try:
             response_num, msg_id, header, body = response
         except ValueError:
-            raise ProtocolError(f"Can't parse response:{response}")
+            logging.error(f"recv wrong response:{response}")
+            return
 
         # server error response handle
         if response_num == Constant.SERVER_ERROR_RESPONSE:
             status_code: int = header.get("status_code", 500)
             exc: Type["rap_exc.BaseRapError"] = self._get_rap_exc_dict().get(status_code, rap_exc.BaseRapError)
-            raise exc(body)
+            self._future_dict[msg_id].set_exception(exc(body))
+            return
 
         # body crypto handle
         if self._crypto is not None and type(body) is bytes:
             try:
                 body = self._crypto.decrypt_object(body)
             except Exception:
-                raise ProtocolError(f"Can't decrypt body.")
+                self._future_dict[msg_id].set_exception(ProtocolError(f"Can't decrypt body."))
+                return
 
         # server event msg handle
         if response_num == Constant.SERVER_EVENT:
@@ -270,7 +273,8 @@ class Client:
 
         # set msg to future_dict's `future`
         if msg_id not in self._future_dict:
-            raise RuntimeError(f"recv msg_id: {msg_id} error, client not request msg id:{msg_id}")
+            logging.error(f"recv msg_id: {msg_id} error, client not request msg id:{msg_id}")
+            return
         self._future_dict[msg_id].set_result(Response(response_num, msg_id, header, body))
 
     async def msg_request(self, method, *args, call_id=-1) -> Response:
