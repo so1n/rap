@@ -13,7 +13,7 @@ from rap.common.utlis import Constant, parse_error
 class ResponseModel(object):
     response_num: int = Constant.MSG_RESPONSE
     msg_id: int = -1
-    header: dict = field(default_factory=dict)
+    header: dict = field(default_factory=lambda: {"status_code": 200})
     result: Optional[dict] = None
     exception: Optional[BaseRapError] = None
     event: Optional[Tuple[str, Any]] = None

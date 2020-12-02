@@ -145,21 +145,17 @@ class Request(object):
 
             # root func only called by local client
             if method_name.startswith("_root_") and request.conn.peer[0] != "127.0.0.1":
-                if request.header.get("user_agent") == Constant.USER_AGENT:
-                    exc, exc_info = parse_error(FuncNotFoundError())
-                    resp_model.header["status_code"] = FuncNotFoundError.status_code
-                    resp_model.result = {"exc": exc, "exc_info": exc_info}
-                else:
-                    resp_model.exception = FuncNotFoundError()
+                resp_model.exception = FuncNotFoundError()
+                return resp_model
             else:
                 new_call_id, result = await self.msg_handle(request.header, call_id, method_name, param, client_model)
+                resp_model.result = {"call_id": new_call_id, "method_name": method_name}
                 if isinstance(result, Exception):
+                    exc, exc_info = parse_error(result)
                     if request.header.get("user_agent") == Constant.USER_AGENT:
-                        exc, exc_info = parse_error(result)
-                        resp_model.header["status_code"] = RpcRunTimeError.status_code
-                        resp_model.result = {"exc": exc, "exc_info": exc_info}
+                        resp_model.result.update({"exc": exc, "exc_info": exc_info})
                     else:
-                        resp_model.exception = RpcRunTimeError(str(result))
+                        resp_model.result.update({"exc_info": exc_info})
                 else:
                     resp_model.result = {"call_id": new_call_id, "method_name": method_name, "result": result}
         elif request.request_num == Constant.DROP_REQUEST:

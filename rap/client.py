@@ -137,7 +137,7 @@ class Client:
         raise exc(exc_info)
 
     @staticmethod
-    def _get_rap_exc_dict():
+    def _get_rap_exc_dict() -> Dict[int, Type[rap_exc.BaseRapError]]:
         exc_dict: Dict[int, Type[rap_exc.BaseRapError]] = {}
         for exc_name in dir(rap_exc):
             class_ = getattr(rap_exc, exc_name)
@@ -174,11 +174,9 @@ class Client:
         client_id = response.body.get("client_id")
         if client_id is None:
             raise RPCError("declare response error, Can not get client id from body")
+        self._client_id = client_id
         if self._crypto is not None:
-            self._client_id = client_id
             self._crypto = Crypto(client_id)
-        else:
-            self._client_id = client_id
         logging.info("declare success")
 
     async def _drop_life_cycle(self):
@@ -193,7 +191,7 @@ class Client:
     # request&response
     async def _base_request(self, request_num: int, header: dict, body: Any) -> Response:
         if self._conn.is_closed():
-            raise ConnectionError("Connection not create")
+            raise ConnectionError("The connection has been closed, please call connect to create connection")
         msg_id: int = self._msg_id + 1
         self._msg_id = msg_id
 
@@ -202,6 +200,7 @@ class Client:
             header["client_id"] = self._client_id
         header["version"] = Constant.VERSION
         header["user_agent"] = Constant.USER_AGENT
+
         if self._crypto is not None:
             if type(body) is not dict:
                 body = {"body": body}
@@ -243,16 +242,17 @@ class Client:
             raise e
 
         if response is None:
-            raise ConnectionError("Connection closed")
+            raise ConnectionError("Connection has been closed")
         # parse response
         try:
             response_num, msg_id, header, body = response
         except ValueError:
             raise ProtocolError(f"Can't parse response:{response}")
+
         # server error response handle
         if response_num == Constant.SERVER_ERROR_RESPONSE:
             status_code: int = header.get("status_code", 500)
-            exc: Type["rap_exc.BaseRapError"] = self._get_rap_exc_dict().get(status_code)
+            exc: Type["rap_exc.BaseRapError"] = self._get_rap_exc_dict().get(status_code, rap_exc.BaseRapError)
             raise exc(body)
 
         # body crypto handle
@@ -280,8 +280,8 @@ class Client:
         )
         if response.num != Constant.MSG_RESPONSE:
             raise RPCError("request num error")
-        if response.header.get("status_code", 200) != 200:
-            if response.header.get("user_agent") == Constant.USER_AGENT and "exc" in response.body:
+        if "exc" in response.body:
+            if response.header.get("user_agent") == Constant.USER_AGENT:
                 self.raise_error(response.body["exc"], response.body.get("exc_info", ""))
             else:
                 raise RuntimeError(response.body.get("ext_info", ""))
