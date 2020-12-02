@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import logging
 import msgpack
+import random
 import time
 
 from dataclasses import dataclass
@@ -60,16 +61,19 @@ class Client:
         keep_alive_time: int = 1200,
         ssl_crt_path: Optional[str] = None,
     ):
-        self._conn: Optional[Connection] = None
-        self._msg_id: int = 0
+        self._conn = Connection(
+            msgpack.Unpacker(raw=False, use_list=False),
+            timeout,
+            ssl_crt_path=ssl_crt_path,
+        )
+        self._msg_id: int = random.randrange(65535)
         self._future_dict: Dict[int, asyncio.Future] = {}
         self._listen_future: Optional[asyncio.Future] = None
         self._is_close: bool = True
-        self._timeout: int = timeout
         self._host: str = host
         self._port: int = port
         self._keep_alive_time: int = keep_alive_time
-        self._ssl_crt_path: Optional[str] = ssl_crt_path
+        self._timeout: int = timeout
 
         if secret_tuple is not None:
             self._crypto: "Crypto" = Crypto(secret_tuple[1])
@@ -82,8 +86,9 @@ class Client:
 
         self.rap_exc_dict = self._get_rap_exc_dict()
 
-    # async with support
-
+    #######################
+    # support `async with`#
+    #######################
     async def __aenter__(self):
         await self.connect()
         return self
@@ -91,14 +96,15 @@ class Client:
     async def __aexit__(self, *args: Tuple):
         await self.wait_close()
 
-    # connect& close
-
+    ##################
+    # connect& close #
+    ##################
     async def wait_close(self):
         """close client"""
-        if not self._conn or self._conn.is_closed():
-            raise RuntimeError("conn already closed")
         if self._is_close:
             raise RuntimeError("Client already closed")
+        if self._conn.is_closed():
+            raise ConnectionError("conn already closed")
         await self._drop_life_cycle()
 
         # close listen func
@@ -108,39 +114,38 @@ class Client:
         self._listen_future = None
         self._conn.close()
 
-    async def connect(self, host: str = "localhost", port: int = 9000, ssl_crt_path: Optional[str] = None):
+    async def connect(self, host: str = "localhost", port: int = 9000):
         """
         Create&conn connection;
         start listen response;
         send declare msg to server
         """
-        if self._conn and not self._conn.is_closed():
+        if not self._conn.is_closed():
             raise ConnectionError(f"Client already connected")
-        self._conn = Connection(
-            msgpack.Unpacker(raw=False, use_list=False),
-            self._timeout,
-            ssl_crt_path=ssl_crt_path,
-        )
         await self._conn.connect(host, port)
         logging.debug(f"Connection to %s...", self._conn.connection_info)
         self._is_close = False
         self._listen_future = asyncio.ensure_future(self._listen())
         await self._declare_life_cycle()
 
-    # util
+    ########
+    # util #
+    ########
     @staticmethod
     def raise_error(exc_name: str, exc_info: str = ""):
         """raise python exception"""
         exc = getattr(rap_exc, exc_name, None)
         if not exc:
             exc = globals()["__builtins__"][exc_name]
-        raise exc(exc_info)
+            raise exc(exc_info)
+        if not exc:
+            raise RPCError(exc_info)
 
     @staticmethod
     def _get_rap_exc_dict() -> Dict[int, Type[rap_exc.BaseRapError]]:
         exc_dict: Dict[int, Type[rap_exc.BaseRapError]] = {}
         for exc_name in dir(rap_exc):
-            class_ = getattr(rap_exc, exc_name)
+            class_: Type = getattr(rap_exc, exc_name)
             if (
                 inspect.isclass(class_)
                 and issubclass(class_, rap_exc.BaseRapError)
@@ -159,10 +164,12 @@ class Client:
             pass
         except Exception as e:
             logging.error(f"listen status:{self._is_close} error: {e}, close conn:{self._conn}")
-            if self._conn and not self._conn.is_closed():
+            if not self._conn.is_closed():
                 self._conn.close()
 
-    # life cycle
+    ##############
+    # life cycle #
+    ##############
     async def _declare_life_cycle(self):
         """send declare msg and init client id"""
         body: dict = {}
@@ -193,6 +200,9 @@ class Client:
         if self._conn.is_closed():
             raise ConnectionError("The connection has been closed, please call connect to create connection")
         msg_id: int = self._msg_id + 1
+        # Avoid too big numbers
+        if msg_id > 65535:
+            msg_id = 1
         self._msg_id = msg_id
 
         # set header value
