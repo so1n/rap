@@ -148,7 +148,12 @@ class Request(object):
                 resp_model.exception = FuncNotFoundError()
                 return resp_model
             else:
-                new_call_id, result = await self.msg_handle(request.header, call_id, method_name, param, client_model)
+                method: Optional[Callable] = func_manager.func_dict.get(method_name)
+                if not method:
+                    resp_model.exception = FuncNotFoundError()
+                    return resp_model
+
+                new_call_id, result = await self.msg_handle(request.header, call_id, method, param, client_model)
                 resp_model.result = {"call_id": new_call_id, "method_name": method_name}
                 if isinstance(result, Exception):
                     exc, exc_info = parse_error(result)
@@ -168,9 +173,8 @@ class Request(object):
             resp_model.result = client_model.crypto.encrypt_object(resp_model.result)
         return resp_model
 
-    async def msg_handle(self, header: dict, call_id: int, method_name: str, param: str, client_model: "ClientModel"):
+    async def msg_handle(self, header: dict, call_id: int, method: Callable, param: str, client_model: "ClientModel"):
         # really request handle
-        method: Callable = func_manager.func_dict.get(method_name)
         # version: str = header.get("version")
         user_agent: str = header.get("user_agent")
         try:
@@ -185,11 +189,18 @@ class Request(object):
                     del client_model.generator_dict[call_id]
                     result = e
             else:
+
                 if asyncio.iscoroutinefunction(method):
                     coroutine: Coroutine = method(*param)
                 else:
                     coroutine: Coroutine = get_event_loop().run_in_executor(None, method, *param)
-                result: Any = await asyncio.wait_for(coroutine, self._run_timeout)
+
+                try:
+                    result: Any = await asyncio.wait_for(coroutine, self._run_timeout)
+                except asyncio.TimeoutError as e:
+                    raise e
+                except Exception as e:
+                    return call_id, e
 
                 if inspect.isgenerator(result):
                     if user_agent != Constant.USER_AGENT:
@@ -209,6 +220,6 @@ class Request(object):
             if isinstance(e, BaseRapError):
                 result = e
             else:
-                logging.exception(f"run:{method_name} param:{param} error:{e}.")
-                result = ServerError("execute func error")
+                logging.exception(f"run:{method} param:{param} error:{e}.")
+                result = RpcRunTimeError("execute func error")
         return call_id, result
