@@ -145,12 +145,12 @@ class Request(object):
 
             # root func only called by local client
             if method_name.startswith("_root_") and request.conn.peer[0] != "127.0.0.1":
-                resp_model.exception = FuncNotFoundError()
+                resp_model.exception = FuncNotFoundError(extra_msg=f'func name: {method_name}')
                 return resp_model
             else:
                 method: Optional[Callable] = func_manager.func_dict.get(method_name)
                 if not method:
-                    resp_model.exception = FuncNotFoundError()
+                    resp_model.exception = FuncNotFoundError(extra_msg=f'func name: {method_name}')
                     return resp_model
 
                 new_call_id, result = await self.msg_handle(request.header, call_id, method, param, client_model)
