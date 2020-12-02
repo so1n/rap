@@ -5,9 +5,11 @@ class BaseRapError(Exception):
     status_code: int = 500
     message: str = "Error"
 
-    def __init__(self, message: Optional[str] = None):
+    def __init__(self, message: Optional[str] = None, extra_msg: Optional[str] = None):
         if message is None:
             message = self.message
+        if extra_msg:
+            message += f'. {extra_msg}'
         super().__init__(message)
 
 
@@ -18,7 +20,7 @@ class AuthError(BaseRapError):
 
 class FuncNotFoundError(BaseRapError):
     status_code: int = 502
-    message: str = "Func not found"
+    message: str = "Not found func"
 
 
 class LifeCycleError(BaseRapError):
