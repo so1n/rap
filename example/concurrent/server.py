@@ -29,11 +29,7 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
-    rpc_server = Server(
-        conn_middleware_list=[AccessConnMiddleware()],
-        msg_middleware_list=[AccessMsgMiddleware()],
-        request_middleware_list=[AccessMiddleware()],
-    )
+    rpc_server = Server()
     rpc_server.register(sync_sum)
     rpc_server.register(async_sum)
     rpc_server.register(async_gen)
