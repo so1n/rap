@@ -3,6 +3,7 @@ from typing import Any, Callable, Union
 from rap.common.conn import ServerConnection
 from rap.common.types import BASE_REQUEST_TYPE
 from rap.manager.client_manager import ClientModel
+from rap.server.requests import RequestModel
 from rap.server.response import ResponseModel
 
 
@@ -35,6 +36,6 @@ class BaseRequestMiddleware(BaseMiddleware):
 
 class BaseMsgMiddleware(BaseMiddleware):
     async def dispatch(
-        self, header: dict, call_id: int, method: Callable, param: str, client_model: "ClientModel"
+        self, request: RequestModel, call_id: int, func: Callable, param: str
     ) -> Union[dict, Exception]:
         raise NotImplementedError

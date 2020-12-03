@@ -35,6 +35,7 @@ class RequestModel(object):
     header: dict
     body: Any
     conn: ServerConnection
+    client_model: Optional[ClientModel] = None
 
 
 class Request(object):
@@ -95,15 +96,16 @@ class Request(object):
             return response
 
         client_model.keep_alive_timestamp = int(time.time())
-        return await self.dispatch(request, client_model, response)
+        request.client_model = client_model
+        return await self.dispatch(request, response)
 
     async def dispatch(
-            self, request: RequestModel, client_model: ClientModel, response: ResponseModel
+            self, request: RequestModel, response: ResponseModel
     ) -> ResponseModel:
         # dispatch
         if response.response_num == Constant.DECLARE_RESPONSE:
-            client_manager.create_client_model(client_model)
-            response.result = {"client_id": client_model.client_id}
+            client_manager.create_client_model(request.client_model)
+            response.result = {"client_id": request.client_model.client_id}
         elif response.response_num == Constant.MSG_RESPONSE:
             try:
                 call_id: int = request.body["call_id"]
@@ -123,7 +125,7 @@ class Request(object):
                     response.exception = FuncNotFoundError(extra_msg=f'func name: {method_name}')
                     return response
 
-                new_call_id, result = await self.msg_handle(request.header, call_id, method, param, client_model)
+                new_call_id, result = await self.msg_handle(request, call_id, method, param)
                 response.result = {"call_id": new_call_id, "method_name": method_name}
                 if isinstance(result, Exception):
                     exc, exc_info = parse_error(result)
@@ -135,23 +137,23 @@ class Request(object):
                     response.result["result"] = result
         elif request.request_num == Constant.DROP_REQUEST:
             call_id = request.body["call_id"]
-            client_manager.destroy_client_model(client_model.client_id)
+            client_manager.destroy_client_model(request.client_model.client_id)
             response.result = {"call_id": call_id, "result": 1}
         return response
 
-    async def msg_handle(self, header: dict, call_id: int, func: Callable, param: str, client_model: "ClientModel"):
+    async def msg_handle(self, request: RequestModel, call_id: int, func: Callable, param: str):
         # version: str = header.get("version")
-        user_agent: str = header.get("user_agent")
+        user_agent: str = request.header.get("user_agent")
         try:
-            if call_id in client_model.generator_dict:
+            if call_id in request.client_model.generator_dict:
                 try:
-                    result = client_model.generator_dict[call_id]
+                    result = request.client_model.generator_dict[call_id]
                     if inspect.isgenerator(result):
                         result = next(result)
                     elif inspect.isasyncgen(result):
                         result = await result.__anext__()
                 except (StopAsyncIteration, StopIteration) as e:
-                    del client_model.generator_dict[call_id]
+                    del request.client_model.generator_dict[call_id]
                     result = e
             else:
                 if asyncio.iscoroutinefunction(func):
@@ -171,14 +173,14 @@ class Request(object):
                         result = ProtocolError(f"{user_agent} not support generator")
                     else:
                         call_id = id(result)
-                        client_model.generator_dict[call_id] = result
+                        request.client_model.generator_dict[call_id] = result
                         result = next(result)
                 elif inspect.isasyncgen(result):
                     if user_agent != Constant.USER_AGENT:
                         result = ProtocolError(f"{user_agent} not support generator")
                     else:
                         call_id = id(result)
-                        client_model.generator_dict[call_id] = result
+                        request.client_model.generator_dict[call_id] = result
                         result = await result.__anext__()
         except Exception as e:
             if isinstance(e, BaseRapError):
