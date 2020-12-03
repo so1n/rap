@@ -56,11 +56,11 @@ class Server(object):
             self._conn_handle = _conn_middleware
 
         if request_middleware_list is not None:
-            _request_middleware: Union[Callable, BaseRequestMiddleware] = self._request_handle.dispatch
+            _request_middleware: Union[Callable, BaseRequestMiddleware] = self._request_handle.before_dispatch
             for request_middleware in reversed(request_middleware_list):
                 request_middleware.load_sub_middleware(_request_middleware)
                 _request_middleware = request_middleware
-            self._request_handle.dispatch = _request_middleware
+            self._request_handle.before_dispatch = _request_middleware
 
         if msg_middleware_list is not None:
             _msg_middleware: Union[Callable, BaseMsgMiddleware] = self._request_handle.msg_handle
@@ -123,7 +123,7 @@ class Server(object):
 
     async def request_handle(self, conn: ServerConnection, request_model: RequestModel):
         try:
-            resp_model: ResponseModel = await self._request_handle.dispatch(request_model)
+            resp_model: ResponseModel = await self._request_handle.before_dispatch(request_model)
             await response(conn, resp_model)
         except Exception as e:
             logging.exception(f"request handle error e")

@@ -20,7 +20,6 @@ from rap.common.utlis import (
     Constant,
     MISS_OBJECT,
     get_event_loop,
-    gen_random_time_id,
     parse_error,
 )
 from rap.common.conn import ServerConnection
@@ -66,7 +65,7 @@ class Request(object):
         else:
             client_model.nonce_set.add(nonce)
 
-    async def dispatch(self, request: RequestModel) -> ResponseModel:
+    async def before_dispatch(self, request: RequestModel) -> ResponseModel:
         logging.debug(f"get request data:%s from %s", request, request.conn.peer)
 
         response_num: Optional[int] = self._response_num_dict.get(request.request_num, Constant.SERVER_ERROR_RESPONSE)
@@ -101,7 +100,11 @@ class Request(object):
             return resp_model
 
         client_model.keep_alive_timestamp = int(time.time())
+        return await self.dispatch(request, response_num, client_model, resp_model)
 
+    async def dispatch(
+            self, request: RequestModel, response_num: int, client_model: ClientModel, resp_model: ResponseModel
+    ) -> ResponseModel:
         # dispatch
         if response_num == Constant.DECLARE_RESPONSE:
             client_manager.create_client_model(client_model)
