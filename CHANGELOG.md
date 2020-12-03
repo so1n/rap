@@ -1,16 +1,28 @@
-### 0.5.5
+### 0.5.6
  - Feature: add server config
  
-### 0.5.4
+### 0.5.5
  - description: Add more middleware
  - Feature: add called limit middleware
 
-### 0.5.3
+### 0.5.4
  - description: near-continuous availability and a high degree of reliability.
  - Feature: client support HA strategy
  - Feature: client support load balance
 
-### 0.5.2.1[now]
+### 0.5.3
+ - description: remove aes and add aes middleware;
+ - Feat: remove aes
+ - Feat: add server/client aes middleware
+
+### 0.5.2.2[now]
+ - description: Distinguish server exceptions and execution function exceptions; better log output
+ - Refactor: Exceptions
+ - Feat: Complete server exception
+ - Feat: Complete execution func exception
+ - Refactor: log output
+ 
+### 0.5.2.1
  - description: hotfix
  - Fix: server conn read recv data bug
  - Fix: crypto error when client reconnect 
