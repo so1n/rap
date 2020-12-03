@@ -3,7 +3,6 @@ import inspect
 import logging
 import msgpack
 import random
-import time
 
 from dataclasses import dataclass
 from functools import wraps
@@ -11,10 +10,9 @@ from typing import Any, Callable, cast, Dict, Optional, Tuple, Type
 
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
-from rap.common.aes import Crypto
-from rap.common.exceptions import RPCError, ProtocolError
+from rap.common.exceptions import RPCError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
-from rap.common.utlis import Constant, gen_random_str_id, gen_random_time_id
+from rap.common.utlis import Constant, gen_random_str_id
 
 
 __all__ = ["Client"]
@@ -55,7 +53,6 @@ class Client:
     def __init__(
         self,
         timeout: int = 9,
-        secret_tuple: Optional[Tuple[str, ...]] = None,
         host: str = "localhost",
         port: int = 9000,
         keep_alive_time: int = 1200,
@@ -75,14 +72,8 @@ class Client:
         self._keep_alive_time: int = keep_alive_time
         self._timeout: int = timeout
 
-        if secret_tuple is not None:
-            self._crypto: "Crypto" = Crypto(secret_tuple[1])
-            self._client_id: str = secret_tuple[0]
-        else:
-            self._crypto: "Optional[Crypto]" = None
-            self._client_id: str = gen_random_str_id(8)
+        self._client_id: str = gen_random_str_id(8)
         self._declare_client_id: str = self._client_id
-        self._declare_crypto: "Crypto" = self._crypto
 
         self.rap_exc_dict = self._get_rap_exc_dict()
 
@@ -138,9 +129,10 @@ class Client:
         exc = getattr(rap_exc, exc_name, None)
         if not exc:
             exc = globals()["__builtins__"][exc_name]
-            raise exc(exc_info)
         if not exc:
             raise RPCError(exc_info)
+        else:
+            raise exc(exc_info)
 
     @staticmethod
     def _get_rap_exc_dict() -> Dict[int, Type[rap_exc.BaseRapError]]:
@@ -175,7 +167,6 @@ class Client:
         """send declare msg and init client id"""
         body: dict = {}
         self._client_id = self._declare_client_id
-        self._crypto = self._declare_crypto  # reload crypto
         response = await self._base_request(Constant.DECLARE_REQUEST, {}, body)
         if response.num != Constant.DECLARE_RESPONSE and response.body != body:
             raise RPCError("declare response error")
@@ -183,8 +174,6 @@ class Client:
         if client_id is None:
             raise RPCError("declare response error, Can not get client id from body")
         self._client_id = client_id
-        if self._crypto is not None:
-            self._crypto = Crypto(client_id)
         logging.info("declare success")
 
     async def _drop_life_cycle(self):
@@ -211,14 +200,6 @@ class Client:
             header["client_id"] = self._client_id
         header["version"] = Constant.VERSION
         header["user_agent"] = Constant.USER_AGENT
-
-        if self._crypto is not None:
-            if type(body) is not dict:
-                body = {"body": body}
-            # set crypto param in body
-            body["timestamp"] = int(time.time())
-            body["nonce"] = gen_random_time_id()
-            body = self._crypto.encrypt_object(body)
 
         request: BASE_REQUEST_TYPE = (request_num, msg_id, header, body)
         try:
@@ -269,14 +250,6 @@ class Client:
             exc: Type["rap_exc.BaseRapError"] = self._get_rap_exc_dict().get(status_code, rap_exc.BaseRapError)
             self._future_dict[msg_id].set_exception(exc(body))
             return
-
-        # body crypto handle
-        if self._crypto is not None and type(body) is bytes:
-            try:
-                body = self._crypto.decrypt_object(body)
-            except Exception:
-                self._future_dict[msg_id].set_exception(ProtocolError(f"Can't decrypt body."))
-                return
 
         # server event msg handle
         if response_num == Constant.SERVER_EVENT:

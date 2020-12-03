@@ -1,10 +1,9 @@
 import asyncio
-import time
 
 from rap.client import Client
 
 
-client = Client(secret_tuple=("test", "keyskeyskeyskeys"))
+client = Client()
 
 
 @client.register

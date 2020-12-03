@@ -6,7 +6,6 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Coroutine, Dict, Optional
 
-from rap.common.aes import Crypto
 from rap.common.exceptions import (
     AuthError,
     BaseRapError,
@@ -25,7 +24,6 @@ from rap.common.utlis import (
     parse_error,
 )
 from rap.common.conn import ServerConnection
-from rap.manager.aes_manager import aes_manager
 from rap.manager.client_manager import client_manager, ClientModel, LifeCycleEnum
 from rap.manager.func_manager import func_manager
 from rap.server.response import ResponseModel
@@ -90,8 +88,7 @@ class Request(object):
 
         # check client_model
         if response_num == Constant.DECLARE_RESPONSE:
-            crypto: Crypto = aes_manager.get_crypto(client_id)
-            client_model: "ClientModel" = ClientModel(crypto=crypto)
+            client_model: "ClientModel" = ClientModel()
         else:
             client_model = client_manager.get_client_model(client_id)
             if client_model is MISS_OBJECT:
@@ -105,40 +102,15 @@ class Request(object):
 
         client_model.keep_alive_timestamp = int(time.time())
 
-        if type(request.body) is bytes:
-            # check crypto
-            if client_model.crypto == MISS_OBJECT:
-                resp_model.exception = AuthError("aes key error")
-                return resp_model
-            try:
-                decrypt_body: dict = client_model.crypto.decrypt_object(request.body)
-            except Exception:
-                resp_model.exception = AuthError("decrypt body error")
-                return resp_model
-
-            exception: "Optional[Exception]" = self._body_handle(decrypt_body, client_model)
-            if exception is not None:
-                resp_model.exception = exception
-                return resp_model
-        else:
-            decrypt_body = request.body
-
         # dispatch
         if response_num == Constant.DECLARE_RESPONSE:
             client_manager.create_client_model(client_model)
-            if client_model.crypto is not MISS_OBJECT:
-                # declare will gen new crypto and replace
-                resp_model.result = client_model.crypto.encrypt_object(
-                    {"timestamp": int(time.time()), "nonce": gen_random_time_id(), "client_id": client_model.client_id}
-                )
-                client_model.crypto = aes_manager.add_crypto(client_model.client_id)
-            else:
-                resp_model.result = {"client_id": client_model.client_id}
+            resp_model.result = {"client_id": client_model.client_id}
         elif response_num == Constant.MSG_RESPONSE:
             try:
-                call_id: int = decrypt_body["call_id"]
-                method_name: str = decrypt_body["method_name"]
-                param: str = decrypt_body["param"]
+                call_id: int = request.body["call_id"]
+                method_name: str = request.body["method_name"]
+                param: str = request.body["param"]
             except Exception:
                 resp_model.exception = ParseError()
                 return resp_model
@@ -164,13 +136,9 @@ class Request(object):
                 else:
                     resp_model.result = {"call_id": new_call_id, "method_name": method_name, "result": result}
         elif request.request_num == Constant.DROP_REQUEST:
-            call_id = decrypt_body["call_id"]
+            call_id = request.body["call_id"]
             client_manager.destroy_client_model(client_model.client_id)
             resp_model.result = {"call_id": call_id, "result": 1}
-
-        if client_model.crypto is not MISS_OBJECT and type(resp_model.result) is dict:
-            resp_model.result.update(dict(timestamp=int(time.time()), nonce=gen_random_time_id()))
-            resp_model.result = client_model.crypto.encrypt_object(resp_model.result)
         return resp_model
 
     async def msg_handle(self, header: dict, call_id: int, method: Callable, param: str, client_model: "ClientModel"):
