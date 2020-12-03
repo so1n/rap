@@ -4,7 +4,7 @@ import time
 from rap.client import Client
 
 
-client = Client(secret_tuple=("test", "keyskeyskeyskeys"))
+client = Client()
 
 
 # in register, must use async def...

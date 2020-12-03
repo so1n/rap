@@ -1,10 +1,6 @@
 import asyncio
-from typing import Iterator
 
 from rap.server import Server
-from rap.middleware.conn.access import AccessConnMiddleware
-from rap.middleware.msg.access import AccessMsgMiddleware
-from rap.middleware.request.access import AccessMiddleware
 
 
 def sync_sum(a: int, b: int) -> int:
@@ -19,7 +15,7 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
-    rpc_server = Server(secret_dict={"test": "keyskeyskeyskeys"})
+    rpc_server = Server()
     rpc_server.register(sync_sum)
     server = loop.run_until_complete(rpc_server.create_server())
 

@@ -4,12 +4,11 @@ import ssl
 
 import msgpack
 
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, List, Optional, Union
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import RpcRunTimeError
 from rap.common.types import READER_TYPE, WRITER_TYPE, BASE_REQUEST_TYPE
-from rap.manager.aes_manager import aes_manager
 from rap.manager.client_manager import client_manager
 from rap.manager.func_manager import func_manager
 from rap.middleware.base_middleware import BaseConnMiddleware, BaseMsgMiddleware, BaseRequestMiddleware
@@ -32,7 +31,6 @@ class Server(object):
         conn_middleware_list: Optional[List[BaseConnMiddleware]] = None,
         msg_middleware_list: Optional[List[BaseMsgMiddleware]] = None,
         request_middleware_list: Optional[List[BaseRequestMiddleware]] = None,
-        secret_dict: Optional[Dict[str, str]] = None,
         ssl_crt_path: Optional[str] = None,
         ssl_key_path: Optional[str] = None,
     ):
@@ -48,9 +46,6 @@ class Server(object):
             self._ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             self._ssl_context.check_hostname = False
             self._ssl_context.load_cert_chain(ssl_crt_path, ssl_key_path)
-
-        if secret_dict is not None:
-            aes_manager.load_aes_key_dict(secret_dict)
 
         # replace func -> *_middleware
         if conn_middleware_list is not None:

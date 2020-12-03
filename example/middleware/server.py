@@ -30,7 +30,6 @@ if __name__ == "__main__":
 
     loop = asyncio.new_event_loop()
     rpc_server = Server(
-        secret_dict={"test": "keyskeyskeyskeys"},
         conn_middleware_list=[AccessConnMiddleware()],
         msg_middleware_list=[AccessMsgMiddleware()],
         request_middleware_list=[AccessMiddleware()],

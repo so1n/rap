@@ -17,7 +17,6 @@ if __name__ == "__main__":
 
     loop = asyncio.new_event_loop()
     rpc_server = Server(
-        secret_dict={"test": "keyskeyskeyskeys"},  # enable secret
         # enable ssl
         ssl_crt_path="./rap_ssl.crt",
         ssl_key_path="./rap_ssl.key",
