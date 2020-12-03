@@ -67,85 +67,79 @@ class Request(object):
 
     async def before_dispatch(self, request: RequestModel) -> ResponseModel:
         logging.debug(f"get request data:%s from %s", request, request.conn.peer)
-
         response_num: Optional[int] = self._response_num_dict.get(request.request_num, Constant.SERVER_ERROR_RESPONSE)
 
         # create result_model
-        resp_model: "ResponseModel" = ResponseModel(response_num=response_num, msg_id=request.msg_id)
+        response: "ResponseModel" = ResponseModel(response_num=response_num, msg_id=request.msg_id)
 
         # check type_id
         if response_num is Constant.SERVER_ERROR_RESPONSE:
             logging.error(f"parse request data: {request} from {request.conn.peer} error")
-            resp_model.exception = ServerError("type_id error")
-            return resp_model
-
-        # check header
-        client_id = request.header.get("client_id", None)
-        if client_id is None:
-            resp_model.exception = ProtocolError("Can not found client id from header")
-            return resp_model
+            response.exception = ServerError("type_id error")
+            return response
 
         # check client_model
         if response_num == Constant.DECLARE_RESPONSE:
             client_model: "ClientModel" = ClientModel()
         else:
+            client_id = request.header.get("client_id", None)
             client_model = client_manager.get_client_model(client_id)
             if client_model is MISS_OBJECT:
-                resp_model.exception = AuthError("The current client id has not been registered")
-                return resp_model
+                response.exception = AuthError("The current client id has not been registered")
+                return response
 
         # check life_cycle
-        if not client_model.modify_life_cycle(self._life_cycle_dict.get(response_num, MISS_OBJECT)):
-            resp_model.exception = LifeCycleError()
-            return resp_model
+        new_life_cycle = self._life_cycle_dict.get(response_num, MISS_OBJECT)
+        if new_life_cycle is MISS_OBJECT or not client_model.modify_life_cycle(new_life_cycle):
+            response.exception = LifeCycleError()
+            return response
 
         client_model.keep_alive_timestamp = int(time.time())
-        return await self.dispatch(request, response_num, client_model, resp_model)
+        return await self.dispatch(request, client_model, response)
 
     async def dispatch(
-            self, request: RequestModel, response_num: int, client_model: ClientModel, resp_model: ResponseModel
+            self, request: RequestModel, client_model: ClientModel, response: ResponseModel
     ) -> ResponseModel:
         # dispatch
-        if response_num == Constant.DECLARE_RESPONSE:
+        if response.response_num == Constant.DECLARE_RESPONSE:
             client_manager.create_client_model(client_model)
-            resp_model.result = {"client_id": client_model.client_id}
-        elif response_num == Constant.MSG_RESPONSE:
+            response.result = {"client_id": client_model.client_id}
+        elif response.response_num == Constant.MSG_RESPONSE:
             try:
                 call_id: int = request.body["call_id"]
                 method_name: str = request.body["method_name"]
                 param: str = request.body["param"]
-            except Exception:
-                resp_model.exception = ParseError()
-                return resp_model
+            except KeyError:
+                response.exception = ParseError('body miss param')
+                return response
 
             # root func only called by local client
             if method_name.startswith("_root_") and request.conn.peer[0] != "127.0.0.1":
-                resp_model.exception = FuncNotFoundError(extra_msg=f'func name: {method_name}')
-                return resp_model
+                response.exception = FuncNotFoundError(extra_msg=f'func name: {method_name}')
+                return response
             else:
                 method: Optional[Callable] = func_manager.func_dict.get(method_name)
                 if not method:
-                    resp_model.exception = FuncNotFoundError(extra_msg=f'func name: {method_name}')
-                    return resp_model
+                    response.exception = FuncNotFoundError(extra_msg=f'func name: {method_name}')
+                    return response
 
                 new_call_id, result = await self.msg_handle(request.header, call_id, method, param, client_model)
-                resp_model.result = {"call_id": new_call_id, "method_name": method_name}
+                response.result = {"call_id": new_call_id, "method_name": method_name}
                 if isinstance(result, Exception):
                     exc, exc_info = parse_error(result)
                     if request.header.get("user_agent") == Constant.USER_AGENT:
-                        resp_model.result.update({"exc": exc, "exc_info": exc_info})
+                        response.result.update({"exc": exc, "exc_info": exc_info})
                     else:
-                        resp_model.result.update({"exc_info": exc_info})
+                        response.result.update({"exc_info": exc_info})
                 else:
-                    resp_model.result = {"call_id": new_call_id, "method_name": method_name, "result": result}
+                    response.result["result"] = result
         elif request.request_num == Constant.DROP_REQUEST:
             call_id = request.body["call_id"]
             client_manager.destroy_client_model(client_model.client_id)
-            resp_model.result = {"call_id": call_id, "result": 1}
-        return resp_model
+            response.result = {"call_id": call_id, "result": 1}
+        return response
 
-    async def msg_handle(self, header: dict, call_id: int, method: Callable, param: str, client_model: "ClientModel"):
-        # really request handle
+    async def msg_handle(self, header: dict, call_id: int, func: Callable, param: str, client_model: "ClientModel"):
         # version: str = header.get("version")
         user_agent: str = header.get("user_agent")
         try:
@@ -160,16 +154,15 @@ class Request(object):
                     del client_model.generator_dict[call_id]
                     result = e
             else:
-
-                if asyncio.iscoroutinefunction(method):
-                    coroutine: Coroutine = method(*param)
+                if asyncio.iscoroutinefunction(func):
+                    coroutine: Coroutine = func(*param)
                 else:
-                    coroutine: Coroutine = get_event_loop().run_in_executor(None, method, *param)
+                    coroutine: Coroutine = get_event_loop().run_in_executor(None, func, *param)
 
                 try:
                     result: Any = await asyncio.wait_for(coroutine, self._run_timeout)
-                except asyncio.TimeoutError as e:
-                    raise e
+                except asyncio.TimeoutError:
+                    return call_id, RpcRunTimeError(f'Call {func.__name__} timeout')
                 except Exception as e:
                     return call_id, e
 
@@ -191,6 +184,6 @@ class Request(object):
             if isinstance(e, BaseRapError):
                 result = e
             else:
-                logging.exception(f"run:{method} param:{param} error:{e}.")
+                logging.exception(f"run:{func} param:{param} error:{e}.")
                 result = RpcRunTimeError("execute func error")
         return call_id, result
