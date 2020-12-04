@@ -11,7 +11,9 @@ from rap.common.exceptions import RpcRunTimeError
 from rap.common.types import READER_TYPE, WRITER_TYPE, BASE_REQUEST_TYPE
 from rap.manager.client_manager import client_manager
 from rap.manager.func_manager import func_manager
-from rap.middleware.base_middleware import BaseConnMiddleware, BaseMsgMiddleware, BaseRequestMiddleware
+from rap.middleware.base_middleware import (
+    BaseConnMiddleware, BaseMsgMiddleware, BaseRawRequestMiddleware, BaseRequestDispatchMiddleware
+)
 from rap.server.requests import Request, RequestModel
 from rap.server.response import response, ResponseModel
 
@@ -30,7 +32,8 @@ class Server(object):
         backlog: int = 1024,
         conn_middleware_list: Optional[List[BaseConnMiddleware]] = None,
         msg_middleware_list: Optional[List[BaseMsgMiddleware]] = None,
-        request_middleware_list: Optional[List[BaseRequestMiddleware]] = None,
+        raw_request_middleware_list: Optional[List[BaseRawRequestMiddleware]] = None,
+        request_dispatch_middleware_list: Optional[List[BaseRequestDispatchMiddleware]] = None,
         ssl_crt_path: Optional[str] = None,
         ssl_key_path: Optional[str] = None,
     ):
@@ -55,12 +58,19 @@ class Server(object):
                 _conn_middleware = conn_middleware
             self._conn_handle = _conn_middleware
 
-        if request_middleware_list is not None:
-            _request_middleware: Union[Callable, BaseRequestMiddleware] = self._request_handle.before_dispatch
-            for request_middleware in reversed(request_middleware_list):
+        if raw_request_middleware_list is not None:
+            _request_middleware: Union[Callable, BaseRawRequestMiddleware] = self._request_handle.before_dispatch
+            for request_middleware in reversed(raw_request_middleware_list):
                 request_middleware.load_sub_middleware(_request_middleware)
                 _request_middleware = request_middleware
             self._request_handle.before_dispatch = _request_middleware
+
+        if request_dispatch_middleware_list is not None:
+            _request_dispatch_middleware: Union[Callable, BaseRequestDispatchMiddleware] = self._request_handle.dispatch
+            for request_dispatch_middleware in reversed(request_dispatch_middleware_list):
+                request_dispatch_middleware.load_sub_middleware(_request_dispatch_middleware)
+                _request_dispatch_middleware = request_dispatch_middleware
+            self._request_handle.dispatch = _request_dispatch_middleware
 
         if msg_middleware_list is not None:
             _msg_middleware: Union[Callable, BaseMsgMiddleware] = self._request_handle.msg_handle
@@ -105,7 +115,7 @@ class Server(object):
                 conn.set_reader_exc(e)
                 raise e
             if request is None:
-                await response(conn, ResponseModel(event=("close conn", "request is empty")))
+                await response(conn, ResponseModel(event=("close conn", "raw_request is empty")))
                 continue
             try:
                 request_num, msg_id, header, body = request
@@ -126,5 +136,5 @@ class Server(object):
             resp_model: ResponseModel = await self._request_handle.before_dispatch(request_model)
             await response(conn, resp_model)
         except Exception as e:
-            logging.exception(f"request handle error e")
+            logging.exception(f"raw_request handle error e")
             await response(conn, ResponseModel(exception=RpcRunTimeError(str(e))))

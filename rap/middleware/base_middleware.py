@@ -21,7 +21,7 @@ class BaseMiddleware(object):
             self.call_next = call_next
 
     async def call_next(self, value: Any):
-        ...
+        pass
 
 
 class BaseConnMiddleware(BaseMiddleware):
@@ -29,8 +29,15 @@ class BaseConnMiddleware(BaseMiddleware):
         raise NotImplementedError
 
 
-class BaseRequestMiddleware(BaseMiddleware):
+class BaseRawRequestMiddleware(BaseMiddleware):
     async def dispatch(self, request: BASE_REQUEST_TYPE) -> ResponseModel:
+        raise NotImplementedError
+
+
+class BaseRequestDispatchMiddleware(BaseMiddleware):
+    async def dispatch(
+            self, request: RequestModel, response: ResponseModel
+    ) -> ResponseModel:
         raise NotImplementedError
 
 
