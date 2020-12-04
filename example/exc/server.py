@@ -1,10 +1,6 @@
 import asyncio
-from typing import Iterator
 
 from rap.server import Server
-from rap.middleware.conn.access import AccessConnMiddleware
-from rap.middleware.msg.access import AccessMsgMiddleware
-from rap.middleware.request.access import AccessMiddleware
 
 
 def raise_msg_exc(a: int, b: int) -> int:

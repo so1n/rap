@@ -4,7 +4,8 @@ from typing import Iterator
 from rap.server import Server
 from rap.middleware.conn.access import AccessConnMiddleware
 from rap.middleware.msg.access import AccessMsgMiddleware
-from rap.middleware.request.access import AccessMiddleware
+from rap.middleware.raw_request.access import AccessMiddleware
+from rap.middleware.request_dispatch.access import AccessMiddleware as AccessRequestDispatchMiddleware
 
 
 def sync_sum(a: int, b: int) -> int:
@@ -32,7 +33,8 @@ if __name__ == "__main__":
     rpc_server = Server(
         conn_middleware_list=[AccessConnMiddleware()],
         msg_middleware_list=[AccessMsgMiddleware()],
-        request_middleware_list=[AccessMiddleware()],
+        raw_request_middleware_list=[AccessMiddleware()],
+        request_dispatch_middleware_list=[AccessRequestDispatchMiddleware()]
     )
     rpc_server.register(sync_sum)
     rpc_server.register(async_sum)
