@@ -2,11 +2,11 @@ import asyncio
 from typing import Iterator
 
 from rap.server import Server
-from rap.middleware.conn.access import AccessConnMiddleware
-from rap.middleware.msg.access import AccessMsgMiddleware
-from rap.middleware.raw_request.access import AccessMiddleware
-from rap.middleware.request_dispatch.access import AccessMiddleware as AccessRequestDispatchMiddleware
-from rap.middleware.response.print_result import PrintResultMiddleware
+from rap.server.middleware.conn.access import AccessConnMiddleware
+from rap.server.middleware.msg import AccessMsgMiddleware
+from rap.server.middleware.raw_request import AccessMiddleware
+from rap.server.middleware.request_dispatch.access import AccessMiddleware as AccessRequestDispatchMiddleware
+from rap.server.middleware.response.print_result import PrintResultMiddleware
 
 
 def sync_sum(a: int, b: int) -> int:
@@ -33,8 +33,10 @@ if __name__ == "__main__":
     loop = asyncio.new_event_loop()
     rpc_server = Server()
     rpc_server.load_middleware(
-        [AccessConnMiddleware(), AccessMsgMiddleware(), AccessMiddleware(), AccessRequestDispatchMiddleware(),
-         PrintResultMiddleware()]
+        [
+            AccessConnMiddleware(), AccessMsgMiddleware(), AccessMiddleware(), AccessRequestDispatchMiddleware(),
+            PrintResultMiddleware()
+        ]
     )
     rpc_server.register(sync_sum)
     rpc_server.register(async_sum)
