@@ -47,7 +47,7 @@ class BaseConnection:
             data = await asyncio.wait_for(self._reader.read(Constant.SOCKET_RECV_SIZE), timeout)
             logging.debug(f"recv data %s from %s", data, self.peer)
             if not data:
-                raise ConnectionError(f"Connection to %s closed", self.peer)
+                raise ConnectionError(f"Connection to {self.peer} closed")
             self._unpacker.feed(data)
             try:
                 return next(self._unpacker)

@@ -53,18 +53,6 @@ class Request(object):
         }
         self.client_model: "Optional[ClientModel]" = None
 
-    @staticmethod
-    def _check_timeout(timestamp: int) -> bool:
-        return (int(time.time()) - timestamp) > 60
-
-    def _body_handle(self, body: dict, client_model: ClientModel) -> Optional[Exception]:
-        if self._check_timeout(body.get("timestamp", 0)):
-            return ServerError("timeout error")
-        nonce: str = body.get("nonce", "")
-        if nonce in client_model.nonce_set:
-            return ServerError("nonce error")
-        else:
-            client_model.nonce_set.add(nonce)
 
     async def before_dispatch(self, request: RequestModel) -> ResponseModel:
         logging.debug(f"get request data:%s from %s", request, request.conn.peer)
@@ -110,6 +98,7 @@ class Request(object):
                 method_name: str = request.body["method_name"]
                 param: str = request.body["param"]
             except KeyError:
+                print(request.body)
                 response.exception = ParseError('body miss params')
                 return response
 

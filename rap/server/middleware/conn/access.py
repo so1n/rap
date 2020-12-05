@@ -1,7 +1,7 @@
 import logging
 
 from rap.common.conn import ServerConnection
-from rap.middleware.base_middleware import BaseConnMiddleware
+from rap.server.middleware.base import BaseConnMiddleware
 from rap.server.response import ResponseModel, Response
 
 

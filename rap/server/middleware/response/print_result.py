@@ -1,4 +1,4 @@
-from rap.middleware.base_middleware import BaseResponseMiddleware
+from rap.server.middleware.base import BaseResponseMiddleware
 from rap.common.types import BASE_RESPONSE_TYPE
 from rap.server.response import ResponseModel
 

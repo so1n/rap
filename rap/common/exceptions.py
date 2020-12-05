@@ -56,3 +56,9 @@ class RpcRunTimeError(BaseRapError):
 class ServerError(BaseRapError):
     status_code: int = 500
     message: str = "Server error"
+
+
+class CryptoError(BaseRapError):
+    status_code: int = 509
+    message: str = "crypto error"
+
