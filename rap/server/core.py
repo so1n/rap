@@ -4,14 +4,14 @@ import ssl
 
 import msgpack
 
-from typing import Callable, List, Optional, Union
+from typing import Callable, List, Optional
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import RpcRunTimeError
 from rap.common.types import READER_TYPE, WRITER_TYPE, BASE_REQUEST_TYPE
 from rap.manager.client_manager import client_manager
 from rap.manager.func_manager import func_manager
-from rap.middleware.base_middleware import (
+from rap.server.middleware.base_middleware import (
     BaseMiddleware,
     BaseConnMiddleware,
     BaseMsgMiddleware,

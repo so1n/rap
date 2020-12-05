@@ -1,6 +1,6 @@
 from typing import Dict, Optional, Union
 
-from rap.common.aes import Crypto
+from rap.common.crypto import Crypto
 from rap.common.utlis import MISS_OBJECT
 
 
