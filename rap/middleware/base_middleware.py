@@ -1,8 +1,7 @@
 from typing import Any, Callable, Union
 
 from rap.common.conn import ServerConnection
-from rap.common.types import BASE_REQUEST_TYPE
-from rap.manager.client_manager import ClientModel
+from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.server.requests import RequestModel
 from rap.server.response import ResponseModel
 
@@ -45,4 +44,9 @@ class BaseMsgMiddleware(BaseMiddleware):
     async def dispatch(
         self, request: RequestModel, call_id: int, func: Callable, param: str
     ) -> Union[dict, Exception]:
+        raise NotImplementedError
+
+
+class BaseResponseMiddleware(BaseMiddleware):
+    async def dispatch(self, resp: ResponseModel) -> BASE_RESPONSE_TYPE:
         raise NotImplementedError

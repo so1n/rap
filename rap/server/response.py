@@ -19,28 +19,35 @@ class ResponseModel(object):
     event: Optional[Tuple[str, Any]] = None
 
 
-async def response(conn: ServerConnection, resp: ResponseModel, timeout: Optional[int] = None):
-    resp.header["version"] = Constant.VERSION
-    resp.header["user_agent"] = Constant.USER_AGENT
-    logging.debug(f"resp: %s", resp)
+class Response(object):
 
-    if resp.exception is not None:
-        error_response: Optional[Tuple[str, str]] = parse_error(resp.exception)
-        resp.header["status_code"] = resp.exception.status_code
-        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, resp.msg_id, resp.header, error_response[1])
-    elif resp.event is not None:
-        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_EVENT, resp.msg_id, resp.header, resp.event)
-    elif resp.result is not None:
-        response_msg: BASE_RESPONSE_TYPE = (resp.response_num, resp.msg_id, resp.header, resp.result)
-    else:
-        exception: BaseRapError = ServerError("not response data")
-        error_response: Optional[Tuple[str, str]] = parse_error(exception)
-        resp.header["status_code"] = exception.status_code
-        response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, resp.msg_id, resp.header, error_response[1])
+    @staticmethod
+    async def response_handle(resp: ResponseModel) -> BASE_RESPONSE_TYPE:
+        if resp.exception is not None:
+            error_response: Optional[Tuple[str, str]] = parse_error(resp.exception)
+            resp.header["status_code"] = resp.exception.status_code
+            response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, resp.msg_id, resp.header, error_response[1])
+        elif resp.event is not None:
+            response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_EVENT, resp.msg_id, resp.header, resp.event)
+        elif resp.result is not None:
+            response_msg: BASE_RESPONSE_TYPE = (resp.response_num, resp.msg_id, resp.header, resp.result)
+        else:
+            exception: BaseRapError = ServerError("not response data")
+            error_response: Optional[Tuple[str, str]] = parse_error(exception)
+            resp.header["status_code"] = exception.status_code
+            response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, resp.msg_id, resp.header, error_response[1])
+        return response_msg
 
-    try:
-        await conn.write(response_msg, timeout)
-    except asyncio.TimeoutError:
-        logging.error(f"response to {conn.peer} timeout. result:{resp.result}, error:{resp.exception}")
-    except Exception as e:
-        logging.error(f"response to {conn.peer} error: {e}. result:{resp.result}, error:{resp.exception}")
+    async def response(self, conn: ServerConnection, resp: ResponseModel, timeout: Optional[int] = None):
+        resp.header["version"] = Constant.VERSION
+        resp.header["user_agent"] = Constant.USER_AGENT
+        logging.debug(f"resp: %s", resp)
+
+        response_msg = await self.response_handle(resp)
+
+        try:
+            await conn.write(response_msg, timeout)
+        except asyncio.TimeoutError:
+            logging.error(f"response to {conn.peer} timeout. result:{resp.result}, error:{resp.exception}")
+        except Exception as e:
+            logging.error(f"response to {conn.peer} error: {e}. result:{resp.result}, error:{resp.exception}")
