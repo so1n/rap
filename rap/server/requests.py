@@ -4,7 +4,7 @@ import logging
 import time
 
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, Dict, Optional
+from typing import Any, Callable, Coroutine, Dict, Optional, Tuple
 
 from rap.common.exceptions import (
     AuthError,
@@ -99,9 +99,7 @@ class Request(object):
         request.client_model = client_model
         return await self.dispatch(request, response)
 
-    async def dispatch(
-            self, request: RequestModel, response: ResponseModel
-    ) -> ResponseModel:
+    async def dispatch(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
         # dispatch
         if response.response_num == Constant.DECLARE_RESPONSE:
             client_manager.create_client_model(request.client_model)
@@ -112,7 +110,7 @@ class Request(object):
                 method_name: str = request.body["method_name"]
                 param: str = request.body["param"]
             except KeyError:
-                response.exception = ParseError('body miss param')
+                response.exception = ParseError('body miss params')
                 return response
 
             # root func only called by local client
@@ -141,8 +139,7 @@ class Request(object):
             response.result = {"call_id": call_id, "result": 1}
         return response
 
-    async def msg_handle(self, request: RequestModel, call_id: int, func: Callable, param: str):
-        # version: str = header.get("version")
+    async def msg_handle(self, request: RequestModel, call_id: int, func: Callable, param: str) -> Tuple[int, Any]:
         user_agent: str = request.header.get("user_agent")
         try:
             if call_id in request.client_model.generator_dict:
@@ -166,7 +163,7 @@ class Request(object):
                 except asyncio.TimeoutError:
                     return call_id, RpcRunTimeError(f'Call {func.__name__} timeout')
                 except Exception as e:
-                    return call_id, e
+                    raise e
 
                 if inspect.isgenerator(result):
                     if user_agent != Constant.USER_AGENT:
