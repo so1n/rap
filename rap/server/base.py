@@ -12,7 +12,12 @@ from rap.common.types import READER_TYPE, WRITER_TYPE, BASE_REQUEST_TYPE
 from rap.manager.client_manager import client_manager
 from rap.manager.func_manager import func_manager
 from rap.middleware.base_middleware import (
-    BaseConnMiddleware, BaseMsgMiddleware, BaseRawRequestMiddleware, BaseRequestDispatchMiddleware
+    BaseMiddleware,
+    BaseConnMiddleware,
+    BaseMsgMiddleware,
+    BaseRawRequestMiddleware,
+    BaseRequestDispatchMiddleware,
+    BaseResponseMiddleware
 )
 from rap.server.requests import Request, RequestModel
 from rap.server.response import Response, ResponseModel
@@ -30,10 +35,6 @@ class Server(object):
         keep_alive: int = 1200,
         run_timeout: int = 9,
         backlog: int = 1024,
-        conn_middleware_list: Optional[List[BaseConnMiddleware]] = None,
-        msg_middleware_list: Optional[List[BaseMsgMiddleware]] = None,
-        raw_request_middleware_list: Optional[List[BaseRawRequestMiddleware]] = None,
-        request_dispatch_middleware_list: Optional[List[BaseRequestDispatchMiddleware]] = None,
         ssl_crt_path: Optional[str] = None,
         ssl_key_path: Optional[str] = None,
     ):
@@ -51,19 +52,23 @@ class Server(object):
             self._ssl_context.check_hostname = False
             self._ssl_context.load_cert_chain(ssl_crt_path, ssl_key_path)
 
-        # replace func -> *_middleware
-        self._conn_handle = self.load_middleware(self._conn_handle, conn_middleware_list)
-        self._request.before_dispatch = self.load_middleware(self._request.before_dispatch, raw_request_middleware_list)
-        self._request.dispatch = self.load_middleware(self._request.dispatch, request_dispatch_middleware_list)
-        self._request.msg_handle = self.load_middleware(self._request.msg_handle, msg_middleware_list)
-
-    @staticmethod
-    def load_middleware(callable_: Callable, middleware_list):
-        _middleware = callable_
+    def load_middleware(self, middleware_list: List[BaseMiddleware]):
         for middleware in reversed(middleware_list):
-            middleware.load_sub_middleware(_middleware)
-            _middleware = middleware
-        return _middleware
+            if isinstance(middleware, BaseConnMiddleware):
+                middleware.load_sub_middleware(self._conn_handle)
+                self._conn_handle = middleware
+            elif isinstance(middleware, BaseRawRequestMiddleware):
+                middleware.load_sub_middleware(self._request.before_dispatch)
+                self._request.before_dispatch = middleware
+            elif isinstance(middleware, BaseRequestDispatchMiddleware):
+                middleware.load_sub_middleware(self._request.dispatch)
+                self._request.dispatch = middleware
+            elif isinstance(middleware, BaseMsgMiddleware):
+                middleware.load_sub_middleware(self._request.msg_handle)
+                self._request.msg_handle = middleware
+            elif isinstance(middleware, BaseResponseMiddleware):
+                middleware.load_sub_middleware(self._response.response_handle)
+                self._response.response_handle = middleware
 
     @staticmethod
     def register(func: Optional[Callable], name: Optional[str] = None):
