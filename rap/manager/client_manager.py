@@ -3,9 +3,8 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Dict, Generator, Optional, Set
+from typing import Dict, Generator, Optional
 
-from rap.common.aes import Crypto
 from rap.common.utlis import gen_random_time_id, MISS_OBJECT
 
 
@@ -18,10 +17,8 @@ class LifeCycleEnum(Enum):
 @dataclass()
 class ClientModel(object):
     client_id: Optional[str] = None
-    crypto: Optional[Crypto] = None
     generator_dict: Dict[int, Generator] = field(default_factory=dict)
     _life_cycle: "LifeCycleEnum" = LifeCycleEnum.declare
-    nonce_set: Set[str] = field(default_factory=set)
     keep_alive_timestamp: int = int(time.time())
 
     def modify_life_cycle(self, life_cycle: "LifeCycleEnum") -> bool:

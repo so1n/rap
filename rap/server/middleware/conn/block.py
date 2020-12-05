@@ -2,7 +2,7 @@ from typing import Set, Optional
 from rap.common.conn import ServerConnection
 from rap.manager.func_manager import func_manager
 
-from rap.middleware.base_middleware import BaseConnMiddleware
+from rap.server.middleware.base import BaseConnMiddleware
 
 
 class IpBlockMiddleware(BaseConnMiddleware):

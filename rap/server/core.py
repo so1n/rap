@@ -11,14 +11,14 @@ from rap.common.exceptions import RpcRunTimeError
 from rap.common.types import READER_TYPE, WRITER_TYPE, BASE_REQUEST_TYPE
 from rap.manager.client_manager import client_manager
 from rap.manager.func_manager import func_manager
-from rap.server.middleware.base_middleware import (
-    BaseMiddleware,
+from rap.server.middleware.base import (
     BaseConnMiddleware,
     BaseMsgMiddleware,
     BaseRawRequestMiddleware,
     BaseRequestDispatchMiddleware,
     BaseResponseMiddleware
 )
+from rap.common.middleware import BaseMiddleware
 from rap.server.requests import Request, RequestModel
 from rap.server.response import Response, ResponseModel
 

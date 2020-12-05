@@ -1,6 +1,6 @@
 import logging
 
-from rap.middleware.base_middleware import BaseRawRequestMiddleware
+from rap.server.middleware.base import BaseRawRequestMiddleware
 from rap.server.requests import RequestModel
 from rap.server.response import ResponseModel
 
