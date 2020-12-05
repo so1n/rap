@@ -1,10 +1,11 @@
 import asyncio
-import time
 
 from rap.client import Client
+from rap.client.middleware.crypto import CryptoMiddleware
 
 
-client = Client(secret_tuple=("test", "keyskeyskeyskeys"))  # enable secret
+client = Client()
+client.load_middleware([CryptoMiddleware("test", "keyskeyskeyskeys")])
 
 
 # in register, must use async def...

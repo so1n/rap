@@ -1,6 +1,7 @@
 import asyncio
 
 from rap.server import Server
+from rap.server.middleware.request_dispatch.crypto import CryptoMiddleware
 
 
 async def async_sum(a: int, b: int) -> int:
@@ -16,9 +17,8 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
-    rpc_server = Server(
-        secret_dict={"test": "keyskeyskeyskeys"},  # enable secret
-    )
+    rpc_server = Server()
+    rpc_server.load_middleware([CryptoMiddleware({"test": "keyskeyskeyskeys"})])
     rpc_server.register(async_sum)
     server = loop.run_until_complete(rpc_server.create_server())
 
