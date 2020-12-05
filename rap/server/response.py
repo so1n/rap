@@ -20,6 +20,8 @@ class ResponseModel(object):
 
 
 class Response(object):
+    def __init__(self, timeout: Optional[int]):
+        self._timeout: Optional[int] = timeout
 
     @staticmethod
     async def response_handle(resp: ResponseModel) -> BASE_RESPONSE_TYPE:
@@ -38,7 +40,7 @@ class Response(object):
             response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_ERROR_RESPONSE, resp.msg_id, resp.header, error_response[1])
         return response_msg
 
-    async def response(self, conn: ServerConnection, resp: ResponseModel, timeout: Optional[int] = None):
+    async def __call__(self, conn: ServerConnection, resp: ResponseModel):
         resp.header["version"] = Constant.VERSION
         resp.header["user_agent"] = Constant.USER_AGENT
         logging.debug(f"resp: %s", resp)
@@ -46,7 +48,7 @@ class Response(object):
         response_msg = await self.response_handle(resp)
 
         try:
-            await conn.write(response_msg, timeout)
+            await conn.write(response_msg, self._timeout)
         except asyncio.TimeoutError:
             logging.error(f"response to {conn.peer} timeout. result:{resp.result}, error:{resp.exception}")
         except Exception as e:
