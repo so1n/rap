@@ -4,13 +4,14 @@ import logging
 import msgpack
 import random
 
-from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, cast, Dict, Optional, Tuple, Type
+from typing import Any, Callable, cast, Dict, List, Optional, Tuple, Type
 
+from rap.client.model import Request, Response
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
 from rap.common.exceptions import RPCError
+from rap.common.middleware import BaseMiddleware
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.common.utlis import Constant, gen_random_str_id
 
@@ -39,14 +40,6 @@ class AsyncIteratorCall:
         response: Response = await self._client.msg_request(self._method, *self._args, call_id=self._call_id)
         self._call_id = response.body["call_id"]
         return response.body["result"]
-
-
-@dataclass()
-class Response(object):
-    num: int
-    msg_id: int
-    header: dict
-    body: Any
 
 
 class Client:
@@ -147,6 +140,14 @@ class Client:
                 exc_dict[class_.status_code] = class_
         return exc_dict
 
+    def load_middleware(self, middleware_list: List[BaseMiddleware]):
+        for middleware in reversed(middleware_list):
+            if isinstance(middleware, BaseMiddleware):
+                middleware.load_sub_middleware(self._real_base_request)
+                self._real_base_request = middleware
+            else:
+                raise RuntimeError(f'f{middleware} must be instance {BaseMiddleware}')
+
     async def _listen(self):
         """listen server msg"""
         logging.debug(f"listen:%s start", self._conn)
@@ -167,7 +168,8 @@ class Client:
         """send declare msg and init client id"""
         body: dict = {}
         self._client_id = self._declare_client_id
-        response = await self._base_request(Constant.DECLARE_REQUEST, {}, body)
+        request: Request = Request(Constant.DECLARE_REQUEST, body)
+        response = await self._base_request(request)
         if response.num != Constant.DECLARE_RESPONSE and response.body != body:
             raise RPCError("declare response error")
         client_id = response.body.get("client_id")
@@ -179,29 +181,38 @@ class Client:
     async def _drop_life_cycle(self):
         """send drop msg"""
         call_id: str = gen_random_str_id(8)
-        response = await self._base_request(Constant.DROP_REQUEST, {}, {"call_id": call_id})
+        request: Request = Request(Constant.DROP_REQUEST, {"call_id": call_id})
+        response = await self._base_request(request)
         if response.num != Constant.DROP_RESPONSE and response.body.get("call_id", "") != call_id:
             logging.warning("drop response error")
         else:
             logging.info("drop response success")
 
     # request&response
-    async def _base_request(self, request_num: int, header: dict, body: Any) -> Response:
+    async def _base_request(self, request: Request) -> Response:
+        """check conn and header"""
         if self._conn.is_closed():
             raise ConnectionError("The connection has been closed, please call connect to create connection")
+
+        def set_header_value(header_key: str, header_Value: Any):
+            """set header value"""
+            if header_key not in request.header:
+                request.header[header_key] = header_Value
+
+        set_header_value("client_id", self._client_id)
+        set_header_value("version", Constant.VERSION)
+        set_header_value("user_agent", Constant.USER_AGENT)
+        return await self._real_base_request(request)
+
+    async def _real_base_request(self, request: Request) -> Response:
+        """gen msg id, send and recv response"""
         msg_id: int = self._msg_id + 1
         # Avoid too big numbers
         if msg_id > 65535:
             msg_id = 1
         self._msg_id = msg_id
 
-        # set header value
-        if "client_id" not in header:
-            header["client_id"] = self._client_id
-        header["version"] = Constant.VERSION
-        header["user_agent"] = Constant.USER_AGENT
-
-        request: BASE_REQUEST_TYPE = (request_num, msg_id, header, body)
+        request: BASE_REQUEST_TYPE = (request.num, msg_id, request.header, request.body)
         try:
             await self._conn.write(request)
             logging.debug(f"send:%s to %s", request, self._conn.connection_info)
@@ -219,6 +230,7 @@ class Client:
         finally:
             if msg_id in self._future_dict:
                 del self._future_dict[msg_id]
+
 
     async def _base_response(self):
         """recv server msg handle"""
@@ -265,9 +277,8 @@ class Client:
 
     async def msg_request(self, method, *args, call_id=-1) -> Response:
         """msg request handle"""
-        response: Response = await self._base_request(
-            Constant.MSG_REQUEST, {}, {"call_id": call_id, "method_name": method, "param": args}
-        )
+        request: Request = Request(Constant.MSG_REQUEST, {"call_id": call_id, "method_name": method, "param": args})
+        response: Response = await self._base_request(request)
         if response.num != Constant.MSG_RESPONSE:
             raise RPCError("request num error")
         if "exc" in response.body:
