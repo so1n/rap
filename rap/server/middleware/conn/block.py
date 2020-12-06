@@ -2,21 +2,21 @@ import ipaddress
 from typing import List, Set, Optional
 
 from rap.common.conn import ServerConnection
+from rap.manager.redis_manager import redis_manager
 from rap.server.middleware.base import BaseConnMiddleware
 
 
 class IpBlockMiddleware(BaseConnMiddleware):
-    def __init__(self, allow_set: Optional[set] = None, block_set: Optional[Set] = None):
-        self.block_set: Set[str] = block_set if block_set else set()
-        self.allow_set: Set[str] = allow_set if allow_set else set()
-
+    def __init__(self):
         self.register(self._add_allow_ip)
         self.register(self._add_block_ip)
         self.register(self._remove_allow_ip)
         self.register(self._remove_block_ip)
         self.register(self._get_allow_ip)
         self.register(self._get_block_ip)
-        super().__init__()
+
+        self.block_key: str = redis_manager.namespace + 'block_ip'
+        self.allow_key: str = redis_manager.namespace + 'allow_ip'
 
     @staticmethod
     def ip_handle(ip: str) -> List[str]:
@@ -26,30 +26,34 @@ class IpBlockMiddleware(BaseConnMiddleware):
             ip_list = [ip for ip in ip_network.hosts()]
         return ip_list
 
-    def _add_allow_ip(self, ip: str):
-        self.allow_set.update(self.ip_handle(ip))
+    async def _add_allow_ip(self, ip: str):
+        ip_list = self.ip_handle(ip)
+        await redis_manager.redis_pool.sadd(self.allow_key, ip_list[0], ip_list[1:])
 
-    def _add_block_ip(self, ip: str):
-        self.block_set.update(self.ip_handle(ip))
+    async def _add_block_ip(self, ip: str):
+        ip_list = self.ip_handle(ip)
+        await redis_manager.redis_pool.sadd(self.block_key, ip_list[0], ip_list[1:])
 
-    def _remove_allow_ip(self, ip: str):
-        self.allow_set.difference(self.ip_handle(ip))
+    async def _remove_allow_ip(self, ip: str):
+        ip_list = self.ip_handle(ip)
+        await redis_manager.redis_pool.srem(self.allow_key, ip_list[0], ip_list[1:])
 
-    def _remove_block_ip(self, ip: str):
-        self.block_set.difference(self.ip_handle(ip))
+    async def _remove_block_ip(self, ip: str):
+        ip_list = self.ip_handle(ip)
+        await redis_manager.redis_pool.srem(self.block_key, ip_list[0], ip_list[1:])
 
-    def _get_allow_ip(self):
-        return self.allow_set
+    async def _get_allow_ip(self) -> List[str]:
+        return [ip async for ip in redis_manager.redis_pool.isscan(self.allow_key)]
 
-    def _get_block_ip(self):
-        return self.block_set
+    async def _get_block_ip(self) -> List[str]:
+        return [ip async for ip in redis_manager.redis_pool.isscan(self.block_key)]
 
     async def dispatch(self, conn: ServerConnection):
         ip: str = conn.peer[0]
-        if self.allow_set:
-            if ip not in self.allow_set:
-                await conn.await_close()
+        is_allow: int = await redis_manager.redis_pool.sismember(self.allow_key, ip)
+        if is_allow:
+            await self.call_next(conn)
         else:
-            if ip in self.block_set:
+            is_block: int = await redis_manager.redis_pool.sismember(self.block_key, ip)
+            if is_block:
                 await conn.await_close()
-        await self.call_next(conn)
