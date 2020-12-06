@@ -2,7 +2,7 @@ import asyncio
 from typing import Iterator
 
 from rap.server import Server
-from rap.server.middleware.conn.access import AccessConnMiddleware
+from rap.server.middleware.conn.conn_limit import ConnLimitMiddleware
 from rap.server.middleware.msg import AccessMsgMiddleware
 from rap.server.middleware.raw_request import AccessMiddleware
 from rap.server.middleware.request_dispatch.access import AccessMiddleware as AccessRequestDispatchMiddleware
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     rpc_server = Server()
     rpc_server.load_middleware(
         [
-            AccessConnMiddleware(), AccessMsgMiddleware(), AccessMiddleware(), AccessRequestDispatchMiddleware(),
+            ConnLimitMiddleware(), AccessMsgMiddleware(), AccessMiddleware(), AccessRequestDispatchMiddleware(),
             PrintResultMiddleware()
         ]
     )
