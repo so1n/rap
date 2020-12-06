@@ -1,14 +1,14 @@
 from typing import Set, Optional
+
 from rap.common.conn import ServerConnection
 from rap.manager.func_manager import func_manager
-
 from rap.server.middleware.base import BaseConnMiddleware
 
 
 class IpBlockMiddleware(BaseConnMiddleware):
     def __init__(self, allow_set: Optional[set] = None, block_set: Optional[Set] = None):
-        self.block_set: Set[str] = block_set if block_set else None
-        self.allow_set: Set[str] = allow_set if allow_set else None
+        self.block_set: Set[str] = block_set if block_set else set()
+        self.allow_set: Set[str] = allow_set if allow_set else set()
 
         func_manager.register(self._add_allow_ip, "_root_add_allow_ip")
         func_manager.register(self._add_block_ip, "_root_add_block_ip")
