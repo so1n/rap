@@ -2,7 +2,6 @@ import ipaddress
 from typing import List, Set, Optional
 
 from rap.common.conn import ServerConnection
-from rap.manager.func_manager import func_manager
 from rap.server.middleware.base import BaseConnMiddleware
 
 
@@ -11,12 +10,12 @@ class IpBlockMiddleware(BaseConnMiddleware):
         self.block_set: Set[str] = block_set if block_set else set()
         self.allow_set: Set[str] = allow_set if allow_set else set()
 
-        func_manager.register(self._add_allow_ip, "_root_add_allow_ip")
-        func_manager.register(self._add_block_ip, "_root_add_block_ip")
-        func_manager.register(self._remove_allow_ip, "_root_remove_allow_ip")
-        func_manager.register(self._remove_block_ip, "_root_remove_block_ip")
-        func_manager.register(self._get_allow_ip, "_root_get_allow_ip")
-        func_manager.register(self._get_block_ip, "_root_get_block_ip")
+        self.register(self._add_allow_ip)
+        self.register(self._add_block_ip)
+        self.register(self._remove_allow_ip)
+        self.register(self._remove_block_ip)
+        self.register(self._get_allow_ip)
+        self.register(self._get_block_ip)
         super().__init__()
 
     @staticmethod
