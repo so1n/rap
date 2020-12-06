@@ -5,6 +5,7 @@ from rap.common.utlis import Constant, MISS_OBJECT, gen_random_time_id
 from rap.common.crypto import Crypto
 from rap.common.exceptions import AuthError, ServerError
 from rap.manager.crypto_manager import crypto_manager
+from rap.manager.redis_manager import redis_manager
 from rap.server.middleware.base import BaseRequestDispatchMiddleware
 from rap.server.requests import RequestModel
 from rap.server.response import ResponseModel
@@ -13,18 +14,7 @@ from rap.server.response import ResponseModel
 class CryptoMiddleware(BaseRequestDispatchMiddleware):
     def __init__(self, secret_dict: Dict[str, str]):
         crypto_manager.load_aes_key_dict(secret_dict)
-        # TODO redis
-        self._nonce_set: set = set()
-
-    def _body_handle(self, body: dict):
-        timestamp: int = (body.get("timestamp", 0))
-        if (int(time.time()) - timestamp) > 60:
-            raise ServerError("timeout error")
-        nonce: str = body.get("nonce", "")
-        if nonce in self._nonce_set:
-            raise ServerError("nonce error")
-        else:
-            self._nonce_set.add(nonce)
+        self._nonce_key: str = redis_manager.namespace + 'nonce'
 
     async def dispatch(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
         if type(request.body) is bytes:
@@ -45,7 +35,16 @@ class CryptoMiddleware(BaseRequestDispatchMiddleware):
                 return response
 
             try:
-                self._body_handle(request.body)
+                timestamp: int = (request.body.get("timestamp", 0))
+                if (int(time.time()) - timestamp) > 60:
+                    response.exception = ServerError("timeout error")
+                    return response
+                nonce: str = request.body.get("nonce", "")
+                if await redis_manager.redis_pool.sismember(self._nonce_key, nonce):
+                    response.exception = ServerError("nonce error")
+                    return response
+                else:
+                    await redis_manager.redis_pool.sadd(self._nonce_key, nonce)
                 request.body = request.body['body']
             except Exception as e:
                 response.exception = e
