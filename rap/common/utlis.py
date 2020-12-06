@@ -4,7 +4,11 @@ import string
 import sys
 import time
 
-__all__ = ["get_event_loop", "Constant", "MISS_OBJECT", "gen_random_time_id", "gen_random_str_id", "parse_error"]
+from dataclasses import dataclass
+
+__all__ = [
+    "get_event_loop", "Constant", "Event", "MISS_OBJECT", "gen_random_time_id", "gen_random_str_id", "parse_error"
+]
 
 from typing import Optional, Tuple
 
@@ -26,6 +30,14 @@ class Constant(object):
     SERVER_EVENT: int = 301
     CLIENT_EVENT_RESPONSE: int = 401
     SERVER_ERROR_RESPONSE: int = 501
+
+    EVENT_CLOSE_CONN: str = 'event_close_conn'
+
+
+@dataclass()
+class Event(object):
+    event_name: str
+    event_info: str
 
 
 def _get_event_loop():
