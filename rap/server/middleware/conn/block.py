@@ -1,5 +1,5 @@
 import ipaddress
-from typing import List, Set, Optional
+from typing import List
 
 from rap.common.conn import ServerConnection
 from rap.manager.redis_manager import redis_manager
@@ -50,10 +50,13 @@ class IpBlockMiddleware(BaseConnMiddleware):
 
     async def dispatch(self, conn: ServerConnection):
         ip: str = conn.peer[0]
-        is_allow: int = await redis_manager.redis_pool.sismember(self.allow_key, ip)
-        if is_allow:
-            await self.call_next(conn)
+        enable_allow: int = await redis_manager.redis_pool.scard(self.allow_key)
+        if enable_allow:
+            is_allow: int = await redis_manager.redis_pool.sismember(self.allow_key, ip)
+            if not is_allow:
+                await conn.await_close()
         else:
             is_block: int = await redis_manager.redis_pool.sismember(self.block_key, ip)
             if is_block:
                 await conn.await_close()
+        await self.call_next(conn)
