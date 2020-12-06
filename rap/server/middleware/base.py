@@ -1,10 +1,18 @@
+from abc import ABC
 from typing import Callable, Union
 
 from rap.common.conn import ServerConnection
-from rap.common.middleware import BaseMiddleware
+from rap.common.middleware import BaseMiddleware as _BaseMiddleware
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
+from rap.manager.func_manager import func_manager
 from rap.server.requests import RequestModel
 from rap.server.response import ResponseModel
+
+
+class BaseMiddleware(_BaseMiddleware, ABC):
+    @staticmethod
+    def register(func: Callable, is_root: bool = True, group: str = 'middleware'):
+        func_manager.register(func, is_root=is_root, group=group)
 
 
 class BaseConnMiddleware(BaseMiddleware):
