@@ -20,7 +20,7 @@ class ResponseModel(object):
 
 
 class Response(object):
-    def __init__(self, timeout: Optional[int]):
+    def __init__(self, timeout: Optional[int] = None):
         self._timeout: Optional[int] = timeout
 
     @staticmethod
