@@ -1,6 +1,7 @@
 import logging
 
 from rap.common.conn import ServerConnection
+from rap.common.utlis import Constant, Event
 from rap.manager.redis_manager import redis_manager
 from rap.server.middleware.base import BaseConnMiddleware
 from rap.server.response import ResponseModel, Response
@@ -20,7 +21,9 @@ class ConnLimitMiddleware(BaseConnMiddleware):
             logging.error(f"Currently exceeding the maximum number of connections limit, close {conn.peer}")
             await Response()(
                 conn,
-                ResponseModel(event=("close conn", "Currently exceeding the maximum number of connections limit")),
+                ResponseModel(
+                    body=Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of connections limit")
+                )
             )
             await conn.await_close()
         else:
@@ -50,7 +53,9 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
             logging.error(f"Currently exceeding the maximum number of ip conn limit, close {conn.peer}")
             await Response()(
                 conn,
-                ResponseModel(event=("close conn", "Currently exceeding the maximum number of ip conn limit")),
+                ResponseModel(
+                    body=Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of ip conn limit")
+                ),
             )
             await conn.await_close()
         else:
