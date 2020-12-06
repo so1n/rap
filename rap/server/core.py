@@ -9,6 +9,7 @@ from typing import Callable, List, Optional
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import RpcRunTimeError
 from rap.common.types import READER_TYPE, WRITER_TYPE, BASE_REQUEST_TYPE
+from rap.common.utlis import Constant, Event
 from rap.manager.client_manager import client_manager
 from rap.manager.func_manager import func_manager
 from rap.server.middleware.base import (
@@ -96,7 +97,7 @@ class Server(object):
                 request: Optional[BASE_REQUEST_TYPE] = await conn.read(self._keep_alive)
             except asyncio.TimeoutError:
                 logging.error(f"recv data from {conn.peer} timeout. close conn")
-                await self._response(conn, ResponseModel(event=("close conn", "keep alive timeout")))
+                await self._response(conn, ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "keep alive timeout")))
                 break
             except IOError as e:
                 logging.debug(f"close conn:%s info:%s", conn.peer, e)
@@ -106,7 +107,7 @@ class Server(object):
                 conn.set_reader_exc(e)
                 raise e
             if request is None:
-                await self._response(conn, ResponseModel(event=("close conn", "raw_request is empty")))
+                await self._response(conn, ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "raw_request is empty")))
                 continue
             try:
                 request_num, msg_id, header, body = request
@@ -115,7 +116,7 @@ class Server(object):
                 asyncio.ensure_future(self.request_handle(conn, request_model))
             except Exception as e:
                 logging.error(f"{conn.peer} send bad msg:{request}, error:{e}")
-                await self._response(conn, ResponseModel(event=("close conn", "protocol error")))
+                await self._response(conn, ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "protocol error")))
                 break
 
         if not conn.is_closed():
@@ -128,4 +129,4 @@ class Server(object):
             await self._response(conn, resp_model)
         except Exception as e:
             logging.exception(f"raw_request handle error e")
-            await self._response(conn, ResponseModel(exception=RpcRunTimeError(str(e))))
+            await self._response(conn, ResponseModel(body=RpcRunTimeError(str(e))))
