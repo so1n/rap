@@ -131,3 +131,10 @@ class RedisManager(object):
             await self._conn_pool.wait_closed()
         else:
             logging.warning(f"{self.__class__.__name__} has been closed")
+
+    @property
+    def namespace(self):
+        return self._namespace
+
+
+redis_manager: RedisManager = RedisManager()
