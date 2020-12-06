@@ -53,7 +53,6 @@ class Request(object):
         }
         self.client_model: "Optional[ClientModel]" = None
 
-
     async def before_dispatch(self, request: RequestModel) -> ResponseModel:
         logging.debug(f"get request data:%s from %s", request, request.conn.peer)
         response_num: Optional[int] = self._response_num_dict.get(request.request_num, Constant.SERVER_ERROR_RESPONSE)
@@ -64,7 +63,7 @@ class Request(object):
         # check type_id
         if response_num is Constant.SERVER_ERROR_RESPONSE:
             logging.error(f"parse request data: {request} from {request.conn.peer} error")
-            response.exception = ServerError("type_id error")
+            response.body = ServerError("type_id error")
             return response
 
         # check client_model
@@ -74,13 +73,13 @@ class Request(object):
             client_id = request.header.get("client_id", None)
             client_model = client_manager.get_client_model(client_id)
             if client_model is MISS_OBJECT:
-                response.exception = AuthError("The current client id has not been registered")
+                response.body = AuthError("The current client id has not been registered")
                 return response
 
         # check life_cycle
         new_life_cycle = self._life_cycle_dict.get(response_num, MISS_OBJECT)
         if new_life_cycle is MISS_OBJECT or not client_model.modify_life_cycle(new_life_cycle):
-            response.exception = LifeCycleError()
+            response.body = LifeCycleError()
             return response
 
         client_model.keep_alive_timestamp = int(time.time())
@@ -91,41 +90,40 @@ class Request(object):
         # dispatch
         if response.response_num == Constant.DECLARE_RESPONSE:
             client_manager.create_client_model(request.client_model)
-            response.result = {"client_id": request.client_model.client_id}
+            response.body = {"client_id": request.client_model.client_id}
         elif response.response_num == Constant.MSG_RESPONSE:
             try:
                 call_id: int = request.body["call_id"]
                 method_name: str = request.body["method_name"]
                 param: str = request.body["param"]
             except KeyError:
-                print(request.body)
-                response.exception = ParseError('body miss params')
+                response.body = ParseError('body miss params')
                 return response
 
             # root func only called by local client
             if method_name.startswith("_root_") and request.conn.peer[0] != "127.0.0.1":
-                response.exception = FuncNotFoundError(extra_msg=f'func name: {method_name}')
+                response.body = FuncNotFoundError(extra_msg=f'func name: {method_name}')
                 return response
             else:
                 method: Optional[Callable] = func_manager.func_dict.get(method_name)
                 if not method:
-                    response.exception = FuncNotFoundError(extra_msg=f'func name: {method_name}')
+                    response.body = FuncNotFoundError(extra_msg=f'func name: {method_name}')
                     return response
 
                 new_call_id, result = await self.msg_handle(request, call_id, method, param)
-                response.result = {"call_id": new_call_id, "method_name": method_name}
+                response.body = {"call_id": new_call_id, "method_name": method_name}
                 if isinstance(result, Exception):
                     exc, exc_info = parse_error(result)
                     if request.header.get("user_agent") == Constant.USER_AGENT:
-                        response.result.update({"exc": exc, "exc_info": exc_info})
+                        response.body.update({"exc": exc, "exc_info": exc_info})
                     else:
-                        response.result.update({"exc_info": exc_info})
+                        response.body.update({"exc_info": exc_info})
                 else:
-                    response.result["result"] = result
+                    response.body["result"] = result
         elif request.request_num == Constant.DROP_REQUEST:
             call_id = request.body["call_id"]
             client_manager.destroy_client_model(request.client_model.client_id)
-            response.result = {"call_id": call_id, "result": 1}
+            response.body = {"call_id": call_id, "result": 1}
         return response
 
     async def msg_handle(self, request: RequestModel, call_id: int, func: Callable, param: str) -> Tuple[int, Any]:
