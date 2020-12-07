@@ -231,7 +231,6 @@ class Client:
             if msg_id in self._future_dict:
                 del self._future_dict[msg_id]
 
-
     async def _base_response(self):
         """recv server msg handle"""
         try:

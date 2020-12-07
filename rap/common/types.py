@@ -12,7 +12,7 @@ READER_TYPE = asyncio.streams.StreamReader
 WRITER_TYPE = asyncio.streams.StreamWriter
 UNPACKER_TYPE = msgpack.Unpacker
 
-_CAN_JSON_TYPE_SET: Set[type] = {bool, dict, float, int, list, str, tuple, type(None)}
+_CAN_JSON_TYPE_SET: Set[type] = {bool, dict, float, int, list, str, tuple, type(None), None}
 
 
 def parse_typing(_type: Type) -> Union[List[Type], Type]:

@@ -6,12 +6,12 @@ from rap.common.crypto import Crypto
 from rap.common.exceptions import AuthError, ServerError
 from rap.manager.crypto_manager import crypto_manager
 from rap.manager.redis_manager import redis_manager
-from rap.server.middleware.base import BaseRequestDispatchMiddleware
+from rap.server.middleware.base import BaseRequestMiddleware
 from rap.server.requests import RequestModel
 from rap.server.response import ResponseModel
 
 
-class CryptoMiddleware(BaseRequestDispatchMiddleware):
+class CryptoMiddleware(BaseRequestMiddleware):
     def __init__(self, secret_dict: Dict[str, str]):
         crypto_manager.load_aes_key_dict(secret_dict)
         self._nonce_key: str = redis_manager.namespace + 'nonce'

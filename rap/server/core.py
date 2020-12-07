@@ -15,8 +15,7 @@ from rap.manager.func_manager import func_manager
 from rap.server.middleware.base import (
     BaseConnMiddleware,
     BaseMsgMiddleware,
-    BaseRawRequestMiddleware,
-    BaseRequestDispatchMiddleware,
+    BaseRequestMiddleware,
     BaseResponseMiddleware
 )
 from rap.common.middleware import BaseMiddleware
@@ -58,10 +57,7 @@ class Server(object):
             if isinstance(middleware, BaseConnMiddleware):
                 middleware.load_sub_middleware(self._conn_handle)
                 self._conn_handle = middleware
-            elif isinstance(middleware, BaseRawRequestMiddleware):
-                middleware.load_sub_middleware(self._request.before_dispatch)
-                self._request.before_dispatch = middleware
-            elif isinstance(middleware, BaseRequestDispatchMiddleware):
+            elif isinstance(middleware, BaseRequestMiddleware):
                 middleware.load_sub_middleware(self._request.dispatch)
                 self._request.dispatch = middleware
             elif isinstance(middleware, BaseMsgMiddleware):
@@ -125,7 +121,7 @@ class Server(object):
 
     async def request_handle(self, conn: ServerConnection, request_model: RequestModel):
         try:
-            resp_model: ResponseModel = await self._request.before_dispatch(request_model)
+            resp_model: ResponseModel = await self._request.dispatch(request_model)
             await self._response(conn, resp_model)
         except Exception as e:
             logging.exception(f"raw_request handle error e")
