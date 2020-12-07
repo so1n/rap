@@ -16,41 +16,44 @@ class CryptoMiddleware(BaseRequestMiddleware):
         crypto_manager.load_aes_key_dict(secret_dict)
         self._nonce_key: str = redis_manager.namespace + 'nonce'
 
-    async def dispatch(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
+    async def dispatch(self, request: RequestModel) -> ResponseModel:
+        print(request, type(request.body))
+        response_num: int = self.response_num_dict.get(request.request_num, Constant.SERVER_ERROR_RESPONSE)
+        response: "ResponseModel" = ResponseModel(response_num=response_num, msg_id=request.msg_id)
         if type(request.body) is bytes:
-            if response.response_num == Constant.DECLARE_RESPONSE:
+            if request.request_num == Constant.DECLARE_REQUEST:
                 client_id: str = request.header['client_id']
                 crypto: Crypto = crypto_manager.get_crypto_by_key_id(client_id)
             else:
-                client_id: str = request.client_model.client_id
+                client_id = request.header.get("client_id", None)
                 crypto: Crypto = crypto_manager.get_crypto_by_key(client_id)
             # check crypto
             if crypto == MISS_OBJECT:
-                response.exception = AuthError("crypto key error")
+                response.body = AuthError("crypto key error")
                 return response
             try:
                 request.body = crypto.decrypt_object(request.body)
             except Exception:
-                response.exception = AuthError("decrypt body error")
+                response.body = AuthError("decrypt body error")
                 return response
 
             try:
                 timestamp: int = (request.body.get("timestamp", 0))
                 if (int(time.time()) - timestamp) > 60:
-                    response.exception = ServerError("timeout error")
+                    response.body = ServerError("timeout error")
                     return response
                 nonce: str = request.body.get("nonce", "")
                 if await redis_manager.redis_pool.sismember(self._nonce_key, nonce):
-                    response.exception = ServerError("nonce error")
+                    response.body = ServerError("nonce error")
                     return response
                 else:
                     await redis_manager.redis_pool.sadd(self._nonce_key, nonce)
                 request.body = request.body['body']
             except Exception as e:
-                response.exception = e
+                response.body = e
                 return response
 
-            response: ResponseModel = await self.call_next(request, response)
+            response: ResponseModel = await self.call_next(request)
             if response.body:
                 response.body.update(dict(timestamp=int(time.time()), nonce=gen_random_time_id()))
                 response.body = crypto.encrypt_object(response.body)
@@ -58,4 +61,4 @@ class CryptoMiddleware(BaseRequestMiddleware):
                 crypto_manager.add_crypto(request.client_model.client_id)
             return response
         else:
-            return await self.call_next(request, response)
+            return await self.call_next(request)

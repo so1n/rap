@@ -20,15 +20,15 @@ class RedisManager(object):
         self.redis_pool: Optional["Redis"] = None
 
     def init(self, conn_pool: "ConnectionsPool", namespace: Optional[str] = None):
-        if conn_pool is None or self._conn_pool.closed:
-            logging.error("conn_pool is none or conn_pool not connect")
+        if conn_pool is None:
+            logging.error("conn_pool is none")
         elif self._conn_pool is not None and not self._conn_pool.closed:
+            logging.error(f"Init error, {self.__class__.__name__} already init")
+        else:
             self._conn_pool = conn_pool
             self.redis_pool = Redis(self._conn_pool)
             if namespace:
                 self._namespace = namespace
-        else:
-            logging.error(f"Init error, {self.__class__.__name__} already init")
 
     async def execute(self, command: str, *args: Any, **kwargs: Any) -> Optional[Any]:
         try:
