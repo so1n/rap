@@ -3,9 +3,8 @@ from typing import Iterator
 
 from rap.server import Server
 from rap.server.middleware.conn.conn_limit import ConnLimitMiddleware
-from rap.server.middleware.msg import AccessMsgMiddleware
-from rap.server.middleware.raw_request import AccessMiddleware
-from rap.server.middleware.request_dispatch.access import AccessMiddleware as AccessRequestDispatchMiddleware
+from rap.server.middleware.msg.access import AccessMsgMiddleware
+from rap.server.middleware.request.crypto import CryptoMiddleware
 from rap.server.middleware.response.print_result import PrintResultMiddleware
 
 
@@ -34,8 +33,7 @@ if __name__ == "__main__":
     rpc_server = Server()
     rpc_server.load_middleware(
         [
-            ConnLimitMiddleware(), AccessMsgMiddleware(), AccessMiddleware(), AccessRequestDispatchMiddleware(),
-            PrintResultMiddleware()
+            ConnLimitMiddleware(), AccessMsgMiddleware(), PrintResultMiddleware()
         ]
     )
     rpc_server.register(sync_sum)
