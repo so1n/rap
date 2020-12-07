@@ -13,7 +13,7 @@ class ConnLimitMiddleware(BaseConnMiddleware):
         self._conn_count: int = 0
         self.register(self.modify_max_conn)
 
-    def modify_max_conn(self, max_: int):
+    def modify_max_conn(self, max_: int) -> None:
         self._max_conn = max_
 
     async def dispatch(self, conn: ServerConnection):
@@ -41,10 +41,10 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
         self.register(self.modify_max_ip_max_conn)
         self.register(self.modify_ip_max_timeout)
 
-    def modify_max_ip_max_conn(self, ip_max: int):
+    def modify_max_ip_max_conn(self, ip_max: int) -> None:
         self._ip_max_conn = ip_max
 
-    def modify_ip_max_timeout(self, timeout: int):
+    def modify_ip_max_timeout(self, timeout: int) -> None:
         self._timeout = timeout
 
     async def dispatch(self, conn: ServerConnection):

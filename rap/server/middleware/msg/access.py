@@ -16,11 +16,12 @@ class AccessMsgMiddleware(BaseMsgMiddleware):
 
         try:
             call_id, result = await self.call_next(request, call_id, func, param)
-            status = True
+            if isinstance(result, Exception):
+                status = False
+            else:
+                status = True
         except Exception as e:
             logging.exception(e)
             result = ServerError("execute func error")
-        if isinstance(result, Exception):
-            status = False
         logging.info(f"func:{func}, time:{time.time() - start_time}, status:{status}")
         return call_id, result

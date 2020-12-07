@@ -41,21 +41,32 @@ class RequestModel(object):
 class Request(object):
     def __init__(self, run_timeout: int):
         self._run_timeout: int = run_timeout
-        self._response_num_dict: Dict[int, int] = {
-            Constant.DECLARE_REQUEST: Constant.DECLARE_RESPONSE,
-            Constant.MSG_REQUEST: Constant.MSG_RESPONSE,
-            Constant.DROP_REQUEST: Constant.DROP_RESPONSE,
+        self._request_num_dict: Dict[int, dict] = {
+            Constant.DECLARE_REQUEST: {
+                'func': self.declare_life_cycle,
+                'life_cycle': LifeCycleEnum.msg,
+                'response_num': Constant.DECLARE_RESPONSE,
+            },
+            Constant.MSG_REQUEST: {
+                'func': self.msg_life_cycle,
+                'life_cycle': LifeCycleEnum.msg,
+                'response_num': Constant.MSG_RESPONSE,
+            },
+            Constant.DROP_REQUEST: {
+                'func': self.drop_life_cycle,
+                'life_cycle': LifeCycleEnum.drop,
+                'response_num': Constant.DROP_REQUEST,
+            },
+            Constant.CLIENT_EVENT_RESPONSE: {
+                'func': self.event,
+                'life_cycle': LifeCycleEnum.msg,
+                'response_num': -1,
+            }
         }
-        self._life_cycle_dict: Dict[int, LifeCycleEnum] = {
-            Constant.DECLARE_RESPONSE: LifeCycleEnum.msg,
-            Constant.MSG_RESPONSE: LifeCycleEnum.msg,
-            Constant.DROP_RESPONSE: LifeCycleEnum.drop,
-        }
-        self.client_model: "Optional[ClientModel]" = None
 
-    async def before_dispatch(self, request: RequestModel) -> ResponseModel:
-        logging.debug(f"get request data:%s from %s", request, request.conn.peer)
-        response_num: Optional[int] = self._response_num_dict.get(request.request_num, Constant.SERVER_ERROR_RESPONSE)
+    async def dispatch(self, request: RequestModel) -> ResponseModel:
+        dispatch_dict: dict = self._request_num_dict.get(request.request_num, None)
+        response_num: int = dispatch_dict.get('response_num', Constant.SERVER_ERROR_RESPONSE)
 
         # create result_model
         response: "ResponseModel" = ResponseModel(response_num=response_num, msg_id=request.msg_id)
@@ -77,54 +88,60 @@ class Request(object):
                 return response
 
         # check life_cycle
-        new_life_cycle = self._life_cycle_dict.get(response_num, MISS_OBJECT)
-        if new_life_cycle is MISS_OBJECT or not client_model.modify_life_cycle(new_life_cycle):
+        if not client_model.modify_life_cycle(dispatch_dict['life_cycle']):
             response.body = LifeCycleError()
             return response
 
         client_model.keep_alive_timestamp = int(time.time())
         request.client_model = client_model
-        return await self.dispatch(request, response)
+        return await dispatch_dict['func'](request, response)
 
-    async def dispatch(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
-        # dispatch
-        if response.response_num == Constant.DECLARE_RESPONSE:
-            client_manager.create_client_model(request.client_model)
-            response.body = {"client_id": request.client_model.client_id}
-        elif response.response_num == Constant.MSG_RESPONSE:
-            try:
-                call_id: int = request.body["call_id"]
-                method_name: str = request.body["method_name"]
-                param: str = request.body["param"]
-            except KeyError:
-                response.body = ParseError('body miss params')
-                return response
+    @staticmethod
+    async def declare_life_cycle(request: RequestModel, response: ResponseModel) -> ResponseModel:
+        client_manager.create_client_model(request.client_model)
+        response.body = {"client_id": request.client_model.client_id}
+        return response
 
-            # root func only called by local client
-            if method_name.startswith("_root_") and request.conn.peer[0] != "127.0.0.1":
+    async def msg_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
+        try:
+            call_id: int = request.body["call_id"]
+            method_name: str = request.body["method_name"]
+            param: str = request.body["param"]
+        except KeyError:
+            response.body = ParseError('body miss params')
+            return response
+
+        # root func only called by local client
+        if method_name.startswith("_root_") and request.conn.peer[0] != "127.0.0.1":
+            response.body = FuncNotFoundError(extra_msg=f'func name: {method_name}')
+            return response
+        else:
+            method: Optional[Callable] = func_manager.func_dict.get(method_name)
+            if not method:
                 response.body = FuncNotFoundError(extra_msg=f'func name: {method_name}')
                 return response
-            else:
-                method: Optional[Callable] = func_manager.func_dict.get(method_name)
-                if not method:
-                    response.body = FuncNotFoundError(extra_msg=f'func name: {method_name}')
-                    return response
 
-                new_call_id, result = await self.msg_handle(request, call_id, method, param)
-                response.body = {"call_id": new_call_id, "method_name": method_name}
-                if isinstance(result, Exception):
-                    exc, exc_info = parse_error(result)
-                    if request.header.get("user_agent") == Constant.USER_AGENT:
-                        response.body.update({"exc": exc, "exc_info": exc_info})
-                    else:
-                        response.body.update({"exc_info": exc_info})
+            new_call_id, result = await self.msg_handle(request, call_id, method, param)
+            response.body = {"call_id": new_call_id, "method_name": method_name}
+            if isinstance(result, Exception):
+                exc, exc_info = parse_error(result)
+                if request.header.get("user_agent") == Constant.USER_AGENT:
+                    response.body.update({"exc": exc, "exc_info": exc_info})
                 else:
-                    response.body["result"] = result
-        elif request.request_num == Constant.DROP_REQUEST:
-            call_id = request.body["call_id"]
-            client_manager.destroy_client_model(request.client_model.client_id)
-            response.body = {"call_id": call_id, "result": 1}
+                    response.body.update({"exc_info": exc_info})
+            else:
+                response.body["result"] = result
         return response
+
+    @staticmethod
+    async def drop_life_cycle(request: RequestModel, response: ResponseModel) -> ResponseModel:
+        call_id = request.body["call_id"]
+        client_manager.destroy_client_model(request.client_model.client_id)
+        response.body = {"call_id": call_id, "result": 1}
+        return response
+
+    async def event(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
+        pass
 
     async def msg_handle(self, request: RequestModel, call_id: int, func: Callable, param: str) -> Tuple[int, Any]:
         user_agent: str = request.header.get("user_agent")

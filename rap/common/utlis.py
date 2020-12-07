@@ -17,7 +17,7 @@ _STR_LD = string.ascii_letters + string.digits
 
 
 class Constant(object):
-    VERSION: str = "0.5.2.2"
+    VERSION: str = "0.5.3"
     USER_AGENT: str = "Python3"
     SOCKET_RECV_SIZE: int = 1024 ** 1
 
@@ -32,6 +32,8 @@ class Constant(object):
     SERVER_ERROR_RESPONSE: int = 501
 
     EVENT_CLOSE_CONN: str = 'event_close_conn'
+    PING_EVENT: str = 'ping'
+    PONG_EVENT: str = 'pong'
 
 
 @dataclass()

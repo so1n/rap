@@ -20,12 +20,7 @@ class BaseConnMiddleware(BaseMiddleware):
         raise NotImplementedError
 
 
-class BaseRawRequestMiddleware(BaseMiddleware):
-    async def dispatch(self, request: BASE_REQUEST_TYPE) -> ResponseModel:
-        raise NotImplementedError
-
-
-class BaseRequestDispatchMiddleware(BaseMiddleware):
+class BaseRequestMiddleware(BaseMiddleware):
     async def dispatch(
             self, request: RequestModel, response: ResponseModel
     ) -> ResponseModel:
