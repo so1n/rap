@@ -4,7 +4,7 @@ import ssl
 
 import msgpack
 
-from typing import Callable, List, Optional
+from typing import Callable, Coroutine, List, Optional, Union
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import RpcRunTimeError
@@ -37,6 +37,8 @@ class Server(object):
         backlog: int = 1024,
         ssl_crt_path: Optional[str] = None,
         ssl_key_path: Optional[str] = None,
+        connect_call_back: List[Union[Callable, Coroutine]] = None,
+        close_call_back: List[Union[Callable, Coroutine]] = None,
     ):
         self._host: str = host
         self._port: int = port
@@ -46,11 +48,16 @@ class Server(object):
         self._request: Request = Request(run_timeout)
         self._response: Response = Response(timeout)
 
+        self._connect_callback: List[Union[Callable, Coroutine]] = connect_call_back
+        self._close_callback: List[Union[Callable, Coroutine]] = close_call_back
+
         self._ssl_context: Optional[ssl.SSLContext] = None
         if ssl_crt_path and ssl_key_path:
             self._ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             self._ssl_context.check_hostname = False
             self._ssl_context.load_cert_chain(ssl_crt_path, ssl_key_path)
+
+        self._server: Optional[asyncio.AbstractServer] = None
 
     def load_middleware(self, middleware_list: List[BaseMiddleware]):
         for middleware in reversed(middleware_list):
@@ -71,12 +78,28 @@ class Server(object):
     def register(func: Optional[Callable], name: Optional[str] = None):
         func_manager.register(func, name)
 
+    @staticmethod
+    async def run_callback(callback_list: List[Union[Callable, Coroutine]]):
+        for callback in callback_list:
+            if asyncio.iscoroutine(callback):
+                await callback
+            else:
+                await asyncio.get_event_loop().run_in_executor(None, callback)
+
     async def create_server(self) -> asyncio.AbstractServer:
+        await self.run_callback(self._connect_callback)
         logging.info(f"server running on {self._host}:{self._port}. use ssl:{bool(self._ssl_context)}")
         asyncio.ensure_future(client_manager.introspection())
-        return await asyncio.start_server(
+        self._server = await asyncio.start_server(
             self.conn_handle, self._host, self._port, ssl=self._ssl_context, backlog=self._backlog
         )
+        return self._server
+
+    async def wait_closed(self):
+        if self._server:
+            self._server.close()
+            await self._server.wait_closed()
+        await self.run_callback(self._close_callback)
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE):
         conn: ServerConnection = ServerConnection(
