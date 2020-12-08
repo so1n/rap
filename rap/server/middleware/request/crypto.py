@@ -17,7 +17,6 @@ class CryptoMiddleware(BaseRequestMiddleware):
         self._nonce_key: str = redis_manager.namespace + 'nonce'
 
     async def dispatch(self, request: RequestModel) -> ResponseModel:
-        print(request, type(request.body))
         response_num: int = self.response_num_dict.get(request.request_num, Constant.SERVER_ERROR_RESPONSE)
         response: "ResponseModel" = ResponseModel(response_num=response_num, msg_id=request.msg_id)
         if type(request.body) is bytes:

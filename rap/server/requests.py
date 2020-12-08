@@ -34,7 +34,6 @@ class RequestModel(object):
     msg_id: int
     header: dict
     body: Any
-    conn: ServerConnection
     client_model: Optional[ClientModel] = None
 
 
@@ -73,7 +72,7 @@ class Request(object):
 
         # check type_id
         if response_num is Constant.SERVER_ERROR_RESPONSE:
-            logging.error(f"parse request data: {request} from {request.conn.peer} error")
+            logging.error(f"parse request data: {request} from {request.header['_host']} error")
             response.body = ServerError("type_id error")
             return response
 
@@ -112,7 +111,7 @@ class Request(object):
             return response
 
         # root func only called by local client
-        if method_name.startswith("_root_") and request.conn.peer[0] != "127.0.0.1":
+        if method_name.startswith("_root_") and request.header['_host'] != "127.0.0.1":
             response.body = FuncNotFoundError(extra_msg=f'func name: {method_name}')
             return response
         else:

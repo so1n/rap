@@ -60,7 +60,7 @@ class Server(object):
         self._server: Optional[asyncio.AbstractServer] = None
 
     def load_middleware(self, middleware_list: List[BaseMiddleware]):
-        for middleware in reversed(middleware_list):
+        for middleware in middleware_list:
             if isinstance(middleware, BaseConnMiddleware):
                 middleware.load_sub_middleware(self._conn_handle)
                 self._conn_handle = middleware
@@ -130,7 +130,7 @@ class Server(object):
                 continue
             try:
                 request_num, msg_id, header, body = request
-                request_model: RequestModel = RequestModel(request_num, msg_id, header, body, conn)
+                request_model: RequestModel = RequestModel(request_num, msg_id, header, body)
                 request_model.header["_host"] = conn.peer
                 asyncio.ensure_future(self.request_handle(conn, request_model))
             except Exception as e:
