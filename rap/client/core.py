@@ -13,7 +13,7 @@ from rap.common.conn import Connection
 from rap.common.exceptions import RPCError
 from rap.common.middleware import BaseMiddleware
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
-from rap.common.utlis import Constant, gen_random_str_id
+from rap.common.utlis import Constant, Event, gen_random_str_id
 
 
 __all__ = ["Client"]
@@ -141,12 +141,12 @@ class Client:
         return exc_dict
 
     def load_middleware(self, middleware_list: List[BaseMiddleware]):
-        for middleware in reversed(middleware_list):
+        for middleware in middleware_list:
             if isinstance(middleware, BaseMiddleware):
                 middleware.load_sub_middleware(self._real_base_request)
                 self._real_base_request = middleware
             else:
-                raise RuntimeError(f'f{middleware} must be instance {BaseMiddleware}')
+                raise RuntimeError(f'{middleware} must be instance {BaseMiddleware}')
 
     async def _listen(self):
         """listen server msg"""
@@ -188,8 +188,7 @@ class Client:
         else:
             logging.info("drop response success")
 
-    # request&response
-    async def _base_request(self, request: Request) -> Response:
+    def before_request_handle(self, request: Request):
         """check conn and header"""
         if self._conn.is_closed():
             raise ConnectionError("The connection has been closed, please call connect to create connection")
@@ -202,16 +201,13 @@ class Client:
         set_header_value("client_id", self._client_id)
         set_header_value("version", Constant.VERSION)
         set_header_value("user_agent", Constant.USER_AGENT)
+
+    # request&response
+    async def _base_request(self, request: Request) -> Response:
+        self.before_request_handle(request)
         return await self._real_base_request(request)
 
-    async def _real_base_request(self, request: Request) -> Response:
-        """gen msg id, send and recv response"""
-        msg_id: int = self._msg_id + 1
-        # Avoid too big numbers
-        if msg_id > 65535:
-            msg_id = 1
-        self._msg_id = msg_id
-
+    async def _send(self, request: Request, msg_id: int):
         request: BASE_REQUEST_TYPE = (request.num, msg_id, request.header, request.body)
         try:
             await self._conn.write(request)
@@ -221,6 +217,17 @@ class Client:
             raise e
         except Exception as e:
             raise e
+
+    async def _real_base_request(self, request: Request) -> Response:
+        """gen msg id, send and recv response"""
+        msg_id: int = self._msg_id + 1
+        # Avoid too big numbers
+        if msg_id > 65535:
+            msg_id = 1
+        self._msg_id = msg_id
+
+        await self._send(request, msg_id)
+
         try:
             self._future_dict[msg_id] = asyncio.Future()
             try:
@@ -265,8 +272,13 @@ class Client:
         # server event msg handle
         if response_num == Constant.SERVER_EVENT:
             event, event_info = body
-            if event == "close conn":
+            if event == Constant.EVENT_CLOSE_CONN:
                 raise RuntimeError(f"recv close conn event, event info:{event_info}")
+            elif event == Constant.PING_EVENT:
+                request: Request = Request(Constant.CLIENT_EVENT_RESPONSE, Event(Constant.PONG_EVENT, '').to_tuple())
+                self.before_request_handle(request)
+                await self._send(request, msg_id=-1)
+                return
 
         # set msg to future_dict's `future`
         if msg_id not in self._future_dict:

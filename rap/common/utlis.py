@@ -41,6 +41,9 @@ class Event(object):
     event_name: str
     event_info: str
 
+    def to_tuple(self) -> Tuple[str, str]:
+        return self.event_name, self.event_info
+
 
 def _get_event_loop():
     if sys.version_info >= (3, 7):

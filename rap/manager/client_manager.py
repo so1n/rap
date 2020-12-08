@@ -20,6 +20,7 @@ class ClientModel(object):
     generator_dict: Dict[int, Generator] = field(default_factory=dict)
     _life_cycle: "LifeCycleEnum" = LifeCycleEnum.declare
     keep_alive_timestamp: int = int(time.time())
+    ping_event_future: Optional[asyncio.Future] = None
 
     def modify_life_cycle(self, life_cycle: "LifeCycleEnum") -> bool:
         now_life_cycle: "LifeCycleEnum" = self._life_cycle
@@ -56,25 +57,9 @@ class ClientManager(object):
         if client_id in self._client_dict:
             del self._client_dict[client_id]
 
-    async def _introspection(self):
-        if not self._client_dict:
-            return
-        now_timestamp: int = int(time.time())
-        count: int = 0
-        for client_id, client_model in self._client_dict.copy().items():
-            count += 1
-            if (now_timestamp - client_model.keep_alive_timestamp) > 100:
-                logging.info(f"introspection: destroy client_id: {client_id}")
-                self.destroy_client_model(client_id)
-            if count >= 50:
-                count = 0
-                await asyncio.sleep(0.1)
-
-    async def introspection(self):
-        logging.info("introspection start")
-        while True:
-            await self._introspection()
-            await asyncio.sleep(10)
+    async def async_destroy_client_model(self, client_id: str, second: int = 10):
+        await asyncio.sleep(second)
+        self.destroy_client_model(client_id)
 
 
 client_manager: "ClientManager" = ClientManager()
