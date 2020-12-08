@@ -4,7 +4,6 @@ from typing import Iterator
 from rap.server import Server
 from rap.server.middleware.conn.conn_limit import ConnLimitMiddleware
 from rap.server.middleware.msg.access import AccessMsgMiddleware
-from rap.server.middleware.request.crypto import CryptoMiddleware
 from rap.server.middleware.response.print_result import PrintResultMiddleware
 
 

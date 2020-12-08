@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Callable, Dict, Union
+from typing import Callable, Dict, Optional, Union
 
 from rap.common.conn import ServerConnection
 from rap.common.middleware import BaseMiddleware as _BaseMiddleware
@@ -28,7 +28,7 @@ class BaseRequestMiddleware(BaseMiddleware):
         Constant.DROP_REQUEST: Constant.DROP_RESPONSE,
     }
 
-    async def dispatch(self, request: RequestModel) -> ResponseModel:
+    async def dispatch(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
         raise NotImplementedError
 
 

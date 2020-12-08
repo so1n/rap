@@ -1,5 +1,5 @@
 import time
-from typing import Dict
+from typing import Dict, Optional
 
 from rap.common.utlis import Constant, MISS_OBJECT, gen_random_time_id
 from rap.common.crypto import Crypto
@@ -16,11 +16,9 @@ class CryptoMiddleware(BaseRequestMiddleware):
         crypto_manager.load_aes_key_dict(secret_dict)
         self._nonce_key: str = redis_manager.namespace + "nonce"
 
-    async def dispatch(self, request: RequestModel) -> ResponseModel:
-        response_num: int = self.response_num_dict.get(request.request_num, Constant.SERVER_ERROR_RESPONSE)
-        response: "ResponseModel" = ResponseModel(response_num=response_num, msg_id=request.msg_id)
+    async def dispatch(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
         if type(request.body) is bytes:
-            if request.request_num == Constant.DECLARE_REQUEST:
+            if request.num == Constant.DECLARE_REQUEST:
                 client_id: str = request.header["client_id"]
                 crypto: Crypto = crypto_manager.get_crypto_by_key_id(client_id)
             else:
@@ -52,12 +50,12 @@ class CryptoMiddleware(BaseRequestMiddleware):
                 response.body = e
                 return response
 
-            response: ResponseModel = await self.call_next(request)
+            response: ResponseModel = await self.call_next(request, response)
             if response.body:
                 response.body.update(dict(timestamp=int(time.time()), nonce=gen_random_time_id()))
                 response.body = crypto.encrypt_object(response.body)
-            if response.response_num == Constant.DECLARE_RESPONSE:
+            if response.num == Constant.DECLARE_RESPONSE:
                 crypto_manager.add_crypto(request.client_model.client_id)
             return response
         else:
-            return await self.call_next(request)
+            return await self.call_next(request, response)

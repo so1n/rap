@@ -4,14 +4,14 @@ from dataclasses import dataclass, field
 from typing import Any, Tuple, Optional
 
 from rap.common.conn import ServerConnection
-from rap.common.exceptions import BaseRapError
+from rap.common.exceptions import BaseRapError, ServerError
 from rap.common.types import BASE_RESPONSE_TYPE
 from rap.common.utlis import Constant, Event, parse_error
 
 
 @dataclass()
 class ResponseModel(object):
-    response_num: int = Constant.MSG_RESPONSE
+    num: int = Constant.MSG_RESPONSE
     msg_id: int = -1
     header: dict = field(default_factory=lambda: {"status_code": 200})
     body: Any = None
@@ -35,9 +35,14 @@ class Response(object):
         elif isinstance(resp.body, Event):
             response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_EVENT, resp.msg_id, resp.header, resp.body.to_tuple())
         elif resp.body is not None:
-            response_msg: BASE_RESPONSE_TYPE = (resp.response_num, resp.msg_id, resp.header, resp.body)
+            response_msg: BASE_RESPONSE_TYPE = (resp.num, resp.msg_id, resp.header, resp.body)
         else:
-            return None
+            exception: BaseRapError = ServerError("not response data")
+            error_response: Optional[Tuple[str, str]] = parse_error(exception)
+            resp.header["status_code"] = exception.status_code
+            response_msg: BASE_RESPONSE_TYPE = (
+                Constant.SERVER_ERROR_RESPONSE, resp.msg_id, resp.header, error_response[1]
+            )
         return response_msg
 
     async def __call__(self, conn: ServerConnection, resp: ResponseModel) -> bool:
@@ -47,7 +52,7 @@ class Response(object):
         resp.header["user_agent"] = Constant.USER_AGENT
         logging.debug(f"resp: %s", resp)
 
-        response_msg = await self.response_handle(resp)
+        response_msg: BASE_RESPONSE_TYPE = await self.response_handle(resp)
         try:
             await conn.write(response_msg, self._timeout)
             return True
