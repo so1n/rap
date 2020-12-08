@@ -1,21 +1,23 @@
-### 0.5.6
+### 0.5.5
  - Feature: add server config
  
-### 0.5.5
- - description: Add more middleware
- - Feature: add called limit middleware
-
 ### 0.5.4
  - description: near-continuous availability and a high degree of reliability.
  - Feature: client support HA strategy
  - Feature: client support load balance
+ - Feature: server HA middleware
 
-### 0.5.3
- - description: remove aes and add aes middleware;
- - Feat: remove aes
- - Feat: add server/client aes middleware
+### 0.5.3[now]
+ - description: new middleware design&redis support
+ - Feat: server&client remove aes
+ - Feat: client add middleware feat
+ - Feat: server&client add aes middleware
+ - Feat: add server.response middleware
+ - Feat: middleware add redis support
+ - Feat: Ping&Pong, conn keep alive 
+ - Refactor: server.load_middleware
 
-### 0.5.2.2[now]
+### 0.5.2.2
  - description: Distinguish server exceptions and execution function exceptions; better log output
  - Refactor: Exceptions
  - Feat: Complete server exception
