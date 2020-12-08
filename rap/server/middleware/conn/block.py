@@ -15,14 +15,14 @@ class IpBlockMiddleware(BaseConnMiddleware):
         self.register(self._get_allow_ip)
         self.register(self._get_block_ip)
 
-        self.block_key: str = redis_manager.namespace + 'block_ip'
-        self.allow_key: str = redis_manager.namespace + 'allow_ip'
+        self.block_key: str = redis_manager.namespace + "block_ip"
+        self.allow_key: str = redis_manager.namespace + "allow_ip"
 
     @staticmethod
     def ip_handle(ip: str) -> List[str]:
         ip_list: List[str] = [ip]
-        if '/' in ip:
-            ip_network: 'ipaddress.ip_network' = ipaddress.ip_network(ip)
+        if "/" in ip:
+            ip_network: "ipaddress.ip_network" = ipaddress.ip_network(ip)
             ip_list = [ip for ip in ip_network.hosts()]
         return ip_list
 

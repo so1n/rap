@@ -17,9 +17,7 @@ __all__ = ["Connection", "ServerConnection"]
 
 
 class BaseConnection:
-    def __init__(
-        self, unpacker: UNPACKER_TYPE, timeout: int, pack_param: Optional[dict] = None
-    ):
+    def __init__(self, unpacker: UNPACKER_TYPE, timeout: int, pack_param: Optional[dict] = None):
         self._is_closed: bool = True
         self._pack_param: dict = pack_param if pack_param else dict()
         self._reader: Optional[READER_TYPE] = None

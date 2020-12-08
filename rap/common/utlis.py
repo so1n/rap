@@ -7,7 +7,13 @@ import time
 from dataclasses import dataclass
 
 __all__ = [
-    "get_event_loop", "Constant", "Event", "MISS_OBJECT", "gen_random_time_id", "gen_random_str_id", "parse_error"
+    "get_event_loop",
+    "Constant",
+    "Event",
+    "MISS_OBJECT",
+    "gen_random_time_id",
+    "gen_random_str_id",
+    "parse_error",
 ]
 
 from typing import Optional, Tuple
@@ -31,9 +37,9 @@ class Constant(object):
     CLIENT_EVENT_RESPONSE: int = 401
     SERVER_ERROR_RESPONSE: int = 501
 
-    EVENT_CLOSE_CONN: str = 'event_close_conn'
-    PING_EVENT: str = 'ping'
-    PONG_EVENT: str = 'pong'
+    EVENT_CLOSE_CONN: str = "event_close_conn"
+    PING_EVENT: str = "ping"
+    PONG_EVENT: str = "pong"
 
 
 @dataclass()

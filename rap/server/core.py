@@ -15,7 +15,7 @@ from rap.server.middleware.base import (
     BaseConnMiddleware,
     BaseMsgMiddleware,
     BaseRequestMiddleware,
-    BaseResponseMiddleware
+    BaseResponseMiddleware,
 )
 from rap.common.middleware import BaseMiddleware
 from rap.server.requests import Request, RequestModel
@@ -74,7 +74,7 @@ class Server(object):
                 self._response.response_handle = middleware
 
     @staticmethod
-    def register(func: Optional[Callable], name: Optional[str] = None, group: str = 'normal'):
+    def register(func: Optional[Callable], name: Optional[str] = None, group: str = "normal"):
         func_manager.register(func, name, group=group)
 
     @staticmethod
@@ -87,7 +87,7 @@ class Server(object):
             else:
                 await asyncio.get_event_loop().run_in_executor(None, callback)
 
-    async def create_server(self) -> 'Server':
+    async def create_server(self) -> "Server":
         await self.run_callback(self._connect_callback)
         self._server = await asyncio.start_server(
             self.conn_handle, self._host, self._port, ssl=self._ssl_context, backlog=self._backlog

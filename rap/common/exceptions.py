@@ -9,7 +9,7 @@ class BaseRapError(Exception):
         if message is None:
             message = self.message
         if extra_msg:
-            message += f'. {extra_msg}'
+            message += f". {extra_msg}"
         super().__init__(message)
 
 
@@ -61,4 +61,3 @@ class ServerError(BaseRapError):
 class CryptoError(BaseRapError):
     status_code: int = 509
     message: str = "crypto error"
-

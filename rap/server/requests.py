@@ -44,30 +44,30 @@ class Request(object):
         self._run_timeout: int = run_timeout
         self._request_num_dict: Dict[int, dict] = {
             Constant.DECLARE_REQUEST: {
-                'func': self.declare_life_cycle,
-                'life_cycle': LifeCycleEnum.msg,
-                'response_num': Constant.DECLARE_RESPONSE,
+                "func": self.declare_life_cycle,
+                "life_cycle": LifeCycleEnum.msg,
+                "response_num": Constant.DECLARE_RESPONSE,
             },
             Constant.MSG_REQUEST: {
-                'func': self.msg_life_cycle,
-                'life_cycle': LifeCycleEnum.msg,
-                'response_num': Constant.MSG_RESPONSE,
+                "func": self.msg_life_cycle,
+                "life_cycle": LifeCycleEnum.msg,
+                "response_num": Constant.MSG_RESPONSE,
             },
             Constant.DROP_REQUEST: {
-                'func': self.drop_life_cycle,
-                'life_cycle': LifeCycleEnum.drop,
-                'response_num': Constant.DROP_REQUEST,
+                "func": self.drop_life_cycle,
+                "life_cycle": LifeCycleEnum.drop,
+                "response_num": Constant.DROP_REQUEST,
             },
             Constant.CLIENT_EVENT_RESPONSE: {
-                'func': self.event,
-                'life_cycle': LifeCycleEnum.msg,
-                'response_num': -1,
-            }
+                "func": self.event,
+                "life_cycle": LifeCycleEnum.msg,
+                "response_num": -1,
+            },
         }
 
     async def dispatch(self, request: RequestModel) -> Optional[ResponseModel]:
         dispatch_dict: dict = self._request_num_dict.get(request.request_num, None)
-        response_num: int = dispatch_dict.get('response_num', Constant.SERVER_ERROR_RESPONSE)
+        response_num: int = dispatch_dict.get("response_num", Constant.SERVER_ERROR_RESPONSE)
 
         # create response_model
         response: "ResponseModel" = ResponseModel(response_num=response_num, msg_id=request.msg_id)
@@ -89,13 +89,13 @@ class Request(object):
                 return response
 
         # check life_cycle
-        if not client_model.modify_life_cycle(dispatch_dict['life_cycle']):
+        if not client_model.modify_life_cycle(dispatch_dict["life_cycle"]):
             response.body = LifeCycleError()
             return response
 
         client_model.keep_alive_timestamp = int(time.time())
         request.client_model = client_model
-        return await dispatch_dict['func'](request, response)
+        return await dispatch_dict["func"](request, response)
 
     @staticmethod
     async def ping_event(conn: ServerConnection, client_model: ClientModel):
@@ -104,14 +104,14 @@ class Request(object):
             diff_time: int = int(time.time()) - client_model.keep_alive_timestamp
             if diff_time > 130:
                 event_resp: ResponseModel = ResponseModel(
-                    Constant.SERVER_EVENT, body=Event(Constant.EVENT_CLOSE_CONN, 'recv pong timeout')
+                    Constant.SERVER_EVENT, body=Event(Constant.EVENT_CLOSE_CONN, "recv pong timeout")
                 )
                 await response(conn, event_resp)
                 if not conn.is_closed():
                     conn.close()
                 asyncio.ensure_future(client_manager.async_destroy_client_model(client_model.client_id))
             else:
-                ping_response: ResponseModel = ResponseModel(Constant.SERVER_EVENT, body=Event(Constant.PING_EVENT, ''))
+                ping_response: ResponseModel = ResponseModel(Constant.SERVER_EVENT, body=Event(Constant.PING_EVENT, ""))
                 await response(conn, ping_response)
                 await asyncio.sleep(60)
 
@@ -129,17 +129,17 @@ class Request(object):
             method_name: str = request.body["method_name"]
             param: str = request.body["param"]
         except KeyError:
-            response.body = ParseError('body miss params')
+            response.body = ParseError("body miss params")
             return response
 
         # root func only called by local client
-        if method_name.startswith("_root_") and request.header['_host'] != "127.0.0.1":
-            response.body = FuncNotFoundError(extra_msg=f'func name: {method_name}')
+        if method_name.startswith("_root_") and request.header["_host"] != "127.0.0.1":
+            response.body = FuncNotFoundError(extra_msg=f"func name: {method_name}")
             return response
         else:
             func: Optional[Callable] = func_manager.func_dict.get(method_name)
             if not func:
-                response.body = FuncNotFoundError(extra_msg=f'func name: {method_name}')
+                response.body = FuncNotFoundError(extra_msg=f"func name: {method_name}")
                 return response
 
             new_call_id, result = await self.msg_handle(request, call_id, func, param)
@@ -165,7 +165,7 @@ class Request(object):
     async def event(request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
         event_name: str = request.body[0]
         if event_name == Constant.PONG_EVENT:
-            client_id: str = request.header.get('client_id')
+            client_id: str = request.header.get("client_id")
             client_manager.get_client_model(client_id).keep_alive_timestamp = int(time.time())
         return None
 
@@ -191,7 +191,7 @@ class Request(object):
                 try:
                     result: Any = await asyncio.wait_for(coroutine, self._run_timeout)
                 except asyncio.TimeoutError:
-                    return call_id, RpcRunTimeError(f'Call {func.__name__} timeout')
+                    return call_id, RpcRunTimeError(f"Call {func.__name__} timeout")
                 except Exception as e:
                     raise e
 

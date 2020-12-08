@@ -14,14 +14,14 @@ from rap.server.response import ResponseModel
 class CryptoMiddleware(BaseRequestMiddleware):
     def __init__(self, secret_dict: Dict[str, str]):
         crypto_manager.load_aes_key_dict(secret_dict)
-        self._nonce_key: str = redis_manager.namespace + 'nonce'
+        self._nonce_key: str = redis_manager.namespace + "nonce"
 
     async def dispatch(self, request: RequestModel) -> ResponseModel:
         response_num: int = self.response_num_dict.get(request.request_num, Constant.SERVER_ERROR_RESPONSE)
         response: "ResponseModel" = ResponseModel(response_num=response_num, msg_id=request.msg_id)
         if type(request.body) is bytes:
             if request.request_num == Constant.DECLARE_REQUEST:
-                client_id: str = request.header['client_id']
+                client_id: str = request.header["client_id"]
                 crypto: Crypto = crypto_manager.get_crypto_by_key_id(client_id)
             else:
                 client_id = request.header.get("client_id", None)
@@ -37,7 +37,7 @@ class CryptoMiddleware(BaseRequestMiddleware):
                 return response
 
             try:
-                timestamp: int = (request.body.get("timestamp", 0))
+                timestamp: int = request.body.get("timestamp", 0)
                 if (int(time.time()) - timestamp) > 60:
                     response.body = ServerError("timeout error")
                     return response
@@ -47,7 +47,7 @@ class CryptoMiddleware(BaseRequestMiddleware):
                     return response
                 else:
                     await redis_manager.redis_pool.sadd(self._nonce_key, nonce)
-                request.body = request.body['body']
+                request.body = request.body["body"]
             except Exception as e:
                 response.body = e
                 return response
