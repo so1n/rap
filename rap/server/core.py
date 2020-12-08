@@ -10,7 +10,6 @@ from rap.common.conn import ServerConnection
 from rap.common.exceptions import RpcRunTimeError
 from rap.common.types import READER_TYPE, WRITER_TYPE, BASE_REQUEST_TYPE
 from rap.common.utlis import Constant, Event
-from rap.manager.client_manager import client_manager
 from rap.manager.func_manager import func_manager
 from rap.server.middleware.base import (
     BaseConnMiddleware,
@@ -75,8 +74,8 @@ class Server(object):
                 self._response.response_handle = middleware
 
     @staticmethod
-    def register(func: Optional[Callable], name: Optional[str] = None):
-        func_manager.register(func, name)
+    def register(func: Optional[Callable], name: Optional[str] = None, group: str = 'normal'):
+        func_manager.register(func, name, group=group)
 
     @staticmethod
     async def run_callback(callback_list: List[Union[Callable, Coroutine]]):
@@ -88,13 +87,13 @@ class Server(object):
             else:
                 await asyncio.get_event_loop().run_in_executor(None, callback)
 
-    async def create_server(self) -> asyncio.AbstractServer:
+    async def create_server(self) -> 'Server':
         await self.run_callback(self._connect_callback)
-        logging.info(f"server running on {self._host}:{self._port}. use ssl:{bool(self._ssl_context)}")
         self._server = await asyncio.start_server(
             self.conn_handle, self._host, self._port, ssl=self._ssl_context, backlog=self._backlog
         )
-        return self._server
+        logging.info(f"server running on {self._host}:{self._port}. use ssl:{bool(self._ssl_context)}")
+        return self
 
     async def wait_closed(self):
         if self._server:
@@ -127,7 +126,7 @@ class Server(object):
                 conn.set_reader_exc(e)
                 raise e
             if request is None:
-                await self._response(conn, ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "raw_request is empty")))
+                await self._response(conn, ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "request is empty")))
                 continue
             try:
                 request_num, msg_id, header, body = request

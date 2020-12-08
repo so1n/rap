@@ -30,13 +30,12 @@ if __name__ == "__main__":
     rpc_server.register(sync_sum)
     rpc_server.register(async_sum)
     rpc_server.register(async_gen)
-    server = loop.run_until_complete(rpc_server.create_server())
+    loop.run_until_complete(rpc_server.create_server())
 
     try:
         loop.run_forever()
     except KeyboardInterrupt:
-        server.close()
-        loop.run_until_complete(server.wait_closed())
+        loop.run_until_complete(rpc_server.wait_closed())
 
     # fail register example
     def fail_register(a, b):

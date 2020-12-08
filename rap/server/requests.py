@@ -69,13 +69,13 @@ class Request(object):
         dispatch_dict: dict = self._request_num_dict.get(request.request_num, None)
         response_num: int = dispatch_dict.get('response_num', Constant.SERVER_ERROR_RESPONSE)
 
-        # create result_model
+        # create response_model
         response: "ResponseModel" = ResponseModel(response_num=response_num, msg_id=request.msg_id)
 
         # check type_id
         if response_num is Constant.SERVER_ERROR_RESPONSE:
             logging.error(f"parse request data: {request} from {request.header['_host']} error")
-            response.body = ServerError("type_id error")
+            response.body = ServerError("response num error")
             return response
 
         # check client_model
@@ -110,12 +110,10 @@ class Request(object):
                 if not conn.is_closed():
                     conn.close()
                 asyncio.ensure_future(client_manager.async_destroy_client_model(client_model.client_id))
-            elif not conn.is_closed():
+            else:
                 ping_response: ResponseModel = ResponseModel(Constant.SERVER_EVENT, body=Event(Constant.PING_EVENT, ''))
                 await response(conn, ping_response)
                 await asyncio.sleep(60)
-            else:
-                await asyncio.sleep(0.01)
 
     async def declare_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
         client_manager.create_client_model(request.client_model)
@@ -139,12 +137,12 @@ class Request(object):
             response.body = FuncNotFoundError(extra_msg=f'func name: {method_name}')
             return response
         else:
-            method: Optional[Callable] = func_manager.func_dict.get(method_name)
-            if not method:
+            func: Optional[Callable] = func_manager.func_dict.get(method_name)
+            if not func:
                 response.body = FuncNotFoundError(extra_msg=f'func name: {method_name}')
                 return response
 
-            new_call_id, result = await self.msg_handle(request, call_id, method, param)
+            new_call_id, result = await self.msg_handle(request, call_id, func, param)
             response.body = {"call_id": new_call_id, "method_name": method_name}
             if isinstance(result, Exception):
                 exc, exc_info = parse_error(result)

@@ -17,10 +17,9 @@ if __name__ == "__main__":
     loop = asyncio.new_event_loop()
     rpc_server = Server()
     rpc_server.register(sync_sum)
-    server = loop.run_until_complete(rpc_server.create_server())
+    loop.run_until_complete(rpc_server.create_server())
 
     try:
         loop.run_forever()
     except KeyboardInterrupt:
-        server.close()
-        loop.run_until_complete(server.wait_closed())
+        loop.run_until_complete(rpc_server.wait_closed())
