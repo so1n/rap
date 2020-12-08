@@ -80,6 +80,8 @@ class Server(object):
 
     @staticmethod
     async def run_callback(callback_list: List[Union[Callable, Coroutine]]):
+        if not callback_list:
+            return
         for callback in callback_list:
             if asyncio.iscoroutine(callback):
                 await callback
@@ -89,7 +91,6 @@ class Server(object):
     async def create_server(self) -> asyncio.AbstractServer:
         await self.run_callback(self._connect_callback)
         logging.info(f"server running on {self._host}:{self._port}. use ssl:{bool(self._ssl_context)}")
-        asyncio.ensure_future(client_manager.introspection())
         self._server = await asyncio.start_server(
             self.conn_handle, self._host, self._port, ssl=self._ssl_context, backlog=self._backlog
         )
@@ -130,7 +131,7 @@ class Server(object):
                 continue
             try:
                 request_num, msg_id, header, body = request
-                request_model: RequestModel = RequestModel(request_num, msg_id, header, body)
+                request_model: RequestModel = RequestModel(request_num, msg_id, header, body, conn)
                 request_model.header["_host"] = conn.peer
                 asyncio.ensure_future(self.request_handle(conn, request_model))
             except Exception as e:

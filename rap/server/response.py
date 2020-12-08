@@ -30,28 +30,26 @@ class Response(object):
                 Constant.SERVER_ERROR_RESPONSE, resp.msg_id, resp.header, error_response[1]
             )
         elif isinstance(resp.body, Event):
-            response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_EVENT, resp.msg_id, resp.header, resp.body)
+            response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_EVENT, resp.msg_id, resp.header, resp.body.to_tuple())
         elif resp.body is not None:
             response_msg: BASE_RESPONSE_TYPE = (resp.response_num, resp.msg_id, resp.header, resp.body)
         else:
-            exception: BaseRapError = ServerError("not response data")
-            error_response: Optional[Tuple[str, str]] = parse_error(exception)
-            resp.header["status_code"] = exception.status_code
-            response_msg: BASE_RESPONSE_TYPE = (
-                Constant.SERVER_ERROR_RESPONSE, resp.msg_id, resp.header, error_response[1]
-            )
+            return None
         return response_msg
 
-    async def __call__(self, conn: ServerConnection, resp: ResponseModel):
+    async def __call__(self, conn: ServerConnection, resp: ResponseModel) -> bool:
+        if not resp:
+            return False
         resp.header["version"] = Constant.VERSION
         resp.header["user_agent"] = Constant.USER_AGENT
         logging.debug(f"resp: %s", resp)
 
         response_msg = await self.response_handle(resp)
-
         try:
             await conn.write(response_msg, self._timeout)
+            return True
         except asyncio.TimeoutError:
             logging.error(f"response to {conn.peer} timeout. body:{resp.body}")
         except Exception as e:
             logging.error(f"response to {conn.peer} error: {e}. body:{resp.body}")
+        return False
