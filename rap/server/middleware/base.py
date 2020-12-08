@@ -12,7 +12,7 @@ from rap.server.response import ResponseModel
 
 class BaseMiddleware(_BaseMiddleware, ABC):
     @staticmethod
-    def register(func: Callable, is_root: bool = True, group: str = 'middleware'):
+    def register(func: Callable, is_root: bool = True, group: str = "middleware"):
         func_manager.register(func, is_root=is_root, group=group)
 
 
@@ -33,9 +33,7 @@ class BaseRequestMiddleware(BaseMiddleware):
 
 
 class BaseMsgMiddleware(BaseMiddleware):
-    async def dispatch(
-        self, request: RequestModel, call_id: int, func: Callable, param: str
-    ) -> Union[dict, Exception]:
+    async def dispatch(self, request: RequestModel, call_id: int, func: Callable, param: str) -> Union[dict, Exception]:
         raise NotImplementedError
 
 

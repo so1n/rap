@@ -15,7 +15,7 @@ from rap.common.utlis import Constant
 
 class RedisManager(object):
     def __init__(self):
-        self._namespace: str = f'rap:{Constant.USER_AGENT}:{Constant.VERSION}:'
+        self._namespace: str = f"rap:{Constant.USER_AGENT}:{Constant.VERSION}:"
         self._conn_pool: Optional["ConnectionsPool"] = None
         self.redis_pool: Optional["Redis"] = None
 

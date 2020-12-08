@@ -146,7 +146,7 @@ class Client:
                 middleware.load_sub_middleware(self._real_base_request)
                 self._real_base_request = middleware
             else:
-                raise RuntimeError(f'{middleware} must be instance {BaseMiddleware}')
+                raise RuntimeError(f"{middleware} must be instance {BaseMiddleware}")
 
     async def _listen(self):
         """listen server msg"""
@@ -248,7 +248,7 @@ class Client:
             self._conn.set_reader_exc(e)
             raise e
         except asyncio.CancelledError:
-            return 
+            return
         except Exception as e:
             self._conn.set_reader_exc(e)
             raise e
@@ -275,7 +275,7 @@ class Client:
             if event == Constant.EVENT_CLOSE_CONN:
                 raise RuntimeError(f"recv close conn event, event info:{event_info}")
             elif event == Constant.PING_EVENT:
-                request: Request = Request(Constant.CLIENT_EVENT_RESPONSE, Event(Constant.PONG_EVENT, '').to_tuple())
+                request: Request = Request(Constant.CLIENT_EVENT_RESPONSE, Event(Constant.PONG_EVENT, "").to_tuple())
                 self.before_request_handle(request)
                 await self._send(request, msg_id=-1)
                 return

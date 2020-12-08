@@ -23,7 +23,7 @@ class ConnLimitMiddleware(BaseConnMiddleware):
                 conn,
                 ResponseModel(
                     body=Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of connections limit")
-                )
+                ),
             )
             await conn.await_close()
         else:

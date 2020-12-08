@@ -28,10 +28,7 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
-    rpc_server = Server(
-        connect_call_back=[init_redis()],
-        close_call_back=[close_redis()]
-    )
+    rpc_server = Server(connect_call_back=[init_redis()], close_call_back=[close_redis()])
     rpc_server.load_middleware([CryptoMiddleware({"test": "keyskeyskeyskeys"})])
     rpc_server.register(async_sum)
     loop.run_until_complete(rpc_server.create_server())

@@ -20,7 +20,7 @@ class FuncManager(object):
         self.register(self._get_register_func, "_root_list")
 
     def register(
-            self, func: Optional[Callable], name: Optional[str] = None, is_root: bool = False, group: str = 'root'
+        self, func: Optional[Callable], name: Optional[str] = None, is_root: bool = False, group: str = "root"
     ):
         # check func param&return value type hint
         sig: "inspect.Signature" = inspect.signature(func)

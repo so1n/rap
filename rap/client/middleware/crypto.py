@@ -17,7 +17,7 @@ class CryptoMiddleware(BaseMiddleWare):
         self._crypto: "Optional[Crypto]" = None
 
     def _body_handle(self, body: dict):
-        timestamp: int = (body.get("timestamp", 0))
+        timestamp: int = body.get("timestamp", 0)
         if (int(time.time()) - timestamp) > 60:
             raise CryptoError("timeout error")
         nonce: str = body.get("nonce", "")
@@ -27,11 +27,7 @@ class CryptoMiddleware(BaseMiddleWare):
             self._nonce_set.add(nonce)
 
     async def dispatch(self, request: Request) -> Response:
-        request.body = {
-            "body": request.body,
-            "timestamp": int(time.time()),
-            "nonce": gen_random_time_id()
-        }
+        request.body = {"body": request.body, "timestamp": int(time.time()), "nonce": gen_random_time_id()}
         if request.num == Constant.DECLARE_REQUEST:
             request.header["client_id"] = self._crypto_id
             request.body = Crypto(self._crypto_key).encrypt_object(request.body)
