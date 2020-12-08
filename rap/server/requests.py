@@ -14,7 +14,6 @@ from rap.common.exceptions import (
     LifeCycleError,
     ParseError,
     ProtocolError,
-    ServerError,
     RpcRunTimeError,
 )
 from rap.common.utlis import (
@@ -31,7 +30,7 @@ from rap.server.response import Response, ResponseModel
 
 @dataclass()
 class RequestModel(object):
-    request_num: int
+    num: int
     msg_id: int
     header: dict
     body: Any
@@ -46,40 +45,26 @@ class Request(object):
             Constant.DECLARE_REQUEST: {
                 "func": self.declare_life_cycle,
                 "life_cycle": LifeCycleEnum.msg,
-                "response_num": Constant.DECLARE_RESPONSE,
             },
             Constant.MSG_REQUEST: {
                 "func": self.msg_life_cycle,
                 "life_cycle": LifeCycleEnum.msg,
-                "response_num": Constant.MSG_RESPONSE,
             },
             Constant.DROP_REQUEST: {
                 "func": self.drop_life_cycle,
                 "life_cycle": LifeCycleEnum.drop,
-                "response_num": Constant.DROP_REQUEST,
             },
             Constant.CLIENT_EVENT_RESPONSE: {
                 "func": self.event,
                 "life_cycle": LifeCycleEnum.msg,
-                "response_num": -1,
             },
         }
 
-    async def dispatch(self, request: RequestModel) -> Optional[ResponseModel]:
-        dispatch_dict: dict = self._request_num_dict.get(request.request_num, None)
-        response_num: int = dispatch_dict.get("response_num", Constant.SERVER_ERROR_RESPONSE)
-
-        # create response_model
-        response: "ResponseModel" = ResponseModel(response_num=response_num, msg_id=request.msg_id)
-
-        # check type_id
-        if response_num is Constant.SERVER_ERROR_RESPONSE:
-            logging.error(f"parse request data: {request} from {request.header['_host']} error")
-            response.body = ServerError("response num error")
-            return response
+    async def dispatch(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
+        dispatch_dict: dict = self._request_num_dict.get(request.num, None)
 
         # check client_model
-        if response_num == Constant.DECLARE_RESPONSE:
+        if request.num == Constant.DECLARE_REQUEST:
             client_model: "ClientModel" = ClientModel()
         else:
             client_id = request.header.get("client_id", None)
@@ -93,7 +78,6 @@ class Request(object):
             response.body = LifeCycleError()
             return response
 
-        client_model.keep_alive_timestamp = int(time.time())
         request.client_model = client_model
         return await dispatch_dict["func"](request, response)
 

@@ -7,9 +7,9 @@ import msgpack
 from typing import Callable, Coroutine, List, Optional, Union
 
 from rap.common.conn import ServerConnection
-from rap.common.exceptions import RpcRunTimeError
+from rap.common.exceptions import RpcRunTimeError, ServerError
 from rap.common.types import READER_TYPE, WRITER_TYPE, BASE_REQUEST_TYPE
-from rap.common.utlis import Constant, Event
+from rap.common.utlis import Constant, Event, response_num_dict
 from rap.manager.func_manager import func_manager
 from rap.server.middleware.base import (
     BaseConnMiddleware,
@@ -130,9 +130,10 @@ class Server(object):
                 continue
             try:
                 request_num, msg_id, header, body = request
-                request_model: RequestModel = RequestModel(request_num, msg_id, header, body, conn)
-                request_model.header["_host"] = conn.peer
-                asyncio.ensure_future(self.request_handle(conn, request_model))
+                request: RequestModel = RequestModel(request_num, msg_id, header, body, conn)
+                request.header["_host"] = conn.peer
+
+                asyncio.ensure_future(self.request_handle(conn, request))
             except Exception as e:
                 logging.error(f"{conn.peer} send bad msg:{request}, error:{e}")
                 await self._response(conn, ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "protocol error")))
@@ -142,10 +143,18 @@ class Server(object):
             conn.close()
             logging.debug(f"close connection: %s", conn.peer)
 
-    async def request_handle(self, conn: ServerConnection, request_model: RequestModel):
+    async def request_handle(self, conn: ServerConnection, request: RequestModel):
         try:
-            resp_model: ResponseModel = await self._request.dispatch(request_model)
-            await self._response(conn, resp_model)
+            response_num: int = response_num_dict.get(request.num, Constant.SERVER_ERROR_RESPONSE)
+            response: "ResponseModel" = ResponseModel(num=response_num, msg_id=request.msg_id)
+            # check type_id
+            if response.num is Constant.SERVER_ERROR_RESPONSE:
+                logging.error(f"parse request data: {request} from {request.header['_host']} error")
+                response.body = ServerError("response num error")
+                await self._response(conn, response)
+            else:
+                response: Optional[ResponseModel] = await self._request.dispatch(request, response)
+                await self._response(conn, response)
         except Exception as e:
             logging.exception(f"raw_request handle error e")
             await self._response(conn, ResponseModel(body=RpcRunTimeError(str(e))))

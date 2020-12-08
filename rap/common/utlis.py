@@ -5,9 +5,11 @@ import sys
 import time
 
 from dataclasses import dataclass
+from typing import Dict
 
 __all__ = [
     "get_event_loop",
+    "response_num_dict",
     "Constant",
     "Event",
     "MISS_OBJECT",
@@ -23,7 +25,7 @@ _STR_LD = string.ascii_letters + string.digits
 
 
 class Constant(object):
-    VERSION: str = "0.5.3"
+    VERSION: str = "0.5.3.1"
     USER_AGENT: str = "Python3"
     SOCKET_RECV_SIZE: int = 1024 ** 1
 
@@ -74,3 +76,11 @@ def parse_error(exception: Optional[Exception]) -> Optional[Tuple[str, str]]:
     if exception:
         error_response = (type(exception).__name__, str(exception))
     return error_response
+
+
+response_num_dict: Dict[int, int] = {
+    Constant.DECLARE_REQUEST: Constant.DECLARE_RESPONSE,
+    Constant.MSG_REQUEST: Constant.MSG_RESPONSE,
+    Constant.DROP_REQUEST: Constant.DROP_RESPONSE,
+    Constant.CLIENT_EVENT_RESPONSE: -1
+}
