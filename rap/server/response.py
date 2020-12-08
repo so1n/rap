@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, Tuple, Optional
 
 from rap.common.conn import ServerConnection
-from rap.common.exceptions import BaseRapError, ServerError
+from rap.common.exceptions import BaseRapError
 from rap.common.types import BASE_RESPONSE_TYPE
 from rap.common.utlis import Constant, Event, parse_error
 

@@ -22,10 +22,9 @@ if __name__ == "__main__":
         ssl_key_path="./rap_ssl.key",
     )
     rpc_server.register(async_sum)
-    server = loop.run_until_complete(rpc_server.create_server())
+    loop.run_until_complete(rpc_server.create_server())
 
     try:
         loop.run_forever()
     except KeyboardInterrupt:
-        server.close()
-        loop.run_until_complete(server.wait_closed())
+        loop.run_until_complete(rpc_server.wait_closed())
