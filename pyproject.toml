@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "rap"
-version = "0.5.3"
-description = "rap(par[::-1]) is a simple and fast python async rpc"
+version = "0.5.3.1"
+description = "rap(par[::-1]) is advanced and fast python async rpc"
 authors = ["So1n <so1n897046026@gamil.com>"]
 license = "Apache Software License"
 readme = "./README.md"

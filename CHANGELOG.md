@@ -7,7 +7,11 @@
  - Feature: client support load balance
  - Feature: server HA middleware
 
-### 0.5.3[now]
+### 0.5.3.1[now]
+ - description: request interface 
+ - Refactor: request_handle&core interface
+
+### 0.5.3
  - description: new middleware design&redis support
  - Feat: server&client remove aes
  - Feat: client add middleware feat
