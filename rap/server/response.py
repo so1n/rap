@@ -41,7 +41,10 @@ class Response(object):
             error_response: Optional[Tuple[str, str]] = parse_error(exception)
             resp.header["status_code"] = exception.status_code
             response_msg: BASE_RESPONSE_TYPE = (
-                Constant.SERVER_ERROR_RESPONSE, resp.msg_id, resp.header, error_response[1]
+                Constant.SERVER_ERROR_RESPONSE,
+                resp.msg_id,
+                resp.header,
+                error_response[1],
             )
         return response_msg
 

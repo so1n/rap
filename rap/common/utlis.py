@@ -82,5 +82,5 @@ response_num_dict: Dict[int, int] = {
     Constant.DECLARE_REQUEST: Constant.DECLARE_RESPONSE,
     Constant.MSG_REQUEST: Constant.MSG_RESPONSE,
     Constant.DROP_REQUEST: Constant.DROP_RESPONSE,
-    Constant.CLIENT_EVENT_RESPONSE: -1
+    Constant.CLIENT_EVENT_RESPONSE: -1,
 }
