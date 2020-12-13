@@ -35,10 +35,12 @@ class AsyncIteratorCall:
         """
         The server will return the call id of the generator function,
         and the client can continue to get data based on the call id.
-        If no data, the server will return StopAsyncIteration or StopIteration error.
+        If no data, the server will return header.status_code = 301 and client must raise StopAsyncIteration Error.
         """
         response: Response = await self._client.msg_request(self._method, *self._args, call_id=self._call_id)
         self._call_id = response.body["call_id"]
+        if response.header["status_code"] == 301:
+            raise StopAsyncIteration()
         return response.body["result"]
 
 
