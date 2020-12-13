@@ -44,7 +44,7 @@ async def run_once():
 async def run_mutli():
     s_t = time.time()
     await client.connect()
-    await asyncio.wait([_run_once() for i in range(100)])
+    await asyncio.wait([_run_once() for _ in range(100)])
     print(time.time() - s_t)
     await client.wait_close()
 

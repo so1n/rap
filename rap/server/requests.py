@@ -128,7 +128,10 @@ class Request(object):
 
             new_call_id, result = await self.msg_handle(request, call_id, func, param)
             response.body = {"call_id": new_call_id, "method_name": method_name}
-            if isinstance(result, Exception):
+            if isinstance(result, StopAsyncIteration) or isinstance(result, StopIteration):
+                response.body["result"] = ""
+                response.header["status_code"] = 301
+            elif isinstance(result, Exception):
                 exc, exc_info = parse_error(result)
                 if request.header.get("user_agent") == Constant.USER_AGENT:
                     response.body.update({"exc": exc, "exc_info": exc_info})
