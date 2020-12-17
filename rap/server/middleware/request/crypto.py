@@ -18,11 +18,10 @@ class CryptoMiddleware(BaseRequestMiddleware):
 
     async def dispatch(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
         if type(request.body) is bytes:
+            client_id: str = request.header.get("client_id", None)
             if request.num == Constant.DECLARE_REQUEST:
-                client_id: str = request.header["client_id"]
                 crypto: Crypto = crypto_manager.get_crypto_by_key_id(client_id)
             else:
-                client_id = request.header.get("client_id", None)
                 crypto: Crypto = crypto_manager.get_crypto_by_key(client_id)
             # check crypto
             if crypto == MISS_OBJECT:

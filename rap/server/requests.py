@@ -4,7 +4,7 @@ import logging
 import time
 
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, Dict, Optional, Tuple
+from typing import Any, Callable, Coroutine, List, Dict, Optional, Tuple
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import (
@@ -25,6 +25,7 @@ from rap.common.utlis import (
 )
 from rap.manager.client_manager import client_manager, ClientModel, LifeCycleEnum
 from rap.manager.func_manager import func_manager
+from rap.server.middleware.base import BaseMiddleware, BaseRequestMiddleware, BaseMsgMiddleware
 from rap.server.response import Response, ResponseModel
 
 
@@ -59,6 +60,15 @@ class Request(object):
                 "life_cycle": LifeCycleEnum.msg,
             },
         }
+
+    # def load_middleware(self, middleware_list: List[BaseMiddleware]):
+    #     for middleware in middleware_list:
+    #         if isinstance(middleware, BaseRequestMiddleware):
+    #             middleware.load_sub_middleware(self._request.dispatch)
+    #             self._request.dispatch = middleware
+    #         elif isinstance(middleware, BaseMsgMiddleware):
+    #             middleware.load_sub_middleware(self._request.msg_handle)
+    #             self._request.msg_handle = middleware
 
     async def dispatch(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
         dispatch_dict: dict = self._request_num_dict.get(request.num, None)
