@@ -1,12 +1,13 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Tuple, Optional
+from typing import Any, List, Tuple, Optional
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import BaseRapError, ServerError
 from rap.common.types import BASE_RESPONSE_TYPE
 from rap.common.utlis import Constant, Event, parse_error
+from rap.server.middleware.base import BaseResponseMiddleware
 
 
 @dataclass()
@@ -18,8 +19,14 @@ class ResponseModel(object):
 
 
 class Response(object):
-    def __init__(self, timeout: Optional[int] = None):
+    def __init__(self, conn: ServerConnection, timeout: Optional[int] = None):
+        self._conn: ServerConnection = conn
         self._timeout: Optional[int] = timeout
+
+    def load_middleware(self, middleware_list: List[BaseResponseMiddleware]):
+        for middleware in middleware_list:
+            middleware.load_sub_middleware(self.response_handle)
+            self.response_handle = middleware
 
     @staticmethod
     async def response_handle(resp: ResponseModel) -> BASE_RESPONSE_TYPE:
@@ -48,7 +55,7 @@ class Response(object):
             )
         return response_msg
 
-    async def __call__(self, conn: ServerConnection, resp: ResponseModel) -> bool:
+    async def __call__(self, resp: ResponseModel) -> bool:
         if not resp:
             return False
         resp.header["version"] = Constant.VERSION
@@ -57,10 +64,10 @@ class Response(object):
 
         response_msg: BASE_RESPONSE_TYPE = await self.response_handle(resp)
         try:
-            await conn.write(response_msg, self._timeout)
+            await self._conn.write(response_msg, self._timeout)
             return True
         except asyncio.TimeoutError:
-            logging.error(f"response to {conn.peer} timeout. body:{resp.body}")
+            logging.error(f"response to {self._conn.peer} timeout. body:{resp.body}")
         except Exception as e:
-            logging.error(f"response to {conn.peer} error: {e}. body:{resp.body}")
+            logging.error(f"response to {self._conn.peer} error: {e}. body:{resp.body}")
         return False

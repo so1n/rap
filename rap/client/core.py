@@ -224,9 +224,7 @@ class Client:
         """gen msg id, send and recv response"""
         msg_id: int = self._msg_id + 1
         # Avoid too big numbers
-        if msg_id > 65535:
-            msg_id = 1
-        self._msg_id = msg_id
+        self._msg_id = msg_id & 65535
 
         await self._send(request, msg_id)
 
