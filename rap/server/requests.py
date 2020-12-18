@@ -25,7 +25,6 @@ from rap.common.utlis import (
 )
 from rap.manager.client_manager import client_manager, ClientModel, LifeCycleEnum
 from rap.manager.func_manager import func_manager
-from rap.server.middleware.base import BaseMiddleware, BaseRequestMiddleware, BaseMsgMiddleware
 from rap.server.response import Response, ResponseModel
 
 
@@ -40,7 +39,8 @@ class RequestModel(object):
 
 
 class Request(object):
-    def __init__(self, run_timeout: int):
+    def __init__(self, conn: ServerConnection, run_timeout: int):
+        self._conn: ServerConnection = conn
         self._run_timeout: int = run_timeout
         self._request_num_dict: Dict[int, dict] = {
             Constant.DECLARE_REQUEST: {
@@ -60,15 +60,6 @@ class Request(object):
                 "life_cycle": LifeCycleEnum.msg,
             },
         }
-
-    # def load_middleware(self, middleware_list: List[BaseMiddleware]):
-    #     for middleware in middleware_list:
-    #         if isinstance(middleware, BaseRequestMiddleware):
-    #             middleware.load_sub_middleware(self._request.dispatch)
-    #             self._request.dispatch = middleware
-    #         elif isinstance(middleware, BaseMsgMiddleware):
-    #             middleware.load_sub_middleware(self._request.msg_handle)
-    #             self._request.msg_handle = middleware
 
     async def dispatch(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
         dispatch_dict: dict = self._request_num_dict.get(request.num, None)
@@ -91,30 +82,27 @@ class Request(object):
         request.client_model = client_model
         return await dispatch_dict["func"](request, response)
 
-    @staticmethod
-    async def ping_event(conn: ServerConnection, client_model: ClientModel):
-        response: Response = Response()
-        while not conn.is_closed():
+    async def ping_event(self, client_model: ClientModel):
+        response: Response = Response(self._conn)
+        while not self._conn.is_closed():
             diff_time: int = int(time.time()) - client_model.keep_alive_timestamp
             if diff_time > 130:
                 event_resp: ResponseModel = ResponseModel(
                     Constant.SERVER_EVENT, body=Event(Constant.EVENT_CLOSE_CONN, "recv pong timeout")
                 )
-                await response(conn, event_resp)
-                if not conn.is_closed():
-                    conn.close()
+                await response(event_resp)
+                if not self._conn.is_closed():
+                    self._conn.close()
                 asyncio.ensure_future(client_manager.async_destroy_client_model(client_model.client_id))
             else:
                 ping_response: ResponseModel = ResponseModel(Constant.SERVER_EVENT, body=Event(Constant.PING_EVENT, ""))
-                await response(conn, ping_response)
+                await response(ping_response)
                 await asyncio.sleep(60)
 
     async def declare_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
         client_manager.create_client_model(request.client_model)
         response.body = {"client_id": request.client_model.client_id}
-        request.client_model.ping_event_future = asyncio.ensure_future(
-            self.ping_event(request.conn, request.client_model)
-        )
+        request.client_model.ping_event_future = asyncio.ensure_future(self.ping_event(request.client_model))
         return response
 
     async def msg_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:

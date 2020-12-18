@@ -1,13 +1,12 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import Any, List, Tuple, Optional
+from typing import Any, Tuple, Optional
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import BaseRapError, ServerError
 from rap.common.types import BASE_RESPONSE_TYPE
 from rap.common.utlis import Constant, Event, parse_error
-from rap.server.middleware.base import BaseResponseMiddleware
 
 
 @dataclass()
@@ -22,11 +21,6 @@ class Response(object):
     def __init__(self, conn: ServerConnection, timeout: Optional[int] = None):
         self._conn: ServerConnection = conn
         self._timeout: Optional[int] = timeout
-
-    def load_middleware(self, middleware_list: List[BaseResponseMiddleware]):
-        for middleware in middleware_list:
-            middleware.load_sub_middleware(self.response_handle)
-            self.response_handle = middleware
 
     @staticmethod
     async def response_handle(resp: ResponseModel) -> BASE_RESPONSE_TYPE:
