@@ -119,6 +119,35 @@ class Server(object):
                 middleware.load_sub_middleware(response_handle.response_handle)
                 request_handle.response_handle = middleware
 
+        async def recv_msg_handle(_request_msg: Optional[BASE_REQUEST_TYPE]):
+            if _request_msg is None:
+                await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "request is empty")))
+                return
+            try:
+                request_num, msg_id, header, body = _request_msg
+                request: RequestModel = RequestModel(request_num, msg_id, header, body, conn)
+                request.header["_host"] = conn.peer
+            except Exception as e:
+                logging.error(f"{conn.peer} send bad msg:{_request_msg}, error:{e}")
+                await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "protocol error")))
+                await conn.wait_closed()
+                return
+
+            try:
+                response_num: int = response_num_dict.get(request.num, Constant.SERVER_ERROR_RESPONSE)
+                response: "ResponseModel" = ResponseModel(num=response_num, msg_id=request.msg_id)
+                # check type_id
+                if response.num is Constant.SERVER_ERROR_RESPONSE:
+                    logging.error(f"parse request data: {request} from {request.header['_host']} error")
+                    response.body = ServerError("response num error")
+                    await response_handle(response)
+                else:
+                    response: Optional[ResponseModel] = await request_handle.dispatch(request, response)
+                    await response_handle(response)
+            except Exception as closer_e:
+                logging.exception(f"raw_request handle error e")
+                await response_handle(ResponseModel(body=RpcRunTimeError(str(closer_e))))
+
         while not conn.is_closed():
             try:
                 request_msg: Optional[BASE_REQUEST_TYPE] = await conn.read(self._keep_alive)
@@ -133,37 +162,8 @@ class Server(object):
                 logging.error(f"recv data from {conn.peer} error:{e}, conn has been closed")
                 conn.set_reader_exc(e)
                 raise e
-            if request_msg is None:
-                await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "request is empty")))
-                continue
-            try:
-                request_num, msg_id, header, body = request_msg
-                request: RequestModel = RequestModel(request_num, msg_id, header, body, conn)
-                request.header["_host"] = conn.peer
-
-                asyncio.ensure_future(self.request_handle(request_handle, response_handle, request))
-            except Exception as e:
-                logging.error(f"{conn.peer} send bad msg:{request_msg}, error:{e}")
-                await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "protocol error")))
-                break
+            asyncio.ensure_future(recv_msg_handle(request_msg))
 
         if not conn.is_closed():
             conn.close()
             logging.debug(f"close connection: %s", conn.peer)
-
-    @staticmethod
-    async def request_handle(request_handle: Request, response_handle: Response, request: RequestModel):
-        try:
-            response_num: int = response_num_dict.get(request.num, Constant.SERVER_ERROR_RESPONSE)
-            response: "ResponseModel" = ResponseModel(num=response_num, msg_id=request.msg_id)
-            # check type_id
-            if response.num is Constant.SERVER_ERROR_RESPONSE:
-                logging.error(f"parse request data: {request} from {request.header['_host']} error")
-                response.body = ServerError("response num error")
-                await response_handle(response)
-            else:
-                response: Optional[ResponseModel] = await request_handle.dispatch(request, response)
-                await response_handle(response)
-        except Exception as e:
-            logging.exception(f"raw_request handle error e")
-            await response_handle(ResponseModel(body=RpcRunTimeError(str(e))))
