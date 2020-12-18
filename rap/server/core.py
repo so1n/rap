@@ -42,10 +42,9 @@ class Server(object):
         self._host: str = host
         self._port: int = port
         self._timeout: int = timeout
-        self._run_timeout: int = timeout
+        self._run_timeout: int = run_timeout
         self._keep_alive: int = keep_alive
         self._backlog: int = backlog
-        self._request: Request = Request(run_timeout)
 
         self._connect_callback: List[Union[Callable, Coroutine]] = connect_call_back
         self._close_callback: List[Union[Callable, Coroutine]] = close_call_back
@@ -57,26 +56,17 @@ class Server(object):
             self._ssl_context.load_cert_chain(ssl_crt_path, ssl_key_path)
 
         self._server: Optional[asyncio.AbstractServer] = None
-        self._response_ml: List[BaseResponseMiddleware] = []
-        self._request_ml: List[BaseMiddleware] = []
+        self._middleware_list: List[BaseMiddleware] = []
 
     def load_middleware(self, middleware_list: List[BaseMiddleware]):
         for middleware in middleware_list:
             if isinstance(middleware, BaseConnMiddleware):
                 middleware.load_sub_middleware(self._conn_handle)
                 self._conn_handle = middleware
-            elif isinstance(middleware, BaseRequestMiddleware):
-                self._request_ml.append(middleware)
-                # middleware.load_sub_middleware(self._request.dispatch)
-                # self._request.dispatch = middleware
-            elif isinstance(middleware, BaseMsgMiddleware):
-                self._request_ml.append(middleware)
-                # middleware.load_sub_middleware(self._request.msg_handle)
-                # self._request.msg_handle = middleware
-            elif isinstance(middleware, BaseResponseMiddleware):
-                self._response_ml.append(middleware)
-                # middleware.load_sub_middleware(self._response.response_handle)
-                # self._response.response_handle = middleware
+            elif isinstance(middleware, BaseMiddleware):
+                self._middleware_list.append(middleware)
+            else:
+                raise RuntimeError(f'{middleware} must instance of {BaseMiddleware}')
 
     @staticmethod
     def register(func: Optional[Callable], name: Optional[str] = None, group: str = "normal"):
@@ -117,11 +107,21 @@ class Server(object):
 
     async def _conn_handle(self, conn: ServerConnection):
         response_handle: Response = Response(conn, self._timeout)
-        response_handle.load_middleware(self._response_ml)
-        request_handle: Request = Request(self._run_timeout)
+        request_handle: Request = Request(conn, self._run_timeout)
+        for middleware in self._middleware_list:
+            if isinstance(middleware, BaseRequestMiddleware):
+                middleware.load_sub_middleware(request_handle.dispatch)
+                request_handle.dispatch = middleware
+            elif isinstance(middleware, BaseMsgMiddleware):
+                middleware.load_sub_middleware(request_handle.msg_handle)
+                request_handle.msg_handle = middleware
+            elif isinstance(middleware, BaseResponseMiddleware):
+                middleware.load_sub_middleware(response_handle.response_handle)
+                request_handle.response_handle = middleware
+
         while not conn.is_closed():
             try:
-                request: Optional[BASE_REQUEST_TYPE] = await conn.read(self._keep_alive)
+                request_msg: Optional[BASE_REQUEST_TYPE] = await conn.read(self._keep_alive)
             except asyncio.TimeoutError:
                 logging.error(f"recv data from {conn.peer} timeout. close conn")
                 await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "keep alive timeout")))
@@ -133,17 +133,17 @@ class Server(object):
                 logging.error(f"recv data from {conn.peer} error:{e}, conn has been closed")
                 conn.set_reader_exc(e)
                 raise e
-            if request is None:
+            if request_msg is None:
                 await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "request is empty")))
                 continue
             try:
-                request_num, msg_id, header, body = request
+                request_num, msg_id, header, body = request_msg
                 request: RequestModel = RequestModel(request_num, msg_id, header, body, conn)
                 request.header["_host"] = conn.peer
 
-                asyncio.ensure_future(self.request_handle(response_handle, request))
+                asyncio.ensure_future(self.request_handle(request_handle, response_handle, request))
             except Exception as e:
-                logging.error(f"{conn.peer} send bad msg:{request}, error:{e}")
+                logging.error(f"{conn.peer} send bad msg:{request_msg}, error:{e}")
                 await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "protocol error")))
                 break
 
@@ -151,7 +151,8 @@ class Server(object):
             conn.close()
             logging.debug(f"close connection: %s", conn.peer)
 
-    async def request_handle(self, response_handle: Response, request: RequestModel):
+    @staticmethod
+    async def request_handle(request_handle: Request, response_handle: Response, request: RequestModel):
         try:
             response_num: int = response_num_dict.get(request.num, Constant.SERVER_ERROR_RESPONSE)
             response: "ResponseModel" = ResponseModel(num=response_num, msg_id=request.msg_id)
@@ -161,7 +162,7 @@ class Server(object):
                 response.body = ServerError("response num error")
                 await response_handle(response)
             else:
-                response: Optional[ResponseModel] = await self._request.dispatch(request, response)
+                response: Optional[ResponseModel] = await request_handle.dispatch(request, response)
                 await response_handle(response)
         except Exception as e:
             logging.exception(f"raw_request handle error e")
