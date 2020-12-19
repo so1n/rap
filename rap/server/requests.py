@@ -4,17 +4,17 @@ import logging
 import time
 
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, List, Dict, Optional, Tuple
+from typing import Any, Callable, Coroutine, Dict, Optional, Tuple
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import (
     AuthError,
     BaseRapError,
     FuncNotFoundError,
-    LifeCycleError,
     ParseError,
     ProtocolError,
     RpcRunTimeError,
+    ServerError
 )
 from rap.common.utlis import (
     Constant,
@@ -22,8 +22,9 @@ from rap.common.utlis import (
     MISS_OBJECT,
     get_event_loop,
     parse_error,
+    response_num_dict
 )
-from rap.manager.client_manager import client_manager, ClientModel, LifeCycleEnum
+from rap.manager.client_manager import client_manager, ClientModel
 from rap.manager.func_manager import func_manager
 from rap.server.response import Response, ResponseModel
 
@@ -34,7 +35,6 @@ class RequestModel(object):
     msg_id: int
     header: dict
     body: Any
-    conn: ServerConnection
     client_model: Optional[ClientModel] = None
 
 
@@ -42,28 +42,23 @@ class Request(object):
     def __init__(self, conn: ServerConnection, run_timeout: int):
         self._conn: ServerConnection = conn
         self._run_timeout: int = run_timeout
-        self._request_num_dict: Dict[int, dict] = {
-            Constant.DECLARE_REQUEST: {
-                "func": self.declare_life_cycle,
-                "life_cycle": LifeCycleEnum.msg,
-            },
-            Constant.MSG_REQUEST: {
-                "func": self.msg_life_cycle,
-                "life_cycle": LifeCycleEnum.msg,
-            },
-            Constant.DROP_REQUEST: {
-                "func": self.drop_life_cycle,
-                "life_cycle": LifeCycleEnum.drop,
-            },
-            Constant.CLIENT_EVENT_RESPONSE: {
-                "func": self.event,
-                "life_cycle": LifeCycleEnum.msg,
-            },
+        self.dispatch_func_dict: Dict[int, Callable] = {
+            Constant.DECLARE_REQUEST: self.declare_life_cycle,
         }
 
-    async def dispatch(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
-        dispatch_dict: dict = self._request_num_dict.get(request.num, None)
+    async def dispatch(self, request: RequestModel) -> Optional[ResponseModel]:
+        dispatch_func: Callable = self.dispatch_func_dict.get(request.num, None)
+        if not dispatch_func:
+            response_num: int = Constant.SERVER_ERROR_RESPONSE
+        else:
+            response_num: int = response_num_dict.get(request.num, Constant.SERVER_ERROR_RESPONSE)
 
+        response: "ResponseModel" = ResponseModel(num=response_num, msg_id=request.msg_id)
+        # check type_id
+        if response.num is Constant.SERVER_ERROR_RESPONSE:
+            logging.error(f"parse request data: {request} from {request.header['_host']} error")
+            response.body = ServerError("response num error")
+            return response
         # check client_model
         if request.num == Constant.DECLARE_REQUEST:
             client_model: "ClientModel" = ClientModel()
@@ -74,13 +69,12 @@ class Request(object):
                 response.body = AuthError("The current client id has not been registered")
                 return response
 
-        # check life_cycle
-        if not client_model.modify_life_cycle(dispatch_dict["life_cycle"]):
-            response.body = LifeCycleError()
-            return response
-
         request.client_model = client_model
-        return await dispatch_dict["func"](request, response)
+        return await self.call_next(request, response)
+
+    async def call_next(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
+        dispatch_func: Callable = self.dispatch_func_dict.get(request.num, None)
+        return await dispatch_func(request, response)
 
     async def ping_event(self, client_model: ClientModel):
         response: Response = Response(self._conn)
@@ -102,6 +96,11 @@ class Request(object):
     async def declare_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
         client_manager.create_client_model(request.client_model)
         response.body = {"client_id": request.client_model.client_id}
+        self.dispatch_func_dict = {
+            Constant.MSG_REQUEST: self.msg_life_cycle,
+            Constant.DROP_REQUEST: self.drop_life_cycle,
+            Constant.CLIENT_EVENT_RESPONSE: self.event,
+        }
         request.client_model.ping_event_future = asyncio.ensure_future(self.ping_event(request.client_model))
         return response
 
@@ -139,10 +138,13 @@ class Request(object):
                 response.body["result"] = result
         return response
 
-    @staticmethod
-    async def drop_life_cycle(request: RequestModel, response: ResponseModel) -> ResponseModel:
+    async def drop_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
         call_id = request.body["call_id"]
         client_manager.destroy_client_model(request.client_model.client_id)
+        self.dispatch_func_dict = {
+            Constant.DROP_REQUEST: self.drop_life_cycle,
+            Constant.CLIENT_EVENT_RESPONSE: self.event,
+        }
         response.body = {"call_id": call_id, "result": 1}
         return response
 
