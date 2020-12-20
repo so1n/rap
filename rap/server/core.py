@@ -110,8 +110,8 @@ class Server(object):
         request_handle: Request = Request(conn, self._run_timeout)
         for middleware in self._middleware_list:
             if isinstance(middleware, BaseRequestMiddleware):
-                middleware.load_sub_middleware(request_handle.call_next)
-                request_handle.call_next = middleware
+                middleware.load_sub_middleware(request_handle.real_dispatch)
+                request_handle.real_dispatch = middleware
             elif isinstance(middleware, BaseMsgMiddleware):
                 middleware.load_sub_middleware(request_handle.msg_handle)
                 request_handle.msg_handle = middleware
@@ -143,6 +143,7 @@ class Server(object):
         while not conn.is_closed():
             try:
                 request_msg: Optional[BASE_REQUEST_TYPE] = await conn.read(self._keep_alive)
+                asyncio.ensure_future(recv_msg_handle(request_msg))
             except asyncio.TimeoutError:
                 logging.error(f"recv data from {conn.peer} timeout. close conn")
                 await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "keep alive timeout")))
@@ -154,7 +155,6 @@ class Server(object):
                 logging.error(f"recv data from {conn.peer} error:{e}, conn has been closed")
                 conn.set_reader_exc(e)
                 raise e
-            asyncio.ensure_future(recv_msg_handle(request_msg))
 
         if not conn.is_closed():
             conn.close()
