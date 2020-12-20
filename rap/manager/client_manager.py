@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import time
 from dataclasses import dataclass, field
 from typing import Dict, Generator, Optional
@@ -18,12 +17,11 @@ class ClientModel(object):
 class ClientManager(object):
     def __init__(self):
         self._client_dict: Dict[str, "ClientModel"] = {}
-        self._expire_time: int = 1800
 
     def exist(self, client_id) -> bool:
         return client_id in self._client_dict
 
-    def create_client_model(self, client_model: "ClientModel"):
+    def save_client_model(self, client_model: "ClientModel"):
         while True:
             client_id: str = gen_random_time_id(length=6)
             if client_id not in self._client_dict:

@@ -47,17 +47,18 @@ class Request(object):
         }
 
     async def dispatch(self, request: RequestModel) -> Optional[ResponseModel]:
-        dispatch_func: Callable = self.dispatch_func_dict.get(request.num, None)
-        if not dispatch_func:
+        if not request.num not in self.dispatch_func_dict:
             response_num: int = Constant.SERVER_ERROR_RESPONSE
+            content: str = 'life cycle error'
         else:
             response_num: int = response_num_dict.get(request.num, Constant.SERVER_ERROR_RESPONSE)
+            content: str = 'request num error'
 
         response: "ResponseModel" = ResponseModel(num=response_num, msg_id=request.msg_id)
         # check type_id
         if response.num is Constant.SERVER_ERROR_RESPONSE:
             logging.error(f"parse request data: {request} from {request.header['_host']} error")
-            response.body = ServerError("response num error")
+            response.body = ServerError(content)
             return response
         # check client_model
         if request.num == Constant.DECLARE_REQUEST:
@@ -70,10 +71,10 @@ class Request(object):
                 return response
 
         request.client_model = client_model
-        return await self.call_next(request, response)
+        return await self.real_dispatch(request, response)
 
-    async def call_next(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
-        dispatch_func: Callable = self.dispatch_func_dict.get(request.num, None)
+    async def real_dispatch(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
+        dispatch_func: Callable = self.dispatch_func_dict[request.num]
         return await dispatch_func(request, response)
 
     async def ping_event(self, client_model: ClientModel):
@@ -88,13 +89,14 @@ class Request(object):
                 if not self._conn.is_closed():
                     self._conn.close()
                 asyncio.ensure_future(client_manager.async_destroy_client_model(client_model.client_id))
+                break
             else:
                 ping_response: ResponseModel = ResponseModel(Constant.SERVER_EVENT, body=Event(Constant.PING_EVENT, ""))
                 await response(ping_response)
                 await asyncio.sleep(60)
 
     async def declare_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
-        client_manager.create_client_model(request.client_model)
+        client_manager.save_client_model(request.client_model)
         response.body = {"client_id": request.client_model.client_id}
         self.dispatch_func_dict = {
             Constant.MSG_REQUEST: self.msg_life_cycle,
@@ -130,10 +132,9 @@ class Request(object):
                 response.header["status_code"] = 301
             elif isinstance(result, Exception):
                 exc, exc_info = parse_error(result)
+                response.body['exc_info'] = exc_info
                 if request.header.get("user_agent") == Constant.USER_AGENT:
-                    response.body.update({"exc": exc, "exc_info": exc_info})
-                else:
-                    response.body.update({"exc_info": exc_info})
+                    response.body['exc'] = exc
             else:
                 response.body["result"] = result
         return response

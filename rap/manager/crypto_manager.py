@@ -21,8 +21,8 @@ class CryptoManager(object):
         return crypto
 
     def get_crypto_by_key_id(self, key_id: str) -> "Union[Crypto, MISS_OBJECT]":
-        key_id: str = self._key_dict.get(key_id, "")
-        return self._crypto_dict.get(key_id, MISS_OBJECT)
+        key: str = self._key_dict.get(key_id, "")
+        return self._crypto_dict.get(key, MISS_OBJECT)
 
     def get_crypto_by_key(self, key: str) -> "Union[Crypto, MISS_OBJECT]":
         return self._crypto_dict.get(key, MISS_OBJECT)
