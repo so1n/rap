@@ -87,6 +87,9 @@ class Request(object):
         asyncio.ensure_future(conn_data_manager.async_destroy_conn_data(conn_data_model.peer))
 
     async def declare_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
+        declare_id: str = request.body.get('declare_id', '')
+        if not declare_id:
+            response.body = ProtocolError('not found declare id')
         conn_data_model: "ConnDataModel" = ConnDataModel(self._conn.peer)
         conn_data_manager.save_conn_data(conn_data_model)
         self.dispatch_func_dict = {
@@ -95,7 +98,7 @@ class Request(object):
             Constant.CLIENT_EVENT_RESPONSE: self.event,
         }
         conn_data_model.ping_event_future = asyncio.ensure_future(self.ping_event(conn_data_model))
-        response.body = request.body
+        response.body = {'declare_id': declare_id[::-1]}
         return response
 
     async def msg_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:

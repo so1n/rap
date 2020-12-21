@@ -165,10 +165,11 @@ class Client:
     ##############
     async def _declare_life_cycle(self):
         """send declare msg and init client id"""
-        body: dict = {}
+        random_id: str = gen_random_str_id()
+        body: dict = {'declare_id': random_id}
         request: Request = Request(Constant.DECLARE_REQUEST, body)
         response = await self._base_request(request)
-        if response.num != Constant.DECLARE_RESPONSE and response.body != body:
+        if response.num != Constant.DECLARE_RESPONSE and response.body['declare_id'] != random_id[::-1]:
             raise RPCError("declare response error")
         logging.info("declare success")
 
