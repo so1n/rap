@@ -14,7 +14,7 @@ class CryptoMiddleware(BaseMiddleWare):
         self._crypto_key: str = crypto_key
 
         self._nonce_set: set = set()
-        self._crypto: "Optional[Crypto]" = None
+        self._crypto: "Crypto" = Crypto(self._crypto_key)
 
     def _body_handle(self, body: dict):
         timestamp: int = body.get("timestamp", 0)
@@ -28,20 +28,13 @@ class CryptoMiddleware(BaseMiddleWare):
 
     async def dispatch(self, request: Request) -> Response:
         request.body = {"body": request.body, "timestamp": int(time.time()), "nonce": gen_random_time_id()}
-        if request.num == Constant.DECLARE_REQUEST:
-            request.header["client_id"] = self._crypto_id
-            request.body = Crypto(self._crypto_key).encrypt_object(request.body)
-        else:
-            request.body = self._crypto.encrypt_object(request.body)
+        request.header['crypto_id'] = self._crypto_id
+        request.body = self._crypto.encrypt_object(request.body)
 
         response: Response = await self.call_next(request)
 
         try:
-            if response.num == Constant.DECLARE_RESPONSE:
-                response.body = Crypto(self._crypto_key).decrypt_object(response.body)
-                self._crypto = Crypto(response.body["client_id"])
-            else:
-                response.body = self._crypto.decrypt_object(response.body)
+            response.body = self._crypto.decrypt_object(response.body)
             self._body_handle(response.body)
         except Exception as e:
             raise CryptoError(f"Can't decrypt body.") from e

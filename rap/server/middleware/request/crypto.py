@@ -1,9 +1,9 @@
 import time
 from typing import Dict, Optional
 
-from rap.common.utlis import Constant, MISS_OBJECT, gen_random_time_id
+from rap.common.utlis import MISS_OBJECT, gen_random_time_id
 from rap.common.crypto import Crypto
-from rap.common.exceptions import AuthError, ServerError
+from rap.common.exceptions import CryptoError, ServerError
 from rap.manager.crypto_manager import crypto_manager
 from rap.manager.redis_manager import redis_manager
 from rap.server.middleware.base import BaseRequestMiddleware
@@ -18,19 +18,16 @@ class CryptoMiddleware(BaseRequestMiddleware):
 
     async def dispatch(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
         if type(request.body) is bytes:
-            client_id: str = request.header.get("client_id", None)
-            if request.num == Constant.DECLARE_REQUEST:
-                crypto: Crypto = crypto_manager.get_crypto_by_key_id(client_id)
-            else:
-                crypto: Crypto = crypto_manager.get_crypto_by_key(client_id)
+            crypto_id: str = request.header.get('crypto_id', None)
+            crypto: Crypto = crypto_manager.get_crypto_by_key_id(crypto_id)
             # check crypto
             if crypto == MISS_OBJECT:
-                response.body = AuthError("crypto key error")
+                response.body = CryptoError("crypto id error")
                 return response
             try:
                 request.body = crypto.decrypt_object(request.body)
             except Exception:
-                response.body = AuthError("decrypt body error")
+                response.body = CryptoError("decrypt body error")
                 return response
 
             try:
@@ -53,8 +50,6 @@ class CryptoMiddleware(BaseRequestMiddleware):
             if response.body:
                 response.body.update(dict(timestamp=int(time.time()), nonce=gen_random_time_id()))
                 response.body = crypto.encrypt_object(response.body)
-            if response.num == Constant.DECLARE_RESPONSE:
-                crypto_manager.add_crypto(request.client_model.peer)
             return response
         else:
             return await self.call_next(request, response)
