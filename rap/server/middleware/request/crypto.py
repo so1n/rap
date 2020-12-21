@@ -54,7 +54,7 @@ class CryptoMiddleware(BaseRequestMiddleware):
                 response.body.update(dict(timestamp=int(time.time()), nonce=gen_random_time_id()))
                 response.body = crypto.encrypt_object(response.body)
             if response.num == Constant.DECLARE_RESPONSE:
-                crypto_manager.add_crypto(request.client_model.client_id)
+                crypto_manager.add_crypto(request.client_model.peer)
             return response
         else:
             return await self.call_next(request, response)

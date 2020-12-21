@@ -8,7 +8,6 @@ from typing import Any, Callable, Coroutine, Dict, Optional, Tuple
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import (
-    AuthError,
     BaseRapError,
     FuncNotFoundError,
     ParseError,
@@ -19,12 +18,11 @@ from rap.common.exceptions import (
 from rap.common.utlis import (
     Constant,
     Event,
-    MISS_OBJECT,
     get_event_loop,
     parse_error,
     response_num_dict
 )
-from rap.manager.client_manager import client_manager, ClientModel
+from rap.manager.conn_data_manager import conn_data_manager, ConnDataModel
 from rap.manager.func_manager import func_manager
 from rap.server.response import Response, ResponseModel
 
@@ -35,7 +33,6 @@ class RequestModel(object):
     msg_id: int
     header: dict
     body: Any
-    client_model: Optional[ClientModel] = None
 
 
 class Request(object):
@@ -47,7 +44,7 @@ class Request(object):
         }
 
     async def dispatch(self, request: RequestModel) -> Optional[ResponseModel]:
-        if not request.num not in self.dispatch_func_dict:
+        if request.num not in self.dispatch_func_dict:
             response_num: int = Constant.SERVER_ERROR_RESPONSE
             content: str = 'life cycle error'
         else:
@@ -60,27 +57,21 @@ class Request(object):
             logging.error(f"parse request data: {request} from {request.header['_host']} error")
             response.body = ServerError(content)
             return response
-        # check client_model
-        if request.num == Constant.DECLARE_REQUEST:
-            client_model: "ClientModel" = ClientModel()
-        else:
-            client_id = request.header.get("client_id", None)
-            client_model = client_manager.get_client_model(client_id)
-            if client_model is MISS_OBJECT:
-                response.body = AuthError("The current client id has not been registered")
-                return response
+        # check conn_data_model
+        if request.num != Constant.DECLARE_REQUEST and not conn_data_manager.exist(self._conn.peer):
+            response.body = ProtocolError('Must declare')
+            return response
 
-        request.client_model = client_model
         return await self.real_dispatch(request, response)
 
     async def real_dispatch(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
         dispatch_func: Callable = self.dispatch_func_dict[request.num]
         return await dispatch_func(request, response)
 
-    async def ping_event(self, client_model: ClientModel):
+    async def ping_event(self, conn_data_model: ConnDataModel):
         response: Response = Response(self._conn)
         while not self._conn.is_closed():
-            diff_time: int = int(time.time()) - client_model.keep_alive_timestamp
+            diff_time: int = int(time.time()) - conn_data_model.keep_alive_timestamp
             if diff_time > 130:
                 event_resp: ResponseModel = ResponseModel(
                     Constant.SERVER_EVENT, body=Event(Constant.EVENT_CLOSE_CONN, "recv pong timeout")
@@ -88,22 +79,23 @@ class Request(object):
                 await response(event_resp)
                 if not self._conn.is_closed():
                     self._conn.close()
-                asyncio.ensure_future(client_manager.async_destroy_client_model(client_model.client_id))
                 break
             else:
                 ping_response: ResponseModel = ResponseModel(Constant.SERVER_EVENT, body=Event(Constant.PING_EVENT, ""))
                 await response(ping_response)
                 await asyncio.sleep(60)
+        asyncio.ensure_future(conn_data_manager.async_destroy_conn_data(conn_data_model.peer))
 
     async def declare_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
-        client_manager.save_client_model(request.client_model)
-        response.body = {"client_id": request.client_model.client_id}
+        conn_data_model: "ConnDataModel" = ConnDataModel(self._conn.peer)
+        conn_data_manager.save_conn_data(conn_data_model)
         self.dispatch_func_dict = {
             Constant.MSG_REQUEST: self.msg_life_cycle,
             Constant.DROP_REQUEST: self.drop_life_cycle,
             Constant.CLIENT_EVENT_RESPONSE: self.event,
         }
-        request.client_model.ping_event_future = asyncio.ensure_future(self.ping_event(request.client_model))
+        conn_data_model.ping_event_future = asyncio.ensure_future(self.ping_event(conn_data_model))
+        response.body = request.body
         return response
 
     async def msg_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
@@ -141,7 +133,7 @@ class Request(object):
 
     async def drop_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
         call_id = request.body["call_id"]
-        client_manager.destroy_client_model(request.client_model.client_id)
+        conn_data_manager.destroy_conn_data(self._conn.peer)
         self.dispatch_func_dict = {
             Constant.DROP_REQUEST: self.drop_life_cycle,
             Constant.CLIENT_EVENT_RESPONSE: self.event,
@@ -149,26 +141,25 @@ class Request(object):
         response.body = {"call_id": call_id, "result": 1}
         return response
 
-    @staticmethod
-    async def event(request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
+    async def event(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
         event_name: str = request.body[0]
         if event_name == Constant.PONG_EVENT:
-            client_id: str = request.header.get("client_id")
-            client_manager.get_client_model(client_id).keep_alive_timestamp = int(time.time())
+            conn_data_manager.get_conn_data(self._conn.peer).keep_alive_timestamp = int(time.time())
         return None
 
     async def msg_handle(self, request: RequestModel, call_id: int, func: Callable, param: str) -> Tuple[int, Any]:
+        conn_data_model: "ConnDataModel" = conn_data_manager.get_conn_data(self._conn.peer)
         user_agent: str = request.header.get("user_agent")
         try:
-            if call_id in request.client_model.generator_dict:
+            if call_id in conn_data_model.generator_dict:
                 try:
-                    result = request.client_model.generator_dict[call_id]
+                    result = conn_data_model.generator_dict[call_id]
                     if inspect.isgenerator(result):
                         result = next(result)
                     elif inspect.isasyncgen(result):
                         result = await result.__anext__()
                 except (StopAsyncIteration, StopIteration) as e:
-                    del request.client_model.generator_dict[call_id]
+                    del conn_data_model.generator_dict[call_id]
                     result = e
             else:
                 if asyncio.iscoroutinefunction(func):
@@ -188,14 +179,14 @@ class Request(object):
                         result = ProtocolError(f"{user_agent} not support generator")
                     else:
                         call_id = id(result)
-                        request.client_model.generator_dict[call_id] = result
+                        conn_data_model.generator_dict[call_id] = result
                         result = next(result)
                 elif inspect.isasyncgen(result):
                     if user_agent != Constant.USER_AGENT:
                         result = ProtocolError(f"{user_agent} not support generator")
                     else:
                         call_id = id(result)
-                        request.client_model.generator_dict[call_id] = result
+                        conn_data_model.generator_dict[call_id] = result
                         result = await result.__anext__()
         except Exception as e:
             if isinstance(e, BaseRapError):
