@@ -67,9 +67,6 @@ class Client:
         self._keep_alive_time: int = keep_alive_time
         self._timeout: int = timeout
 
-        self._client_id: str = gen_random_str_id(8)
-        self._declare_client_id: str = self._client_id
-
         self.rap_exc_dict = self._get_rap_exc_dict()
 
     #######################
@@ -169,15 +166,10 @@ class Client:
     async def _declare_life_cycle(self):
         """send declare msg and init client id"""
         body: dict = {}
-        self._client_id = self._declare_client_id
         request: Request = Request(Constant.DECLARE_REQUEST, body)
         response = await self._base_request(request)
         if response.num != Constant.DECLARE_RESPONSE and response.body != body:
             raise RPCError("declare response error")
-        client_id = response.body.get("client_id")
-        if client_id is None:
-            raise RPCError("declare response error, Can not get client id from body")
-        self._client_id = client_id
         logging.info("declare success")
 
     async def _drop_life_cycle(self):
@@ -200,7 +192,6 @@ class Client:
             if header_key not in request.header:
                 request.header[header_key] = header_Value
 
-        set_header_value("client_id", self._client_id)
         set_header_value("version", Constant.VERSION)
         set_header_value("user_agent", Constant.USER_AGENT)
 
