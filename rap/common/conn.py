@@ -73,7 +73,8 @@ class BaseConnection:
             return self._is_closed
 
     async def wait_closed(self):
-        await self._writer.wait_closed()
+        if self._writer:
+            await self._writer.wait_closed()
 
     async def await_close(self):
         self.close()
