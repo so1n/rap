@@ -10,8 +10,12 @@ from rap.common.utlis import MISS_OBJECT
 class ConnDataModel(object):
     peer: str
     generator_dict: Dict[int, Generator] = field(default_factory=dict)
-    keep_alive_timestamp: int = int(time.time())
+    keep_alive_timestamp: int = field(default_factory=lambda: int(time.time()))
     ping_event_future: Optional[asyncio.Future] = None
+
+    def __del__(self):
+        if self.ping_event_future and not self.ping_event_future.cancelled():
+            self.ping_event_future.cancel()
 
 
 class ConnDataManager(object):
