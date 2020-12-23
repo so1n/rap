@@ -21,12 +21,25 @@ class Session(object):
         self._transport: 'Transport' = transport
         self._token: Optional[Token] = None
 
-    async def __aenter__(self) -> 'Transport':
+    async def __aenter__(self) -> 'Session':
         self._token = self._transport.conn_context.set(self._transport.get_random_conn())
-        return self._transport
+        return self
 
     async def __aexit__(self, *args: Tuple):
         self._transport.conn_context.reset(self._token)
+
+    @property
+    def conn(self):
+        return self._transport.now_conn
+
+    async def request(self, method: str, *args, call_id=-1) -> Response:
+        return await self._transport.request(method, *args, call_id, self.conn)
+
+    async def write(self, request: Request, msg_id: int) -> str:
+        return await self._transport.write(request, msg_id, self.conn)
+
+    async def read(self, resp_future_id: str) -> Response:
+        return await self._transport.read(resp_future_id)
 
 
 class Transport(object):
@@ -254,7 +267,7 @@ class Transport(object):
     ######################
     # one by one request #
     ######################
-    async def request(self, method, *args, call_id=-1, conn: Optional[Connection] = None) -> Response:
+    async def request(self, method: str, *args, call_id=-1, conn: Optional[Connection] = None) -> Response:
         """msg request handle"""
         if not conn:
             conn = self.now_conn
