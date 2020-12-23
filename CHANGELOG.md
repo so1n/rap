@@ -7,25 +7,33 @@
  - Feature: client support load balance
  - Feature: server HA middleware
 
-### 0.5.3.1[now]
+### 0.5.3.2[now]
+ - description: simplify&mutli server
+ - Feature: remove life cycle
+ - Fix: keepalive time init error
+ - Refactor: refactor server
+ - Refactor: refactor client, support conn mutli server
+ - Remove: remove server client_model(one conn one request object)
+ 
+### 0.5.3.1
  - description: request interface 
  - Refactor: request_handle&core interface
 
 ### 0.5.3
  - description: new middleware design&redis support
- - Feat: server&client remove aes
- - Feat: client add middleware feat
- - Feat: server&client add aes middleware
- - Feat: add server.response middleware
- - Feat: middleware add redis support
- - Feat: Ping&Pong, conn keep alive 
+ - Feature: server&client remove aes
+ - Feature: client add middleware feat
+ - Feature: server&client add aes middleware
+ - Feature: add server.response middleware
+ - Feature: middleware add redis support
+ - Feature: Ping&Pong, conn keep alive 
  - Refactor: server.load_middleware
 
 ### 0.5.2.2
  - description: Distinguish server exceptions and execution function exceptions; better log output
  - Refactor: Exceptions
- - Feat: Complete server exception
- - Feat: Complete execution func exception
+ - Feature: Complete server exception
+ - Feature: Complete execution func exception
  - Refactor: log output
  
 ### 0.5.2.1
