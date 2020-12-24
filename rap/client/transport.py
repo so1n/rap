@@ -13,7 +13,10 @@ from rap.common.conn import Connection
 from rap.common.exceptions import RPCError
 from rap.common.middleware import BaseMiddleware
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
-from rap.common.utlis import Constant, Event, gen_random_str_id
+from rap.common.utlis import Constant, Event, MISS_OBJECT, gen_random_str_id
+
+
+_conn_context: ContextVar[Connection] = ContextVar("conn_context", default=MISS_OBJECT)
 
 
 class Session(object):
@@ -22,11 +25,11 @@ class Session(object):
         self._token: Optional[Token] = None
 
     async def __aenter__(self) -> 'Session':
-        self._token = self._transport.conn_context.set(self._transport.get_random_conn())
+        self._token = _conn_context.set(self._transport.get_random_conn())
         return self
 
     async def __aexit__(self, *args: Tuple):
-        self._transport.conn_context.reset(self._token)
+        _conn_context.reset(self._token)
 
     @property
     def conn(self):
@@ -61,8 +64,6 @@ class Transport(object):
         self._rap_exc_dict = get_rap_exc_dict()
         self._listen_future_dict: Dict[str, asyncio.Future] = {}
         self._resp_future_dict: Dict[str, asyncio.Future[Response]] = {}
-
-        self.conn_context: ContextVar[Connection] = ContextVar(f"{id(self)}_context")
 
     async def _connect(self, host: str):
         conn = Connection(
@@ -209,10 +210,6 @@ class Transport(object):
     # base one by one request response #
     ####################################
     async def _base_request(self, request: Request, conn: Connection) -> Response:
-        self.before_request_handle(request, conn)
-        return await self._real_base_request(request, conn)
-
-    async def _real_base_request(self, request: Request, conn: Connection) -> Response:
         """gen msg id, send and recv response"""
         msg_id: int = self._msg_id + 1
         # Avoid too big numbers
@@ -225,9 +222,10 @@ class Transport(object):
             if resp_future_id in self._resp_future_dict:
                 del self._resp_future_dict[resp_future_id]
 
-    @staticmethod
-    def before_request_handle(request: Request, conn: Connection):
+    def before_request_handle(self, request: Request, conn: Connection) -> Connection:
         """check conn and header"""
+        if not conn:
+            conn = self.now_conn
         if conn.is_closed():
             raise ConnectionError("The connection has been closed, please call connect to create connection")
 
@@ -236,27 +234,32 @@ class Transport(object):
             if header_key not in request.header:
                 request.header[header_key] = header_Value
 
+        use_session: bool = False
+        if _conn_context.get(MISS_OBJECT) is not MISS_OBJECT:
+            use_session = True
+
         set_header_value("version", Constant.VERSION)
         set_header_value("user_agent", Constant.USER_AGENT)
+        set_header_value("use_session", use_session)
+        return conn
 
     #######################
     # base write&read api #
     #######################
     async def write(self, request: Request, msg_id: int, conn: Optional[Connection] = None) -> str:
-        if not conn:
-            conn = self.now_conn
+        conn = self.before_request_handle(request, conn)
         request: BASE_REQUEST_TYPE = (request.num, msg_id, request.header, request.body)
         try:
             await conn.write(request)
             logging.debug(f"send:%s to %s", request, conn.connection_info)
             resp_future_id: str = f'{conn.peer}:{msg_id}'
-            self._resp_future_dict[resp_future_id] = asyncio.Future()
-            return resp_future_id
         except asyncio.TimeoutError as e:
             logging.error(f"send to %s timeout, drop data:%s", conn.connection_info, request)
             raise e
         except Exception as e:
             raise e
+        self._resp_future_dict[resp_future_id] = asyncio.Future()
+        return resp_future_id
 
     async def read(self, resp_future_id: str) -> Response:
         try:
@@ -269,8 +272,6 @@ class Transport(object):
     ######################
     async def request(self, method: str, *args, call_id=-1, conn: Optional[Connection] = None) -> Response:
         """msg request handle"""
-        if not conn:
-            conn = self.now_conn
         request: Request = Request(Constant.MSG_REQUEST, {"call_id": call_id, "method_name": method, "param": args})
         response: Response = await self._base_request(request, conn)
         if response.num != Constant.MSG_RESPONSE:
@@ -291,7 +292,10 @@ class Transport(object):
 
     @property
     def now_conn(self) -> Connection:
-        return self.conn_context.get(self.get_random_conn())
+        conn: Optional[Connection] = _conn_context.get()
+        if conn is MISS_OBJECT:
+            conn = self.get_random_conn()
+        return conn
 
     @property
     def session(self):
@@ -303,7 +307,7 @@ class Transport(object):
     def load_middleware(self, middleware_list: List[BaseMiddleware]):
         for middleware in middleware_list:
             if isinstance(middleware, BaseMiddleware):
-                middleware.load_sub_middleware(self._real_base_request)
-                self._real_base_request = middleware
+                middleware.load_sub_middleware(self._base_request)
+                self._base_request = middleware
             else:
                 raise RuntimeError(f"{middleware} must be instance {BaseMiddleware}")
