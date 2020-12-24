@@ -18,6 +18,7 @@ from rap.common.exceptions import (
 from rap.common.utlis import (
     Constant,
     Event,
+    MISS_OBJECT,
     get_event_loop,
     parse_error,
     response_num_dict
@@ -34,19 +35,54 @@ class RequestModel(object):
     body: Any
 
 
+class Channel(object):
+    def __init__(
+            self,
+            func_name: str,
+            write: Callable[[ResponseModel], Coroutine[Any, Any, Any]],
+            close: Callable
+    ):
+        self._func_name: str = func_name
+        self._close: Callable = close
+        self._write: Callable[[ResponseModel], Coroutine[Any, Any, Any]] = write
+        self.queue: asyncio.Queue = asyncio.Queue()
+        self.channel_id: int = id(self)
+
+    async def write(self, body: Any):
+        response: "ResponseModel" = ResponseModel(
+            num=Constant.MSG_RESPONSE,
+            msg_id=-1,
+            header={'type': 'channel', 'channel_id': self.channel_id, 'channel_life_cycle': 'msg'},
+            body={"call_id": -1, "method_name": self._func_name, "body": body}
+        )
+        await self._write(response)
+
+    async def read(self) -> ResponseModel:
+        return await self.queue.get()
+
+    async def read_body(self) -> Any:
+        response: ResponseModel = await self.read()
+        return response.body.get('body')
+
+    def close(self):
+        self._close()
+
+
 class Request(object):
-    def __init__(self, conn: ServerConnection, run_timeout: int):
+    def __init__(self, conn: ServerConnection, run_timeout: int, response: Response):
         self._conn: ServerConnection = conn
         self._run_timeout: int = run_timeout
         self.dispatch_func_dict: Dict[int, Callable] = {
             Constant.DECLARE_REQUEST: self.declare_life_cycle,
         }
+        self._response: Response = response
 
         # now one conn one Request object
         self._is_declare: bool = False
         self._ping_pong_future: Optional[asyncio.Future] = None
         self._keepalive_timestamp: int = int(time.time())
         self._generator_dict: Dict[int, Generator] = {}
+        self._channel_dict: Dict[int, Channel] = {}
 
     async def dispatch(self, request: RequestModel) -> Optional[ResponseModel]:
         if request.num not in self.dispatch_func_dict:
@@ -104,37 +140,40 @@ class Request(object):
         response.body = {'declare_id': declare_id[::-1]}
         return response
 
-    async def msg_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
+    async def msg_life_cycle(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
+
         try:
             call_id: int = request.body["call_id"]
             method_name: str = request.body["method_name"]
-            param: str = request.body["param"]
         except KeyError:
             response.body = ParseError("body miss params")
             return response
+        param: str = request.body.get("param")
 
         # root func only called by local client
         if method_name.startswith("_root_") and request.header["_host"] != "127.0.0.1":
             response.body = FuncNotFoundError(extra_msg=f"func name: {method_name}")
             return response
-        else:
-            func: Optional[Callable] = func_manager.func_dict.get(method_name)
-            if not func:
-                response.body = FuncNotFoundError(extra_msg=f"func name: {method_name}")
-                return response
+        func: Optional[Callable] = func_manager.func_dict.get(method_name)
+        if not func:
+            response.body = FuncNotFoundError(extra_msg=f"func name: {method_name}")
+            return response
 
-            new_call_id, result = await self.msg_handle(request, call_id, func, param)
-            response.body = {"call_id": new_call_id, "method_name": method_name}
-            if isinstance(result, StopAsyncIteration) or isinstance(result, StopIteration):
-                response.body["result"] = ""
-                response.header["status_code"] = 301
-            elif isinstance(result, Exception):
-                exc, exc_info = parse_error(result)
-                response.body['exc_info'] = exc_info
-                if request.header.get("user_agent") == Constant.USER_AGENT:
-                    response.body['exc'] = exc
-            else:
-                response.body["result"] = result
+        if request.header.get('type') == 'channel':
+            return await self.channel_handle(request, response, func)
+
+        new_call_id, result = await self.msg_handle(request, call_id, func, param)
+        response.body = {"call_id": new_call_id, "method_name": method_name}
+        if isinstance(result, StopAsyncIteration) or isinstance(result, StopIteration):
+            response.body["result"] = ""
+            response.header["status_code"] = 301
+        elif isinstance(result, Exception):
+            exc, exc_info = parse_error(result)
+            response.body['exc_info'] = exc_info
+            if request.header.get("user_agent") == Constant.USER_AGENT:
+                response.body['exc'] = exc
+        else:
+            response.body["result"] = result
         return response
 
     async def drop_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
@@ -154,6 +193,38 @@ class Request(object):
         if event_name == Constant.PONG_EVENT:
             self._keepalive_timestamp = int(time.time())
         return None
+
+    async def channel_handle(
+            self, request: RequestModel, response: ResponseModel, func: Callable
+    ) -> Optional[ResponseModel]:
+        channel_id: int = request.header.get('channel_id')
+        life_cycle: str = request.header.get("channel_life_cycle")
+        func_name: str = func.__name__
+
+        channel: Channel = self._channel_dict.get(channel_id, MISS_OBJECT)
+        if life_cycle == 'msg:':
+            await channel.queue.put(request)
+        elif channel is MISS_OBJECT and life_cycle == 'declare':
+            async def write(_response: ResponseModel):
+                await self._response(_response)
+
+            def close(_call_id: int):
+                del self._channel_dict[_call_id]
+
+            channel = Channel(func_name, write, close)
+            asyncio.ensure_future(func(channel))
+            channel_id: int = id(channel)
+            self._channel_dict[channel_id] = channel
+            response.header = {'type': 'channel', 'channel_id': channel_id, 'channel_life_cycle': 'declare'}
+            response.body = {"call_id": -1, "method_name": func_name}
+            return response
+        elif life_cycle == 'drop':
+            channel.close()
+            response.header = {'type': 'channel', 'channel_id': channel_id, 'channel_life_cycle': 'drop'}
+            response.body = {"call_id": -1, "method_name": func_name}
+            return response
+        else:
+            await channel.queue.put(request)
 
     async def msg_handle(self, request: RequestModel, call_id: int, func: Callable, param: str) -> Tuple[int, Any]:
         user_agent: str = request.header.get("user_agent")
