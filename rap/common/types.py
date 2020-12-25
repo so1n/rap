@@ -5,8 +5,9 @@ from collections.abc import Iterator
 from typing import Any, List, Tuple, Optional, Type, Set, Union, _GenericAlias
 
 
-BASE_REQUEST_TYPE = Tuple[int, int, dict, Any]
-BASE_RESPONSE_TYPE = Optional[Tuple[int, int, dict, Any]]
+# request num, msg id, func name, method, header, body
+BASE_REQUEST_TYPE = Tuple[int, int, str, str, dict, Any]
+BASE_RESPONSE_TYPE = Optional[Tuple[int, int, str, str, dict, Any]]
 LOOP_TYPE = asyncio.get_event_loop
 READER_TYPE = asyncio.streams.StreamReader
 WRITER_TYPE = asyncio.streams.StreamWriter
