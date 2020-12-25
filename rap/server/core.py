@@ -107,7 +107,7 @@ class Server(object):
 
     async def _conn_handle(self, conn: ServerConnection):
         response_handle: Response = Response(conn, self._timeout)
-        request_handle: Request = Request(conn, self._run_timeout)
+        request_handle: Request = Request(conn, self._run_timeout, response_handle)
         for middleware in self._middleware_list:
             if isinstance(middleware, BaseRequestMiddleware):
                 middleware.load_sub_middleware(request_handle.real_dispatch)

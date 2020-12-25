@@ -24,11 +24,11 @@ class FuncManager(object):
     ):
         # check func param&return value type hint
         sig: "inspect.Signature" = inspect.signature(func)
-        if not check_is_json_type(sig.return_annotation) or sig.return_annotation is sig.empty:
-            raise RegisteredError(f"{func.__name__} return type:{sig.return_annotation} is not json type")
-        for param in sig.parameters.values():
-            if not check_is_json_type(param.annotation) or param.annotation is sig.empty:
-                raise RegisteredError(f"{func.__name__} param:{param.name} type:{param.annotation} is not json type")
+        # if not check_is_json_type(sig.return_annotation) or sig.return_annotation is sig.empty:
+        #     raise RegisteredError(f"{func.__name__} return type:{sig.return_annotation} is not json type")
+        # for param in sig.parameters.values():
+        #     if not check_is_json_type(param.annotation) or param.annotation is sig.empty:
+        #         raise RegisteredError(f"{func.__name__} param:{param.name} type:{param.annotation} is not json type")
 
         if not hasattr(func, "__call__"):
             raise RegisteredError(f"{name} is not a callable object")
