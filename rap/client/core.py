@@ -4,7 +4,7 @@ from functools import wraps
 from typing import Any, Callable, cast, List, Optional, Tuple
 
 from rap.client.model import Response
-from rap.client.transport import Transport
+from rap.client.transport import Channel, Transport
 from rap.common.conn import Connection
 from rap.common.middleware import BaseMiddleware
 
@@ -94,6 +94,14 @@ class Client:
 
         return cast(Callable, wrapper)
 
+    def _async_channel_register(self, func: Callable):
+        """Decoration generator function"""
+        @wraps(func)
+        async def wrapper(*args, **kwargs) -> Any:
+            async with self.transport.channel(func.__name__) as channel:
+                await func(channel)
+        return cast(Callable, wrapper)
+
     # client api
     async def raw_call(self, method: str, *args: Any) -> Any:
         """rpc client base call method"""
@@ -112,7 +120,14 @@ class Client:
     def register(self, func: Callable) -> Any:
         """Using this method to decorate a fake function can help you use it better.
         (such as ide completion, ide reconstruction and type hints)"""
+        func_sig: inspect.Signature = inspect.signature(func)
+        func_arg_parameter: List[inspect.Parameter] = [i for i in func_sig.parameters.values() if i.default == i.empty]
+        if len(func_arg_parameter) == 1 and func_arg_parameter[0].annotation is Channel:
+            return self._async_channel_register(func)
+
         if inspect.iscoroutinefunction(func):
             return self._async_register(func)
         elif inspect.isasyncgenfunction(func):
             return self._async_gen_register(func)
+
+

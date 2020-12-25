@@ -38,17 +38,24 @@ class RequestModel(object):
 class Channel(object):
     def __init__(
             self,
+            channel_id: str,
             func_name: str,
             write: Callable[[ResponseModel], Coroutine[Any, Any, Any]],
-            close: Callable
+            close: Callable,
+            conn: ServerConnection
     ):
         self._func_name: str = func_name
         self._close: Callable = close
         self._write: Callable[[ResponseModel], Coroutine[Any, Any, Any]] = write
+        self._conn: ServerConnection = conn
         self.queue: asyncio.Queue = asyncio.Queue()
-        self.channel_id: int = id(self)
+        self.channel_id: str = channel_id
+        self._is_close: bool = False
+        self.future: Optional[asyncio.Future] = None
 
     async def write(self, body: Any):
+        if self.is_close:
+            raise asyncio.CancelledError(f'channel{self.channel_id} is close')
         response: "ResponseModel" = ResponseModel(
             num=Constant.MSG_RESPONSE,
             msg_id=-1,
@@ -58,13 +65,32 @@ class Channel(object):
         await self._write(response)
 
     async def read(self) -> ResponseModel:
+        if self.is_close:
+            raise asyncio.CancelledError(f'channel{self.channel_id} is close')
         return await self.queue.get()
 
     async def read_body(self) -> Any:
         response: ResponseModel = await self.read()
         return response.body.get('body')
 
-    def close(self):
+    @property
+    def is_close(self) -> bool:
+        return self._is_close or (self._conn and self._conn.is_closed())
+
+    async def close(self):
+        if self._is_close:
+            logging.debug('already close channel %s', self.channel_id)
+            return
+        self._is_close = True
+        if not self.future.cancelled():
+            self.future.cancel()
+        response: "ResponseModel" = ResponseModel(
+            num=Constant.MSG_RESPONSE,
+            msg_id=-1,
+            header={'type': 'channel', 'channel_id': self.channel_id, 'channel_life_cycle': 'drop'},
+            body={"call_id": -1, "method_name": self._func_name}
+        )
+        await self._write(response)
         self._close()
 
 
@@ -82,7 +108,7 @@ class Request(object):
         self._ping_pong_future: Optional[asyncio.Future] = None
         self._keepalive_timestamp: int = int(time.time())
         self._generator_dict: Dict[int, Generator] = {}
-        self._channel_dict: Dict[int, Channel] = {}
+        self._channel_dict: Dict[str, Channel] = {}
 
     async def dispatch(self, request: RequestModel) -> Optional[ResponseModel]:
         if request.num not in self.dispatch_func_dict:
@@ -197,32 +223,46 @@ class Request(object):
     async def channel_handle(
             self, request: RequestModel, response: ResponseModel, func: Callable
     ) -> Optional[ResponseModel]:
-        channel_id: int = request.header.get('channel_id')
+        channel_id: str = request.header.get('channel_id')
         life_cycle: str = request.header.get("channel_life_cycle")
         func_name: str = func.__name__
 
         channel: Channel = self._channel_dict.get(channel_id, MISS_OBJECT)
         if life_cycle == 'msg:':
             await channel.queue.put(request)
-        elif channel is MISS_OBJECT and life_cycle == 'declare':
+        elif life_cycle == 'declare':
+            if channel is not MISS_OBJECT:
+                response: "ResponseModel" = ResponseModel(
+                    num=Constant.MSG_RESPONSE,
+                    msg_id=-1,
+                    header={'type': 'channel', 'channel_id': channel_id, 'channel_life_cycle': 'declare'},
+                    body=ProtocolError('channel already create')
+                )
+                return response
+
             async def write(_response: ResponseModel):
                 await self._response(_response)
 
-            def close(_call_id: int):
-                del self._channel_dict[_call_id]
+            def close():
+                del self._channel_dict[channel_id]
 
-            channel = Channel(func_name, write, close)
-            asyncio.ensure_future(func(channel))
-            channel_id: int = id(channel)
+            channel = Channel(channel_id, func_name, write, close, self._conn)
+
+            async def channel_func():
+                try:
+                    await func(channel)
+                finally:
+                    if not channel.is_close:
+                        await channel.close()
+
+            channel.future = asyncio.ensure_future(channel_func())
             self._channel_dict[channel_id] = channel
             response.header = {'type': 'channel', 'channel_id': channel_id, 'channel_life_cycle': 'declare'}
             response.body = {"call_id": -1, "method_name": func_name}
             return response
         elif life_cycle == 'drop':
-            channel.close()
-            response.header = {'type': 'channel', 'channel_id': channel_id, 'channel_life_cycle': 'drop'}
-            response.body = {"call_id": -1, "method_name": func_name}
-            return response
+            await channel.close()
+            return
         else:
             await channel.queue.put(request)
 

@@ -42,10 +42,7 @@ async def _run_once():
 async def run_once():
     s_t = time.time()
     await client.connect()
-    async with client.transport.session as s:
-        print(s.conn)
-        await _run_once()
-        print(s.conn)
+    async with client.transport.session:
         await _run_once()
     print(time.time() - s_t)
     await client.wait_close()

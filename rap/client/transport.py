@@ -23,13 +23,17 @@ _conn_context: ContextVar[Connection] = ContextVar("conn_context", default=MISS_
 class Session(object):
     def __init__(self, transport: 'Transport'):
         self._transport: 'Transport' = transport
-        self._token: Token = _conn_context.set(self._transport.get_random_conn())
+        self._token: Optional[Token] = None
 
     async def __aenter__(self) -> 'Session':
+        self.create()
         return self
 
     async def __aexit__(self, *args: Tuple):
         self.close()
+
+    def create(self):
+        self._token: Token = _conn_context.set(self._transport.get_random_conn())
 
     def close(self):
         _conn_context.reset(self._token)
@@ -51,59 +55,78 @@ class Session(object):
 class Channel(object):
     def __init__(
             self,
-            create: Callable[[int], Coroutine[Any, Any, Any]],
-            read: Callable[[int], Coroutine[Any, Any, Response]],
+            fun_name: str,
+            session: Session,
+            create: Callable[[str], Coroutine[Any, Any, Any]],
+            read: Callable[[str], Coroutine[Any, Any, Response]],
             write: Callable[[Request], Coroutine[Any, Any, str]],
-            close: Callable,
+            close: Callable[[str], Coroutine[Any, Any, Any]],
     ):
-        self._channel_id: int = -1
-        self._create: Callable[[int], Coroutine[Any, Any, Any]] = create
-        self._read: Callable[[], Coroutine[Any, Any, Response]] = read
+        self._func_name: str = fun_name
+        self._session: Session = session
+        self._channel_id: str = str(uuid.uuid4())
+        self._create: Callable[[str], Coroutine[Any, Any, Any]] = create
+        self._read: Callable[[str], Coroutine[Any, Any, Response]] = read
         self._write: Callable[[Request], Coroutine[Any, Any, str]] = write
-        self._close: Callable = close
-        self._method: str = ''
+        self._close: Callable[[str], Coroutine[Any, Any, Any]] = close
 
     async def create(self):
-        life_cycle: str = 'declare'
-        await self._base_write(self._method, None, life_cycle)
-        response: Response = await self._base_read(life_cycle)
-        channel_id: int = response.header.get('channel_id')
-        self._channel_id = channel_id
+        self._session.create()
         await self._create(self._channel_id)
-
-    async def _base_read(self, life_cycle: str) -> Response:
-        response: Response = await self._read()
-        if response.header.get('type') != 'channel':
-            raise ProtocolError('this msg is not channel')
+        life_cycle: str = 'declare'
+        await self._base_write(None, life_cycle)
+        response: Response = await self._base_read()
         if response.header.get('channel_life_cycle') != life_cycle:
             raise ProtocolError('channel life cycle error')
-        if response.header.get('channel_id', -1) == -1:
-            raise ProtocolError('channel init error')
+        channel_id: str = response.header.get('channel_id')
+        self._channel_id = channel_id
+
+    async def _base_read(self) -> Response:
+        response: Response = await self._read(self._channel_id)
+        if isinstance(response, Exception):
+            raise response
+        if response.header.get('type') != 'channel':
+            raise ProtocolError('this msg is not channel')
+        if response.header.get('channel_life_cycle') == 'drop':
+            await self._close(self._channel_id)
         return response
 
-    async def _base_write(self, method: str, body: Any, life_cycle: str) -> str:
+    async def _base_write(self, body: Any, life_cycle: str) -> str:
         request: Request = Request(
             Constant.MSG_REQUEST,
-            {"call_id": -1, "method_name": method, "body": body},
+            {"call_id": -1, "method_name": self._func_name, "body": body},
             {"type": "channel", "channel_life_cycle": life_cycle, "channel_id": self._channel_id}
         )
         return await self._write(request)
 
-    async def read(self):
-        response: Response = await self._base_read('msg')
-        channel_id: int = response.header['channel_id']
-        if channel_id != self._channel_id:
-            raise ProtocolError('channel id error')
+    async def read(self) -> Response:
+        response: Response = await self._base_read()
+        if response.header.get('channel_life_cycle') != 'msg':
+            raise ProtocolError('channel life cycle error')
         return response
 
+    async def read_body(self):
+        response: Response = await self.read()
+        return response.body['body']
+
     async def write(self, body: Any):
-        await self._base_write(self._method, body, 'msg')
+        await self._base_write(body, 'msg')
 
     async def close(self):
+        self._session.close()
         life_cycle: str = 'drop'
-        await self._base_write(self._method, None, life_cycle)
-        await self._base_read(life_cycle)
-        self._close()
+        await self._base_write(None, life_cycle)
+
+        async def wait_drop_response():
+            while True:
+                response: Response = await self._base_read()
+                if response.header.get('channel_life_cycle') == 'drop':
+                    break
+
+        try:
+            await asyncio.wait_for(wait_drop_response(), 9)
+        except asyncio.TimeoutError:
+            logging.warning('wait drop response timeout')
 
     async def __aenter__(self) -> 'Channel':
         await self.create()
@@ -132,7 +155,7 @@ class Transport(object):
         self._rap_exc_dict = get_rap_exc_dict()
         self._listen_future_dict: Dict[str, asyncio.Future] = {}
         self._resp_future_dict: Dict[str, asyncio.Future[Response]] = {}
-        self._channel_queue_dict: Dict[int, asyncio.Queue] = {}
+        self._channel_queue_dict: Dict[str, asyncio.Queue] = {}
 
     async def _connect(self, host: str):
         conn = Connection(
@@ -227,14 +250,14 @@ class Transport(object):
             return
 
         resp_future_id: str = f'{conn.peer}:{msg_id}'
-        channel_id: Optional[int] = header.get('channel_id')
+        channel_id: Optional[str] = header.get('channel_id')
 
         # server error response handle
         if response_num == Constant.SERVER_ERROR_RESPONSE:
             status_code: int = header.get("status_code", 500)
             exc: Type["rap_exc.BaseRapError"] = self._rap_exc_dict.get(status_code, rap_exc.BaseRapError)
             if channel_id:
-                self._channel_queue_dict[channel_id].put_nowait(exc)
+                self._channel_queue_dict[channel_id].put_nowait(exc(body))
             else:
                 self._resp_future_dict[resp_future_id].set_exception(exc(body))
             return
@@ -299,7 +322,7 @@ class Transport(object):
             if resp_future_id in self._resp_future_dict:
                 del self._resp_future_dict[resp_future_id]
 
-    def before_request_handle(self, request: Request, conn: Connection) -> Connection:
+    def before_request_handle(self, request: Request, conn: Optional[Connection] = None) -> Connection:
         """check conn and header"""
         if not conn:
             conn = self.now_conn
@@ -382,24 +405,22 @@ class Transport(object):
     def session(self):
         return Session(self)
 
-    @property
-    def channel(self):
-        session: 'Session' = self.session
+    def channel(self, func_name: str):
 
-        async def create(_channel_id: int):
+        async def create(_channel_id: str):
             self._channel_queue_dict[_channel_id] = asyncio.Queue()
 
-        async def read(_channel_id: int) -> Response:
+        async def read(_channel_id: str) -> Response:
             return await self._channel_queue_dict[_channel_id].get()
 
         async def write(request: Request) -> str:
-            return await self.write(request, -1, session.conn)
+            conn = self.before_request_handle(request)
+            return await self.write(request, -1, conn)
 
-        def close(_call_id: int):
-            session.close()
+        async def close(_call_id: str):
             del self._channel_queue_dict[_call_id]
 
-        return Channel(create, read, write, close)
+        return Channel(func_name, self.session, create, read, write, close)
 
     ##############
     # middleware #
