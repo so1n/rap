@@ -43,6 +43,14 @@ class Constant(object):
     PING_EVENT: str = "ping"
     PONG_EVENT: str = "pong"
 
+    DECLARE: str = 'declare'
+    MSG: str = 'MSG'
+    DROP: str = 'drop'
+
+    ONE_BY_ONE: str = 'one-by-one'
+    SESSION: str = 'session'
+    CHANNEL: str = 'channel'
+
 
 @dataclass()
 class Event(object):

@@ -85,8 +85,6 @@ class Channel(object):
         response: Response = await self._read(self._channel_id)
         if isinstance(response, Exception):
             raise response
-        if response.header.get('type') != 'channel':
-            raise ProtocolError('this msg is not channel')
         if response.header.get('channel_life_cycle') == 'drop':
             await self._close(self._channel_id)
         return response
@@ -94,8 +92,10 @@ class Channel(object):
     async def _base_write(self, body: Any, life_cycle: str) -> str:
         request: Request = Request(
             Constant.MSG_REQUEST,
-            {"call_id": -1, "method_name": self._func_name, "body": body},
-            {"type": "channel", "channel_life_cycle": life_cycle, "channel_id": self._channel_id}
+            self._func_name,
+            Constant.CHANNEL,
+            body,
+            {"channel_life_cycle": life_cycle, "channel_id": self._channel_id}
         )
         return await self._write(request)
 
@@ -107,7 +107,7 @@ class Channel(object):
 
     async def read_body(self):
         response: Response = await self.read()
-        return response.body['body']
+        return response.body
 
     async def write(self, body: Any):
         await self._base_write(body, 'msg')
@@ -228,8 +228,8 @@ class Transport(object):
     async def _read_from_conn(self, conn: Connection):
         """recv server msg handle"""
         try:
-            response: Optional[BASE_RESPONSE_TYPE] = await conn.read(self._keep_alive_time)
-            logging.debug(f"recv raw data: %s", response)
+            response_msg: Optional[BASE_RESPONSE_TYPE] = await conn.read(self._keep_alive_time)
+            logging.debug(f"recv raw data: %s", response_msg)
         except asyncio.TimeoutError as e:
             logging.error(f"recv response from {conn.connection_info} timeout")
             conn.set_reader_exc(e)
@@ -240,48 +240,52 @@ class Transport(object):
             conn.set_reader_exc(e)
             raise e
 
-        if response is None:
+        if response_msg is None:
             raise ConnectionError("Connection has been closed")
         # parse response
         try:
-            response_num, msg_id, header, body = response
+            response: Response = Response(*response_msg)
         except ValueError:
-            logging.error(f"recv wrong response:{response}")
+            logging.error(f"recv wrong response:{response_msg}")
             return
 
-        resp_future_id: str = f'{conn.peer}:{msg_id}'
-        channel_id: Optional[str] = header.get('channel_id')
+        resp_future_id: str = f'{conn.peer}:{response.msg_id}'
+        channel_id: Optional[str] = response.header.get('channel_id')
+        if channel_id and response.method != Constant.CHANNEL:
+            raise ProtocolError(f'recv error method:{response.method}')
 
         # server error response handle
-        if response_num == Constant.SERVER_ERROR_RESPONSE:
-            status_code: int = header.get("status_code", 500)
+        if response.num == Constant.SERVER_ERROR_RESPONSE:
+            status_code: int = response.header.get("status_code", 500)
             exc: Type["rap_exc.BaseRapError"] = self._rap_exc_dict.get(status_code, rap_exc.BaseRapError)
             if channel_id:
-                self._channel_queue_dict[channel_id].put_nowait(exc(body))
+                self._channel_queue_dict[channel_id].put_nowait(exc(response.body))
             else:
-                self._resp_future_dict[resp_future_id].set_exception(exc(body))
+                self._resp_future_dict[resp_future_id].set_exception(exc(response.body))
             return
 
         # server event msg handle
-        if response_num == Constant.SERVER_EVENT:
-            event, event_info = body
+        elif response.num == Constant.SERVER_EVENT:
+            event, event_info = response.body
             if event == Constant.EVENT_CLOSE_CONN:
                 raise RuntimeError(f"recv close conn event, event info:{event_info}")
             elif event == Constant.PING_EVENT:
-                request: Request = Request(Constant.CLIENT_EVENT_RESPONSE, Event(Constant.PONG_EVENT, "").to_tuple())
+                request: Request = Request(
+                    Constant.CLIENT_EVENT_RESPONSE, '', '', Event(Constant.PONG_EVENT, "").to_tuple()
+                )
                 self.before_request_handle(request, conn)
                 await self.write(request, -1, conn)
                 return
 
         if channel_id:
-            self._channel_queue_dict[channel_id].put_nowait(Response(response_num, msg_id, header, body))
+            self._channel_queue_dict[channel_id].put_nowait(response)
             return
 
         # set msg to future_dict's `future`
         if resp_future_id not in self._resp_future_dict:
             logging.error(f"recv listen future id: {resp_future_id} error, client not request")
             return
-        self._resp_future_dict[resp_future_id].set_result(Response(response_num, msg_id, header, body))
+        self._resp_future_dict[resp_future_id].set_result(response)
 
     ##############
     # life cycle #
@@ -289,19 +293,18 @@ class Transport(object):
     async def _declare_life_cycle(self, conn: Connection):
         """send declare msg and init client id"""
         random_id: str = gen_random_str_id()
-        body: dict = {'declare_id': random_id}
-        request: Request = Request(Constant.DECLARE_REQUEST, body)
+        request: Request = Request(Constant.DECLARE_REQUEST, '', Constant.ONE_BY_ONE, random_id)
         response = await self._base_request(request, conn)
-        if response.num != Constant.DECLARE_RESPONSE and response.body['declare_id'] != random_id[::-1]:
+        if response.num != Constant.DECLARE_RESPONSE and response.body != random_id[::-1]:
             raise RPCError("declare response error")
         logging.info("declare success")
 
     async def _drop_life_cycle(self, conn: Connection):
         """send drop msg"""
-        call_id: str = gen_random_str_id(8)
-        request: Request = Request(Constant.DROP_REQUEST, {"call_id": call_id})
+        random_id: str = gen_random_str_id(8)
+        request: Request = Request(Constant.DROP_REQUEST, '', Constant.ONE_BY_ONE, random_id)
         response = await self._base_request(request, conn)
-        if response.num != Constant.DROP_RESPONSE and response.body.get("call_id", "") != call_id:
+        if response.num != Constant.DROP_RESPONSE and response.body != random_id[::-1]:
             logging.warning("drop response error")
         else:
             logging.info("drop response success")
@@ -348,7 +351,7 @@ class Transport(object):
     #######################
     async def write(self, request: Request, msg_id: int, conn: Optional[Connection] = None) -> str:
         conn = self.before_request_handle(request, conn)
-        request_msg: BASE_REQUEST_TYPE = (request.num, msg_id, request.header, request.body)
+        request_msg: BASE_REQUEST_TYPE = request.gen_request_msg(msg_id)
         try:
             await conn.write(request_msg)
             logging.debug(f"send:%s to %s", request_msg, conn.connection_info)
@@ -374,9 +377,11 @@ class Transport(object):
     ######################
     # one by one request #
     ######################
-    async def request(self, method: str, *args, call_id=-1, conn: Optional[Connection] = None) -> Response:
+    async def request(self, func_name: str, *args, call_id=-1, conn: Optional[Connection] = None) -> Response:
         """msg request handle"""
-        request: Request = Request(Constant.MSG_REQUEST, {"call_id": call_id, "method_name": method, "param": args})
+        request: Request = Request(
+            Constant.MSG_REQUEST, func_name, Constant.ONE_BY_ONE, {"call_id": call_id, "param": args}
+        )
         response: Response = await self._base_request(request, conn)
         if response.num != Constant.MSG_RESPONSE:
             raise RPCError("request num error")

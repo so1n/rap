@@ -13,6 +13,8 @@ from rap.common.utlis import Constant, Event, parse_error
 class ResponseModel(object):
     num: int = Constant.MSG_RESPONSE
     msg_id: int = -1
+    func_name: Optional[str] = None
+    method: Optional[str] = None
     header: dict = field(default_factory=lambda: {"status_code": 200})
     body: Any = None
 
@@ -30,22 +32,28 @@ class Response(object):
             response_msg: BASE_RESPONSE_TYPE = (
                 Constant.SERVER_ERROR_RESPONSE,
                 resp.msg_id,
+                resp.func_name,
+                resp.method,
                 resp.header,
                 error_response[1],
             )
         elif isinstance(resp.body, Event):
-            response_msg: BASE_RESPONSE_TYPE = (Constant.SERVER_EVENT, resp.msg_id, resp.header, resp.body.to_tuple())
-        elif resp.body is not None:
-            response_msg: BASE_RESPONSE_TYPE = (resp.num, resp.msg_id, resp.header, resp.body)
-        else:
-            exception: BaseRapError = ServerError("not response data")
-            error_response: Optional[Tuple[str, str]] = parse_error(exception)
-            resp.header["status_code"] = exception.status_code
             response_msg: BASE_RESPONSE_TYPE = (
-                Constant.SERVER_ERROR_RESPONSE,
+                Constant.SERVER_EVENT,
                 resp.msg_id,
+                resp.func_name,
+                resp.method,
                 resp.header,
-                error_response[1],
+                resp.body.to_tuple()
+            )
+        else:
+            response_msg: BASE_RESPONSE_TYPE = (
+                resp.num,
+                resp.msg_id,
+                resp.func_name,
+                resp.method,
+                resp.header,
+                resp.body
             )
         return response_msg
 

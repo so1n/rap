@@ -124,8 +124,7 @@ class Server(object):
                 await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "request is empty")))
                 return
             try:
-                request_num, msg_id, header, body = _request_msg
-                request: RequestModel = RequestModel(request_num, msg_id, header, body)
+                request: RequestModel = RequestModel(*_request_msg)
                 request.header["_host"] = conn.peer
             except Exception as closer_e:
                 logging.error(f"{conn.peer} send bad msg:{_request_msg}, error:{closer_e}")
