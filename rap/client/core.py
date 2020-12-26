@@ -32,7 +32,7 @@ class AsyncIteratorCall:
         If no data, the server will return header.status_code = 301 and client must raise StopAsyncIteration Error.
         """
         response: Response = await self._client.transport.request(
-            self._method, *self._args, call_id=self._call_id, conn=self._conn
+            self._method, *self._args, call_id=self._call_id, conn=self._conn, header={"use_session": True}
         )
         self._call_id = response.body["call_id"]
         if response.header["status_code"] == 301:

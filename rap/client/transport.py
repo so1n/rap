@@ -377,11 +377,15 @@ class Transport(object):
     ######################
     # one by one request #
     ######################
-    async def request(self, func_name: str, *args, call_id=-1, conn: Optional[Connection] = None) -> Response:
+    async def request(
+            self, func_name: str, *args, call_id=-1, conn: Optional[Connection] = None, header: Optional[dict] = None
+    ) -> Response:
         """msg request handle"""
         request: Request = Request(
             Constant.MSG_REQUEST, func_name, Constant.ONE_BY_ONE, {"call_id": call_id, "param": args}
         )
+        if header is not None:
+            request.header.update(header)
         response: Response = await self._base_request(request, conn)
         if response.num != Constant.MSG_RESPONSE:
             raise RPCError("request num error")
