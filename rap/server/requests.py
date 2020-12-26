@@ -188,7 +188,6 @@ class Request(object):
 
         if request.method == Constant.CHANNEL:
             return await self.channel_handle(request, response, func)
-        print(request)
         try:
             call_id: int = request.body["call_id"]
         except KeyError:
