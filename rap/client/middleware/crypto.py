@@ -1,14 +1,13 @@
 import time
-from typing import Optional, Tuple
 
-from .base import BaseMiddleWare
+from .base import BaseMiddleware
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError
-from rap.common.utlis import Constant, gen_random_time_id
+from rap.common.utlis import gen_random_time_id
 from rap.client.model import Request, Response
 
 
-class CryptoMiddleware(BaseMiddleWare):
+class CryptoMiddleware(BaseMiddleware):
     def __init__(self, crypto_key_id: str, crypto_key: str):
         self._crypto_id: str = crypto_key_id
         self._crypto_key: str = crypto_key
@@ -26,17 +25,15 @@ class CryptoMiddleware(BaseMiddleWare):
         else:
             self._nonce_set.add(nonce)
 
-    async def dispatch(self, request: Request) -> Response:
+    async def process_request(self, request: Request):
         request.body = {"body": request.body, "timestamp": int(time.time()), "nonce": gen_random_time_id()}
         request.header['crypto_id'] = self._crypto_id
         request.body = self._crypto.encrypt_object(request.body)
 
-        response: Response = await self.call_next(request)
-
+    async def process_response(self, response: Response):
         try:
-            response.body = self._crypto.decrypt_object(response.body)
-            self._body_handle(response.body)
+            if type(response.body) is bytes:
+                response.body = self._crypto.decrypt_object(response.body)
+                self._body_handle(response.body)
         except Exception as e:
             raise CryptoError(f"Can't decrypt body.") from e
-
-        return response

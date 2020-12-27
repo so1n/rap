@@ -7,12 +7,12 @@ import uuid
 from contextvars import ContextVar, Token
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Type, Tuple
 
+from rap.client.middleware.base import BaseMiddleware
 from rap.client.model import Request, Response
 from rap.client.utils import get_rap_exc_dict, raise_rap_error
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
 from rap.common.exceptions import RPCError, ProtocolError
-from rap.common.middleware import BaseMiddleware
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.common.utlis import Constant, Event, MISS_OBJECT, gen_random_str_id
 
@@ -142,7 +142,7 @@ class Transport(object):
             host_list: List[str],
             timeout: int = 9,
             keep_alive_time: int = 1200,
-            ssl_crt_path: Optional[str] = None
+            ssl_crt_path: Optional[str] = None,
     ):
         self._host_list: List[str] = host_list
         self._conn_dict: Dict[str, Connection] = {}
@@ -150,12 +150,14 @@ class Transport(object):
         self._timeout: int = timeout
         self._ssl_crt_path: str = ssl_crt_path
         self._keep_alive_time: int = keep_alive_time
+        self._process_request_list: List = []
+        self._process_response_list: List = []
 
         self._msg_id: int = random.randrange(65535)
         self._rap_exc_dict = get_rap_exc_dict()
         self._listen_future_dict: Dict[str, asyncio.Future] = {}
         self._resp_future_dict: Dict[str, asyncio.Future[Response]] = {}
-        self._channel_queue_dict: Dict[str, asyncio.Queue] = {}
+        self._channel_queue_dict: Dict[str, asyncio.Queue[Response]] = {}
 
     async def _connect(self, host: str):
         conn = Connection(
@@ -248,6 +250,9 @@ class Transport(object):
         except ValueError:
             logging.error(f"recv wrong response:{response_msg}")
             return
+
+        for process_response in self._process_response_list:
+            await process_response(response)
 
         resp_future_id: str = f'{conn.peer}:{response.msg_id}'
         channel_id: Optional[str] = response.header.get('channel_id')
@@ -351,6 +356,8 @@ class Transport(object):
     #######################
     async def write(self, request: Request, msg_id: int, conn: Optional[Connection] = None) -> str:
         conn = self.before_request_handle(request, conn)
+        for process_request in self._process_request_list:
+            await process_request(request)
         request_msg: BASE_REQUEST_TYPE = request.gen_request_msg(msg_id)
         try:
             await conn.write(request_msg)
@@ -436,8 +443,5 @@ class Transport(object):
     ##############
     def load_middleware(self, middleware_list: List[BaseMiddleware]):
         for middleware in middleware_list:
-            if isinstance(middleware, BaseMiddleware):
-                middleware.load_sub_middleware(self._base_request)
-                self._base_request = middleware
-            else:
-                raise RuntimeError(f"{middleware} must be instance {BaseMiddleware}")
+            self._process_request_list.append(middleware.process_request)
+            self._process_response_list.append(middleware.process_response)
