@@ -5,17 +5,18 @@ import sys
 import time
 
 from dataclasses import dataclass
-from typing import Dict
+from typing import Any, Dict
 
 __all__ = [
-    "get_event_loop",
-    "response_num_dict",
     "Constant",
     "Event",
     "MISS_OBJECT",
+    "State",
     "gen_random_time_id",
     "gen_random_str_id",
+    "get_event_loop",
     "parse_error",
+    "response_num_dict",
 ]
 
 from typing import Optional, Tuple
@@ -50,6 +51,27 @@ class Constant(object):
     ONE_BY_ONE: str = 'one-by-one'
     SESSION: str = 'session'
     CHANNEL: str = 'channel'
+
+
+class State(object):
+    def __init__(self, state: Optional[Dict] = None):
+        if state is None:
+            state = {}
+        super(State, self).__setattr__("_state", state)
+
+    def __setattr__(self, key: Any, value: Any) -> None:
+        self._state[key] = value
+
+    def __getattr__(self, key: Any) -> Any:
+        try:
+            return self._state[key]
+        except KeyError:
+            raise AttributeError(
+                f"'{self.__class__.__name__}' object has no attribute '{key}'"
+            )
+
+    def __delattr__(self, key: Any) -> None:
+        del self._state[key]
 
 
 @dataclass()

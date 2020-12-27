@@ -4,7 +4,7 @@ from typing import Callable, Tuple, Union
 
 from rap.common.exceptions import ServerError
 from rap.server.middleware.base import BaseMsgMiddleware
-from rap.server.requests import RequestModel
+from rap.server.model import RequestModel
 
 
 class AccessMsgMiddleware(BaseMsgMiddleware):

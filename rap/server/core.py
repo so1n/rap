@@ -8,19 +8,18 @@ from typing import Callable, Coroutine, List, Optional, Union
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import RpcRunTimeError
+from rap.common.middleware import BaseMiddleware
 from rap.common.types import READER_TYPE, WRITER_TYPE, BASE_REQUEST_TYPE
 from rap.common.utlis import Constant, Event
 from rap.manager.func_manager import func_manager
+from rap.server.filter_stream.base import BaseFilter
 from rap.server.middleware.base import (
     BaseConnMiddleware,
     BaseMsgMiddleware,
-    BaseRequestMiddleware,
-    BaseResponseMiddleware,
 )
-from rap.common.middleware import BaseMiddleware
-from rap.server.requests import Request, RequestModel
-from rap.server.response import Response, ResponseModel
-
+from rap.server.requests import Request
+from rap.server.model import RequestModel, ResponseModel
+from rap.server.response import Response
 
 __all__ = ["Server"]
 
@@ -57,6 +56,7 @@ class Server(object):
 
         self._server: Optional[asyncio.AbstractServer] = None
         self._middleware_list: List[BaseMiddleware] = []
+        self._filter_list: List[BaseFilter] = []
 
     def load_middleware(self, middleware_list: List[BaseMiddleware]):
         for middleware in middleware_list:
@@ -67,6 +67,11 @@ class Server(object):
                 self._middleware_list.append(middleware)
             else:
                 raise RuntimeError(f'{middleware} must instance of {BaseMiddleware}')
+
+    def load_filter(self, filter_list: List[BaseFilter]):
+        for filter_ in filter_list:
+            if isinstance(filter_, BaseFilter):
+                self._filter_list.append(filter_)
 
     @staticmethod
     def register(func: Optional[Callable], name: Optional[str] = None, group: str = "normal"):
@@ -106,18 +111,12 @@ class Server(object):
         await self._conn_handle(conn)
 
     async def _conn_handle(self, conn: ServerConnection):
-        response_handle: Response = Response(conn, self._timeout)
-        request_handle: Request = Request(conn, self._run_timeout, response_handle)
+        response_handle: Response = Response(conn, self._timeout, filter_list=self._filter_list)
+        request_handle: Request = Request(conn, self._run_timeout, response_handle, filter_list=self._filter_list)
         for middleware in self._middleware_list:
-            if isinstance(middleware, BaseRequestMiddleware):
-                middleware.load_sub_middleware(request_handle.real_dispatch)
-                request_handle.real_dispatch = middleware
-            elif isinstance(middleware, BaseMsgMiddleware):
+            if isinstance(middleware, BaseMsgMiddleware):
                 middleware.load_sub_middleware(request_handle.msg_handle)
                 request_handle.msg_handle = middleware
-            elif isinstance(middleware, BaseResponseMiddleware):
-                middleware.load_sub_middleware(response_handle.response_handle)
-                request_handle.response_handle = middleware
 
         async def recv_msg_handle(_request_msg: Optional[BASE_REQUEST_TYPE]):
             if _request_msg is None:
@@ -131,6 +130,7 @@ class Server(object):
                 await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "protocol error")))
                 await conn.wait_closed()
                 return
+
 
             try:
                 response: Optional[ResponseModel] = await request_handle.dispatch(request)

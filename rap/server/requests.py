@@ -3,8 +3,7 @@ import inspect
 import logging
 import time
 
-from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, Dict, Generator, Optional, Tuple
+from typing import Any, Callable, Coroutine, Dict, Generator, List, Optional, Tuple
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import (
@@ -24,17 +23,9 @@ from rap.common.utlis import (
     response_num_dict
 )
 from rap.manager.func_manager import func_manager
-from rap.server.response import Response, ResponseModel
-
-
-@dataclass()
-class RequestModel(object):
-    num: int
-    msg_id: int
-    func_name: str
-    method: str
-    header: dict
-    body: Any
+from rap.server.filter_stream.base import BaseFilter
+from rap.server.model import RequestModel, ResponseModel
+from rap.server.response import Response
 
 
 class Channel(object):
@@ -100,14 +91,21 @@ class Channel(object):
 
 
 class Request(object):
-    def __init__(self, conn: ServerConnection, run_timeout: int, response: Response):
+    def __init__(
+            self,
+            conn: ServerConnection,
+            run_timeout: int,
+            response: Response,
+            filter_list: Optional[List[BaseFilter]] = None
+    ):
         self._conn: ServerConnection = conn
         self._run_timeout: int = run_timeout
+        self._response: Response = response
+        self._filter_list: Optional[List[BaseFilter]] = filter_list
+
         self.dispatch_func_dict: Dict[int, Callable] = {
             Constant.DECLARE_REQUEST: self.declare_life_cycle,
         }
-        self._response: Response = response
-
         # now one conn one Request object
         self._is_declare: bool = False
         self._ping_pong_future: Optional[asyncio.Future] = None
@@ -127,8 +125,17 @@ class Request(object):
             num=response_num,
             func_name=request.func_name,
             method=request.method,
-            msg_id=request.msg_id
+            msg_id=request.msg_id,
+            stats=request.stats
         )
+        print(response.stats._state)
+        try:
+            for filter_ in self._filter_list:
+                await filter_.process_request(request)
+        except Exception as e:
+            response.body = e
+            return response
+
         # check type_id
         if response.num is Constant.SERVER_ERROR_RESPONSE:
             logging.error(f"parse request data: {request} from {request.header['_host']} error")
@@ -146,20 +153,19 @@ class Request(object):
         return await dispatch_func(request, response)
 
     async def ping_event(self):
-        response: Response = Response(self._conn)
         while not self._conn.is_closed():
             diff_time: int = int(time.time()) - self._keepalive_timestamp
             if diff_time > 130:
                 event_resp: ResponseModel = ResponseModel(
                     Constant.SERVER_EVENT, body=Event(Constant.EVENT_CLOSE_CONN, "recv pong timeout")
                 )
-                await response(event_resp)
+                await self._response(event_resp)
                 if not self._conn.is_closed():
                     self._conn.close()
                 break
             else:
                 ping_response: ResponseModel = ResponseModel(Constant.SERVER_EVENT, body=Event(Constant.PING_EVENT, ""))
-                await response(ping_response)
+                await self._response(ping_response)
                 await asyncio.sleep(60)
 
     async def declare_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
