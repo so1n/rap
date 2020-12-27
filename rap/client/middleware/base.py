@@ -1,7 +1,9 @@
 from rap.client.model import Request, Response
-from rap.common.middleware import BaseMiddleware as _BaseMiddleware
 
 
-class BaseMiddleWare(_BaseMiddleware):
-    async def dispatch(self, request: Request) -> Response:
-        raise NotImplementedError
+class BaseMiddleware(object):
+    async def process_request(self, request: Request):
+        pass
+
+    async def process_response(self, response: Response):
+        pass

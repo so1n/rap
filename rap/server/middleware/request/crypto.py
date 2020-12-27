@@ -47,7 +47,11 @@ class CryptoMiddleware(BaseRequestMiddleware):
                 return response
 
             response: ResponseModel = await self.call_next(request, response)
+            if not response:
+                return response
             if response.body:
+                if type(response.body) is not dict:
+                    response.body = {'body': response.body}
                 response.body.update(dict(timestamp=int(time.time()), nonce=gen_random_time_id()))
                 response.body = crypto.encrypt_object(response.body)
             return response

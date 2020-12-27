@@ -3,10 +3,10 @@ import inspect
 from functools import wraps
 from typing import Any, Callable, cast, List, Optional, Tuple
 
+from rap.client.middleware.base import BaseMiddleware
 from rap.client.model import Response
 from rap.client.transport import Channel, Transport
 from rap.common.conn import Connection
-from rap.common.middleware import BaseMiddleware
 
 
 __all__ = ["Client"]
@@ -18,7 +18,7 @@ class AsyncIteratorCall:
     def __init__(self, method: str, client: "Client", *args: Tuple):
         self._method: str = method
         self._call_id: Optional[int] = None
-        self._args = args
+        self._args: Tuple = args
         self._client: "Client" = client
         self._conn: Connection = self._client.transport.now_conn
 
@@ -129,5 +129,3 @@ class Client:
             return self._async_register(func)
         elif inspect.isasyncgenfunction(func):
             return self._async_gen_register(func)
-
-
