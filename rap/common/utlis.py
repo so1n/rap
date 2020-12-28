@@ -48,8 +48,7 @@ class Constant(object):
     MSG: str = 'MSG'
     DROP: str = 'drop'
 
-    ONE_BY_ONE: str = 'one-by-one'
-    SESSION: str = 'session'
+    NORMAL: str = 'normal'
     CHANNEL: str = 'channel'
 
 

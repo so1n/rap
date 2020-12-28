@@ -3,17 +3,26 @@ import importlib
 import logging
 import os
 
+from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
 
+from rap.common.channel import BaseChannel
 from rap.common.exceptions import RegisteredError
 from rap.common.types import check_is_json_type
+
+
+@dataclass()
+class FuncModel(object):
+    group: str
+    type_: str
+    name: str
+    func: Callable
 
 
 class FuncManager(object):
     def __init__(self):
         self._cwd: str = os.getcwd()
-        self.func_dict: Dict[str, Callable] = dict()
-        self.func_info_dict: Dict[str, dict] = dict()
+        self.func_dict: Dict[str, FuncModel] = dict()
 
         self.register(self._load, "_root_load")
         self.register(self._reload, "_root_reload")
@@ -24,11 +33,18 @@ class FuncManager(object):
     ):
         # check func param&return value type hint
         sig: "inspect.Signature" = inspect.signature(func)
-        # if not check_is_json_type(sig.return_annotation) or sig.return_annotation is sig.empty:
-        #     raise RegisteredError(f"{func.__name__} return type:{sig.return_annotation} is not json type")
-        # for param in sig.parameters.values():
-        #     if not check_is_json_type(param.annotation) or param.annotation is sig.empty:
-        #         raise RegisteredError(f"{func.__name__} param:{param.name} type:{param.annotation} is not json type")
+        func_arg_parameter: List[inspect.Parameter] = [i for i in sig.parameters.values() if i.default == i.empty]
+        type_: str = "normal"
+        if not (len(func_arg_parameter) == 1 and issubclass(func_arg_parameter[0].annotation, BaseChannel)):
+            if not check_is_json_type(sig.return_annotation) or sig.return_annotation is sig.empty:
+                raise RegisteredError(f"{func.__name__} return type:{sig.return_annotation} is not json type")
+            for param in sig.parameters.values():
+                if not check_is_json_type(param.annotation) or param.annotation is sig.empty:
+                    raise RegisteredError(
+                        f"{func.__name__} param:{param.name} type:{param.annotation} is not json type"
+                    )
+        else:
+            type_ = 'channel'
 
         if not hasattr(func, "__call__"):
             raise RegisteredError(f"{name} is not a callable object")
@@ -41,12 +57,13 @@ class FuncManager(object):
             name = "_root_" + name
         if name in self.func_dict:
             raise RegisteredError(f"Name: {name} has already been used")
-        self.func_dict[name] = func
-        self.func_info_dict[name] = {"group": group}
+
+        func_key: str = f'{group}:{type_}:{name}'
+        self.func_dict[func_key] = FuncModel(group=group, type_=type_, name=name, func=func)
 
         # not display log before called logging.basicConfig
         if not name.startswith("_root_"):
-            logging.info(f"register func:{name}")
+            logging.info(f"register func:{func_key}")
 
     def _load(self, path: str, func_str: str) -> str:
         try:

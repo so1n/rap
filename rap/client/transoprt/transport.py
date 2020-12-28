@@ -2,6 +2,7 @@ import asyncio
 import logging
 import msgpack
 import random
+import uuid
 
 from contextvars import ContextVar, Token
 from typing import Any, Dict, List, Optional, Type, Tuple
@@ -182,7 +183,7 @@ class Transport(object):
     async def _declare_life_cycle(self, conn: Connection):
         """send declare msg and init client id"""
         random_id: str = gen_random_str_id()
-        request: Request = Request(Constant.DECLARE_REQUEST, '', Constant.ONE_BY_ONE, random_id)
+        request: Request = Request(Constant.DECLARE_REQUEST, '', Constant.NORMAL, random_id)
         response = await self._base_request(request, conn)
         if response.num != Constant.DECLARE_RESPONSE and response.body != random_id[::-1]:
             raise RPCError("declare response error")
@@ -191,7 +192,7 @@ class Transport(object):
     async def _drop_life_cycle(self, conn: Connection):
         """send drop msg"""
         random_id: str = gen_random_str_id(8)
-        request: Request = Request(Constant.DROP_REQUEST, '', Constant.ONE_BY_ONE, random_id)
+        request: Request = Request(Constant.DROP_REQUEST, '', Constant.NORMAL, random_id)
         response = await self._base_request(request, conn)
         if response.num != Constant.DROP_RESPONSE and response.body != random_id[::-1]:
             logging.warning("drop response error")
@@ -233,6 +234,7 @@ class Transport(object):
         set_header_value("version", Constant.VERSION)
         set_header_value("user_agent", Constant.USER_AGENT)
         set_header_value("use_session", use_session)
+        set_header_value("request_id", str(uuid.uuid4()))
         return conn
 
     #######################
@@ -273,7 +275,7 @@ class Transport(object):
     ) -> Response:
         """msg request handle"""
         request: Request = Request(
-            Constant.MSG_REQUEST, func_name, Constant.ONE_BY_ONE, {"call_id": call_id, "param": args}
+            Constant.MSG_REQUEST, func_name, Constant.NORMAL, {"call_id": call_id, "param": args}
         )
         if header is not None:
             request.header.update(header)
