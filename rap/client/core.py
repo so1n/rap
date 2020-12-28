@@ -3,7 +3,7 @@ import inspect
 from functools import wraps
 from typing import Any, Callable, cast, List, Optional, Tuple
 
-from rap.client.middleware.base import BaseMiddleware
+from rap.client.filter.base import BaseFilter
 from rap.client.model import Response
 from rap.client.transport import Channel, Transport
 from rap.common.conn import Connection
@@ -72,7 +72,7 @@ class Client:
         """
         await self.transport.connect()
 
-    def load_middleware(self, middleware_list: List[BaseMiddleware]):
+    def load_middleware(self, middleware_list: List[BaseFilter]):
         self.transport.load_middleware(middleware_list)
 
     # register

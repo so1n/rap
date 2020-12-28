@@ -9,7 +9,7 @@ from rap.server.model import RequestModel
 
 class BaseMiddleware(_BaseMiddleware, ABC):
     @staticmethod
-    def register(func: Callable, is_root: bool = True, group: str = "middleware"):
+    def register(func: Callable, is_root: bool = True, group: str = "filter"):
         func_manager.register(func, is_root=is_root, group=group)
 
 
@@ -18,7 +18,7 @@ class BaseConnMiddleware(BaseMiddleware):
         return await self.dispatch(*args)
 
     @staticmethod
-    def register(func: Callable, is_root: bool = True, group: str = "middleware"):
+    def register(func: Callable, is_root: bool = True, group: str = "filter"):
         func_manager.register(func, is_root=is_root, group=group)
 
     def load_sub_middleware(self, call_next: "Union[Callable, BaseMiddleware]"):

@@ -26,6 +26,7 @@ class ConnLimitMiddleware(BaseConnMiddleware):
                 ),
             )
             await conn.await_close()
+            return
         else:
             try:
                 self._conn_count += 1
@@ -57,6 +58,7 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
                 ),
             )
             await conn.await_close()
+            return
         else:
             await redis_manager.redis_pool.incr(key)
             try:

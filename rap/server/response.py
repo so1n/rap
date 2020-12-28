@@ -6,7 +6,7 @@ from rap.common.conn import ServerConnection
 from rap.common.exceptions import BaseRapError
 from rap.common.types import BASE_RESPONSE_TYPE
 from rap.common.utlis import Constant, Event, parse_error
-from rap.server.filter_stream.base import BaseFilter
+from rap.server.filter.base import BaseFilter
 from rap.server.model import ResponseModel
 
 
