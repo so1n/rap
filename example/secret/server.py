@@ -3,7 +3,7 @@ import aioredis
 
 from rap.manager.redis_manager import redis_manager
 from rap.server import Server
-from rap.server.middleware.request.crypto import CryptoMiddleware
+from rap.server.filter_stream.request.crypto import CryptoFilter
 
 
 async def init_redis():
@@ -29,7 +29,7 @@ if __name__ == "__main__":
 
     loop = asyncio.new_event_loop()
     rpc_server = Server(connect_call_back=[init_redis()], close_call_back=[close_redis()])
-    rpc_server.load_middleware([CryptoMiddleware({"test": "keyskeyskeyskeys"})])
+    rpc_server.load_filter([CryptoFilter({"test": "keyskeyskeyskeys"})])
     rpc_server.register(async_sum)
     loop.run_until_complete(rpc_server.create_server())
 
