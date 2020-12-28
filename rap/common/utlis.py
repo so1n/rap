@@ -70,6 +70,9 @@ class State(object):
                 f"'{self.__class__.__name__}' object has no attribute '{key}'"
             )
 
+    def __len__(self):
+        return len(self._state)
+
     def __delattr__(self, key: Any) -> None:
         del self._state[key]
 
