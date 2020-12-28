@@ -23,7 +23,7 @@ from rap.common.utlis import (
     response_num_dict
 )
 from rap.manager.func_manager import func_manager
-from rap.server.filter.base import BaseFilter
+from rap.server.processor.base import BaseFilter
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.response import Response
 
@@ -128,7 +128,6 @@ class Request(object):
             msg_id=request.msg_id,
             stats=request.stats
         )
-        print(response.stats._state)
         try:
             for filter_ in self._filter_list:
                 await filter_.process_request(request)
@@ -146,9 +145,6 @@ class Request(object):
             response.body = ProtocolError('Must declare')
             return response
 
-        return await self.real_dispatch(request, response)
-
-    async def real_dispatch(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
         dispatch_func: Callable = self.dispatch_func_dict[request.num]
         return await dispatch_func(request, response)
 
@@ -203,7 +199,6 @@ class Request(object):
         new_call_id, result = await self.msg_handle(request, call_id, func, param)
         response.body = {"call_id": new_call_id}
         if isinstance(result, StopAsyncIteration) or isinstance(result, StopIteration):
-            response.body["result"] = ""
             response.header["status_code"] = 301
         elif isinstance(result, Exception):
             exc, exc_info = parse_error(result)
@@ -219,6 +214,7 @@ class Request(object):
         if self._ping_pong_future:
             if self._ping_pong_future.cancelled():
                 self._ping_pong_future.cancel()
+                # TODO
         self.dispatch_func_dict = {
             Constant.DROP_REQUEST: self.drop_life_cycle,
             Constant.CLIENT_EVENT_RESPONSE: self.event,

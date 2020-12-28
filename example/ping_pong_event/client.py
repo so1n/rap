@@ -1,7 +1,7 @@
 import asyncio
 
 from rap.client import Client
-from rap.client.middleware.crypto import CryptoMiddleware
+from rap.client.processor.crypto import CryptoFliter
 
 
 client = Client()

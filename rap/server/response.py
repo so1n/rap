@@ -4,9 +4,8 @@ from typing import List, Tuple, Optional
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import BaseRapError
-from rap.common.types import BASE_RESPONSE_TYPE
 from rap.common.utlis import Constant, Event, parse_error
-from rap.server.filter.base import BaseFilter
+from rap.server.processor.base import BaseFilter
 from rap.server.model import ResponseModel
 
 
@@ -46,14 +45,7 @@ class Response(object):
                 resp.body.to_tuple()
             )
         else:
-            return ResponseModel(
-                resp.num,
-                resp.msg_id,
-                resp.func_name,
-                resp.method,
-                resp.header,
-                resp.body
-            )
+            return resp
 
     async def __call__(self, resp: ResponseModel) -> bool:
         if not resp:

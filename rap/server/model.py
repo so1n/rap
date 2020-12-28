@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from rap.common.utlis import Constant, MISS_OBJECT, State
+from rap.common.utlis import Constant, State
 
 
 @dataclass()
@@ -23,4 +23,4 @@ class ResponseModel(object):
     method: Optional[str] = None
     header: dict = field(default_factory=lambda: {"status_code": 200})
     body: Any = None
-    stats: 'object()' = MISS_OBJECT
+    stats: 'object()' = State()
