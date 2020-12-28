@@ -6,7 +6,7 @@ from rap.common.exceptions import CryptoError, ServerError
 from rap.common.utlis import Constant, MISS_OBJECT, gen_random_time_id
 from rap.manager.crypto_manager import crypto_manager
 from rap.manager.redis_manager import redis_manager
-from rap.server.filter.base import BaseFilter
+from rap.server.processor.base import BaseFilter
 from rap.server.model import RequestModel, ResponseModel
 
 
@@ -43,7 +43,7 @@ class CryptoFilter(BaseFilter):
             raise CryptoError(str(e)) from e
 
     async def process_response(self, response: ResponseModel):
-        if response.body and response.num != Constant.SERVER_ERROR_RESPONSE and response.stats is not MISS_OBJECT:
+        if response.body and response.num != Constant.SERVER_ERROR_RESPONSE:
             try:
                 crypto: Crypto = response.stats.crypto
             except AttributeError:

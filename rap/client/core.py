@@ -3,7 +3,7 @@ import inspect
 from functools import wraps
 from typing import Any, Callable, cast, List, Optional, Tuple
 
-from rap.client.filter.base import BaseFilter
+from rap.client.processor.base import BaseFilter
 from rap.client.model import Response
 from rap.client.transport import Channel, Transport
 from rap.common.conn import Connection

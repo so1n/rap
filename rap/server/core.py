@@ -12,7 +12,7 @@ from rap.common.middleware import BaseMiddleware
 from rap.common.types import READER_TYPE, WRITER_TYPE, BASE_REQUEST_TYPE
 from rap.common.utlis import Constant, Event
 from rap.manager.func_manager import func_manager
-from rap.server.filter.base import BaseFilter
+from rap.server.processor.base import BaseFilter
 from rap.server.middleware.base import (
     BaseConnMiddleware,
     BaseMsgMiddleware,
@@ -130,7 +130,6 @@ class Server(object):
                 await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "protocol error")))
                 await conn.wait_closed()
                 return
-
 
             try:
                 response: Optional[ResponseModel] = await request_handle.dispatch(request)

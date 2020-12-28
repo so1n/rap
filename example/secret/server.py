@@ -3,7 +3,7 @@ import aioredis
 
 from rap.manager.redis_manager import redis_manager
 from rap.server import Server
-from rap.server.filter_stream.request.crypto import CryptoFilter
+from rap.server.processor.request.crypto import CryptoFilter
 
 
 async def init_redis():
