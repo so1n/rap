@@ -17,6 +17,16 @@ async def async_channel(channel: Channel):
             await channel.write("I don't know")
 
 
+async def echo(channel: Channel):
+    cnt: int = 0
+    async for body in channel:
+        await asyncio.sleep(1)
+        cnt += 1
+        if cnt > 10:
+            break
+        await channel.write(body)
+
+
 if __name__ == "__main__":
     import logging
 
@@ -27,6 +37,7 @@ if __name__ == "__main__":
     loop = asyncio.new_event_loop()
     rpc_server = Server()
     rpc_server.register(async_channel)
+    rpc_server.register(echo)
 
     loop.run_until_complete(rpc_server.create_server())
     try:

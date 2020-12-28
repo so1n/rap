@@ -16,9 +16,18 @@ async def async_channel(channel: Channel):
     return
 
 
+@client.register
+async def echo(channel: Channel):
+    await channel.write('hi!')
+    async for body in channel:
+        print(body)
+        await channel.write(body)
+
+
 async def run_once():
     await client.connect()
-    await async_channel()
+    await echo()
+    # await async_channel()
     await client.wait_close()
 
 
