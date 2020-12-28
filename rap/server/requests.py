@@ -5,6 +5,7 @@ import time
 
 from typing import Any, Callable, Coroutine, Dict, Generator, List, Optional, Tuple
 
+from rap.common.channel import BaseChannel
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import (
     BaseRapError,
@@ -29,7 +30,7 @@ from rap.server.model import RequestModel, ResponseModel
 from rap.server.response import Response
 
 
-class Channel(object):
+class Channel(BaseChannel):
     def __init__(
             self,
             channel_id: str,
@@ -140,12 +141,12 @@ class Request(object):
 
         response: "ResponseModel" = ResponseModel(
             num=response_num,
-            header=request.header,
             func_name=request.func_name,
             method=request.method,
             msg_id=request.msg_id,
             stats=request.stats
         )
+        response.header.update(request.header)
         try:
             for filter_ in self._filter_list:
                 await filter_.process_request(request)
@@ -201,7 +202,8 @@ class Request(object):
         if request.func_name.startswith("_root_") and request.header["_host"] != "127.0.0.1":
             response.body = FuncNotFoundError(extra_msg=f"func name: {request.func_name}")
             return response
-        func: Optional[Callable] = func_manager.func_dict.get(request.func_name)
+        fun_key: str = f'normal:{request.method}:{request.func_name}'
+        func: Optional[Callable] = func_manager.func_dict.get(fun_key).func
         if not func:
             response.body = FuncNotFoundError(extra_msg=f"func name: {request.func_name}")
             return response

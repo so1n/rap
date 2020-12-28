@@ -4,6 +4,7 @@ import uuid
 from typing import Callable, Coroutine, Any, Union, Tuple, TYPE_CHECKING
 
 from rap.client.model import Response, Request
+from rap.common.channel import BaseChannel
 from rap.common.exceptions import ChannelError
 from rap.common.utlis import Constant
 
@@ -11,7 +12,7 @@ if TYPE_CHECKING:
     from rap.client.transoprt.transport import Session
 
 
-class Channel(object):
+class Channel(BaseChannel):
     def __init__(
             self,
             fun_name: str,
@@ -124,3 +125,7 @@ class Channel(object):
             return await self.read_body()
         except ChannelError:
             raise StopAsyncIteration()
+
+    @property
+    def is_close(self) -> bool:
+        return self._is_close

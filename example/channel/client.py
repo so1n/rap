@@ -27,7 +27,7 @@ async def echo(channel: Channel):
 async def run_once():
     await client.connect()
     await echo()
-    # await async_channel()
+    await async_channel()
     await client.wait_close()
 
 
@@ -35,7 +35,7 @@ if __name__ == "__main__":
     import logging
 
     logging.basicConfig(
-        format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.DEBUG
+        format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.INFO
     )
 
     loop = asyncio.get_event_loop()
