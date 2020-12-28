@@ -1,26 +1,28 @@
 import asyncio
 import logging
 import uuid
-from typing import Callable, Coroutine, Any, Union, Tuple
+from typing import Callable, Coroutine, Any, Union, Tuple, TYPE_CHECKING
 
 from rap.client.model import Response, Request
-from rap.client.transoprt.transport import Session
 from rap.common.exceptions import ChannelError
 from rap.common.utlis import Constant
+
+if TYPE_CHECKING:
+    from rap.client.transoprt.transport import Session
 
 
 class Channel(object):
     def __init__(
             self,
             fun_name: str,
-            session: Session,
+            session: 'Session',
             create: Callable[[str], Coroutine[Any, Any, Any]],
             read: Callable[[str], Coroutine[Any, Any, Response]],
             write: Callable[[Request], Coroutine[Any, Any, str]],
             close: Callable[[str], Coroutine[Any, Any, Any]],
     ):
         self._func_name: str = fun_name
-        self._session: Session = session
+        self._session: 'Session' = session
         self._channel_id: str = str(uuid.uuid4())
         self._create: Callable[[str], Coroutine[Any, Any, Any]] = create
         self._read: Callable[[str], Coroutine[Any, Any, Response]] = read
@@ -29,6 +31,8 @@ class Channel(object):
         self._is_close: bool = True
 
     async def create(self):
+        if not self._is_close:
+            raise ChannelError('channel already create')
         self._session.create()
         await self._create(self._channel_id)
         self._is_close = False
@@ -111,3 +115,12 @@ class Channel(object):
 
     async def __aexit__(self, *args: Tuple):
         await self.close()
+
+    def __aiter__(self) -> 'Channel':
+        return self
+
+    async def __anext__(self):
+        try:
+            return await self.read_body()
+        except ChannelError:
+            raise StopAsyncIteration()

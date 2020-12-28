@@ -97,6 +97,15 @@ class Channel(object):
         await self._write(response)
         self._close()
 
+    def __aiter__(self) -> 'Channel':
+        return self
+
+    async def __anext__(self):
+        try:
+            return await self.read_body()
+        except ChannelError:
+            raise StopAsyncIteration()
+
 
 class Request(object):
     def __init__(
@@ -131,6 +140,7 @@ class Request(object):
 
         response: "ResponseModel" = ResponseModel(
             num=response_num,
+            header=request.header,
             func_name=request.func_name,
             method=request.method,
             msg_id=request.msg_id,
@@ -243,8 +253,6 @@ class Request(object):
         channel_id: str = request.header.get('channel_id')
         life_cycle: str = request.header.get("channel_life_cycle", "error")
         func_name: str = func.__name__
-        response.header = request.header
-        response.msg_id = request.msg_id
 
         channel: Channel = self._channel_dict.get(channel_id, MISS_OBJECT)
         if life_cycle == 'msg':
