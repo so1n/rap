@@ -5,7 +5,7 @@ from typing import Any, Callable, cast, List, Optional, Tuple
 
 from rap.client.processor.base import BaseFilter
 from rap.client.model import Response
-from rap.client.transport import Channel, Transport
+from rap.client.transport import Channel, Transport, Session
 from rap.common.conn import Connection
 
 
@@ -21,8 +21,16 @@ class AsyncIteratorCall:
         self._args: Tuple = args
         self._client: "Client" = client
         self._conn: Connection = self._client.transport.now_conn
+        self._session: Session = self._client.transport.session
 
-    def __aiter__(self):
+    async def __aenter__(self) -> 'AsyncIteratorCall':
+        self._session.create()
+        return self
+
+    async def __aexit__(self, *args: Tuple):
+        self._session.close()
+
+    def __aiter__(self) -> 'AsyncIteratorCall':
         return self
 
     async def __anext__(self):
@@ -32,7 +40,7 @@ class AsyncIteratorCall:
         If no data, the server will return header.status_code = 301 and client must raise StopAsyncIteration Error.
         """
         response: Response = await self._client.transport.request(
-            self._method, *self._args, call_id=self._call_id, conn=self._conn, header={"use_session": True}
+            self._method, *self._args, call_id=self._call_id, conn=self._conn
         )
         self._call_id = response.body["call_id"]
         if response.header["status_code"] == 301:
@@ -114,8 +122,9 @@ class Client:
 
     async def iterator_call(self, method: str, *args: Any) -> Any:
         """Python-specific generator call"""
-        async for result in AsyncIteratorCall(method, self, *args):
-            yield result
+        async with AsyncIteratorCall(method, self, *args) as async_iterator:
+            async for result in async_iterator:
+                yield result
 
     def register(self, func: Callable) -> Any:
         """Using this method to decorate a fake function can help you use it better.
