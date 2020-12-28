@@ -12,7 +12,7 @@ from rap.common.middleware import BaseMiddleware
 from rap.common.types import READER_TYPE, WRITER_TYPE, BASE_REQUEST_TYPE
 from rap.common.utlis import Constant, Event
 from rap.manager.func_manager import func_manager
-from rap.server.filter_stream.base import BaseFilter
+from rap.server.filter.base import BaseFilter
 from rap.server.middleware.base import (
     BaseConnMiddleware,
     BaseMsgMiddleware,

@@ -7,7 +7,7 @@ import uuid
 from contextvars import ContextVar, Token
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Type, Tuple
 
-from rap.client.middleware.base import BaseMiddleware
+from rap.client.filter.base import BaseFilter
 from rap.client.model import Request, Response
 from rap.client.utils import get_rap_exc_dict, raise_rap_error
 from rap.common import exceptions as rap_exc
@@ -439,9 +439,9 @@ class Transport(object):
         return Channel(func_name, self.session, create, read, write, close)
 
     ##############
-    # middleware #
+    # filter #
     ##############
-    def load_middleware(self, middleware_list: List[BaseMiddleware]):
+    def load_middleware(self, middleware_list: List[BaseFilter]):
         for middleware in middleware_list:
             self._process_request_list.append(middleware.process_request)
             self._process_response_list.append(middleware.process_response)

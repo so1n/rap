@@ -55,8 +55,10 @@ class IpBlockMiddleware(BaseConnMiddleware):
             is_allow: int = await redis_manager.redis_pool.sismember(self.allow_key, ip)
             if not is_allow:
                 await conn.await_close()
+                return
         else:
             is_block: int = await redis_manager.redis_pool.sismember(self.block_key, ip)
             if is_block:
                 await conn.await_close()
+                return
         await self.call_next(conn)

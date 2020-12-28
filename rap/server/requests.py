@@ -23,7 +23,7 @@ from rap.common.utlis import (
     response_num_dict
 )
 from rap.manager.func_manager import func_manager
-from rap.server.filter_stream.base import BaseFilter
+from rap.server.filter.base import BaseFilter
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.response import Response
 
