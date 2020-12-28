@@ -1,8 +1,7 @@
 import asyncio
 
 from rap.client import Client
-from rap.client.transport import Channel
-
+from rap.client.transoprt.channel import Channel
 
 client = Client()
 

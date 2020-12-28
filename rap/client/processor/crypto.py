@@ -1,13 +1,13 @@
 import time
 
-from .base import BaseFilter
+from .base import BaseProcessor
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError
 from rap.common.utlis import gen_random_time_id
 from rap.client.model import Request, Response
 
 
-class CryptoFliter(BaseFilter):
+class CryptoProcessor(BaseProcessor):
     def __init__(self, crypto_key_id: str, crypto_key: str):
         self._crypto_id: str = crypto_key_id
         self._crypto_key: str = crypto_key

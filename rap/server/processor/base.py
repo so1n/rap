@@ -1,7 +1,7 @@
 from rap.server.model import RequestModel, ResponseModel
 
 
-class BaseFilter(object):
+class BaseProcessor(object):
     async def process_request(self, request: RequestModel):
         pass
 

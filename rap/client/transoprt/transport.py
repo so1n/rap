@@ -2,158 +2,22 @@ import asyncio
 import logging
 import msgpack
 import random
-import uuid
 
 from contextvars import ContextVar, Token
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Type, Tuple, Union
+from typing import Any, Dict, List, Optional, Type, Tuple
 
-from rap.client.processor.base import BaseFilter
+from rap.client.processor.base import BaseProcessor
 from rap.client.model import Request, Response
+from rap.client.transoprt.channel import Channel
 from rap.client.utils import get_rap_exc_dict, raise_rap_error
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
-from rap.common.exceptions import ChannelError, RPCError, ProtocolError
+from rap.common.exceptions import RPCError, ProtocolError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.common.utlis import Constant, Event, MISS_OBJECT, gen_random_str_id
 
 
 _conn_context: ContextVar[Connection] = ContextVar("conn_context", default=MISS_OBJECT)
-
-
-class Session(object):
-    def __init__(self, transport: 'Transport'):
-        self._transport: 'Transport' = transport
-        self._token: Optional[Token] = None
-
-    async def __aenter__(self) -> 'Session':
-        self.create()
-        return self
-
-    async def __aexit__(self, *args: Tuple):
-        self.close()
-
-    def create(self):
-        self._token: Token = _conn_context.set(self._transport.get_random_conn())
-
-    def close(self):
-        _conn_context.reset(self._token)
-
-    @property
-    def conn(self):
-        return self._transport.now_conn
-
-    async def request(self, method: str, *args, call_id=-1) -> Response:
-        return await self._transport.request(method, *args, call_id, self.conn)
-
-    async def write(self, request: Request, msg_id: int) -> str:
-        return await self._transport.write(request, msg_id, self.conn)
-
-    async def read(self, resp_future_id: str) -> Response:
-        return await self._transport.read(resp_future_id)
-
-
-class Channel(object):
-    def __init__(
-            self,
-            fun_name: str,
-            session: Session,
-            create: Callable[[str], Coroutine[Any, Any, Any]],
-            read: Callable[[str], Coroutine[Any, Any, Response]],
-            write: Callable[[Request], Coroutine[Any, Any, str]],
-            close: Callable[[str], Coroutine[Any, Any, Any]],
-    ):
-        self._func_name: str = fun_name
-        self._session: Session = session
-        self._channel_id: str = str(uuid.uuid4())
-        self._create: Callable[[str], Coroutine[Any, Any, Any]] = create
-        self._read: Callable[[str], Coroutine[Any, Any, Response]] = read
-        self._write: Callable[[Request], Coroutine[Any, Any, str]] = write
-        self._close: Callable[[str], Coroutine[Any, Any, Any]] = close
-        self._is_close: bool = True
-
-    async def create(self):
-        self._session.create()
-        await self._create(self._channel_id)
-        self._is_close = False
-
-        life_cycle: str = 'declare'
-        await self._base_write(None, life_cycle)
-        response: Response = await self._base_read()
-        if response.header.get('channel_life_cycle') != life_cycle:
-            raise ChannelError('channel life cycle error')
-        channel_id: str = response.header.get('channel_id')
-        self._channel_id = channel_id
-
-    async def _base_read(self) -> Response:
-        if self._is_close:
-            raise ChannelError(f'channel is closed')
-        response: Union[Response, Exception] = await self._read(self._channel_id)
-        if isinstance(response, Exception):
-            raise response
-        if response.header.get('channel_life_cycle') == 'drop':
-            self._is_close = True
-            await self._close(self._channel_id)
-            raise ChannelError('recv drop event, close channel')
-        return response
-
-    async def loop(self, flag: bool = True) -> bool:
-        await asyncio.sleep(0.01)
-        if self._is_close:
-            return not self._is_close
-        else:
-            return flag
-
-    async def _base_write(self, body: Any, life_cycle: str) -> str:
-        if self._is_close:
-            raise ChannelError(f'channel is closed')
-        request: Request = Request(
-            Constant.MSG_REQUEST,
-            self._func_name,
-            Constant.CHANNEL,
-            body,
-            {"channel_life_cycle": life_cycle, "channel_id": self._channel_id}
-        )
-        return await self._write(request)
-
-    async def read(self) -> Response:
-        response: Response = await self._base_read()
-        if response.header.get('channel_life_cycle') != 'msg':
-            raise ChannelError('channel life cycle error')
-        return response
-
-    async def read_body(self):
-        response: Response = await self.read()
-        return response.body
-
-    async def write(self, body: Any):
-        await self._base_write(body, 'msg')
-
-    async def close(self):
-        if self._is_close:
-            return
-        self._session.close()
-        life_cycle: str = 'drop'
-        await self._base_write(None, life_cycle)
-
-        async def wait_drop_response():
-            try:
-                while True:
-                    response: Response = await self._base_read()
-                    logging.debug('drop msg:%s' % response)
-            except RuntimeError:
-                pass
-
-        try:
-            await asyncio.wait_for(wait_drop_response(), 3)
-        except asyncio.TimeoutError:
-            logging.warning('wait drop response timeout')
-
-    async def __aenter__(self) -> 'Channel':
-        await self.create()
-        return self
-
-    async def __aexit__(self, *args: Tuple):
-        await self.close()
 
 
 class Transport(object):
@@ -438,10 +302,10 @@ class Transport(object):
         return conn
 
     @property
-    def session(self):
+    def session(self) -> 'Session':
         return Session(self)
 
-    def channel(self, func_name: str):
+    def channel(self, func_name: str) -> 'Channel':
 
         async def create(_channel_id: str):
             self._channel_queue_dict[_channel_id] = asyncio.Queue()
@@ -461,7 +325,39 @@ class Transport(object):
     ##############
     # processor #
     ##############
-    def load_middleware(self, middleware_list: List[BaseFilter]):
-        for middleware in middleware_list:
+    def load_processor(self, processor_list: List[BaseProcessor]):
+        for middleware in processor_list:
             self._process_request_list.append(middleware.process_request)
             self._process_response_list.append(middleware.process_response)
+
+
+class Session(object):
+    def __init__(self, transport: 'Transport'):
+        self._transport: 'Transport' = transport
+        self._token: Optional[Token] = None
+
+    async def __aenter__(self) -> 'Session':
+        self.create()
+        return self
+
+    async def __aexit__(self, *args: Tuple):
+        self.close()
+
+    def create(self):
+        self._token: Token = _conn_context.set(self._transport.get_random_conn())
+
+    def close(self):
+        _conn_context.reset(self._token)
+
+    @property
+    def conn(self):
+        return self._transport.now_conn
+
+    async def request(self, method: str, *args, call_id=-1) -> Response:
+        return await self._transport.request(method, *args, call_id, self.conn)
+
+    async def write(self, request: Request, msg_id: int) -> str:
+        return await self._transport.write(request, msg_id, self.conn)
+
+    async def read(self, resp_future_id: str) -> Response:
+        return await self._transport.read(resp_future_id)

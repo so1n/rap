@@ -6,11 +6,11 @@ from rap.common.exceptions import CryptoError, ServerError
 from rap.common.utlis import Constant, MISS_OBJECT, gen_random_time_id
 from rap.manager.crypto_manager import crypto_manager
 from rap.manager.redis_manager import redis_manager
-from rap.server.processor.base import BaseFilter
+from rap.server.processor.base import BaseProcessor
 from rap.server.model import RequestModel, ResponseModel
 
 
-class CryptoFilter(BaseFilter):
+class CryptoProcessor(BaseProcessor):
     def __init__(self, secret_dict: Dict[str, str]):
         crypto_manager.load_aes_key_dict(secret_dict)
         self._nonce_key: str = redis_manager.namespace + "nonce"

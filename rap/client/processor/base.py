@@ -1,7 +1,7 @@
 from rap.client.model import Request, Response
 
 
-class BaseFilter(object):
+class BaseProcessor(object):
     async def process_request(self, request: Request):
         pass
 
