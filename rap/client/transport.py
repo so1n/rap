@@ -5,14 +5,14 @@ import random
 import uuid
 
 from contextvars import ContextVar, Token
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Type, Tuple
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Type, Tuple, Union
 
 from rap.client.processor.base import BaseFilter
 from rap.client.model import Request, Response
 from rap.client.utils import get_rap_exc_dict, raise_rap_error
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
-from rap.common.exceptions import RPCError, ProtocolError
+from rap.common.exceptions import ChannelError, RPCError, ProtocolError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.common.utlis import Constant, Event, MISS_OBJECT, gen_random_str_id
 
@@ -69,27 +69,43 @@ class Channel(object):
         self._read: Callable[[str], Coroutine[Any, Any, Response]] = read
         self._write: Callable[[Request], Coroutine[Any, Any, str]] = write
         self._close: Callable[[str], Coroutine[Any, Any, Any]] = close
+        self._is_close: bool = True
 
     async def create(self):
         self._session.create()
         await self._create(self._channel_id)
+        self._is_close = False
+
         life_cycle: str = 'declare'
         await self._base_write(None, life_cycle)
         response: Response = await self._base_read()
         if response.header.get('channel_life_cycle') != life_cycle:
-            raise ProtocolError('channel life cycle error')
+            raise ChannelError('channel life cycle error')
         channel_id: str = response.header.get('channel_id')
         self._channel_id = channel_id
 
     async def _base_read(self) -> Response:
-        response: Response = await self._read(self._channel_id)
+        if self._is_close:
+            raise ChannelError(f'channel is closed')
+        response: Union[Response, Exception] = await self._read(self._channel_id)
         if isinstance(response, Exception):
             raise response
         if response.header.get('channel_life_cycle') == 'drop':
+            self._is_close = True
             await self._close(self._channel_id)
+            raise ChannelError('recv drop event, close channel')
         return response
 
+    async def loop(self, flag: bool = True) -> bool:
+        await asyncio.sleep(0.01)
+        if self._is_close:
+            return not self._is_close
+        else:
+            return flag
+
     async def _base_write(self, body: Any, life_cycle: str) -> str:
+        if self._is_close:
+            raise ChannelError(f'channel is closed')
         request: Request = Request(
             Constant.MSG_REQUEST,
             self._func_name,
@@ -102,7 +118,7 @@ class Channel(object):
     async def read(self) -> Response:
         response: Response = await self._base_read()
         if response.header.get('channel_life_cycle') != 'msg':
-            raise ProtocolError('channel life cycle error')
+            raise ChannelError('channel life cycle error')
         return response
 
     async def read_body(self):
@@ -113,18 +129,22 @@ class Channel(object):
         await self._base_write(body, 'msg')
 
     async def close(self):
+        if self._is_close:
+            return
         self._session.close()
         life_cycle: str = 'drop'
         await self._base_write(None, life_cycle)
 
         async def wait_drop_response():
-            while True:
-                response: Response = await self._base_read()
-                if response.header.get('channel_life_cycle') == 'drop':
-                    break
+            try:
+                while True:
+                    response: Response = await self._base_read()
+                    logging.debug('drop msg:%s' % response)
+            except RuntimeError:
+                pass
 
         try:
-            await asyncio.wait_for(wait_drop_response(), 9)
+            await asyncio.wait_for(wait_drop_response(), 3)
         except asyncio.TimeoutError:
             logging.warning('wait drop response timeout')
 

@@ -8,6 +8,7 @@ from typing import Any, Callable, Coroutine, Dict, Generator, List, Optional, Tu
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import (
     BaseRapError,
+    ChannelError,
     FuncNotFoundError,
     ParseError,
     ProtocolError,
@@ -48,7 +49,7 @@ class Channel(object):
 
     async def write(self, body: Any):
         if self.is_close:
-            raise asyncio.CancelledError(f'channel{self.channel_id} is close')
+            raise ChannelError(f'channel{self.channel_id} is close')
         response: "ResponseModel" = ResponseModel(
             num=Constant.MSG_RESPONSE,
             msg_id=-1,
@@ -61,7 +62,7 @@ class Channel(object):
 
     async def read(self) -> ResponseModel:
         if self.is_close:
-            raise asyncio.CancelledError(f'channel{self.channel_id} is close')
+            raise ChannelError(f'channel{self.channel_id} is close')
         return await self.queue.get()
 
     async def read_body(self) -> Any:
@@ -70,7 +71,14 @@ class Channel(object):
 
     @property
     def is_close(self) -> bool:
-        return self._is_close or (self._conn and self._conn.is_closed())
+        return self._is_close
+
+    async def loop(self, flag: bool = True) -> bool:
+        await asyncio.sleep(0.01)
+        if self._is_close:
+            return not self._is_close
+        else:
+            return flag
 
     async def close(self):
         if self._is_close:
@@ -231,23 +239,22 @@ class Request(object):
     async def channel_handle(
             self, request: RequestModel, response: ResponseModel, func: Callable
     ) -> Optional[ResponseModel]:
+        # declare var
         channel_id: str = request.header.get('channel_id')
-        life_cycle: str = request.header.get("channel_life_cycle")
+        life_cycle: str = request.header.get("channel_life_cycle", "error")
         func_name: str = func.__name__
+        response.header = request.header
+        response.msg_id = request.msg_id
 
         channel: Channel = self._channel_dict.get(channel_id, MISS_OBJECT)
-        if life_cycle == 'msg:':
+        if life_cycle == 'msg':
+            if channel is MISS_OBJECT:
+                response.body = ChannelError('channel not create')
+                return response
             await channel.queue.put(request)
         elif life_cycle == 'declare':
             if channel is not MISS_OBJECT:
-                response: "ResponseModel" = ResponseModel(
-                    num=Constant.MSG_RESPONSE,
-                    msg_id=-1,
-                    func_name=func_name,
-                    method=Constant.CHANNEL,
-                    header={'channel_id': channel_id, 'channel_life_cycle': 'declare'},
-                    body=ProtocolError('channel already create')
-                )
+                response.body = ChannelError('channel already create')
                 return response
 
             async def write(_response: ResponseModel):
@@ -266,14 +273,24 @@ class Request(object):
                         await channel.close()
 
             channel.future = asyncio.ensure_future(channel_func())
+
+            def future_done_callback(future: asyncio.Future):
+                logging.debug("channel:%s future status:%s" % (channel_id, future.done()))
+
+            channel.future.add_done_callback(future_done_callback)
             self._channel_dict[channel_id] = channel
             response.header = {'channel_id': channel_id, 'channel_life_cycle': 'declare'}
             return response
         elif life_cycle == 'drop':
-            await channel.close()
-            return
+            if channel is MISS_OBJECT:
+                response.body = ChannelError('channel not create')
+                return response
+            else:
+                await channel.close()
+                return
         else:
-            await channel.queue.put(request)
+            response.body = ChannelError('channel life cycle error')
+            return response
 
     async def msg_handle(self, request: RequestModel, call_id: int, func: Callable, param: str) -> Tuple[int, Any]:
         user_agent: str = request.header.get("user_agent")
