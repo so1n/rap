@@ -61,3 +61,8 @@ class ServerError(BaseRapError):
 class CryptoError(BaseRapError):
     status_code: int = 509
     message: str = "crypto error"
+
+
+class ChannelError(BaseRapError):
+    status_code: int = 510
+    message: str = "Channel Error"

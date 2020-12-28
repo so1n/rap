@@ -11,7 +11,7 @@ client = Client()
 async def async_channel(channel: Channel):
     await channel.write('hello')
     cnt: int = 0
-    while cnt < 3:
+    while await channel.loop(cnt < 3):
         cnt += 1
         print(await channel.read_body())
     return

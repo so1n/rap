@@ -5,12 +5,12 @@ from rap.server.requests import Channel
 
 
 async def async_channel(channel: Channel):
-    while not channel.is_close:
-        logging.info(channel.is_close)
+    while await channel.loop():
         body: any = await channel.read_body()
         if body == 'hello':
             cnt: int = 0
-            while True:
+            await channel.write(f'hello {cnt}')
+            while await channel.loop(cnt < 10):
                 cnt += 1
                 await channel.write(f'hello {cnt}')
         else:
