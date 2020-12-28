@@ -1,11 +1,11 @@
 import asyncio
 
 from rap.client import Client
-from rap.client.processor.crypto import CryptoFliter
+from rap.client.processor.crypto import CryptoProcessor
 
 
 client = Client()
-client.load_middleware([CryptoFliter("test", "keyskeyskeyskeys")])
+client.load_middleware([CryptoProcessor("test", "keyskeyskeyskeys")])
 
 
 # in register, must use async def...

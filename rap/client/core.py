@@ -3,9 +3,10 @@ import inspect
 from functools import wraps
 from typing import Any, Callable, cast, List, Optional, Tuple
 
-from rap.client.processor.base import BaseFilter
+from rap.client.processor.base import BaseProcessor
 from rap.client.model import Response
-from rap.client.transport import Channel, Transport, Session
+from rap.client.transoprt.transport import Transport, Session
+from rap.client.transoprt.channel import Channel
 from rap.common.conn import Connection
 
 
@@ -80,8 +81,8 @@ class Client:
         """
         await self.transport.connect()
 
-    def load_middleware(self, middleware_list: List[BaseFilter]):
-        self.transport.load_middleware(middleware_list)
+    def load_middleware(self, middleware_list: List[BaseProcessor]):
+        self.transport.load_processor(middleware_list)
 
     # register
     def _async_register(self, func: Callable):

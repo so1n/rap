@@ -12,7 +12,7 @@ from rap.common.middleware import BaseMiddleware
 from rap.common.types import READER_TYPE, WRITER_TYPE, BASE_REQUEST_TYPE
 from rap.common.utlis import Constant, Event
 from rap.manager.func_manager import func_manager
-from rap.server.processor.base import BaseFilter
+from rap.server.processor.base import BaseProcessor
 from rap.server.middleware.base import (
     BaseConnMiddleware,
     BaseMsgMiddleware,
@@ -56,7 +56,7 @@ class Server(object):
 
         self._server: Optional[asyncio.AbstractServer] = None
         self._middleware_list: List[BaseMiddleware] = []
-        self._filter_list: List[BaseFilter] = []
+        self._filter_list: List[BaseProcessor] = []
 
     def load_middleware(self, middleware_list: List[BaseMiddleware]):
         for middleware in middleware_list:
@@ -68,9 +68,9 @@ class Server(object):
             else:
                 raise RuntimeError(f'{middleware} must instance of {BaseMiddleware}')
 
-    def load_filter(self, filter_list: List[BaseFilter]):
+    def load_filter(self, filter_list: List[BaseProcessor]):
         for filter_ in filter_list:
-            if isinstance(filter_, BaseFilter):
+            if isinstance(filter_, BaseProcessor):
                 self._filter_list.append(filter_)
 
     @staticmethod

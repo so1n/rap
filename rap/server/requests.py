@@ -24,7 +24,7 @@ from rap.common.utlis import (
     response_num_dict
 )
 from rap.manager.func_manager import func_manager
-from rap.server.processor.base import BaseFilter
+from rap.server.processor.base import BaseProcessor
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.response import Response
 
@@ -104,12 +104,12 @@ class Request(object):
             conn: ServerConnection,
             run_timeout: int,
             response: Response,
-            filter_list: Optional[List[BaseFilter]] = None
+            filter_list: Optional[List[BaseProcessor]] = None
     ):
         self._conn: ServerConnection = conn
         self._run_timeout: int = run_timeout
         self._response: Response = response
-        self._filter_list: Optional[List[BaseFilter]] = filter_list
+        self._filter_list: Optional[List[BaseProcessor]] = filter_list
 
         self.dispatch_func_dict: Dict[int, Callable] = {
             Constant.DECLARE_REQUEST: self.declare_life_cycle,

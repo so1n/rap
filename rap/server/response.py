@@ -5,7 +5,7 @@ from typing import List, Tuple, Optional
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import BaseRapError
 from rap.common.utlis import Constant, Event, parse_error
-from rap.server.processor.base import BaseFilter
+from rap.server.processor.base import BaseProcessor
 from rap.server.model import ResponseModel
 
 
@@ -14,11 +14,11 @@ class Response(object):
             self,
             conn: ServerConnection,
             timeout: Optional[int] = None,
-            filter_list: Optional[List[BaseFilter]] = None
+            filter_list: Optional[List[BaseProcessor]] = None
     ):
         self._conn: ServerConnection = conn
         self._timeout: Optional[int] = timeout
-        self._filter_list: Optional[List[BaseFilter]] = filter_list
+        self._filter_list: Optional[List[BaseProcessor]] = filter_list
 
     @staticmethod
     async def response_handle(resp: ResponseModel) -> ResponseModel:
