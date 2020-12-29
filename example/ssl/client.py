@@ -2,7 +2,6 @@ import asyncio
 
 from rap.client import Client
 
-
 client = Client(ssl_crt_path="./rap_ssl.crt")  # enable secret
 
 

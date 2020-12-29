@@ -3,9 +3,10 @@ try:
 except ModuleNotFoundError:
     import json
 
-from Crypto.Cipher import AES
-from binascii import b2a_hex, a2b_hex
+from binascii import a2b_hex, b2a_hex
 from typing import Any
+
+from Crypto.Cipher import AES
 
 
 class Crypto(object):

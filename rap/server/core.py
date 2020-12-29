@@ -1,24 +1,20 @@
 import asyncio
 import logging
 import ssl
+from typing import Callable, Coroutine, List, Optional, Union
 
 import msgpack
-
-from typing import Callable, Coroutine, List, Optional, Union
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import RpcRunTimeError
 from rap.common.middleware import BaseMiddleware
-from rap.common.types import READER_TYPE, WRITER_TYPE, BASE_REQUEST_TYPE
+from rap.common.types import BASE_REQUEST_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utlis import Constant, Event
 from rap.manager.func_manager import func_manager
-from rap.server.processor.base import BaseProcessor
-from rap.server.middleware.base import (
-    BaseConnMiddleware,
-    BaseMsgMiddleware,
-)
-from rap.server.requests import Request
+from rap.server.middleware.base import BaseConnMiddleware, BaseMsgMiddleware
 from rap.server.model import RequestModel, ResponseModel
+from rap.server.processor.base import BaseProcessor
+from rap.server.requests import Request
 from rap.server.response import Response
 
 __all__ = ["Server"]

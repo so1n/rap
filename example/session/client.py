@@ -3,7 +3,6 @@ import time
 
 from rap.client import Client
 
-
 client = Client(
     host_list=[
         "localhost:9000",

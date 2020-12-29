@@ -4,8 +4,8 @@ from rap.common.conn import ServerConnection
 from rap.common.utlis import Constant, Event
 from rap.manager.redis_manager import redis_manager
 from rap.server.middleware.base import BaseConnMiddleware
-from rap.server.response import Response
 from rap.server.model import ResponseModel
+from rap.server.response import Response
 
 
 class ConnLimitMiddleware(BaseConnMiddleware):
