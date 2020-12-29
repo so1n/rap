@@ -1,14 +1,12 @@
 import inspect
-
 from functools import wraps
-from typing import Any, Callable, cast, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple, cast
 
-from rap.client.processor.base import BaseProcessor
 from rap.client.model import Response
-from rap.client.transoprt.transport import Transport, Session
+from rap.client.processor.base import BaseProcessor
 from rap.client.transoprt.channel import Channel
+from rap.client.transoprt.transport import Session, Transport
 from rap.common.conn import Connection
-
 
 __all__ = ["Client"]
 

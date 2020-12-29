@@ -1,12 +1,12 @@
 import asyncio
 import logging
-from typing import List, Tuple, Optional
+from typing import List, Optional, Tuple
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import BaseRapError
 from rap.common.utlis import Constant, Event, parse_error
-from rap.server.processor.base import BaseProcessor
 from rap.server.model import ResponseModel
+from rap.server.processor.base import BaseProcessor
 
 
 class Response(object):

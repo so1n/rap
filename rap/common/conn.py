@@ -1,17 +1,12 @@
 import asyncio
 import logging
 import ssl
-
 from typing import Optional
 
 import msgpack
 
+from rap.common.types import READER_TYPE, UNPACKER_TYPE, WRITER_TYPE
 from rap.common.utlis import Constant
-from rap.common.types import (
-    READER_TYPE,
-    WRITER_TYPE,
-    UNPACKER_TYPE,
-)
 
 __all__ = ["Connection", "ServerConnection"]
 

@@ -2,7 +2,6 @@ import asyncio
 
 from rap.server import Server
 
-
 if __name__ == "__main__":
     import logging
 

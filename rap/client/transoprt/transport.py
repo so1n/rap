@@ -1,22 +1,21 @@
 import asyncio
 import logging
-import msgpack
 import random
 import uuid
-
 from contextvars import ContextVar, Token
-from typing import Any, Dict, List, Optional, Type, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Type
 
-from rap.client.processor.base import BaseProcessor
+import msgpack
+
 from rap.client.model import Request, Response
+from rap.client.processor.base import BaseProcessor
 from rap.client.transoprt.channel import Channel
 from rap.client.utils import get_rap_exc_dict, raise_rap_error
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
-from rap.common.exceptions import RPCError, ProtocolError
+from rap.common.exceptions import ProtocolError, RPCError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
-from rap.common.utlis import Constant, Event, MISS_OBJECT, gen_random_str_id
-
+from rap.common.utlis import MISS_OBJECT, Constant, Event, gen_random_str_id
 
 _conn_context: ContextVar[Connection] = ContextVar("conn_context", default=MISS_OBJECT)
 

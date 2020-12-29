@@ -1,9 +1,8 @@
 import asyncio
-import msgpack
 from collections.abc import Iterator
+from typing import Any, List, Optional, Set, Tuple, Type, Union, _GenericAlias
 
-from typing import Any, List, Tuple, Optional, Type, Set, Union, _GenericAlias
-
+import msgpack
 
 # request num, msg id, func name, method, header, body
 BASE_REQUEST_TYPE = Tuple[int, int, str, str, dict, Any]

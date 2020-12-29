@@ -1,8 +1,8 @@
 import argparse
 import asyncio
 import sys
-from rap.client import Client
 
+from rap.client import Client
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
