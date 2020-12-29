@@ -18,7 +18,7 @@ class CryptoProcessor(BaseProcessor):
     async def process_request(self, request: RequestModel):
         if type(request.body) is not bytes:
             return
-        crypto_id: str = request.header.get('crypto_id', None)
+        crypto_id: str = request.header.get("crypto_id", None)
         crypto: Crypto = crypto_manager.get_crypto_by_key_id(crypto_id)
         # check crypto
         if crypto == MISS_OBJECT:
@@ -49,6 +49,6 @@ class CryptoProcessor(BaseProcessor):
             except AttributeError:
                 return
             if type(response.body) is not dict:
-                response.body = {'body': response.body}
+                response.body = {"body": response.body}
             response.body.update(dict(timestamp=int(time.time()), nonce=gen_random_time_id()))
             response.body = crypto.encrypt_object(response.body)

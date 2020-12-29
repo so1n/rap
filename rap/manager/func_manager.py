@@ -44,7 +44,7 @@ class FuncManager(object):
                         f"{func.__name__} param:{param.name} type:{param.annotation} is not json type"
                     )
         else:
-            type_ = 'channel'
+            type_ = "channel"
 
         if not hasattr(func, "__call__"):
             raise RegisteredError(f"{name} is not a callable object")
@@ -58,7 +58,7 @@ class FuncManager(object):
         if name in self.func_dict:
             raise RegisteredError(f"Name: {name} has already been used")
 
-        func_key: str = f'{group}:{type_}:{name}'
+        func_key: str = f"{group}:{type_}:{name}"
         self.func_dict[func_key] = FuncModel(group=group, type_=type_, name=name, func=func)
 
         # not display log before called logging.basicConfig

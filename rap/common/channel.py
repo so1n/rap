@@ -21,7 +21,7 @@ class BaseChannel(object):
     def is_close(self) -> bool:
         raise NotImplementedError
 
-    def __aiter__(self) -> 'BaseChannel':
+    def __aiter__(self) -> "BaseChannel":
         raise NotImplementedError
 
     async def __anext__(self):

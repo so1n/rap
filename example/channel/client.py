@@ -8,7 +8,7 @@ client = Client()
 
 @client.register
 async def async_channel(channel: Channel):
-    await channel.write('hello')
+    await channel.write("hello")
     cnt: int = 0
     while await channel.loop(cnt < 3):
         cnt += 1
@@ -18,7 +18,7 @@ async def async_channel(channel: Channel):
 
 @client.register
 async def echo(channel: Channel):
-    await channel.write('hi!')
+    await channel.write("hi!")
     async for body in channel:
         print(body)
         await channel.write(body)

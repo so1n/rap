@@ -27,7 +27,7 @@ class CryptoProcessor(BaseProcessor):
 
     async def process_request(self, request: Request):
         request.body = {"body": request.body, "timestamp": int(time.time()), "nonce": gen_random_time_id()}
-        request.header['crypto_id'] = self._crypto_id
+        request.header["crypto_id"] = self._crypto_id
         request.body = self._crypto.encrypt_object(request.body)
 
     async def process_response(self, response: Response):

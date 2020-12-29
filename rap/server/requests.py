@@ -14,16 +14,9 @@ from rap.common.exceptions import (
     ParseError,
     ProtocolError,
     RpcRunTimeError,
-    ServerError
+    ServerError,
 )
-from rap.common.utlis import (
-    Constant,
-    Event,
-    MISS_OBJECT,
-    get_event_loop,
-    parse_error,
-    response_num_dict
-)
+from rap.common.utlis import Constant, Event, MISS_OBJECT, get_event_loop, parse_error, response_num_dict
 from rap.manager.func_manager import func_manager
 from rap.server.processor.base import BaseProcessor
 from rap.server.model import RequestModel, ResponseModel
@@ -32,12 +25,12 @@ from rap.server.response import Response
 
 class Channel(BaseChannel):
     def __init__(
-            self,
-            channel_id: str,
-            func_name: str,
-            write: Callable[[ResponseModel], Coroutine[Any, Any, Any]],
-            close: Callable,
-            conn: ServerConnection
+        self,
+        channel_id: str,
+        func_name: str,
+        write: Callable[[ResponseModel], Coroutine[Any, Any, Any]],
+        close: Callable,
+        conn: ServerConnection,
     ):
         self._func_name: str = func_name
         self._close: Callable = close
@@ -50,20 +43,20 @@ class Channel(BaseChannel):
 
     async def write(self, body: Any):
         if self.is_close:
-            raise ChannelError(f'channel{self.channel_id} is close')
+            raise ChannelError(f"channel{self.channel_id} is close")
         response: "ResponseModel" = ResponseModel(
             num=Constant.MSG_RESPONSE,
             msg_id=-1,
             func_name=self._func_name,
             method=Constant.CHANNEL,
-            header={'type': 'channel', 'channel_id': self.channel_id, 'channel_life_cycle': 'msg'},
-            body=body
+            header={"type": "channel", "channel_id": self.channel_id, "channel_life_cycle": "msg"},
+            body=body,
         )
         await self._write(response)
 
     async def read(self) -> ResponseModel:
         if self.is_close:
-            raise ChannelError(f'channel{self.channel_id} is close')
+            raise ChannelError(f"channel{self.channel_id} is close")
         return await self.queue.get()
 
     async def read_body(self) -> Any:
@@ -83,7 +76,7 @@ class Channel(BaseChannel):
 
     async def close(self):
         if self._is_close:
-            logging.debug('already close channel %s', self.channel_id)
+            logging.debug("already close channel %s", self.channel_id)
             return
         self._is_close = True
         if not self.future.cancelled():
@@ -93,12 +86,12 @@ class Channel(BaseChannel):
             msg_id=-1,
             func_name=self._func_name,
             method=Constant.CHANNEL,
-            header={'channel_id': self.channel_id, 'channel_life_cycle': 'drop'},
+            header={"channel_id": self.channel_id, "channel_life_cycle": "drop"},
         )
         await self._write(response)
         self._close()
 
-    def __aiter__(self) -> 'Channel':
+    def __aiter__(self) -> "Channel":
         return self
 
     async def __anext__(self):
@@ -110,11 +103,11 @@ class Channel(BaseChannel):
 
 class Request(object):
     def __init__(
-            self,
-            conn: ServerConnection,
-            run_timeout: int,
-            response: Response,
-            filter_list: Optional[List[BaseProcessor]] = None
+        self,
+        conn: ServerConnection,
+        run_timeout: int,
+        response: Response,
+        filter_list: Optional[List[BaseProcessor]] = None,
     ):
         self._conn: ServerConnection = conn
         self._run_timeout: int = run_timeout
@@ -134,17 +127,17 @@ class Request(object):
     async def dispatch(self, request: RequestModel) -> Optional[ResponseModel]:
         if request.num not in self.dispatch_func_dict:
             response_num: int = Constant.SERVER_ERROR_RESPONSE
-            content: str = 'life cycle error'
+            content: str = "life cycle error"
         else:
             response_num: int = response_num_dict.get(request.num, Constant.SERVER_ERROR_RESPONSE)
-            content: str = 'request num error'
+            content: str = "request num error"
 
         response: "ResponseModel" = ResponseModel(
             num=response_num,
             func_name=request.func_name,
             method=request.method,
             msg_id=request.msg_id,
-            stats=request.stats
+            stats=request.stats,
         )
         response.header.update(request.header)
         try:
@@ -161,7 +154,7 @@ class Request(object):
             return response
         # check conn_data_model
         if request.num != Constant.DECLARE_REQUEST and not self._is_declare:
-            response.body = ProtocolError('Must declare')
+            response.body = ProtocolError("Must declare")
             return response
 
         dispatch_func: Callable = self.dispatch_func_dict[request.num]
@@ -186,7 +179,7 @@ class Request(object):
     async def declare_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
         random_id: str = request.body
         if not random_id:
-            response.body = ProtocolError('not found declare id')
+            response.body = ProtocolError("not found declare id")
         self.dispatch_func_dict = {
             Constant.MSG_REQUEST: self.msg_life_cycle,
             Constant.DROP_REQUEST: self.drop_life_cycle,
@@ -202,7 +195,7 @@ class Request(object):
         if request.func_name.startswith("_root_") and request.header["_host"] != "127.0.0.1":
             response.body = FuncNotFoundError(extra_msg=f"func name: {request.func_name}")
             return response
-        fun_key: str = f'normal:{request.method}:{request.func_name}'
+        fun_key: str = f"normal:{request.method}:{request.func_name}"
         func: Optional[Callable] = func_manager.func_dict.get(fun_key).func
         if not func:
             response.body = FuncNotFoundError(extra_msg=f"func name: {request.func_name}")
@@ -222,9 +215,9 @@ class Request(object):
             response.header["status_code"] = 301
         elif isinstance(result, Exception):
             exc, exc_info = parse_error(result)
-            response.body['exc_info'] = exc_info
+            response.body["exc_info"] = exc_info
             if request.header.get("user_agent") == Constant.USER_AGENT:
-                response.body['exc'] = exc
+                response.body["exc"] = exc
         else:
             response.body["result"] = result
         return response
@@ -249,22 +242,22 @@ class Request(object):
         return None
 
     async def channel_handle(
-            self, request: RequestModel, response: ResponseModel, func: Callable
+        self, request: RequestModel, response: ResponseModel, func: Callable
     ) -> Optional[ResponseModel]:
         # declare var
-        channel_id: str = request.header.get('channel_id')
+        channel_id: str = request.header.get("channel_id")
         life_cycle: str = request.header.get("channel_life_cycle", "error")
         func_name: str = func.__name__
 
         channel: Channel = self._channel_dict.get(channel_id, MISS_OBJECT)
-        if life_cycle == 'msg':
+        if life_cycle == "msg":
             if channel is MISS_OBJECT:
-                response.body = ChannelError('channel not create')
+                response.body = ChannelError("channel not create")
                 return response
             await channel.queue.put(request)
-        elif life_cycle == 'declare':
+        elif life_cycle == "declare":
             if channel is not MISS_OBJECT:
-                response.body = ChannelError('channel already create')
+                response.body = ChannelError("channel already create")
                 return response
 
             async def write(_response: ResponseModel):
@@ -289,17 +282,17 @@ class Request(object):
 
             channel.future.add_done_callback(future_done_callback)
             self._channel_dict[channel_id] = channel
-            response.header = {'channel_id': channel_id, 'channel_life_cycle': 'declare'}
+            response.header = {"channel_id": channel_id, "channel_life_cycle": "declare"}
             return response
-        elif life_cycle == 'drop':
+        elif life_cycle == "drop":
             if channel is MISS_OBJECT:
-                response.body = ChannelError('channel not create')
+                response.body = ChannelError("channel not create")
                 return response
             else:
                 await channel.close()
                 return
         else:
-            response.body = ChannelError('channel life cycle error')
+            response.body = ChannelError("channel life cycle error")
             return response
 
     async def msg_handle(self, request: RequestModel, call_id: int, func: Callable, param: str) -> Tuple[int, Any]:

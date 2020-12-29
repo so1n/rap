@@ -11,10 +11,7 @@ from rap.server.model import ResponseModel
 
 class Response(object):
     def __init__(
-            self,
-            conn: ServerConnection,
-            timeout: Optional[int] = None,
-            filter_list: Optional[List[BaseProcessor]] = None
+        self, conn: ServerConnection, timeout: Optional[int] = None, filter_list: Optional[List[BaseProcessor]] = None
     ):
         self._conn: ServerConnection = conn
         self._timeout: Optional[int] = timeout
@@ -37,12 +34,7 @@ class Response(object):
             )
         elif isinstance(resp.body, Event):
             return ResponseModel(
-                Constant.SERVER_EVENT,
-                resp.msg_id,
-                resp.func_name,
-                resp.method,
-                resp.header,
-                resp.body.to_tuple()
+                Constant.SERVER_EVENT, resp.msg_id, resp.func_name, resp.method, resp.header, resp.body.to_tuple()
             )
         else:
             return resp
@@ -58,8 +50,7 @@ class Response(object):
 
         try:
             await self._conn.write(
-                (resp.num, resp.msg_id, resp.func_name, resp.method, resp.header, resp.body),
-                self._timeout
+                (resp.num, resp.msg_id, resp.func_name, resp.method, resp.header, resp.body), self._timeout
             )
             return True
         except asyncio.TimeoutError:
