@@ -23,11 +23,11 @@ _conn_context: ContextVar[Connection] = ContextVar("conn_context", default=MISS_
 
 class Transport(object):
     def __init__(
-            self,
-            host_list: List[str],
-            timeout: int = 9,
-            keep_alive_time: int = 1200,
-            ssl_crt_path: Optional[str] = None,
+        self,
+        host_list: List[str],
+        timeout: int = 9,
+        keep_alive_time: int = 1200,
+        ssl_crt_path: Optional[str] = None,
     ):
         self._host_list: List[str] = host_list
         self._conn_dict: Dict[str, Connection] = {}
@@ -57,11 +57,11 @@ class Transport(object):
             del self._conn_dict[host]
         self._conn_dict[host] = conn
 
-        ip, port = host.split(':')
+        ip, port = host.split(":")
         await conn.connect(ip, int(port))
 
         if conn.peer in self._listen_future_dict:
-            temp_future: 'asyncio.Future' = self._listen_future_dict[conn.peer]
+            temp_future: "asyncio.Future" = self._listen_future_dict[conn.peer]
             if not temp_future.cancelled():
                 temp_future.cancel()
         self._listen_future_dict[conn.peer] = asyncio.ensure_future(self._listen(conn))
@@ -71,11 +71,11 @@ class Transport(object):
 
     async def connect(self):
         if not self._is_close:
-            raise ConnectionError(f'{self.__class__.__name__} already connect')
+            raise ConnectionError(f"{self.__class__.__name__} already connect")
         for host in self._host_list:
             if host in self._conn_dict:
                 if not self._conn_dict[host].is_closed():
-                    logging.warning(f'{host} already connected')
+                    logging.warning(f"{host} already connected")
                 else:
                     await self._connect(host)
             else:
@@ -87,9 +87,9 @@ class Transport(object):
             raise RuntimeError(f"{self.__class__.__name__} already closed")
         for host in self._host_list:
             if host not in self._conn_dict:
-                logging.warning(f'{host} not init')
+                logging.warning(f"{host} not init")
             elif self._conn_dict[host].is_closed():
-                logging.warning(f'{host} already close')
+                logging.warning(f"{host} already close")
             else:
                 conn: Connection = self._conn_dict[host]
                 await self._drop_life_cycle(conn)
@@ -139,10 +139,10 @@ class Transport(object):
         for process_response in self._process_response_list:
             await process_response(response)
 
-        resp_future_id: str = f'{conn.peer}:{response.msg_id}'
-        channel_id: Optional[str] = response.header.get('channel_id')
+        resp_future_id: str = f"{conn.peer}:{response.msg_id}"
+        channel_id: Optional[str] = response.header.get("channel_id")
         if channel_id and response.method != Constant.CHANNEL:
-            raise ProtocolError(f'recv error method:{response.method}')
+            raise ProtocolError(f"recv error method:{response.method}")
 
         # server error response handle
         if response.num == Constant.SERVER_ERROR_RESPONSE:
@@ -161,7 +161,7 @@ class Transport(object):
                 raise RuntimeError(f"recv close conn event, event info:{event_info}")
             elif event == Constant.PING_EVENT:
                 request: Request = Request(
-                    Constant.CLIENT_EVENT_RESPONSE, '', '', Event(Constant.PONG_EVENT, "").to_tuple()
+                    Constant.CLIENT_EVENT_RESPONSE, "", "", Event(Constant.PONG_EVENT, "").to_tuple()
                 )
                 self.before_request_handle(request, conn)
                 await self.write(request, -1, conn)
@@ -183,7 +183,7 @@ class Transport(object):
     async def _declare_life_cycle(self, conn: Connection):
         """send declare msg and init client id"""
         random_id: str = gen_random_str_id()
-        request: Request = Request(Constant.DECLARE_REQUEST, '', Constant.NORMAL, random_id)
+        request: Request = Request(Constant.DECLARE_REQUEST, "", Constant.NORMAL, random_id)
         response = await self._base_request(request, conn)
         if response.num != Constant.DECLARE_RESPONSE and response.body != random_id[::-1]:
             raise RPCError("declare response error")
@@ -192,7 +192,7 @@ class Transport(object):
     async def _drop_life_cycle(self, conn: Connection):
         """send drop msg"""
         random_id: str = gen_random_str_id(8)
-        request: Request = Request(Constant.DROP_REQUEST, '', Constant.NORMAL, random_id)
+        request: Request = Request(Constant.DROP_REQUEST, "", Constant.NORMAL, random_id)
         response = await self._base_request(request, conn)
         if response.num != Constant.DROP_RESPONSE and response.body != random_id[::-1]:
             logging.warning("drop response error")
@@ -254,10 +254,10 @@ class Transport(object):
         except Exception as e:
             raise e
 
-        if 'channel_id' in request.header:
-            return request.header['channel_id']
+        if "channel_id" in request.header:
+            return request.header["channel_id"]
         else:
-            resp_future_id: str = f'{conn.peer}:{msg_id}'
+            resp_future_id: str = f"{conn.peer}:{msg_id}"
             self._resp_future_dict[resp_future_id] = asyncio.Future()
             return resp_future_id
 
@@ -271,7 +271,7 @@ class Transport(object):
     # one by one request #
     ######################
     async def request(
-            self, func_name: str, *args, call_id=-1, conn: Optional[Connection] = None, header: Optional[dict] = None
+        self, func_name: str, *args, call_id=-1, conn: Optional[Connection] = None, header: Optional[dict] = None
     ) -> Response:
         """msg request handle"""
         request: Request = Request(
@@ -304,11 +304,10 @@ class Transport(object):
         return conn
 
     @property
-    def session(self) -> 'Session':
+    def session(self) -> "Session":
         return Session(self)
 
-    def channel(self, func_name: str) -> 'Channel':
-
+    def channel(self, func_name: str) -> "Channel":
         async def create(_channel_id: str):
             self._channel_queue_dict[_channel_id] = asyncio.Queue()
 
@@ -334,11 +333,11 @@ class Transport(object):
 
 
 class Session(object):
-    def __init__(self, transport: 'Transport'):
-        self._transport: 'Transport' = transport
+    def __init__(self, transport: "Transport"):
+        self._transport: "Transport" = transport
         self._token: Optional[Token] = None
 
-    async def __aenter__(self) -> 'Session':
+    async def __aenter__(self) -> "Session":
         self.create()
         return self
 

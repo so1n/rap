@@ -66,7 +66,7 @@ class Server(object):
             elif isinstance(middleware, BaseMiddleware):
                 self._middleware_list.append(middleware)
             else:
-                raise RuntimeError(f'{middleware} must instance of {BaseMiddleware}')
+                raise RuntimeError(f"{middleware} must instance of {BaseMiddleware}")
 
     def load_filter(self, filter_list: List[BaseProcessor]):
         for filter_ in filter_list:

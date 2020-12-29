@@ -24,14 +24,14 @@ class AsyncIteratorCall:
         self._conn: Connection = self._client.transport.now_conn
         self._session: Session = self._client.transport.session
 
-    async def __aenter__(self) -> 'AsyncIteratorCall':
+    async def __aenter__(self) -> "AsyncIteratorCall":
         self._session.create()
         return self
 
     async def __aexit__(self, *args: Tuple):
         self._session.close()
 
-    def __aiter__(self) -> 'AsyncIteratorCall':
+    def __aiter__(self) -> "AsyncIteratorCall":
         return self
 
     async def __anext__(self):
@@ -60,10 +60,7 @@ class Client:
         if not host_list:
             host_list = ["localhost:9000"]
         self.transport: Transport = Transport(
-            host_list,
-            timeout=timeout,
-            keep_alive_time=keep_alive_time,
-            ssl_crt_path=ssl_crt_path
+            host_list, timeout=timeout, keep_alive_time=keep_alive_time, ssl_crt_path=ssl_crt_path
         )
 
     ##################
@@ -96,6 +93,7 @@ class Client:
 
     def _async_gen_register(self, func: Callable):
         """Decoration generator function"""
+
         @wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
             async for result in self.iterator_call(func.__name__, *args):
@@ -105,10 +103,12 @@ class Client:
 
     def _async_channel_register(self, func: Callable):
         """Decoration generator function"""
+
         @wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
             async with self.transport.channel(func.__name__) as channel:
                 await func(channel)
+
         return cast(Callable, wrapper)
 
     # client api

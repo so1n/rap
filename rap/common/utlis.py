@@ -44,12 +44,12 @@ class Constant(object):
     PING_EVENT: str = "ping"
     PONG_EVENT: str = "pong"
 
-    DECLARE: str = 'declare'
-    MSG: str = 'MSG'
-    DROP: str = 'drop'
+    DECLARE: str = "declare"
+    MSG: str = "MSG"
+    DROP: str = "drop"
 
-    NORMAL: str = 'normal'
-    CHANNEL: str = 'channel'
+    NORMAL: str = "normal"
+    CHANNEL: str = "channel"
 
 
 class State(object):
@@ -65,9 +65,7 @@ class State(object):
         try:
             return self._state[key]
         except KeyError:
-            raise AttributeError(
-                f"'{self.__class__.__name__}' object has no attribute '{key}'"
-            )
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{key}'")
 
     def __len__(self):
         return len(self._state)
@@ -93,11 +91,11 @@ def _get_event_loop():
 
 
 def gen_random_str_id(length: int = 8) -> str:
-    return "".join(random.choice(_STR_LD) for i in range(length))
+    return "".join(random.choice(_STR_LD) for _ in range(length))
 
 
 def gen_random_time_id(length: int = 8, time_length: int = 10) -> str:
-    return str(int(time.time()))[-time_length:] + "".join(random.choice(_STR_LD) for i in range(length))
+    return str(int(time.time()))[-time_length:] + "".join(random.choice(_STR_LD) for _ in range(length))
 
 
 get_event_loop = _get_event_loop()

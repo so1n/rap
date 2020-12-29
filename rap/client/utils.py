@@ -10,9 +10,9 @@ def get_rap_exc_dict() -> Dict[int, Type[rap_exc.BaseRapError]]:
     for exc_name in dir(rap_exc):
         class_: Type = getattr(rap_exc, exc_name)
         if (
-                inspect.isclass(class_)
-                and issubclass(class_, rap_exc.BaseRapError)
-                and class_.__name__ != rap_exc.BaseRapError.__class__.__name__
+            inspect.isclass(class_)
+            and issubclass(class_, rap_exc.BaseRapError)
+            and class_.__name__ != rap_exc.BaseRapError.__class__.__name__
         ):
             exc_dict[class_.status_code] = class_
     return exc_dict

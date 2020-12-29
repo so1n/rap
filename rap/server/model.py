@@ -12,7 +12,7 @@ class RequestModel(object):
     method: str
     header: dict
     body: Any
-    stats: 'object()' = State()
+    stats: "object()" = State()
 
 
 @dataclass()
@@ -23,4 +23,4 @@ class ResponseModel(object):
     method: Optional[str] = None
     header: dict = field(default_factory=lambda: {"status_code": 200})
     body: Any = None
-    stats: 'object()' = State()
+    stats: "object()" = State()
