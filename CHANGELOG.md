@@ -1,13 +1,24 @@
-### 0.5.5
+### 0.5.5[TODO]
  - Feature: add server config
  
-### 0.5.4
+### 0.5.4[TODO]
  - description: near-continuous availability and a high degree of reliability.
  - Feature: client support HA strategy
  - Feature: client support load balance
  - Feature: server HA middleware
 
-### 0.5.3.2[now]
+### 0.5.3.3[now]
+ - description: support session & channel
+ - Feature: add use_session column in header
+ - Feature: add request_id column in header
+ - Feature: add channel
+ - Feature: add processor
+ - Feature: client:AsyncIteratorCall support client session
+ - Refactor: func manager
+ - Refactor: middleware
+ - Refactor: rap protocol
+
+### 0.5.3.2
  - description: simplify&mutli server
  - Feature: remove life cycle
  - Fix: keepalive time init error
@@ -58,7 +69,7 @@
  - Refactor: server middleware
  - Refactor: exceptions
 
-### 0.5
+## 0.5
  - description: Use more flexible rpc protocol
  - Refactor: new protocol
 
