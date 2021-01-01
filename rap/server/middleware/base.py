@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Any, Callable, Union
+from typing import Any, Callable, Coroutine, List, Union
 
 from rap.common.conn import ServerConnection
 from rap.common.middleware import BaseMiddleware as _BaseMiddleware
@@ -8,6 +8,9 @@ from rap.server.model import RequestModel
 
 
 class BaseMiddleware(_BaseMiddleware, ABC):
+    start_event_list: List[Union[Callable, Coroutine]]
+    stop_event_list: List[Union[Callable, Coroutine]]
+
     @staticmethod
     def register(func: Callable, is_root: bool = True, group: str = "middleware"):
         func_manager.register(func, is_root=is_root, group=group)

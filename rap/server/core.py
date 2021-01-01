@@ -1,7 +1,9 @@
 import asyncio
 import logging
 import ssl
-from typing import Callable, Coroutine, List, Optional, Union
+
+from typing import Any, Callable, Coroutine, List, Optional, Set, Union
+from types import FunctionType
 
 import msgpack
 
@@ -31,7 +33,7 @@ class Server(object):
         backlog: int = 1024,
         ssl_crt_path: Optional[str] = None,
         ssl_key_path: Optional[str] = None,
-        connect_call_back: List[Union[Callable, Coroutine]] = None,
+        start_call_back: List[Union[Callable, Coroutine]] = None,
         close_call_back: List[Union[Callable, Coroutine]] = None,
     ):
         self._host: str = host
@@ -41,8 +43,8 @@ class Server(object):
         self._keep_alive: int = keep_alive
         self._backlog: int = backlog
 
-        self._connect_callback: List[Union[Callable, Coroutine]] = connect_call_back
-        self._close_callback: List[Union[Callable, Coroutine]] = close_call_back
+        self._start_event_list: List[Union[Callable, Coroutine]] = start_call_back
+        self._stop_event_list: List[Union[Callable, Coroutine]] = close_call_back
 
         self._ssl_context: Optional[ssl.SSLContext] = None
         if ssl_crt_path and ssl_key_path:
@@ -53,9 +55,26 @@ class Server(object):
         self._server: Optional[asyncio.AbstractServer] = None
         self._middleware_list: List[BaseMiddleware] = []
         self._filter_list: List[BaseProcessor] = []
+        self._depend_set: Set[Any] = set()  # Check whether any components have been re-introduced
+
+    def load_start_event(self, func_list: List[Callable]):
+        for func in func_list:
+            if not isinstance(object, FunctionType):
+                raise ImportError(f'{func} must be fun')
+            self._start_event_list.append(func)
+
+    def load_stop_event(self, func_list: List[Callable]):
+        for func in func_list:
+            if not isinstance(object, FunctionType):
+                raise ImportError(f'{func} must be fun')
+            self._stop_event_list.append(func)
 
     def load_middleware(self, middleware_list: List[BaseMiddleware]):
         for middleware in middleware_list:
+            if middleware not in self._depend_set:
+                self._depend_set.add(middleware)
+            else:
+                raise ImportError(f'{middleware} middleware already load')
             if isinstance(middleware, BaseConnMiddleware):
                 middleware.load_sub_middleware(self._conn_handle)
                 self._conn_handle = middleware
@@ -63,11 +82,19 @@ class Server(object):
                 self._middleware_list.append(middleware)
             else:
                 raise RuntimeError(f"{middleware} must instance of {BaseMiddleware}")
+            if middleware.start_event_list:
+                self.load_start_event(middleware.start_event_list)
+            if middleware.stop_event_list:
+                self.load_stop_event(middleware.stop_event_list)
 
-    def load_filter(self, filter_list: List[BaseProcessor]):
-        for filter_ in filter_list:
-            if isinstance(filter_, BaseProcessor):
-                self._filter_list.append(filter_)
+    def load_processor(self, processor_list: List[BaseProcessor]):
+        for processor in processor_list:
+            if processor not in self._depend_set:
+                self._depend_set.add(processor)
+            else:
+                raise ImportError(f'{processor} processor already load')
+            if isinstance(processor, BaseProcessor):
+                self._filter_list.append(processor)
 
     @staticmethod
     def register(func: Optional[Callable], name: Optional[str] = None, group: str = "normal"):
@@ -84,7 +111,7 @@ class Server(object):
                 await asyncio.get_event_loop().run_in_executor(None, callback)
 
     async def create_server(self) -> "Server":
-        await self.run_callback(self._connect_callback)
+        await self.run_callback(self._start_event_list)
         self._server = await asyncio.start_server(
             self.conn_handle, self._host, self._port, ssl=self._ssl_context, backlog=self._backlog
         )
@@ -95,7 +122,7 @@ class Server(object):
         if self._server:
             self._server.close()
             await self._server.wait_closed()
-        await self.run_callback(self._close_callback)
+        await self.run_callback(self._stop_event_list)
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE):
         conn: ServerConnection = ServerConnection(
