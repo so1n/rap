@@ -16,9 +16,7 @@ class AccessMsgMiddleware(BaseMsgMiddleware):
 
         try:
             call_id, result = await self.call_next(request, call_id, func, param)
-            if isinstance(result, Exception):
-                status = False
-            else:
+            if not isinstance(result, Exception):
                 status = True
         except Exception as e:
             logging.exception(e)
