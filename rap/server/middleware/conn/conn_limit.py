@@ -17,8 +17,8 @@ class ConnLimitMiddleware(BaseConnMiddleware):
         self._conn_count: int = 0
         self.register(self.modify_max_conn)
 
-    def modify_max_conn(self, max_: int) -> None:
-        self._max_conn = max_
+    def modify_max_conn(self, max_conn: int) -> None:
+        self._max_conn = max_conn
 
     async def dispatch(self, conn: ServerConnection):
         if self._conn_count > self._max_conn:
