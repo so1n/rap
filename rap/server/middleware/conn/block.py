@@ -7,6 +7,11 @@ from rap.server.middleware.base import BaseConnMiddleware
 
 
 class IpBlockMiddleware(BaseConnMiddleware):
+    """
+    feat:
+        1. block ip
+        2. allow ip
+    """
     def __init__(self):
         self.register(self._add_allow_ip)
         self.register(self._add_block_ip)
@@ -20,10 +25,14 @@ class IpBlockMiddleware(BaseConnMiddleware):
 
     @staticmethod
     def ip_handle(ip: str) -> List[str]:
+        """
+        >>> IpBlockMiddleware.ip_handle('192.168.0.0/31')
+        ['192.168.0.1', '192.168.0.2']
+        """
         ip_list: List[str] = [ip]
         if "/" in ip:
             ip_network: "ipaddress.ip_network" = ipaddress.ip_network(ip)
-            ip_list = [ip for ip in ip_network.hosts()]
+            ip_list = [str(ip) for ip in ip_network.hosts()]
         return ip_list
 
     async def _add_allow_ip(self, ip: str):

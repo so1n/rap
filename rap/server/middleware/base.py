@@ -9,17 +9,20 @@ from rap.server.model import RequestModel
 
 class BaseMiddleware(_BaseMiddleware, ABC):
     @staticmethod
-    def register(func: Callable, is_root: bool = True, group: str = "processor"):
+    def register(func: Callable, is_root: bool = True, group: str = "middleware"):
         func_manager.register(func, is_root=is_root, group=group)
 
 
 class BaseConnMiddleware(BaseMiddleware):
+    """
+    Currently, the conn can be processed in the conn middleware only after the server establishes the link
+    """
     async def __call__(self, *args, **kwargs):
         return await self.dispatch(*args)
 
     @staticmethod
-    def register(func: Callable, is_root: bool = True, group: str = "processor"):
-        func_manager.register(func, is_root=is_root, group=group)
+    def register(func: Callable, is_root: bool = True, group: str = "conn_middleware"):
+        super().register(func, is_root, group)
 
     def load_sub_middleware(self, call_next: "Union[Callable, BaseMiddleware]"):
         if isinstance(call_next, BaseMiddleware):
@@ -35,5 +38,9 @@ class BaseConnMiddleware(BaseMiddleware):
 
 
 class BaseMsgMiddleware(BaseMiddleware):
+    @staticmethod
+    def register(func: Callable, is_root: bool = True, group: str = "msg_middleware"):
+        super().register(func, is_root, group)
+
     async def dispatch(self, request: RequestModel, call_id: int, func: Callable, param: str) -> Union[dict, Exception]:
         raise NotImplementedError

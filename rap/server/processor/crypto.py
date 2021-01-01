@@ -11,11 +11,13 @@ from rap.server.processor.base import BaseProcessor
 
 
 class CryptoProcessor(BaseProcessor):
+    # TODO fix nonce timeout
     def __init__(self, secret_dict: Dict[str, str]):
         crypto_manager.load_aes_key_dict(secret_dict)
         self._nonce_key: str = redis_manager.namespace + "nonce"
 
     async def process_request(self, request: RequestModel):
+        """decrypt request body"""
         if type(request.body) is not bytes:
             return
         crypto_id: str = request.header.get("crypto_id", None)
@@ -38,11 +40,14 @@ class CryptoProcessor(BaseProcessor):
             else:
                 await redis_manager.redis_pool.sadd(self._nonce_key, nonce)
             request.body = request.body["body"]
+
+            # set share data
             request.stats.crypto = crypto
         except Exception as e:
             raise CryptoError(str(e)) from e
 
     async def process_response(self, response: ResponseModel):
+        """encrypt response body"""
         if response.body and response.num != Constant.SERVER_ERROR_RESPONSE:
             try:
                 crypto: Crypto = response.stats.crypto
