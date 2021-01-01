@@ -11,10 +11,26 @@ from rap.server.processor.base import BaseProcessor
 
 
 class CryptoProcessor(BaseProcessor):
-    # TODO fix nonce timeout
-    def __init__(self, secret_dict: Dict[str, str]):
+    def __init__(self, secret_dict: Dict[str, str] = None, timeout: int = 60, nonce_timeout: int = 60):
+        if not secret_dict and not crypto_manager:
+            raise ValueError('secret_dict must not None')
         crypto_manager.load_aes_key_dict(secret_dict)
         self._nonce_key: str = redis_manager.namespace + "nonce"
+        self._timeout: int = timeout
+        self._nonce_timeout: int = nonce_timeout
+
+        self.register(self.modify_timeout)
+        self.register(self.modify_nonce_timeout)
+
+    @staticmethod
+    def add_secret_dict(secret_dict: Dict[str, str]):
+        crypto_manager.load_aes_key_dict(secret_dict)
+
+    def modify_timeout(self, timeout: int) -> None:
+        self._timeout = timeout
+
+    def modify_nonce_timeout(self, timeout: int) -> None:
+        self._nonce_timeout = timeout
 
     async def process_request(self, request: RequestModel):
         """decrypt request body"""
@@ -35,10 +51,13 @@ class CryptoProcessor(BaseProcessor):
             if (int(time.time()) - timestamp) > 60:
                 raise ServerError("timeout error")
             nonce: str = request.body.get("nonce", "")
-            if await redis_manager.redis_pool.sismember(self._nonce_key, nonce):
+            if not nonce:
+                raise ServerError("nonce error")
+            nonce = f'{self._nonce_key}:{nonce}'
+            if await redis_manager.exists(nonce):
                 raise ServerError("nonce error")
             else:
-                await redis_manager.redis_pool.sadd(self._nonce_key, nonce)
+                await redis_manager.redis_pool.set(nonce, 1, expire=self._nonce_timeout)
             request.body = request.body["body"]
 
             # set share data

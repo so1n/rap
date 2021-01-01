@@ -31,5 +31,8 @@ class CryptoManager(object):
         if key in self._crypto_dict:
             del self._crypto_dict[key]
 
+    def __bool__(self) -> bool:
+        return bool(self._crypto_dict)
+
 
 crypto_manager: "CryptoManager" = CryptoManager()
