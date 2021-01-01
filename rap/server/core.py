@@ -75,6 +75,7 @@ class Server(object):
                 self._depend_set.add(middleware)
             else:
                 raise ImportError(f'{middleware} middleware already load')
+
             if isinstance(middleware, BaseConnMiddleware):
                 middleware.load_sub_middleware(self._conn_handle)
                 self._conn_handle = middleware
@@ -82,6 +83,7 @@ class Server(object):
                 self._middleware_list.append(middleware)
             else:
                 raise RuntimeError(f"{middleware} must instance of {BaseMiddleware}")
+
             if middleware.start_event_list:
                 self.load_start_event(middleware.start_event_list)
             if middleware.stop_event_list:
@@ -95,6 +97,13 @@ class Server(object):
                 raise ImportError(f'{processor} processor already load')
             if isinstance(processor, BaseProcessor):
                 self._filter_list.append(processor)
+            else:
+                raise RuntimeError(f"{processor} must instance of {BaseProcessor}")
+
+            if processor.start_event_list:
+                self.load_start_event(processor.start_event_list)
+            if processor.stop_event_list:
+                self.load_stop_event(processor.stop_event_list)
 
     @staticmethod
     def register(func: Optional[Callable], name: Optional[str] = None, group: str = "normal"):
@@ -122,7 +131,7 @@ class Server(object):
         if self._server:
             self._server.close()
             await self._server.wait_closed()
-        await self.run_callback(self._stop_event_list)
+            await self.run_callback(self._stop_event_list)
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE):
         conn: ServerConnection = ServerConnection(
@@ -164,6 +173,7 @@ class Server(object):
         while not conn.is_closed():
             try:
                 request_msg: Optional[BASE_REQUEST_TYPE] = await conn.read(self._keep_alive)
+                # create future handle msg
                 asyncio.ensure_future(recv_msg_handle(request_msg))
             except asyncio.TimeoutError:
                 logging.error(f"recv data from {conn.peer} timeout. close conn")

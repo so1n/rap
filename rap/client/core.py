@@ -22,6 +22,9 @@ class AsyncIteratorCall:
         self._conn: Connection = self._client.transport.now_conn
         self._session: Session = self._client.transport.session
 
+    ######################
+    # async with support #
+    ######################
     async def __aenter__(self) -> "AsyncIteratorCall":
         self._session.create()
         return self
@@ -29,6 +32,9 @@ class AsyncIteratorCall:
     async def __aexit__(self, *args: Tuple):
         self._session.close()
 
+    #####################
+    # async for support #
+    #####################
     def __aiter__(self) -> "AsyncIteratorCall":
         return self
 

@@ -133,10 +133,10 @@ class Request(object):
     async def dispatch(self, request: RequestModel) -> Optional[ResponseModel]:
         if request.num not in self.dispatch_func_dict:
             response_num: int = Constant.SERVER_ERROR_RESPONSE
-            content: str = "life cycle error"
+            error_content: str = "life cycle error"
         else:
             response_num: int = response_num_dict.get(request.num, Constant.SERVER_ERROR_RESPONSE)
-            content: str = "request num error"
+            error_content: str = "request num error"
 
         response: "ResponseModel" = ResponseModel(
             num=response_num,
@@ -156,7 +156,7 @@ class Request(object):
         # check type_id
         if response.num is Constant.SERVER_ERROR_RESPONSE:
             logging.error(f"parse request data: {request} from {request.header['_host']} error")
-            response.body = ServerError(content)
+            response.body = ServerError(error_content)
             return response
         # check conn_data_model
         if request.num != Constant.DECLARE_REQUEST and not self._is_declare:
@@ -170,22 +170,21 @@ class Request(object):
         while not self._conn.is_closed():
             diff_time: int = int(time.time()) - self._keepalive_timestamp
             if diff_time > 130:
-                event_resp: ResponseModel = ResponseModel(
-                    Constant.SERVER_EVENT, body=Event(Constant.EVENT_CLOSE_CONN, "recv pong timeout")
+                await self._response(
+                    ResponseModel(Constant.SERVER_EVENT, body=Event(Constant.EVENT_CLOSE_CONN, "recv pong timeout"))
                 )
-                await self._response(event_resp)
                 if not self._conn.is_closed():
                     self._conn.close()
                 break
             else:
-                ping_response: ResponseModel = ResponseModel(Constant.SERVER_EVENT, body=Event(Constant.PING_EVENT, ""))
-                await self._response(ping_response)
+                await self._response(ResponseModel(Constant.SERVER_EVENT, body=Event(Constant.PING_EVENT, "")))
                 await asyncio.sleep(60)
 
     async def declare_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
         random_id: str = request.body
         if not random_id:
             response.body = ProtocolError("not found declare id")
+            return response
         self.dispatch_func_dict = {
             Constant.MSG_REQUEST: self.msg_life_cycle,
             Constant.DROP_REQUEST: self.drop_life_cycle,
@@ -230,10 +229,8 @@ class Request(object):
 
     async def drop_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
         random_id: str = request.body
-        if self._ping_pong_future:
-            if self._ping_pong_future.cancelled():
-                self._ping_pong_future.cancel()
-                # TODO
+        if self._ping_pong_future and self._ping_pong_future.cancelled():
+            self._ping_pong_future.cancel()
         self.dispatch_func_dict = {
             Constant.DROP_REQUEST: self.drop_life_cycle,
             Constant.CLIENT_EVENT_RESPONSE: self.event,
@@ -281,12 +278,12 @@ class Request(object):
                     if not channel.is_close:
                         await channel.close()
 
-            channel.future = asyncio.ensure_future(channel_func())
-
             def future_done_callback(future: asyncio.Future):
                 logging.debug("channel:%s future status:%s" % (channel_id, future.done()))
 
+            channel.future = asyncio.ensure_future(channel_func())
             channel.future.add_done_callback(future_done_callback)
+
             self._channel_dict[channel_id] = channel
             response.header = {"channel_id": channel_id, "channel_life_cycle": "declare"}
             return response

@@ -97,14 +97,14 @@ def gen_random_time_id(length: int = 8, time_length: int = 10) -> str:
     return str(int(time.time()))[-time_length:] + "".join(random.choice(_STR_LD) for _ in range(length))
 
 
-get_event_loop = _get_event_loop()
-
-
 def parse_error(exception: Optional[Exception]) -> Optional[Tuple[str, str]]:
     error_response: Optional[Tuple[str, str]] = None
     if exception:
         error_response = (type(exception).__name__, str(exception))
     return error_response
+
+
+get_event_loop = _get_event_loop()
 
 
 response_num_dict: Dict[int, int] = {

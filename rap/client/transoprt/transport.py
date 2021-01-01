@@ -229,10 +229,10 @@ class Transport(object):
         use_session: bool = False
         if _conn_context.get(MISS_OBJECT) is not MISS_OBJECT:
             use_session = True
+        request.header["use_session"] = use_session
 
         set_header_value("version", Constant.VERSION)
         set_header_value("user_agent", Constant.USER_AGENT)
-        set_header_value("use_session", use_session)
         set_header_value("request_id", str(uuid.uuid4()))
         return conn
 
