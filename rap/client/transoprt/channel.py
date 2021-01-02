@@ -13,6 +13,8 @@ if TYPE_CHECKING:
 
 
 class Channel(BaseChannel):
+    """support channel use
+    """
     def __init__(
         self,
         fun_name: str,
@@ -22,9 +24,9 @@ class Channel(BaseChannel):
         write: Callable[[Request], Coroutine[Any, Any, str]],
         close: Callable[[str], Coroutine[Any, Any, Any]],
     ):
+        self.channel_id: str = str(uuid.uuid4())
         self._func_name: str = fun_name
         self._session: "Session" = session
-        self._channel_id: str = str(uuid.uuid4())
         self._create: Callable[[str], Coroutine[Any, Any, Any]] = create
         self._read: Callable[[str], Coroutine[Any, Any, Response]] = read
         self._write: Callable[[Request], Coroutine[Any, Any, str]] = write
@@ -32,10 +34,11 @@ class Channel(BaseChannel):
         self._is_close: bool = True
 
     async def create(self):
+        """create and init channel, create session"""
         if not self._is_close:
             raise ChannelError("channel already create")
         self._session.create()
-        await self._create(self._channel_id)
+        await self._create(self.channel_id)
         self._is_close = False
 
         life_cycle: str = "declare"
@@ -44,21 +47,47 @@ class Channel(BaseChannel):
         if response.header.get("channel_life_cycle") != life_cycle:
             raise ChannelError("channel life cycle error")
         channel_id: str = response.header.get("channel_id")
-        self._channel_id = channel_id
+        self.channel_id = channel_id
 
     async def _base_read(self) -> Response:
+        """base read response msg from channel conn
+        When a drop message is received or the channel is closed, will raise `ChannelError`
+        """
         if self._is_close:
             raise ChannelError(f"channel is closed")
-        response: Union[Response, Exception] = await self._read(self._channel_id)
+        response: Union[Response, Exception] = await self._read(self.channel_id)
         if isinstance(response, Exception):
             raise response
         if response.header.get("channel_life_cycle") == "drop":
             self._is_close = True
-            await self._close(self._channel_id)
+            await self._close(self.channel_id)
             raise ChannelError("recv drop event, close channel")
         return response
 
     async def loop(self, flag: bool = True) -> bool:
+        """In the channel function, elegantly replace `while True`
+        bad demo
+        >>> async def channel_demo(channel: Channel):
+        ...     while True:
+        ...         pass
+
+        good demo
+        >>> async def channel_demo(channel: Channel):
+        ...     while await channel.loop():
+        ...         pass
+
+        bad demo
+        >>> cnt: int = 0
+        >>> async def channel_demo(channel: Channel):
+        ...     while cnt < 3:
+        ...         pass
+
+        good demo
+        >>> cnt: int = 0
+        >>> async def channel_demo(channel: Channel):
+        ...     while await channel.loop(cnt < 3):
+        ...         pass
+        """
         await asyncio.sleep(0.01)
         if self._is_close:
             return not self._is_close
@@ -66,6 +95,7 @@ class Channel(BaseChannel):
             return flag
 
     async def _base_write(self, body: Any, life_cycle: str) -> str:
+        """base send body to channel"""
         if self._is_close:
             raise ChannelError(f"channel is closed")
         request: Request = Request(
@@ -73,7 +103,7 @@ class Channel(BaseChannel):
             self._func_name,
             Constant.CHANNEL,
             body,
-            {"channel_life_cycle": life_cycle, "channel_id": self._channel_id},
+            {"channel_life_cycle": life_cycle, "channel_id": self.channel_id},
         )
         return await self._write(request)
 
@@ -91,6 +121,8 @@ class Channel(BaseChannel):
         await self._base_write(body, "msg")
 
     async def close(self):
+        """Actively send a close message and close the channel
+        """
         if self._is_close:
             return
         self._session.close()
@@ -102,7 +134,7 @@ class Channel(BaseChannel):
                 while True:
                     response: Response = await self._base_read()
                     logging.debug("drop msg:%s" % response)
-            except RuntimeError:
+            except ChannelError:
                 pass
 
         try:
@@ -110,6 +142,9 @@ class Channel(BaseChannel):
         except asyncio.TimeoutError:
             logging.warning("wait drop response timeout")
 
+    ######################
+    # async with support #
+    ######################
     async def __aenter__(self) -> "Channel":
         await self.create()
         return self
@@ -117,6 +152,9 @@ class Channel(BaseChannel):
     async def __aexit__(self, *args: Tuple):
         await self.close()
 
+    #####################
+    # async for support #
+    #####################
     def __aiter__(self) -> "Channel":
         return self
 

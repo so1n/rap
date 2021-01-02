@@ -2,8 +2,10 @@ import asyncio
 import logging
 import random
 import uuid
+
 from contextvars import ContextVar, Token
-from typing import Any, Dict, List, Optional, Tuple, Type
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import msgpack
 
@@ -20,7 +22,23 @@ from rap.common.utlis import MISS_OBJECT, Constant, Event, gen_random_str_id
 _conn_context: ContextVar[Connection] = ContextVar("conn_context", default=MISS_OBJECT)
 
 
+@dataclass()
+class ConnModel(object):
+    conn: Connection
+    future: asyncio.Future
+
+    def is_closed(self) -> bool:
+        return self.conn.is_closed() or self.future.done()
+
+    async def await_close(self):
+        if not self.future.cancelled():
+            self.future.cancel()
+        if not self.conn.is_closed():
+            await self.conn.await_close()
+
+
 class Transport(object):
+    """base client transport, encapsulation of custom transport protocol"""
     def __init__(
         self,
         host_list: List[str],
@@ -29,7 +47,7 @@ class Transport(object):
         ssl_crt_path: Optional[str] = None,
     ):
         self._host_list: List[str] = host_list
-        self._conn_dict: Dict[str, Connection] = {}
+        self._conn_dict: Dict[str, ConnModel] = {}
         self._is_close: bool = True
         self._timeout: int = timeout
         self._ssl_crt_path: str = ssl_crt_path
@@ -39,49 +57,43 @@ class Transport(object):
 
         self._msg_id: int = random.randrange(65535)
         self._rap_exc_dict = get_rap_exc_dict()
-        self._listen_future_dict: Dict[str, asyncio.Future] = {}
         self._resp_future_dict: Dict[str, asyncio.Future[Response]] = {}
-        self._channel_queue_dict: Dict[str, asyncio.Queue[Response]] = {}
+        self._channel_queue_dict: Dict[str, asyncio.Queue[Union[Response, Exception]]] = {}
 
     async def _connect(self, host: str):
-        conn = Connection(
+        """
+        create conn and listen future by host
+        """
+        if host in self._conn_dict:
+            await self._conn_dict[host].await_close()
+
+        conn: Connection = Connection(
             msgpack.Unpacker(raw=False, use_list=False),
             self._timeout,
             ssl_crt_path=self._ssl_crt_path,
         )
-        if host in self._conn_dict:
-            temp_conn: Connection = self._conn_dict[host]
-            if not temp_conn.is_closed():
-                await temp_conn.wait_closed()
-            del self._conn_dict[host]
-        self._conn_dict[host] = conn
-
         ip, port = host.split(":")
         await conn.connect(ip, int(port))
-
-        if conn.peer in self._listen_future_dict:
-            temp_future: "asyncio.Future" = self._listen_future_dict[conn.peer]
-            if not temp_future.cancelled():
-                temp_future.cancel()
-        self._listen_future_dict[conn.peer] = asyncio.ensure_future(self._listen(conn))
-
+        future: asyncio.Future = asyncio.ensure_future(self._listen(conn))
         await self._declare_life_cycle(conn)
+        self._conn_dict[host] = ConnModel(conn, future)
         logging.debug(f"Connection to %s...", conn.connection_info)
 
     async def connect(self):
+        """
+        create conn and listen future
+        """
         if not self._is_close:
             raise ConnectionError(f"{self.__class__.__name__} already connect")
         for host in self._host_list:
-            if host in self._conn_dict:
-                if not self._conn_dict[host].is_closed():
-                    logging.warning(f"{host} already connected")
-                else:
-                    await self._connect(host)
+            if host in self._conn_dict and not self._conn_dict[host].is_closed():
+                logging.warning(f"{host} already connected")
             else:
                 await self._connect(host)
         self._is_close = False
 
-    async def wait_close(self):
+    async def await_close(self):
+        """close all conn and cancel future"""
         if self._is_close:
             raise RuntimeError(f"{self.__class__.__name__} already closed")
         for host in self._host_list:
@@ -90,12 +102,13 @@ class Transport(object):
             elif self._conn_dict[host].is_closed():
                 logging.warning(f"{host} already close")
             else:
-                conn: Connection = self._conn_dict[host]
+                conn: Connection = self._conn_dict[host].conn
+                future: asyncio.Future = self._conn_dict[host].future
                 await self._drop_life_cycle(conn)
-                if not self._listen_future_dict[conn.peer].cancelled():
-                    self._listen_future_dict[conn.peer].cancel()
-                del self._listen_future_dict[conn.peer]
+                if not future.cancelled():
+                    future.cancel()
                 await conn.await_close()
+                del self._conn_dict[host]
         self._is_close = True
 
     async def _listen(self, conn: Connection):
@@ -166,8 +179,12 @@ class Transport(object):
                 await self.write(request, -1, conn)
                 return
 
+        # put msg to channel
         if channel_id:
-            self._channel_queue_dict[channel_id].put_nowait(response)
+            if channel_id not in self._channel_queue_dict:
+                logging.error(f'recv {channel_id} msg, but {channel_id} not create')
+            else:
+                self._channel_queue_dict[channel_id].put_nowait(response)
             return
 
         # set msg to future_dict's `future`
@@ -240,6 +257,7 @@ class Transport(object):
     # base write&read api #
     #######################
     async def write(self, request: Request, msg_id: int, conn: Optional[Connection] = None) -> str:
+        """write msg to conn, If it is not a normal request, you need to set msg_id: -1"""
         conn = self.before_request_handle(request, conn)
         for process_request in self._process_request_list:
             await process_request(request)
@@ -261,6 +279,7 @@ class Transport(object):
             return resp_future_id
 
     async def read(self, resp_future_id: str) -> Response:
+        """write response msg(except channel response)"""
         try:
             return await asyncio.wait_for(self._resp_future_dict[resp_future_id], self._timeout)
         except asyncio.TimeoutError:
@@ -293,7 +312,7 @@ class Transport(object):
     ############
     def get_random_conn(self) -> Connection:
         key: str = random.choice(self._host_list)
-        return self._conn_dict[key]
+        return self._conn_dict[key].conn
 
     @property
     def now_conn(self) -> Connection:
@@ -332,6 +351,9 @@ class Transport(object):
 
 
 class Session(object):
+    """
+    `Session` uses `contextvar` to enable transport to use only the same conn in session
+    """
     def __init__(self, transport: "Transport"):
         self._transport: "Transport" = transport
         self._token: Optional[Token] = None
