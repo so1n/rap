@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from typing import List, Optional, Tuple
+import uuid
+from typing import Any, List, Optional, Tuple
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import BaseRapError
@@ -19,8 +20,15 @@ class Response(object):
 
     @staticmethod
     async def response_handle(resp: ResponseModel) -> ResponseModel:
-        resp.header["version"] = Constant.VERSION
-        resp.header["user_agent"] = Constant.USER_AGENT
+        def set_header_value(header_key: str, header_Value: Any):
+            """set header value"""
+            if header_key not in resp.header:
+                resp.header[header_key] = header_Value
+
+        set_header_value("version", Constant.VERSION)
+        set_header_value("user_agent", Constant.USER_AGENT)
+        set_header_value("request_id", str(uuid.uuid4()))
+
         if isinstance(resp.body, BaseRapError):
             error_response: Optional[Tuple[str, str]] = parse_error(resp.body)
             resp.header["status_code"] = resp.body.status_code
@@ -54,7 +62,7 @@ class Response(object):
             )
             return True
         except asyncio.TimeoutError:
-            logging.error(f"response to {self._conn.peer} timeout. body:{resp.body}")
+            logging.error(f"response to {self._conn.peer} timeout. resp:{resp}")
         except Exception as e:
-            logging.error(f"response to {self._conn.peer} error: {e}. body:{resp.body}")
+            logging.error(f"response to {self._conn.peer} error: {e}. resp:{resp}")
         return False

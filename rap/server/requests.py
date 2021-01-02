@@ -85,8 +85,6 @@ class Channel(BaseChannel):
             logging.debug("already close channel %s", self.channel_id)
             return
         self._is_close = True
-        if not self.future.cancelled():
-            self.future.cancel()
         response: "ResponseModel" = ResponseModel(
             num=Constant.MSG_RESPONSE,
             msg_id=-1,
@@ -95,6 +93,8 @@ class Channel(BaseChannel):
             header={"channel_id": self.channel_id, "channel_life_cycle": "drop"},
         )
         await self._write(response)
+        if not self.future.cancelled():
+            self.future.cancel()
         self._close()
 
     def __aiter__(self) -> "Channel":
@@ -276,7 +276,7 @@ class Request(object):
                     await func(channel)
                 finally:
                     if not channel.is_close:
-                        await channel.close()
+                        asyncio.ensure_future(channel.close())
 
             def future_done_callback(future: asyncio.Future):
                 logging.debug("channel:%s future status:%s" % (channel_id, future.done()))
