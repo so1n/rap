@@ -1,7 +1,20 @@
 import asyncio
 
+import aioredis
+
+from rap.manager.redis_manager import redis_manager
 from rap.server import Server
+from rap.server.processor.crypto import CryptoProcessor
 from rap.server.requests import Channel
+
+
+async def init_redis():
+    conn_pool = await aioredis.create_pool("redis://localhost", minsize=1, maxsize=10, encoding="utf-8")
+    redis_manager.init(conn_pool)
+
+
+async def close_redis():
+    await redis_manager.close()
 
 
 async def async_channel(channel: Channel):
@@ -35,7 +48,8 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
-    rpc_server = Server()
+    rpc_server = Server(start_call_back=[init_redis()], close_call_back=[close_redis()])
+    rpc_server.load_processor([CryptoProcessor({"test": "keyskeyskeyskeys"})])
     rpc_server.register(async_channel)
     rpc_server.register(echo)
 

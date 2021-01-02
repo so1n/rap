@@ -8,8 +8,8 @@ from rap.server.model import RequestModel
 
 
 class BaseMiddleware(_BaseMiddleware, ABC):
-    start_event_list: List[Union[Callable, Coroutine]]
-    stop_event_list: List[Union[Callable, Coroutine]]
+    start_event_list: List[Union[Callable, Coroutine]] = []
+    stop_event_list: List[Union[Callable, Coroutine]] = []
 
     @staticmethod
     def register(func: Callable, is_root: bool = True, group: str = "middleware"):

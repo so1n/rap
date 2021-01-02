@@ -264,6 +264,7 @@ class Request(object):
                 return response
 
             async def write(_response: ResponseModel):
+                _response.stats = response.stats
                 await self._response(_response)
 
             def close():
