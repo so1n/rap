@@ -12,7 +12,7 @@ __all__ = ["Client"]
 
 
 class AsyncIteratorCall:
-    """client support async iterator"""
+    """let client support async iterator (keep sending and receiving messages under the same conn)"""
 
     def __init__(self, method: str, client: "Client", *args: Tuple):
         self._method: str = method
@@ -22,9 +22,9 @@ class AsyncIteratorCall:
         self._conn: Connection = self._client.transport.now_conn
         self._session: Session = self._client.transport.session
 
-    ######################
-    # async with support #
-    ######################
+    ###################
+    # session support #
+    ###################
     async def __aenter__(self) -> "AsyncIteratorCall":
         self._session.create()
         return self
@@ -61,6 +61,18 @@ class Client:
         keep_alive_time: int = 1200,
         ssl_crt_path: Optional[str] = None,
     ):
+        """
+        host_list:
+         server host
+         example value: ['127.0.0.1:9000', '127.0.0.1:9001']
+        timeout: 
+         send msg timeout
+        keep_alive_time
+         recv msg timeout
+        ssl_crt_path:
+         ssl.crt  path
+         example value: "./rap_ssl.crt"
+        """
         if not host_list:
             host_list = ["localhost:9000"]
         self.transport: Transport = Transport(
@@ -72,7 +84,7 @@ class Client:
     ##################
     async def wait_close(self):
         """close client"""
-        await self.transport.wait_close()
+        await self.transport.await_close()
 
     async def connect(self):
         """
@@ -82,10 +94,12 @@ class Client:
         """
         await self.transport.connect()
 
-    def load_middleware(self, middleware_list: List[BaseProcessor]):
+    def load_processor(self, middleware_list: List[BaseProcessor]):
         self.transport.load_processor(middleware_list)
 
-    # register
+    #####################
+    # register func api #
+    #####################
     def _async_register(self, func: Callable):
         """Decorate normal function"""
 
@@ -106,7 +120,7 @@ class Client:
         return cast(Callable, wrapper)
 
     def _async_channel_register(self, func: Callable):
-        """Decoration generator function"""
+        """Decoration channel function"""
 
         @wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
@@ -115,7 +129,9 @@ class Client:
 
         return cast(Callable, wrapper)
 
-    # client api
+    ###################
+    # client base api #
+    ###################
     async def raw_call(self, method: str, *args: Any) -> Any:
         """rpc client base call method"""
         response = await self.transport.request(method, *args)
@@ -133,7 +149,8 @@ class Client:
 
     def register(self, func: Callable) -> Any:
         """Using this method to decorate a fake function can help you use it better.
-        (such as ide completion, ide reconstruction and type hints)"""
+        (such as ide completion, ide reconstruction and type hints)
+        and will be automatically registered according to the function type"""
         func_sig: inspect.Signature = inspect.signature(func)
         func_arg_parameter: List[inspect.Parameter] = [i for i in func_sig.parameters.values() if i.default == i.empty]
         if len(func_arg_parameter) == 1 and func_arg_parameter[0].annotation is Channel:
