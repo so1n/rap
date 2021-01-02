@@ -36,5 +36,6 @@ class CryptoProcessor(BaseProcessor):
             if type(response.body) is bytes:
                 response.body = self._crypto.decrypt_object(response.body)
                 self._body_handle(response.body)
+                response.body = response.body['body']
         except Exception as e:
             raise CryptoError(f"Can't decrypt body.") from e

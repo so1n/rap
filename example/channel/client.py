@@ -1,9 +1,11 @@
 import asyncio
 
 from rap.client import Client
+from rap.client.processor.crypto import CryptoProcessor
 from rap.client.transoprt.channel import Channel
 
 client = Client()
+client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
 
 
 @client.register
