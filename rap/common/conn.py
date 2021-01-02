@@ -55,10 +55,6 @@ class BaseConnection:
         self._reader.feed_eof()
         self._writer.close()
 
-        self._reader = None
-        self._writer = None
-        self.connection_info = None
-        self.peer = None
         self._is_closed = True
 
     def is_closed(self) -> bool:
