@@ -25,8 +25,7 @@ __all__ = ["Server"]
 class Server(object):
     def __init__(
         self,
-        host: str = "localhost",
-        port: int = 9000,
+        host: Union[str, List] = "localhost:9000",
         timeout: int = 9,
         keep_alive: int = 1200,
         run_timeout: int = 9,
@@ -36,8 +35,10 @@ class Server(object):
         start_call_back: List[Union[Callable, Coroutine]] = None,
         close_call_back: List[Union[Callable, Coroutine]] = None,
     ):
-        self._host: str = host
-        self._port: int = port
+        if type(host) is str:
+            self._host = [host]
+        else:
+            self._host = host
         self._timeout: int = timeout
         self._run_timeout: int = run_timeout
         self._keep_alive: int = keep_alive
@@ -52,7 +53,7 @@ class Server(object):
             self._ssl_context.check_hostname = False
             self._ssl_context.load_cert_chain(ssl_crt_path, ssl_key_path)
 
-        self._server: Optional[asyncio.AbstractServer] = None
+        self._server_list: List[asyncio.AbstractServer] = []
         self._middleware_list: List[BaseMiddleware] = []
         self._filter_list: List[BaseProcessor] = []
         self._depend_set: Set[Any] = set()  # Check whether any components have been re-introduced
@@ -121,16 +122,18 @@ class Server(object):
 
     async def create_server(self) -> "Server":
         await self.run_callback(self._start_event_list)
-        self._server = await asyncio.start_server(
-            self.conn_handle, self._host, self._port, ssl=self._ssl_context, backlog=self._backlog
-        )
-        logging.info(f"server running on {self._host}:{self._port}. use ssl:{bool(self._ssl_context)}")
+        for host in self._host:
+            ip, port = host.split(':')
+            self._server_list.append(
+                await asyncio.start_server(self.conn_handle, ip, port, ssl=self._ssl_context, backlog=self._backlog)
+            )
+        logging.info(f"server running on {self._host}. use ssl:{bool(self._ssl_context)}")
         return self
 
     async def wait_closed(self):
-        if self._server:
-            self._server.close()
-            await self._server.wait_closed()
+        for server in self._server_list:
+            server.close()
+            await server.wait_closed()
             await self.run_callback(self._stop_event_list)
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE):
