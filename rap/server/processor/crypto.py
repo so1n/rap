@@ -72,7 +72,5 @@ class CryptoProcessor(BaseProcessor):
                 crypto: Crypto = response.stats.crypto
             except AttributeError:
                 return
-            if type(response.body) is not dict:
-                response.body = {"body": response.body}
-            response.body.update(dict(timestamp=int(time.time()), nonce=gen_random_time_id()))
+            response.body = {"body": response.body, "timestamp": int(time.time()), "nonce": gen_random_time_id()}
             response.body = crypto.encrypt_object(response.body)

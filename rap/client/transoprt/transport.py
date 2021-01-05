@@ -145,13 +145,27 @@ class Transport(object):
             logging.error(f"recv wrong response:{response_msg}")
             return
 
-        for process_response in self._process_response_list:
-            await process_response(response)
+        exc: Optional[Exception] = None
+        try:
+            for process_response in self._process_response_list:
+                await process_response(response)
+        except Exception as e:
+            exc = e
 
         resp_future_id: str = f"{conn.peer}:{response.msg_id}"
+        print(resp_future_id)
         channel_id: Optional[str] = response.header.get("channel_id")
-        if channel_id and response.method != Constant.CHANNEL:
-            raise ProtocolError(f"recv error method:{response.method}")
+        if channel_id and response.method != Constant.CHANNEL and not exc:
+            exc: Exception = ProtocolError(f"recv error method:{response.method}")
+
+        if exc:
+            if channel_id in self._channel_queue_dict:
+                self._channel_queue_dict[channel_id].put_nowait(exc)
+            elif response.msg_id != -1 and resp_future_id in self._resp_future_dict:
+                self._resp_future_dict[resp_future_id].set_exception(exc)
+            else:
+                logging.error(f'recv error msg:{response}')
+            return
 
         # server error response handle
         if response.num == Constant.SERVER_ERROR_RESPONSE:
