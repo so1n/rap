@@ -110,7 +110,7 @@ class Transport(object):
 
     async def _listen(self, conn: Connection):
         """listen server msg"""
-        logging.debug(f"listen:%s start", conn.peer)
+        logging.debug(f"listen:%s start", conn.peer_tuple)
         try:
             while not conn.is_closed():
                 await self._read_from_conn(conn)
@@ -152,8 +152,7 @@ class Transport(object):
         except Exception as e:
             exc = e
 
-        resp_future_id: str = f"{conn.peer}:{response.msg_id}"
-        print(resp_future_id)
+        resp_future_id: str = f"{conn.sock_tuple}:{response.msg_id}"
         channel_id: Optional[str] = response.header.get("channel_id")
         if channel_id and response.method != Constant.CHANNEL and not exc:
             exc: Exception = ProtocolError(f"recv error method:{response.method}")
@@ -285,7 +284,7 @@ class Transport(object):
         if "channel_id" in request.header:
             return request.header["channel_id"]
         else:
-            resp_future_id: str = f"{conn.peer}:{msg_id}"
+            resp_future_id: str = f"{conn.sock_tuple}:{msg_id}"
             self._resp_future_dict[resp_future_id] = asyncio.Future()
             return resp_future_id
 

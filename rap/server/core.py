@@ -156,9 +156,9 @@ class Server(object):
                 return
             try:
                 request: RequestModel = RequestModel(*_request_msg)
-                request.header["_host"] = conn.peer
+                request.header["_host"] = conn.peer_tuple
             except Exception as closer_e:
-                logging.error(f"{conn.peer} send bad msg:{_request_msg}, error:{closer_e}")
+                logging.error(f"{conn.peer_tuple} send bad msg:{_request_msg}, error:{closer_e}")
                 await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "protocol error")))
                 await conn.wait_closed()
                 return
@@ -176,17 +176,17 @@ class Server(object):
                 # create future handle msg
                 asyncio.ensure_future(recv_msg_handle(request_msg))
             except asyncio.TimeoutError:
-                logging.error(f"recv data from {conn.peer} timeout. close conn")
+                logging.error(f"recv data from {conn.peer_tuple} timeout. close conn")
                 await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "keep alive timeout")))
                 break
             except IOError as e:
-                logging.debug(f"close conn:%s info:%s", conn.peer, e)
+                logging.debug(f"close conn:%s info:%s", conn.peer_tuple, e)
                 break
             except Exception as e:
-                logging.error(f"recv data from {conn.peer} error:{e}, conn has been closed")
+                logging.error(f"recv data from {conn.peer_tuple} error:{e}, conn has been closed")
                 conn.set_reader_exc(e)
                 raise e
 
         if not conn.is_closed():
             conn.close()
-            logging.debug(f"close connection: %s", conn.peer)
+            logging.debug(f"close connection: %s", conn.peer_tuple)

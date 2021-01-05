@@ -73,7 +73,7 @@ class IpBlockMiddleware(BaseConnMiddleware):
         return [ip async for ip in redis_manager.redis_pool.isscan(self.block_key)]
 
     async def dispatch(self, conn: ServerConnection):
-        ip: str = conn.peer[0]
+        ip: str = conn.peer_tuple[0]
         enable_allow: bool = await redis_manager.redis_pool.scard(self.allow_key) > 0
         if enable_allow:
             is_allow: int = await redis_manager.redis_pool.sismember(self.allow_key, ip)

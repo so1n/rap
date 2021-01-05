@@ -22,7 +22,7 @@ class ConnLimitMiddleware(BaseConnMiddleware):
 
     async def dispatch(self, conn: ServerConnection):
         if self._conn_count > self._max_conn:
-            logging.error(f"Currently exceeding the maximum number of connections limit, close {conn.peer}")
+            logging.error(f"Currently exceeding the maximum number of connections limit, close {conn.peer_tuple}")
             await Response(conn)(
                 ResponseModel(
                     body=Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of connections limit")
@@ -55,9 +55,9 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
         self._timeout = timeout
 
     async def dispatch(self, conn: ServerConnection):
-        key: str = redis_manager.namespace + conn.peer[0]
+        key: str = redis_manager.namespace + conn.peer_tuple[0]
         if (await redis_manager.redis_pool.get(key)) > self._ip_max_conn:
-            logging.error(f"Currently exceeding the maximum number of ip conn limit, close {conn.peer}")
+            logging.error(f"Currently exceeding the maximum number of ip conn limit, close {conn.peer_tuple}")
             await Response(conn)(
                 ResponseModel(
                     body=Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of ip conn limit")
