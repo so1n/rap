@@ -12,12 +12,12 @@ __all__ = ["Connection", "ServerConnection"]
 
 
 class BaseConnection:
-    def __init__(self, unpacker: UNPACKER_TYPE, timeout: int, pack_param: Optional[dict] = None):
+    def __init__(self, timeout: int, pack_param: Optional[dict] = None):
         self._is_closed: bool = True
         self._pack_param: dict = pack_param if pack_param else dict()
         self._reader: Optional[READER_TYPE] = None
         self._timeout: int = timeout
-        self._unpacker: UNPACKER_TYPE = unpacker
+        self._unpacker: UNPACKER_TYPE = msgpack.Unpacker(raw=False, use_list=False)
         self._writer: Optional[WRITER_TYPE] = None
 
         self.peer: Optional[str] = None
@@ -75,12 +75,11 @@ class BaseConnection:
 class Connection(BaseConnection):
     def __init__(
         self,
-        unpacker: UNPACKER_TYPE,
         timeout: int,
         pack_param: Optional[dict] = None,
         ssl_crt_path: Optional[str] = None,
     ):
-        super().__init__(unpacker, timeout, pack_param)
+        super().__init__(timeout, pack_param)
         self.connection_info: Optional[str] = None
         self._ssl_crt_path: Optional[str] = ssl_crt_path
 
@@ -99,16 +98,15 @@ class Connection(BaseConnection):
         self._is_closed = False
 
 
-class ServerConnection(Connection):
+class ServerConnection(BaseConnection):
     def __init__(
         self,
         reader: READER_TYPE,
         writer: WRITER_TYPE,
-        unpacker: UNPACKER_TYPE,
         timeout: int,
         pack_param: Optional[dict] = None,
     ):
-        super().__init__(unpacker, timeout, pack_param)
+        super().__init__(timeout, pack_param)
         self._reader = reader
         self._writer = writer
         self.peer = self._writer.get_extra_info("peername")

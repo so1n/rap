@@ -7,8 +7,6 @@ from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
-import msgpack
-
 from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.transoprt.channel import Channel
@@ -68,7 +66,6 @@ class Transport(object):
             await self._conn_dict[host].await_close()
 
         conn: Connection = Connection(
-            msgpack.Unpacker(raw=False, use_list=False),
             self._timeout,
             ssl_crt_path=self._ssl_crt_path,
         )
