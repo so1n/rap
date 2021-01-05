@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import ssl
-from typing import Optional
+from typing import Optional, Tuple
 
 import msgpack
 
@@ -20,11 +20,11 @@ class BaseConnection:
         self._unpacker: UNPACKER_TYPE = msgpack.Unpacker(raw=False, use_list=False)
         self._writer: Optional[WRITER_TYPE] = None
 
-        self.peer: Optional[str] = None
-        self.connection_info: Optional[str] = None
+        self.peer_tuple: Optional[Tuple[str, int]] = None
+        self.sock_tuple: Optional[Tuple[str, int]] = None
 
     async def write(self, data: tuple, timeout: Optional[int] = None):
-        logging.debug(f"sending %s to %s", data, self.peer)
+        logging.debug(f"sending %s to %s", data, self.peer_tuple)
         self._writer.write(msgpack.packb(data, **self._pack_param))
         timeout = timeout if timeout else self._timeout
         await asyncio.wait_for(self._writer.drain(), timeout)
@@ -38,9 +38,9 @@ class BaseConnection:
         timeout = timeout if timeout else self._timeout
         while True:
             data = await asyncio.wait_for(self._reader.read(Constant.SOCKET_RECV_SIZE), timeout)
-            logging.debug(f"recv data %s from %s", data, self.peer)
+            logging.debug(f"recv data %s from %s", data, self.peer_tuple)
             if not data:
-                raise ConnectionError(f"Connection to {self.peer} closed")
+                raise ConnectionError(f"Connection to {self.peer_tuple} closed")
             self._unpacker.feed(data)
             try:
                 return next(self._unpacker)
@@ -94,7 +94,8 @@ class Connection(BaseConnection):
             logging.info(f"connection enable ssl")
 
         self._reader, self._writer = await asyncio.open_connection(host, port, ssl=ssl_context)
-        self.peer = self._writer.get_extra_info("peername")
+        self.sock_tuple = self._writer.get_extra_info("sockname")
+        self.peer_tuple = self._writer.get_extra_info("peername")
         self._is_closed = False
 
 
@@ -109,5 +110,6 @@ class ServerConnection(BaseConnection):
         super().__init__(timeout, pack_param)
         self._reader = reader
         self._writer = writer
-        self.peer = self._writer.get_extra_info("peername")
+        self.peer_tuple = self._writer.get_extra_info("peername")
+        self.sock_tuple: Tuple[str, int] = self._writer.get_extra_info("sockname")
         self._is_closed = False

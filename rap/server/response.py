@@ -62,7 +62,7 @@ class Response(object):
             )
             return True
         except asyncio.TimeoutError:
-            logging.error(f"response to {self._conn.peer} timeout. resp:{resp}")
+            logging.error(f"response to {self._conn.peer_tuple} timeout. resp:{resp}")
         except Exception as e:
-            logging.error(f"response to {self._conn.peer} error: {e}. resp:{resp}")
+            logging.error(f"response to {self._conn.peer_tuple} error: {e}. resp:{resp}")
         return False
