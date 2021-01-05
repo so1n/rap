@@ -14,23 +14,27 @@ __all__ = ["Client"]
 class AsyncIteratorCall:
     """let client support async iterator (keep sending and receiving messages under the same conn)"""
 
-    def __init__(self, method: str, client: "Client", *args: Tuple):
+    def __init__(self, method: str, client: "Client", *args: Tuple, header: Optional[dict] = None):
         self._method: str = method
         self._call_id: Optional[int] = None
         self._args: Tuple = args
         self._client: "Client" = client
-        self._conn: Connection = self._client.transport.now_conn
+        self._header: Optional[dict] = header
+
         self._session: Session = self._client.transport.session
+        self._in_session: bool = self._session.in_session
 
     ###################
     # session support #
     ###################
     async def __aenter__(self) -> "AsyncIteratorCall":
-        self._session.create()
+        if not self._in_session:
+            self._session.create()
         return self
 
     async def __aexit__(self, *args: Tuple):
-        self._session.close()
+        if not self._in_session:
+            self._session.close()
 
     #####################
     # async for support #
@@ -45,7 +49,7 @@ class AsyncIteratorCall:
         If no data, the server will return header.status_code = 301 and client must raise StopAsyncIteration Error.
         """
         response: Response = await self._client.transport.request(
-            self._method, *self._args, call_id=self._call_id, conn=self._conn
+            self._method, *self._args, call_id=self._call_id, conn=self._session.conn, header=self._header
         )
         self._call_id = response.body["call_id"]
         if response.header["status_code"] == 301:
@@ -105,7 +109,7 @@ class Client:
 
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            return await self.raw_call(func.__name__, *args)
+            return await self.raw_call(func.__name__, *args, **kwargs)
 
         return cast(Callable, wrapper)
 
@@ -114,7 +118,7 @@ class Client:
 
         @wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
-            async for result in self.iterator_call(func.__name__, *args):
+            async for result in self.iterator_call(func.__name__, *args, **kwargs):
                 yield result
 
         return cast(Callable, wrapper)
@@ -132,18 +136,25 @@ class Client:
     ###################
     # client base api #
     ###################
-    async def raw_call(self, method: str, *args: Any) -> Any:
+    async def raw_call(
+            self, method: str, *args: Any, conn: Optional[Connection] = None, header: Optional[dict] = None
+    ) -> Any:
         """rpc client base call method"""
-        response = await self.transport.request(method, *args)
+
+        response = await self.transport.request(method, *args, conn=conn, header=header)
         return response.body["result"]
 
-    async def call(self, func: Callable, *args: Any) -> Any:
+    async def call(
+            self, func: Callable, *args: Any, conn: Optional[Connection] = None, header: Optional[dict] = None
+    ) -> Any:
         """automatically resolve function names and call call_by_text"""
-        return await self.raw_call(func.__name__, *args)
+        return await self.raw_call(func.__name__, *args, conn=conn, header=header)
 
-    async def iterator_call(self, method: str, *args: Any) -> Any:
+    async def iterator_call(
+            self, method: str, *args: Any, conn: Optional[Connection] = None, header: Optional[dict] = None
+    ) -> Any:
         """Python-specific generator call"""
-        async with AsyncIteratorCall(method, self, *args) as async_iterator:
+        async with AsyncIteratorCall(method, self, *args, header=header) as async_iterator:
             async for result in async_iterator:
                 yield result
 
