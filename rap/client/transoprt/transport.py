@@ -372,8 +372,15 @@ class Session(object):
         _conn_context.reset(self._token)
 
     @property
-    def conn(self):
-        return self._transport.now_conn
+    def in_session(self) -> bool:
+        return _conn_context.get(MISS_OBJECT) is not MISS_OBJECT
+
+    @property
+    def conn(self) -> Connection:
+        conn: Optional[Connection] = _conn_context.get()
+        if conn is MISS_OBJECT:
+            raise RuntimeError('Session has not been created')
+        return conn
 
     async def request(self, method: str, *args, call_id=-1) -> Response:
         return await self._transport.request(method, *args, call_id, self.conn)
