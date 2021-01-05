@@ -5,8 +5,6 @@ import ssl
 from typing import Any, Callable, Coroutine, List, Optional, Set, Union
 from types import FunctionType
 
-import msgpack
-
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import RpcRunTimeError
 from rap.common.middleware import BaseMiddleware
@@ -140,7 +138,6 @@ class Server(object):
         conn: ServerConnection = ServerConnection(
             reader,
             writer,
-            msgpack.Unpacker(raw=False, use_list=False),
             self._timeout,
         )
         await self._conn_handle(conn)
