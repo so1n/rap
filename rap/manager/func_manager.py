@@ -23,18 +23,35 @@ class FuncManager(object):
         self._cwd: str = os.getcwd()
         self.func_dict: Dict[str, FuncModel] = dict()
 
-        self.register(self._load, "_root_load")
-        self.register(self._reload, "_root_reload")
-        self.register(self._get_register_func, "_root_list")
+        self.register(self._load, "load", group="root")
+        self.register(self._reload, "reload", group="root")
+        self.register(self._get_register_func, "list", group="root")
 
-    def register(
-        self, func: Optional[Callable], name: Optional[str] = None, is_root: bool = False, group: str = "root"
-    ):
-        # check func param&return value type hint
+    @staticmethod
+    def _get_func_type(func: Callable) -> str:
         sig: "inspect.Signature" = inspect.signature(func)
         func_arg_parameter: List[inspect.Parameter] = [i for i in sig.parameters.values() if i.default == i.empty]
-        type_: str = "normal"
-        if not (len(func_arg_parameter) == 1 and issubclass(func_arg_parameter[0].annotation, BaseChannel)):
+
+        func_type: str = "normal"
+        if len(func_arg_parameter) == 1 and issubclass(func_arg_parameter[0].annotation, BaseChannel):
+            func_type = "channel"
+        return func_type
+
+    def register(self, func: Optional[Callable], name: Optional[str] = None, group: str = "default"):
+        """
+        func: Function that need to be registered
+        name: If the function name is not specified, the system will obtain its own name according to the function,
+              otherwise it will be replaced by the specified function name
+        group: Specify the group to which the function to be registered belongs.
+               The same function can be registered to different groups.
+               The root group is generally used for system components, and there are restrictions when calling.
+        """
+        sig: "inspect.Signature" = inspect.signature(func)
+
+        type_: str = self._get_func_type(func)
+
+        if type_ == 'normal':
+            # check func param&return value type hint
             if not check_is_json_type(sig.return_annotation) or sig.return_annotation is sig.empty:
                 raise RegisteredError(f"{func.__name__} return type:{sig.return_annotation} is not json type")
             for param in sig.parameters.values():
@@ -42,8 +59,6 @@ class FuncManager(object):
                     raise RegisteredError(
                         f"{func.__name__} param:{param.name} type:{param.annotation} is not json type"
                     )
-        else:
-            type_ = "channel"
 
         if not hasattr(func, "__call__"):
             raise RegisteredError(f"{name} is not a callable object")
@@ -52,36 +67,50 @@ class FuncManager(object):
             name: str = name if name else func.__name__
         else:
             raise RegisteredError("func must be func or method")
-        if is_root and not name.startswith("_root_"):
-            name = "_root_" + name
-        if name in self.func_dict:
-            raise RegisteredError(f"Name: {name} has already been used")
 
         func_key: str = f"{group}:{type_}:{name}"
+        if func_key in self.func_dict:
+            raise RegisteredError(f"Name: {name} has already been used")
         self.func_dict[func_key] = FuncModel(group=group, type_=type_, name=name, func=func)
 
         # not display log before called logging.basicConfig
-        if not name.startswith("_root_"):
+        if group != 'group':
             logging.info(f"register func:{func_key}")
 
-    def _load(self, path: str, func_str: str) -> str:
+    @staticmethod
+    def _load_func(path: str, func_str: str) -> Callable:
+        reload_module = importlib.import_module(path)
+        func = getattr(reload_module, func_str)
+        if not hasattr(func, "__call__"):
+            raise RegisteredError(f"{func_str} is not a callable object")
+        return func
+
+    def _load(
+            self, path: str, func_str: str, name: Optional[str] = None, group: str = "default"
+    ) -> str:
         try:
-            reload_module = importlib.import_module(path)
-            func = getattr(reload_module, func_str)
-            self.register(func)
+            if group == 'root':
+                raise RegisteredError("Can't load root func")
+
+            func = self._load_func(path, func_str)
+            self.register(func, name, group)
             return f"load {func_str} from {path} success"
         except Exception as e:
             raise RegisteredError(f"load {func_str} from {path} fail, {str(e)}")
 
-    def _reload(self, path: str, func_str: str) -> str:
+    def _reload(
+            self, path: str, func_str: str, name: Optional[str] = None, group: str = "default"
+    ) -> str:
         try:
-            if func_str not in self.func_dict:
-                raise RegisteredError(f"func:{func_str} not found")
-            reload_module = importlib.import_module(path)
-            func = getattr(reload_module, func_str)
-            if not hasattr(func, "__call__"):
-                raise RegisteredError(f"{func_str} is not a callable object")
-            self.func_dict[func_str] = func
+            if group == 'root':
+                raise RegisteredError("Can't load root func")
+
+            func = self._load_func(path, func_str)
+            type_: str = self._get_func_type(func)
+            func_key: str = f"{group}:{type_}:{name}"
+            if func_key not in self.func_dict:
+                raise RegisteredError(f"Name: {name} not in register table")
+            self.func_dict[func_key] = FuncModel(group=group, type_=type_, name=name, func=func)
             return f"reload {func_str} from {path} success"
         except Exception as e:
             raise RegisteredError(f"reload {func_str} from {path} fail, {str(e)}")
@@ -89,7 +118,7 @@ class FuncManager(object):
     def _get_register_func(self) -> List[Tuple[str, str, str]]:
         register_list: List[Tuple[str, str, str]] = []
         for key, value in self.func_dict.items():
-            module = inspect.getmodule(value)
+            module = inspect.getmodule(value.func)
             module_name: str = module.__name__
             module_file: str = module.__file__
             register_list.append((key, module_name, module_file))
