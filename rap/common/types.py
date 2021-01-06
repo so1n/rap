@@ -17,6 +17,7 @@ _CAN_JSON_TYPE_SET: Set[type] = {bool, dict, float, int, list, str, tuple, type(
 
 def parse_typing(_type: Type) -> Union[List[Type], Type]:
     """
+    parse typing.type to Python.type
     >>> from typing import Dict, Optional
     >>> assert dict is parse_typing(dict)
     >>> assert list is parse_typing(List)
@@ -44,6 +45,7 @@ def parse_typing(_type: Type) -> Union[List[Type], Type]:
 
 def check_is_json_type(_type: Type) -> bool:
     """
+    check type is legal json type
     >>> from typing import Dict, Optional
     >>> assert check_is_json_type(parse_typing(dict))
     >>> assert check_is_json_type(parse_typing(List))
