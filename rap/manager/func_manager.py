@@ -74,7 +74,7 @@ class FuncManager(object):
         self.func_dict[func_key] = FuncModel(group=group, type_=type_, name=name, func=func)
 
         # not display log before called logging.basicConfig
-        if group != 'group':
+        if group != 'root':
             logging.info(f"register func:{func_key}")
 
     @staticmethod
@@ -123,6 +123,12 @@ class FuncManager(object):
             module_file: str = module.__file__
             register_list.append((key, module_name, module_file))
         return register_list
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.func_dict
+    
+    def __getitem__(self, key: str) -> FuncModel:
+        return self.func_dict[key]
 
 
 func_manager: "FuncManager" = FuncManager()
