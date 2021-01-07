@@ -57,12 +57,16 @@ class Server(object):
         self._processor_list: List[BaseProcessor] = []
         self._depend_set: Set[Any] = set()  # Check whether any components have been re-introduced
 
-        self.load_start_event(start_event_list)
-        self.load_stop_event(stop_event_list)
-        self.load_middleware(middleware_list)
-        self.load_processor(processor_list)
+        if start_event_list:
+            self.load_start_event(start_event_list)
+        if stop_event_list:
+            self.load_stop_event(stop_event_list)
+        if middleware_list:
+            self.load_middleware(middleware_list)
+        if processor_list:
+            self.load_processor(processor_list)
 
-    def _load_event(self, event_list: List[Union[Callable, Union]], event: Union[Callable, Coroutine]):
+    def _load_event(self, event_list: List[Union[Callable, Coroutine]], event: Union[Callable, Coroutine]):
         if not (isinstance(object, FunctionType) or asyncio.iscoroutine(event)):
             raise ImportError(f'{event} must be fun or coroutine')
 
@@ -73,11 +77,11 @@ class Server(object):
 
         event_list.append(event)
 
-    def load_start_event(self, event_list: List[Union[Callable, Union]]):
+    def load_start_event(self, event_list: List[Union[Callable, Coroutine]]):
         for event in event_list:
             self._load_event(self._start_event_list, event)
 
-    def load_stop_event(self, event_list: List[Union[Callable, Union]]):
+    def load_stop_event(self, event_list: List[Union[Callable, Coroutine]]):
         for event in event_list:
             self._load_event(self._stop_event_list, event)
 
