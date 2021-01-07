@@ -197,12 +197,14 @@ class Request(object):
 
     async def msg_life_cycle(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
         # root func only called by local client
-        if request.func_name.startswith("_root_") and request.header["_host"] != "127.0.0.1":
+        func_key: str = f"normal:{request.method}:{request.func_name}"
+
+        if func_key not in func_manager:
             response.body = FuncNotFoundError(extra_msg=f"func name: {request.func_name}")
             return response
-        fun_key: str = f"normal:{request.method}:{request.func_name}"
-        func: Optional[Callable] = func_manager.func_dict.get(fun_key).func
-        if not func:
+
+        func: Callable = func_manager[func_key].func
+        if func_manager[func_key].group == 'group' and request.header["_host"] != "127.0.0.1":
             response.body = FuncNotFoundError(extra_msg=f"func name: {request.func_name}")
             return response
 
