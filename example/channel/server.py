@@ -48,7 +48,7 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
-    rpc_server = Server(start_call_back=[init_redis()], close_call_back=[close_redis()])
+    rpc_server = Server(start_event_list=[init_redis()], stop_event_list=[close_redis()])
     rpc_server.load_processor([CryptoProcessor({"test": "keyskeyskeyskeys"})])
     rpc_server.register(async_channel)
     rpc_server.register(echo)
@@ -57,4 +57,4 @@ if __name__ == "__main__":
     try:
         loop.run_forever()
     except KeyboardInterrupt:
-        loop.run_until_complete(rpc_server.wait_closed())
+        loop.run_until_complete(rpc_server.await_closed())

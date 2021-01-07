@@ -30,8 +30,10 @@ class Server(object):
         backlog: int = 1024,
         ssl_crt_path: Optional[str] = None,
         ssl_key_path: Optional[str] = None,
-        start_call_back: List[Union[Callable, Coroutine]] = None,
-        close_call_back: List[Union[Callable, Coroutine]] = None,
+        start_event_list: List[Union[Callable, Coroutine]] = None,
+        stop_event_list: List[Union[Callable, Coroutine]] = None,
+        middleware_list: List[BaseMiddleware] = None,
+        processor_list: List[BaseProcessor] = None
     ):
         if type(host) is str:
             self._host = [host]
@@ -41,9 +43,7 @@ class Server(object):
         self._run_timeout: int = run_timeout
         self._keep_alive: int = keep_alive
         self._backlog: int = backlog
-
-        self._start_event_list: List[Union[Callable, Coroutine]] = start_call_back
-        self._stop_event_list: List[Union[Callable, Coroutine]] = close_call_back
+        self._server_list: List[asyncio.AbstractServer] = []
 
         self._ssl_context: Optional[ssl.SSLContext] = None
         if ssl_crt_path and ssl_key_path:
@@ -51,22 +51,35 @@ class Server(object):
             self._ssl_context.check_hostname = False
             self._ssl_context.load_cert_chain(ssl_crt_path, ssl_key_path)
 
-        self._server_list: List[asyncio.AbstractServer] = []
+        self._start_event_list: List[Union[Callable, Coroutine]] = []
+        self._stop_event_list: List[Union[Callable, Coroutine]] = []
         self._middleware_list: List[BaseMiddleware] = []
-        self._filter_list: List[BaseProcessor] = []
+        self._processor_list: List[BaseProcessor] = []
         self._depend_set: Set[Any] = set()  # Check whether any components have been re-introduced
 
-    def load_start_event(self, func_list: List[Callable]):
-        for func in func_list:
-            if not isinstance(object, FunctionType):
-                raise ImportError(f'{func} must be fun')
-            self._start_event_list.append(func)
+        self.load_start_event(start_event_list)
+        self.load_stop_event(stop_event_list)
+        self.load_middleware(middleware_list)
+        self.load_processor(processor_list)
 
-    def load_stop_event(self, func_list: List[Callable]):
-        for func in func_list:
-            if not isinstance(object, FunctionType):
-                raise ImportError(f'{func} must be fun')
-            self._stop_event_list.append(func)
+    def _load_event(self, event_list: List[Union[Callable, Union]], event: Union[Callable, Coroutine]):
+        if not (isinstance(object, FunctionType) or asyncio.iscoroutine(event)):
+            raise ImportError(f'{event} must be fun or coroutine')
+
+        if event not in self._depend_set:
+            self._depend_set.add(event)
+        else:
+            raise ImportError(f'{event} event already load')
+
+        event_list.append(event)
+
+    def load_start_event(self, event_list: List[Union[Callable, Union]]):
+        for event in event_list:
+            self._load_event(self._start_event_list, event)
+
+    def load_stop_event(self, event_list: List[Union[Callable, Union]]):
+        for event in event_list:
+            self._load_event(self._stop_event_list, event)
 
     def load_middleware(self, middleware_list: List[BaseMiddleware]):
         for middleware in middleware_list:
@@ -95,7 +108,7 @@ class Server(object):
             else:
                 raise ImportError(f'{processor} processor already load')
             if isinstance(processor, BaseProcessor):
-                self._filter_list.append(processor)
+                self._processor_list.append(processor)
             else:
                 raise RuntimeError(f"{processor} must instance of {BaseProcessor}")
 
@@ -109,7 +122,7 @@ class Server(object):
         func_manager.register(func, name, group=group)
 
     @staticmethod
-    async def run_callback(callback_list: List[Union[Callable, Coroutine]]):
+    async def run_callback_list(callback_list: List[Union[Callable, Coroutine]]):
         if not callback_list:
             return
         for callback in callback_list:
@@ -119,7 +132,7 @@ class Server(object):
                 await asyncio.get_event_loop().run_in_executor(None, callback)
 
     async def create_server(self) -> "Server":
-        await self.run_callback(self._start_event_list)
+        await self.run_callback_list(self._start_event_list)
         for host in self._host:
             ip, port = host.split(':')
             self._server_list.append(
@@ -128,23 +141,19 @@ class Server(object):
         logging.info(f"server running on {self._host}. use ssl:{bool(self._ssl_context)}")
         return self
 
-    async def wait_closed(self):
+    async def await_closed(self):
         for server in self._server_list:
             server.close()
             await server.wait_closed()
-            await self.run_callback(self._stop_event_list)
+            await self.run_callback_list(self._stop_event_list)
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE):
-        conn: ServerConnection = ServerConnection(
-            reader,
-            writer,
-            self._timeout,
-        )
+        conn: ServerConnection = ServerConnection(reader, writer, self._timeout)
         await self._conn_handle(conn)
 
     async def _conn_handle(self, conn: ServerConnection):
-        response_handle: Response = Response(conn, self._timeout, filter_list=self._filter_list)
-        request_handle: Request = Request(conn, self._run_timeout, response_handle, filter_list=self._filter_list)
+        response_handle: Response = Response(conn, self._timeout, filter_list=self._processor_list)
+        request_handle: Request = Request(conn, self._run_timeout, response_handle, filter_list=self._processor_list)
         for middleware in self._middleware_list:
             if isinstance(middleware, BaseMsgMiddleware):
                 middleware.load_sub_middleware(request_handle.msg_handle)
