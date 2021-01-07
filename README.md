@@ -41,7 +41,7 @@ try:
     loop.run_forever()
 except KeyboardInterrupt:
     server.close()
-    loop.run_until_complete(server.wait_closed())
+    loop.run_until_complete(server.await_closed())
 ```
 
 ## Client

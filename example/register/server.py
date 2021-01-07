@@ -35,7 +35,7 @@ if __name__ == "__main__":
     try:
         loop.run_forever()
     except KeyboardInterrupt:
-        loop.run_until_complete(rpc_server.wait_closed())
+        loop.run_until_complete(rpc_server.await_closed())
 
     # fail register example
     def fail_register(a, b):
