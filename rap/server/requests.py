@@ -113,11 +113,15 @@ class Request(object):
         conn: ServerConnection,
         run_timeout: int,
         response: Response,
+        ping_fail_cnt: int,
+        ping_sleep_time: int,
         filter_list: Optional[List[BaseProcessor]] = None,
     ):
         self._conn: ServerConnection = conn
         self._run_timeout: int = run_timeout
         self._response: Response = response
+        self._ping_sleep_time: int = ping_sleep_time
+        self._ping_fail_cnt: int = ping_fail_cnt
         self._filter_list: Optional[List[BaseProcessor]] = filter_list
 
         self.dispatch_func_dict: Dict[int, Callable] = {
@@ -169,7 +173,7 @@ class Request(object):
     async def ping_event(self):
         while not self._conn.is_closed():
             diff_time: int = int(time.time()) - self._keepalive_timestamp
-            if diff_time > 130:
+            if diff_time > (self._ping_sleep_time * self._ping_fail_cnt) + 10:
                 await self._response(
                     ResponseModel(Constant.SERVER_EVENT, body=Event(Constant.EVENT_CLOSE_CONN, "recv pong timeout"))
                 )
@@ -178,7 +182,7 @@ class Request(object):
                 break
             else:
                 await self._response(ResponseModel(Constant.SERVER_EVENT, body=Event(Constant.PING_EVENT, "")))
-                await asyncio.sleep(60)
+                await asyncio.sleep(self._ping_sleep_time)
 
     async def declare_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
         random_id: str = request.body

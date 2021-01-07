@@ -27,6 +27,8 @@ class Server(object):
         timeout: int = 9,
         keep_alive: int = 1200,
         run_timeout: int = 9,
+        ping_fail_cnt: int = 2,
+        ping_sleep_time: int = 60,
         backlog: int = 1024,
         ssl_crt_path: Optional[str] = None,
         ssl_key_path: Optional[str] = None,
@@ -43,6 +45,8 @@ class Server(object):
         self._run_timeout: int = run_timeout
         self._keep_alive: int = keep_alive
         self._backlog: int = backlog
+        self._ping_fail_cnt: int = ping_fail_cnt
+        self._ping_sleep_time: int = ping_sleep_time
         self._server_list: List[asyncio.AbstractServer] = []
 
         self._ssl_context: Optional[ssl.SSLContext] = None
@@ -157,7 +161,14 @@ class Server(object):
 
     async def _conn_handle(self, conn: ServerConnection):
         response_handle: Response = Response(conn, self._timeout, filter_list=self._processor_list)
-        request_handle: Request = Request(conn, self._run_timeout, response_handle, filter_list=self._processor_list)
+        request_handle: Request = Request(
+            conn,
+            self._run_timeout,
+            response_handle,
+            self._ping_fail_cnt,
+            self._ping_sleep_time,
+            filter_list=self._processor_list
+        )
         for middleware in self._middleware_list:
             if isinstance(middleware, BaseMsgMiddleware):
                 middleware.load_sub_middleware(request_handle.msg_handle)
