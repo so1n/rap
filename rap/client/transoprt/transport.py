@@ -14,7 +14,7 @@ from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
 from rap.common.exceptions import ProtocolError, RPCError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
-from rap.common.utlis import MISS_OBJECT, Constant, Event, gen_random_str_id
+from rap.common.utlis import MISS_OBJECT, Constant, Event
 
 _conn_context: ContextVar[Connection] = ContextVar("conn_context", default=MISS_OBJECT)
 
@@ -72,7 +72,6 @@ class Transport(object):
         ip, port = host.split(":")
         await conn.connect(ip, int(port))
         future: asyncio.Future = asyncio.ensure_future(self._listen(conn))
-        await self._declare_life_cycle(conn)
         self._conn_dict[host] = ConnModel(conn, future)
         logging.debug(f"Connection to %s...", conn.connection_info)
 
@@ -101,7 +100,6 @@ class Transport(object):
             else:
                 conn: Connection = self._conn_dict[host].conn
                 future: asyncio.Future = self._conn_dict[host].future
-                await self._drop_life_cycle(conn)
                 if not future.cancelled():
                     future.cancel()
                 await conn.await_close()
@@ -154,11 +152,10 @@ class Transport(object):
 
         resp_future_id: str = f"{conn.sock_tuple}:{response.msg_id}"
         channel_id: Optional[str] = response.header.get("channel_id")
-        if channel_id and response.method != Constant.CHANNEL and not exc:
-            exc: Exception = ProtocolError(f"recv error method:{response.method}")
+        is_channel_resp: bool = bool(channel_id) and (response.num == Constant.CHANNEL_RESPONSE)
 
         if exc:
-            if channel_id in self._channel_queue_dict:
+            if is_channel_resp and channel_id in self._channel_queue_dict:
                 self._channel_queue_dict[channel_id].put_nowait(exc)
             elif response.msg_id != -1 and resp_future_id in self._resp_future_dict:
                 self._resp_future_dict[resp_future_id].set_exception(exc)
@@ -170,10 +167,12 @@ class Transport(object):
         if response.num == Constant.SERVER_ERROR_RESPONSE:
             status_code: int = response.header.get("status_code", 500)
             exc: Type["rap_exc.BaseRapError"] = self._rap_exc_dict.get(status_code, rap_exc.BaseRapError)
-            if channel_id:
+            if is_channel_resp and channel_id in self._channel_queue_dict:
                 self._channel_queue_dict[channel_id].put_nowait(exc(response.body))
-            else:
+            elif resp_future_id in self._resp_future_dict:
                 self._resp_future_dict[resp_future_id].set_exception(exc(response.body))
+            else:
+                logging.error(f"recv error msg:{response}")
             return
 
         # server event msg handle
@@ -183,14 +182,14 @@ class Transport(object):
                 raise RuntimeError(f"recv close conn event, event info:{event_info}")
             elif event == Constant.PING_EVENT:
                 request: Request = Request(
-                    Constant.CLIENT_EVENT_RESPONSE, "", "", Event(Constant.PONG_EVENT, "").to_tuple()
+                    Constant.CLIENT_EVENT_RESPONSE, "", Event(Constant.PONG_EVENT, "").to_tuple()
                 )
                 self.before_request_handle(request, conn)
                 await self.write(request, -1, conn)
                 return
 
         # put msg to channel
-        if channel_id:
+        if is_channel_resp:
             if channel_id not in self._channel_queue_dict:
                 logging.error(f"recv {channel_id} msg, but {channel_id} not create")
             else:
@@ -202,28 +201,6 @@ class Transport(object):
             logging.error(f"recv listen future id: {resp_future_id} error, client not request")
             return
         self._resp_future_dict[resp_future_id].set_result(response)
-
-    ##############
-    # life cycle #
-    ##############
-    async def _declare_life_cycle(self, conn: Connection):
-        """send declare msg and init client id"""
-        random_id: str = gen_random_str_id()
-        request: Request = Request(Constant.DECLARE_REQUEST, "", Constant.NORMAL, random_id)
-        response = await self._base_request(request, conn)
-        if response.num != Constant.DECLARE_RESPONSE and response.body != random_id[::-1]:
-            raise RPCError("declare response error")
-        logging.info("declare success")
-
-    async def _drop_life_cycle(self, conn: Connection):
-        """send drop msg"""
-        random_id: str = gen_random_str_id(8)
-        request: Request = Request(Constant.DROP_REQUEST, "", Constant.NORMAL, random_id)
-        response = await self._base_request(request, conn)
-        if response.num != Constant.DROP_RESPONSE and response.body != random_id[::-1]:
-            logging.warning("drop response error")
-        else:
-            logging.info("drop response success")
 
     ####################################
     # base one by one request response #
@@ -302,9 +279,7 @@ class Transport(object):
         self, func_name: str, *args, call_id=-1, conn: Optional[Connection] = None, header: Optional[dict] = None
     ) -> Response:
         """msg request handle"""
-        request: Request = Request(
-            Constant.MSG_REQUEST, func_name, Constant.NORMAL, {"call_id": call_id, "param": args}
-        )
+        request: Request = Request(Constant.MSG_REQUEST, func_name, {"call_id": call_id, "param": args})
         if header is not None:
             request.header.update(header)
         response: Response = await self._base_request(request, conn)

@@ -1,7 +1,6 @@
 import asyncio
 
 from rap.client import Client
-from rap.client.processor.crypto import CryptoProcessor
 
 client = Client()
 

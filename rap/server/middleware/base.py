@@ -13,7 +13,7 @@ class BaseMiddleware(_BaseMiddleware, ABC):
 
     @staticmethod
     def register(func: Callable, is_root: bool = True, group: str = "middleware"):
-        func_manager.register(func, is_root=is_root, group=group)
+        func_manager.register(func, group=group)
 
 
 class BaseConnMiddleware(BaseMiddleware):

@@ -41,7 +41,7 @@ class Channel(BaseChannel):
         await self._create(self.channel_id)
         self._is_close = False
 
-        life_cycle: str = "declare"
+        life_cycle: str = Constant.DECLARE
         await self._base_write(None, life_cycle)
         response: Response = await self._base_read()
         if response.header.get("channel_life_cycle") != life_cycle:
@@ -58,7 +58,7 @@ class Channel(BaseChannel):
         response: Union[Response, Exception] = await self._read(self.channel_id)
         if isinstance(response, Exception):
             raise response
-        if response.header.get("channel_life_cycle") == "drop":
+        if response.header.get("channel_life_cycle") == Constant.DROP:
             self._is_close = True
             await self._close(self.channel_id)
             raise ChannelError("recv drop event, close channel")
@@ -99,9 +99,8 @@ class Channel(BaseChannel):
         if self._is_close:
             raise ChannelError(f"channel is closed")
         request: Request = Request(
-            Constant.MSG_REQUEST,
+            Constant.CHANNEL_REQUEST,
             self._func_name,
-            Constant.CHANNEL,
             body,
             {"channel_life_cycle": life_cycle, "channel_id": self.channel_id},
         )
@@ -109,7 +108,7 @@ class Channel(BaseChannel):
 
     async def read(self) -> Response:
         response: Response = await self._base_read()
-        if response.header.get("channel_life_cycle") != "msg":
+        if response.header.get("channel_life_cycle") != Constant.MSG:
             raise ChannelError("channel life cycle error")
         return response
 
@@ -118,14 +117,14 @@ class Channel(BaseChannel):
         return response.body
 
     async def write(self, body: Any):
-        await self._base_write(body, "msg")
+        await self._base_write(body, Constant.MSG)
 
     async def close(self):
         """Actively send a close message and close the channel"""
         if self._is_close:
             return
         self._session.close()
-        life_cycle: str = "drop"
+        life_cycle: str = Constant.DROP
         await self._base_write(None, life_cycle)
 
         async def wait_drop_response():

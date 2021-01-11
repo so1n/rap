@@ -2,7 +2,7 @@ import asyncio
 import inspect
 import logging
 import time
-from typing import Any, Callable, Coroutine, Dict, Generator, List, Optional, Tuple
+from typing import Any, Callable, Coroutine, Dict, Generator, List, Optional, Tuple, Union
 
 from rap.common.channel import BaseChannel
 from rap.common.conn import ServerConnection
@@ -44,11 +44,10 @@ class Channel(BaseChannel):
         if self.is_close:
             raise ChannelError(f"channel{self.channel_id} is close")
         response: "ResponseModel" = ResponseModel(
-            num=Constant.MSG_RESPONSE,
+            num=Constant.CHANNEL_RESPONSE,
             msg_id=-1,
             func_name=self._func_name,
-            method=Constant.CHANNEL,
-            header={"type": "channel", "channel_id": self.channel_id, "channel_life_cycle": "msg"},
+            header={"channel_id": self.channel_id, "channel_life_cycle": Constant.MSG},
             body=body,
         )
         await self._write(response)
@@ -79,11 +78,10 @@ class Channel(BaseChannel):
             return
         self._is_close = True
         response: "ResponseModel" = ResponseModel(
-            num=Constant.MSG_RESPONSE,
+            num=Constant.CHANNEL_RESPONSE,
             msg_id=-1,
             func_name=self._func_name,
-            method=Constant.CHANNEL,
-            header={"channel_id": self.channel_id, "channel_life_cycle": "drop"},
+            header={"channel_id": self.channel_id, "channel_life_cycle": Constant.DROP},
         )
         await self._write(response)
         if not self.future.cancelled():
@@ -118,11 +116,12 @@ class Request(object):
         self._filter_list: Optional[List[BaseProcessor]] = filter_list
 
         self.dispatch_func_dict: Dict[int, Callable] = {
-            Constant.DECLARE_REQUEST: self.declare_life_cycle,
+            Constant.CLIENT_EVENT_RESPONSE: self.event,
+            Constant.MSG_REQUEST: self.msg_handle,
+            Constant.CHANNEL_REQUEST: self.channel_handle,
         }
         # now one conn one Request object
-        self._is_declare: bool = False
-        self._ping_pong_future: Optional[asyncio.Future] = None
+        self._ping_pong_future: asyncio.Future = asyncio.ensure_future(self.ping_event())
         self._keepalive_timestamp: int = int(time.time())
         self._generator_dict: Dict[int, Generator] = {}
         self._channel_dict: Dict[str, Channel] = {}
@@ -135,14 +134,15 @@ class Request(object):
             response_num: int = response_num_dict.get(request.num, Constant.SERVER_ERROR_RESPONSE)
             error_content: str = "request num error"
 
+        # gen response object
         response: "ResponseModel" = ResponseModel(
             num=response_num,
             func_name=request.func_name,
-            method=request.method,
             msg_id=request.msg_id,
             stats=request.stats,
         )
         response.header.update(request.header)
+
         try:
             for filter_ in self._filter_list:
                 await filter_.process_request(request)
@@ -154,10 +154,6 @@ class Request(object):
         if response.num is Constant.SERVER_ERROR_RESPONSE:
             logging.error(f"parse request data: {request} from {request.header['_host']} error")
             response.body = ServerError(error_content)
-            return response
-        # check conn_data_model
-        if request.num != Constant.DECLARE_REQUEST and not self._is_declare:
-            response.body = ProtocolError("Must declare")
             return response
 
         dispatch_func: Callable = self.dispatch_func_dict[request.num]
@@ -177,87 +173,24 @@ class Request(object):
                 await self._response(ResponseModel(Constant.SERVER_EVENT, body=Event(Constant.PING_EVENT, "")))
                 await asyncio.sleep(self._ping_sleep_time)
 
-    async def declare_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
-        random_id: str = request.body
-        if not random_id:
-            response.body = ProtocolError("not found declare id")
-            return response
-        self.dispatch_func_dict = {
-            Constant.MSG_REQUEST: self.msg_life_cycle,
-            Constant.DROP_REQUEST: self.drop_life_cycle,
-            Constant.CLIENT_EVENT_RESPONSE: self.event,
-        }
-        self._is_declare = True
-        self._ping_pong_future = asyncio.ensure_future(self.ping_event())
-        response.body = random_id[::-1]
-        return response
-
-    async def msg_life_cycle(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
-        # root func only called by local client
-        func_key: str = f"normal:{request.method}:{request.func_name}"
-
-        if func_key not in func_manager:
-            response.body = FuncNotFoundError(extra_msg=f"func name: {request.func_name}")
-            return response
-
-        func: Callable = func_manager[func_key].func
-        if func_manager[func_key].group == "group" and request.header["_host"] != "127.0.0.1":
-            response.body = FuncNotFoundError(extra_msg=f"func name: {request.func_name}")
-            return response
-
-        if request.method == Constant.CHANNEL:
-            return await self.channel_handle(request, response, func)
-        try:
-            call_id: int = request.body["call_id"]
-        except KeyError:
-            response.body = ParseError("body miss params")
-            return response
-        param: str = request.body.get("param")
-        new_call_id, result = await self.msg_handle(request, call_id, func, param)
-        response.body = {"call_id": new_call_id}
-        if isinstance(result, StopAsyncIteration) or isinstance(result, StopIteration):
-            response.header["status_code"] = 301
-        elif isinstance(result, Exception):
-            exc, exc_info = parse_error(result)
-            response.body["exc_info"] = exc_info
-            if request.header.get("user_agent") == Constant.USER_AGENT:
-                response.body["exc"] = exc
-        else:
-            response.body["result"] = result
-        return response
-
-    async def drop_life_cycle(self, request: RequestModel, response: ResponseModel) -> ResponseModel:
-        random_id: str = request.body
-        if self._ping_pong_future and self._ping_pong_future.cancelled():
-            self._ping_pong_future.cancel()
-        self.dispatch_func_dict = {
-            Constant.DROP_REQUEST: self.drop_life_cycle,
-            Constant.CLIENT_EVENT_RESPONSE: self.event,
-        }
-        response.body = random_id[::-1]
-        return response
-
-    async def event(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
-        event_name: str = request.body[0]
-        if event_name == Constant.PONG_EVENT:
-            self._keepalive_timestamp = int(time.time())
-        return None
-
     async def channel_handle(
-        self, request: RequestModel, response: ResponseModel, func: Callable
+        self, request: RequestModel, response: ResponseModel
     ) -> Optional[ResponseModel]:
+        func: Union[Callable, ResponseModel] = self.check_func(request, response, "channel")
+        if isinstance(func, ResponseModel):
+            return func
         # declare var
         channel_id: str = request.header.get("channel_id")
         life_cycle: str = request.header.get("channel_life_cycle", "error")
         func_name: str = func.__name__
 
         channel: Channel = self._channel_dict.get(channel_id, MISS_OBJECT)
-        if life_cycle == "msg":
+        if life_cycle == Constant.MSG:
             if channel is MISS_OBJECT:
                 response.body = ChannelError("channel not create")
                 return response
             await channel.queue.put(request)
-        elif life_cycle == "declare":
+        elif life_cycle == Constant.DECLARE:
             if channel is not MISS_OBJECT:
                 response.body = ChannelError("channel already create")
                 return response
@@ -285,9 +218,9 @@ class Request(object):
             channel.future.add_done_callback(future_done_callback)
 
             self._channel_dict[channel_id] = channel
-            response.header = {"channel_id": channel_id, "channel_life_cycle": "declare"}
+            response.header = {"channel_id": channel_id, "channel_life_cycle": Constant.DECLARE}
             return response
-        elif life_cycle == "drop":
+        elif life_cycle == Constant.DROP:
             if channel is MISS_OBJECT:
                 response.body = ChannelError("channel not create")
                 return response
@@ -298,7 +231,21 @@ class Request(object):
             response.body = ChannelError("channel life cycle error")
             return response
 
-    async def msg_handle(self, request: RequestModel, call_id: int, func: Callable, param: str) -> Tuple[int, Any]:
+    @staticmethod
+    def check_func(request: RequestModel, response: ResponseModel, type_: str) -> Union[Callable, ResponseModel]:
+        func_key: str = f"normal:{type_}:{request.func_name}"
+
+        if func_key not in func_manager:
+            response.body = FuncNotFoundError(extra_msg=f"func name: {request.func_name}")
+            return response
+
+        func: Callable = func_manager[func_key].func
+        if func_manager[func_key].group == 'root' and request.header["_host"] != "127.0.0.1":
+            response.body = FuncNotFoundError(extra_msg=f"func name: {request.func_name}")
+            return response
+        return func
+
+    async def _msg_handle(self, request: RequestModel, call_id: int, func: Callable, param: str) -> Tuple[int, Any]:
         user_agent: str = request.header.get("user_agent")
         try:
             if call_id in self._generator_dict:
@@ -345,3 +292,37 @@ class Request(object):
                 logging.exception(f"run:{func} param:{param} error:{e}.")
                 result = RpcRunTimeError("execute func error")
         return call_id, result
+
+    async def msg_handle(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
+        func: Union[Callable, ResponseModel] = self.check_func(request, response, "normal")
+        if isinstance(func, ResponseModel):
+            return func
+
+        try:
+            call_id: int = request.body["call_id"]
+        except KeyError:
+            response.body = ParseError("body miss params")
+            return response
+        param: str = request.body.get("param")
+        new_call_id, result = await self._msg_handle(request, call_id, func, param)
+        response.body = {"call_id": new_call_id}
+        if isinstance(result, StopAsyncIteration) or isinstance(result, StopIteration):
+            response.header["status_code"] = 301
+        elif isinstance(result, Exception):
+            exc, exc_info = parse_error(result)
+            response.body["exc_info"] = exc_info
+            if request.header.get("user_agent") == Constant.USER_AGENT:
+                response.body["exc"] = exc
+        else:
+            response.body["result"] = result
+        return response
+
+    async def event(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
+        event_name: str = request.body[0]
+        if event_name == Constant.PONG_EVENT:
+            self._keepalive_timestamp = int(time.time())
+        return None
+
+    def __del__(self):
+        if self._ping_pong_future and self._ping_pong_future.cancelled():
+            self._ping_pong_future.cancel()
