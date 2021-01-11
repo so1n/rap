@@ -55,8 +55,7 @@ class Channel(BaseChannel):
     async def read(self) -> ResponseModel:
         if self.is_close:
             raise ChannelError(f"channel{self.channel_id} is close")
-        for coro in asyncio.as_completed([self.queue.get(), self._conn.result_future]):
-            return await coro
+        return await self.queue.get()
 
     async def read_body(self) -> Any:
         response: ResponseModel = await self.read()
@@ -173,8 +172,15 @@ class Request(object):
                 break
             else:
                 await self._response(ResponseModel(Constant.SERVER_EVENT, body=Event(Constant.PING_EVENT, "")))
-                for coro in asyncio.as_completed([asyncio.sleep(self._ping_sleep_time), self._conn.result_future]):
-                    await coro
+
+                try:
+                    # check conn exc
+                    await asyncio.wait_for(self._conn.result_future, self._ping_sleep_time)
+                except asyncio.TimeoutError:
+                    # ignore timeout error
+                    pass
+                except Exception:
+                    break
 
     async def channel_handle(
         self, request: RequestModel, response: ResponseModel
@@ -217,6 +223,10 @@ class Request(object):
             def future_done_callback(future: asyncio.Future):
                 logging.debug("channel:%s future status:%s" % (channel_id, future.done()))
 
+            async def add_exc_to_queue(exc):
+                await channel.queue.put(exc)
+
+            self._conn.add_listen_func(add_exc_to_queue)
             channel.future = asyncio.ensure_future(channel_func())
             channel.future.add_done_callback(future_done_callback)
 
