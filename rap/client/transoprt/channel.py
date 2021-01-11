@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Callable, Coroutine, Tuple, Union
 
 from rap.client.model import Request, Response
 from rap.common.channel import BaseChannel
+from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError
 from rap.common.utlis import Constant
 
@@ -21,7 +22,7 @@ class Channel(BaseChannel):
         session: "Session",
         create: Callable[[str], Coroutine[Any, Any, Any]],
         read: Callable[[str], Coroutine[Any, Any, Response]],
-        write: Callable[[Request], Coroutine[Any, Any, str]],
+        write: Callable[[Request, Connection], Coroutine[Any, Any, str]],
         close: Callable[[str], Coroutine[Any, Any, Any]],
     ):
         self.channel_id: str = str(uuid.uuid4())
@@ -29,7 +30,7 @@ class Channel(BaseChannel):
         self._session: "Session" = session
         self._create: Callable[[str], Coroutine[Any, Any, Any]] = create
         self._read: Callable[[str], Coroutine[Any, Any, Response]] = read
-        self._write: Callable[[Request], Coroutine[Any, Any, str]] = write
+        self._write: Callable[[Request, Connection], Coroutine[Any, Any, str]] = write
         self._close: Callable[[str], Coroutine[Any, Any, Any]] = close
         self._is_close: bool = True
 
@@ -55,7 +56,11 @@ class Channel(BaseChannel):
         """
         if self._is_close:
             raise ChannelError(f"channel is closed")
-        response: Union[Response, Exception] = await self._read(self.channel_id)
+        response: Union[Response, Exception] = ChannelError('read error')
+        for coro in asyncio.as_completed([self._read(self.channel_id), self._session.conn.result_future]):
+            response = await coro
+            break
+
         if isinstance(response, Exception):
             raise response
         if response.header.get("channel_life_cycle") == Constant.DROP:
@@ -104,7 +109,7 @@ class Channel(BaseChannel):
             body,
             {"channel_life_cycle": life_cycle, "channel_id": self.channel_id},
         )
-        return await self._write(request)
+        return await self._write(request, self._session.conn)
 
     async def read(self) -> Response:
         response: Response = await self._base_read()

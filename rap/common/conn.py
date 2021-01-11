@@ -20,6 +20,7 @@ class BaseConnection:
         self._unpacker: UNPACKER_TYPE = msgpack.Unpacker(raw=False, use_list=False)
         self._writer: Optional[WRITER_TYPE] = None
 
+        self.result_future: Optional[asyncio.Future] = None
         self.peer_tuple: Optional[Tuple[str, int]] = None
         self.sock_tuple: Optional[Tuple[str, int]] = None
 
@@ -50,12 +51,16 @@ class BaseConnection:
 
     def set_reader_exc(self, exc: Exception):
         self._reader.set_exception(exc)
+        self.result_future.set_exception(exc)
 
     def close(self):
         self._reader.feed_eof()
         self._writer.close()
 
         self._is_closed = True
+
+        if self.result_future and self.result_future.cancelled():
+            self.result_future.cancel()
 
     def is_closed(self) -> bool:
         if self._writer:
@@ -96,6 +101,7 @@ class Connection(BaseConnection):
         self._reader, self._writer = await asyncio.open_connection(host, port, ssl=ssl_context)
         self.sock_tuple = self._writer.get_extra_info("sockname")
         self.peer_tuple = self._writer.get_extra_info("peername")
+        self.result_future: Optional[asyncio.Future] = asyncio.Future()
         self._is_closed = False
 
 

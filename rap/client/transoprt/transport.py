@@ -12,7 +12,7 @@ from rap.client.transoprt.channel import Channel
 from rap.client.utils import get_rap_exc_dict, raise_rap_error
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
-from rap.common.exceptions import ProtocolError, RPCError
+from rap.common.exceptions import RPCError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.common.utlis import MISS_OBJECT, Constant, Event
 
@@ -184,7 +184,6 @@ class Transport(object):
                 request: Request = Request(
                     Constant.CLIENT_EVENT_RESPONSE, "", Event(Constant.PONG_EVENT, "").to_tuple()
                 )
-                self.before_request_handle(request, conn)
                 await self.write(request, -1, conn)
                 return
 
@@ -211,20 +210,19 @@ class Transport(object):
         # Avoid too big numbers
         self._msg_id = msg_id & 65535
 
+        if not conn:
+            conn = self.now_conn
         resp_future_id: str = await self.write(request, msg_id, conn)
         try:
-            return await self.read(resp_future_id)
+            for coro in asyncio.as_completed([self.read(resp_future_id), conn.result_future]):
+                return await coro
         finally:
             if resp_future_id in self._resp_future_dict:
                 del self._resp_future_dict[resp_future_id]
 
-    def before_request_handle(self, request: Request, conn: Optional[Connection] = None) -> Connection:
-        """check conn and header"""
-        if not conn:
-            conn = self.now_conn
-        if conn.is_closed():
-            raise ConnectionError("The connection has been closed, please call connect to create connection")
-
+    @staticmethod
+    def before_request_handle(request: Request):
+        """check and header"""
         def set_header_value(header_key: str, header_Value: Any):
             """set header value"""
             if header_key not in request.header:
@@ -238,14 +236,13 @@ class Transport(object):
         set_header_value("version", Constant.VERSION)
         set_header_value("user_agent", Constant.USER_AGENT)
         set_header_value("request_id", str(uuid.uuid4()))
-        return conn
 
     #######################
     # base write&read api #
     #######################
-    async def write(self, request: Request, msg_id: int, conn: Optional[Connection] = None) -> str:
+    async def write(self, request: Request, msg_id: int, conn) -> str:
         """write msg to conn, If it is not a normal request, you need to set msg_id: -1"""
-        conn = self.before_request_handle(request, conn)
+        self.before_request_handle(request)
         for process_request in self._process_request_list:
             await process_request(request)
         request_msg: BASE_REQUEST_TYPE = request.gen_request_msg(msg_id)
@@ -317,8 +314,7 @@ class Transport(object):
         async def read(_channel_id: str) -> Response:
             return await self._channel_queue_dict[_channel_id].get()
 
-        async def write(request: Request) -> str:
-            conn = self.before_request_handle(request)
+        async def write(request: Request, conn: Connection) -> str:
             return await self.write(request, -1, conn)
 
         async def close(_call_id: str):
