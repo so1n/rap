@@ -17,6 +17,7 @@ from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.common.utlis import MISS_OBJECT, Constant, Event, as_first_completed
 
 _conn_context: ContextVar[Connection] = ContextVar("conn_context", default=MISS_OBJECT)
+_session_context: ContextVar['Session'] = ContextVar("session_context", default=MISS_OBJECT)
 
 
 @dataclass()
@@ -210,7 +211,7 @@ class Transport(object):
                 del self._resp_future_dict[resp_future_id]
 
     @staticmethod
-    def before_request_handle(request: Request, conn: Connection):
+    def before_request_handle(request: Request):
         """check and header"""
         def set_header_value(header_key: str, header_Value: Any):
             """set header value"""
@@ -219,10 +220,9 @@ class Transport(object):
 
         use_session: bool = False
 
-        temp_conn: Connection = _conn_context.get(MISS_OBJECT)
-        if temp_conn is not MISS_OBJECT and temp_conn is conn:
-            use_session = True
-        request.header["use_session"] = use_session
+        session: 'Session' = _session_context.get(MISS_OBJECT)
+        if session is not MISS_OBJECT:
+            request.header["session_id"] = session.id
 
         set_header_value("version", Constant.VERSION)
         set_header_value("user_agent", Constant.USER_AGENT)
@@ -238,7 +238,7 @@ class Transport(object):
             nonlocal conn
             if not conn:
                 conn = self.now_conn
-            self.before_request_handle(request, conn)
+            self.before_request_handle(request)
 
             for process_request in self._process_request_list:
                 await process_request(request)
@@ -301,10 +301,13 @@ class Transport(object):
 
     @property
     def now_conn(self) -> Connection:
-        conn: Optional[Connection] = _conn_context.get()
-        if conn is MISS_OBJECT:
-            conn = self.get_random_conn()
-        return conn
+        session: 'Session' = _session_context.get(MISS_OBJECT)
+        if session is MISS_OBJECT:
+            return self.get_random_conn()
+        elif session.conn is None:
+            return self.get_random_conn()
+        else:
+            return session.conn
 
     @property
     def session(self) -> "Session":
@@ -343,10 +346,11 @@ class Session(object):
     """
     `Session` uses `contextvar` to enable transport to use only the same conn in session
     """
-
     def __init__(self, transport: "Transport"):
         self._transport: "Transport" = transport
         self._token: Optional[Token] = None
+        self.id: Optional[str] = None
+        self._conn: Optional[Connection] = None
 
     async def __aenter__(self) -> "Session":
         self.create()
@@ -356,21 +360,22 @@ class Session(object):
         self.close()
 
     def create(self):
-        self._token: Token = _conn_context.set(self._transport.get_random_conn())
+        self.id = str(uuid.uuid4())
+        self._conn = self._transport.get_random_conn()
+        self._token: Token = _session_context.set(self)
 
     def close(self):
-        _conn_context.reset(self._token)
+        self.id = None
+        self._conn = None
+        _session_context.reset(self._token)
 
     @property
     def in_session(self) -> bool:
-        return _conn_context.get(MISS_OBJECT) is not MISS_OBJECT
+        return _session_context.get(MISS_OBJECT) is not MISS_OBJECT
 
     @property
     def conn(self) -> Connection:
-        conn: Optional[Connection] = _conn_context.get()
-        if conn is MISS_OBJECT:
-            raise RuntimeError("Session has not been created")
-        return conn
+        return self._conn
 
     async def request(self, method: str, *args, call_id=-1, header: Optional[dict] = None) -> Response:
         return await self._transport.request(method, *args, call_id, self.conn, header)
