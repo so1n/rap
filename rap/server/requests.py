@@ -15,14 +15,7 @@ from rap.common.exceptions import (
     RpcRunTimeError,
     ServerError,
 )
-from rap.common.utlis import (
-    MISS_OBJECT,
-    Constant,
-    Event,
-    get_event_loop,
-    parse_error,
-    response_num_dict,
-)
+from rap.common.utlis import MISS_OBJECT, Constant, Event, get_event_loop, parse_error, response_num_dict
 from rap.manager.func_manager import func_manager
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
@@ -208,7 +201,7 @@ class Request(object):
             return response
 
         func: Callable = func_manager[func_key].func
-        if func_manager[func_key].group == 'group' and request.header["_host"] != "127.0.0.1":
+        if func_manager[func_key].group == "group" and request.header["_host"] != "127.0.0.1":
             response.body = FuncNotFoundError(extra_msg=f"func name: {request.func_name}")
             return response
 

@@ -53,6 +53,7 @@ class Constant(object):
 
 class State(object):
     """copy from starlette"""
+
     def __init__(self, state: Optional[Dict] = None):
         if state is None:
             state = {}

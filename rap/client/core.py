@@ -69,7 +69,7 @@ class Client:
         host_list:
          server host
          example value: ['127.0.0.1:9000', '127.0.0.1:9001']
-        timeout: 
+        timeout:
          send msg timeout
         keep_alive_time
          recv msg timeout
@@ -137,7 +137,7 @@ class Client:
     # client base api #
     ###################
     async def raw_call(
-            self, method: str, *args: Any, conn: Optional[Connection] = None, header: Optional[dict] = None
+        self, method: str, *args: Any, conn: Optional[Connection] = None, header: Optional[dict] = None
     ) -> Any:
         """rpc client base call method"""
 
@@ -145,13 +145,13 @@ class Client:
         return response.body["result"]
 
     async def call(
-            self, func: Callable, *args: Any, conn: Optional[Connection] = None, header: Optional[dict] = None
+        self, func: Callable, *args: Any, conn: Optional[Connection] = None, header: Optional[dict] = None
     ) -> Any:
         """automatically resolve function names and call call_by_text"""
         return await self.raw_call(func.__name__, *args, conn=conn, header=header)
 
     async def iterator_call(
-            self, method: str, *args: Any, conn: Optional[Connection] = None, header: Optional[dict] = None
+        self, method: str, *args: Any, conn: Optional[Connection] = None, header: Optional[dict] = None
     ) -> Any:
         """Python-specific generator call"""
         async with AsyncIteratorCall(method, self, *args, header=header) as async_iterator:

@@ -1,9 +1,8 @@
 import asyncio
 import logging
 import ssl
-
-from typing import Any, Callable, Coroutine, List, Optional, Set, Union
 from types import FunctionType
+from typing import Any, Callable, Coroutine, List, Optional, Set, Union
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import RpcRunTimeError
@@ -35,7 +34,7 @@ class Server(object):
         start_event_list: List[Union[Callable, Coroutine]] = None,
         stop_event_list: List[Union[Callable, Coroutine]] = None,
         middleware_list: List[BaseMiddleware] = None,
-        processor_list: List[BaseProcessor] = None
+        processor_list: List[BaseProcessor] = None,
     ):
         if type(host) is str:
             self._host = [host]
@@ -72,12 +71,12 @@ class Server(object):
 
     def _load_event(self, event_list: List[Union[Callable, Coroutine]], event: Union[Callable, Coroutine]):
         if not (isinstance(object, FunctionType) or asyncio.iscoroutine(event)):
-            raise ImportError(f'{event} must be fun or coroutine')
+            raise ImportError(f"{event} must be fun or coroutine")
 
         if event not in self._depend_set:
             self._depend_set.add(event)
         else:
-            raise ImportError(f'{event} event already load')
+            raise ImportError(f"{event} event already load")
 
         event_list.append(event)
 
@@ -94,7 +93,7 @@ class Server(object):
             if middleware not in self._depend_set:
                 self._depend_set.add(middleware)
             else:
-                raise ImportError(f'{middleware} middleware already load')
+                raise ImportError(f"{middleware} middleware already load")
 
             if isinstance(middleware, BaseConnMiddleware):
                 middleware.load_sub_middleware(self._conn_handle)
@@ -114,7 +113,7 @@ class Server(object):
             if processor not in self._depend_set:
                 self._depend_set.add(processor)
             else:
-                raise ImportError(f'{processor} processor already load')
+                raise ImportError(f"{processor} processor already load")
             if isinstance(processor, BaseProcessor):
                 self._processor_list.append(processor)
             else:
@@ -142,7 +141,7 @@ class Server(object):
     async def create_server(self) -> "Server":
         await self.run_callback_list(self._start_event_list)
         for host in self._host:
-            ip, port = host.split(':')
+            ip, port = host.split(":")
             self._server_list.append(
                 await asyncio.start_server(self.conn_handle, ip, port, ssl=self._ssl_context, backlog=self._backlog)
             )
@@ -167,7 +166,7 @@ class Server(object):
             response_handle,
             self._ping_fail_cnt,
             self._ping_sleep_time,
-            filter_list=self._processor_list
+            filter_list=self._processor_list,
         )
         for middleware in self._middleware_list:
             if isinstance(middleware, BaseMsgMiddleware):

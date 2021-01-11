@@ -13,8 +13,8 @@ if TYPE_CHECKING:
 
 
 class Channel(BaseChannel):
-    """support channel use
-    """
+    """support channel use"""
+
     def __init__(
         self,
         fun_name: str,
@@ -121,8 +121,7 @@ class Channel(BaseChannel):
         await self._base_write(body, "msg")
 
     async def close(self):
-        """Actively send a close message and close the channel
-        """
+        """Actively send a close message and close the channel"""
         if self._is_close:
             return
         self._session.close()
