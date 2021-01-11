@@ -55,7 +55,8 @@ class Channel(BaseChannel):
     async def read(self) -> ResponseModel:
         if self.is_close:
             raise ChannelError(f"channel{self.channel_id} is close")
-        return await self.queue.get()
+        for coro in asyncio.as_completed([self.queue.get(), self._conn.result_future]):
+            return await coro
 
     async def read_body(self) -> Any:
         response: ResponseModel = await self.read()
@@ -77,13 +78,14 @@ class Channel(BaseChannel):
             logging.debug("already close channel %s", self.channel_id)
             return
         self._is_close = True
-        response: "ResponseModel" = ResponseModel(
-            num=Constant.CHANNEL_RESPONSE,
-            msg_id=-1,
-            func_name=self._func_name,
-            header={"channel_id": self.channel_id, "channel_life_cycle": Constant.DROP},
-        )
-        await self._write(response)
+        if not self._conn.is_closed():
+            response: "ResponseModel" = ResponseModel(
+                num=Constant.CHANNEL_RESPONSE,
+                msg_id=-1,
+                func_name=self._func_name,
+                header={"channel_id": self.channel_id, "channel_life_cycle": Constant.DROP},
+            )
+            await self._write(response)
         if not self.future.cancelled():
             self.future.cancel()
         self._close()
@@ -171,7 +173,8 @@ class Request(object):
                 break
             else:
                 await self._response(ResponseModel(Constant.SERVER_EVENT, body=Event(Constant.PING_EVENT, "")))
-                await asyncio.sleep(self._ping_sleep_time)
+                for coro in asyncio.as_completed([asyncio.sleep(self._ping_sleep_time), self._conn.result_future]):
+                    await coro
 
     async def channel_handle(
         self, request: RequestModel, response: ResponseModel
