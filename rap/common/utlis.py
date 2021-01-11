@@ -29,15 +29,14 @@ class Constant(object):
     USER_AGENT: str = "Python3"
     SOCKET_RECV_SIZE: int = 1024 ** 1
 
-    DECLARE_REQUEST: int = 101
-    DECLARE_RESPONSE: int = 201
-    MSG_REQUEST: int = 102
-    MSG_RESPONSE: int = 202
-    DROP_REQUEST: int = 103
-    DROP_RESPONSE: int = 203
-    SERVER_EVENT: int = 301
-    CLIENT_EVENT_RESPONSE: int = 401
-    SERVER_ERROR_RESPONSE: int = 501
+    MSG_REQUEST: int = 101
+    MSG_RESPONSE: int = 201
+    CHANNEL_REQUEST: int = 102
+    CHANNEL_RESPONSE: int = 202
+    CLIENT_EVENT: int = 103
+    CLIENT_EVENT_RESPONSE: int = 203
+    SERVER_EVENT: int = 104
+    SERVER_ERROR_RESPONSE: int = 204
 
     EVENT_CLOSE_CONN: str = "event_close_conn"
     PING_EVENT: str = "ping"
@@ -46,9 +45,6 @@ class Constant(object):
     DECLARE: str = "declare"
     MSG: str = "MSG"
     DROP: str = "drop"
-
-    NORMAL: str = "normal"
-    CHANNEL: str = "channel"
 
 
 class State(object):
@@ -110,8 +106,7 @@ get_event_loop = _get_event_loop()
 
 
 response_num_dict: Dict[int, int] = {
-    Constant.DECLARE_REQUEST: Constant.DECLARE_RESPONSE,
     Constant.MSG_REQUEST: Constant.MSG_RESPONSE,
-    Constant.DROP_REQUEST: Constant.DROP_RESPONSE,
+    Constant.CHANNEL_REQUEST: Constant.CHANNEL_RESPONSE,
     Constant.CLIENT_EVENT_RESPONSE: -1,
 }

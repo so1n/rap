@@ -36,13 +36,12 @@ class Response(object):
                 Constant.SERVER_ERROR_RESPONSE,
                 resp.msg_id,
                 resp.func_name,
-                resp.method,
                 resp.header,
                 error_response[1],
             )
         elif isinstance(resp.body, Event):
             return ResponseModel(
-                Constant.SERVER_EVENT, resp.msg_id, resp.func_name, resp.method, resp.header, resp.body.to_tuple()
+                Constant.SERVER_EVENT, resp.msg_id, resp.func_name, resp.header, resp.body.to_tuple()
             )
         else:
             return resp
@@ -58,7 +57,7 @@ class Response(object):
 
         try:
             await self._conn.write(
-                (resp.num, resp.msg_id, resp.func_name, resp.method, resp.header, resp.body), self._timeout
+                (resp.num, resp.msg_id, resp.func_name, resp.header, resp.body), self._timeout
             )
             return True
         except asyncio.TimeoutError:

@@ -14,8 +14,8 @@ class BaseProcessor(object):
     stop_event_list: List[Union[Callable, Coroutine]] = []
 
     @staticmethod
-    def register(func: Callable, is_root: bool = True, group: str = "processor"):
-        func_manager.register(func, is_root=is_root, group=group)
+    def register(func: Callable, group: str = "processor"):
+        func_manager.register(func, group=group)
 
     async def process_request(self, request: RequestModel):
         pass
