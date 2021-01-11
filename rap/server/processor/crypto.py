@@ -13,7 +13,7 @@ from rap.server.processor.base import BaseProcessor
 class CryptoProcessor(BaseProcessor):
     def __init__(self, secret_dict: Dict[str, str] = None, timeout: int = 60, nonce_timeout: int = 60):
         if not secret_dict and not crypto_manager:
-            raise ValueError('secret_dict must not None')
+            raise ValueError("secret_dict must not None")
         crypto_manager.load_aes_key_dict(secret_dict)
         self._nonce_key: str = redis_manager.namespace + "nonce"
         self._timeout: int = timeout
@@ -53,7 +53,7 @@ class CryptoProcessor(BaseProcessor):
             nonce: str = request.body.get("nonce", "")
             if not nonce:
                 raise ServerError("nonce error")
-            nonce = f'{self._nonce_key}:{nonce}'
+            nonce = f"{self._nonce_key}:{nonce}"
             if await redis_manager.exists(nonce):
                 raise ServerError("nonce error")
             else:

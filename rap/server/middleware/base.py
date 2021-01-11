@@ -20,6 +20,7 @@ class BaseConnMiddleware(BaseMiddleware):
     """
     Currently, the conn can be processed in the conn middleware only after the server establishes the link
     """
+
     async def __call__(self, *args, **kwargs):
         return await self.dispatch(*args)
 

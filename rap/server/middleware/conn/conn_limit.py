@@ -12,6 +12,7 @@ class ConnLimitMiddleware(BaseConnMiddleware):
     """
     feat: limit server max conn num
     """
+
     def __init__(self, max_conn: int = 1024):
         self._max_conn: int = max_conn
         self._conn_count: int = 0
@@ -42,6 +43,7 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
     """
     feat: Limit the number of connections of a specified IP within a unit time
     """
+
     def __init__(self, ip_max_conn: int = 128, timeout: int = 180):
         self._ip_max_conn: int = ip_max_conn
         self._timeout: int = timeout

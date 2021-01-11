@@ -9,6 +9,7 @@ class BaseProcessor(object):
     feat: Process the data of a certain process (usually used to read data and write data)
     ps: If you need to share data, please use `request.stats` and `response.stats`
     """
+
     start_event_list: List[Union[Callable, Coroutine]] = []
     stop_event_list: List[Union[Callable, Coroutine]] = []
 

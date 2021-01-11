@@ -50,7 +50,7 @@ class FuncManager(object):
 
         type_: str = self._get_func_type(func)
 
-        if type_ == 'normal':
+        if type_ == "normal":
             # check func param&return value type hint
             if not check_is_json_type(sig.return_annotation) or sig.return_annotation is sig.empty:
                 raise RegisteredError(f"{func.__name__} return type:{sig.return_annotation} is not json type")
@@ -74,7 +74,7 @@ class FuncManager(object):
         self.func_dict[func_key] = FuncModel(group=group, type_=type_, name=name, func=func)
 
         # not display log before called logging.basicConfig
-        if group != 'root':
+        if group != "root":
             logging.info(f"register func:{func_key}")
 
     @staticmethod
@@ -85,11 +85,9 @@ class FuncManager(object):
             raise RegisteredError(f"{func_str} is not a callable object")
         return func
 
-    def _load(
-            self, path: str, func_str: str, name: Optional[str] = None, group: str = "default"
-    ) -> str:
+    def _load(self, path: str, func_str: str, name: Optional[str] = None, group: str = "default") -> str:
         try:
-            if group == 'root':
+            if group == "root":
                 raise RegisteredError("Can't load root func")
 
             func = self._load_func(path, func_str)
@@ -98,11 +96,9 @@ class FuncManager(object):
         except Exception as e:
             raise RegisteredError(f"load {func_str} from {path} fail, {str(e)}")
 
-    def _reload(
-            self, path: str, func_str: str, name: Optional[str] = None, group: str = "default"
-    ) -> str:
+    def _reload(self, path: str, func_str: str, name: Optional[str] = None, group: str = "default") -> str:
         try:
-            if group == 'root':
+            if group == "root":
                 raise RegisteredError("Can't load root func")
 
             func = self._load_func(path, func_str)
@@ -126,7 +122,7 @@ class FuncManager(object):
 
     def __contains__(self, key: str) -> bool:
         return key in self.func_dict
-    
+
     def __getitem__(self, key: str) -> FuncModel:
         return self.func_dict[key]
 

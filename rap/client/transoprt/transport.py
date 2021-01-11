@@ -2,7 +2,6 @@ import asyncio
 import logging
 import random
 import uuid
-
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
@@ -37,6 +36,7 @@ class ConnModel(object):
 
 class Transport(object):
     """base client transport, encapsulation of custom transport protocol"""
+
     def __init__(
         self,
         host_list: List[str],
@@ -163,7 +163,7 @@ class Transport(object):
             elif response.msg_id != -1 and resp_future_id in self._resp_future_dict:
                 self._resp_future_dict[resp_future_id].set_exception(exc)
             else:
-                logging.error(f'recv error msg:{response}')
+                logging.error(f"recv error msg:{response}")
             return
 
         # server error response handle
@@ -192,7 +192,7 @@ class Transport(object):
         # put msg to channel
         if channel_id:
             if channel_id not in self._channel_queue_dict:
-                logging.error(f'recv {channel_id} msg, but {channel_id} not create')
+                logging.error(f"recv {channel_id} msg, but {channel_id} not create")
             else:
                 self._channel_queue_dict[channel_id].put_nowait(response)
             return
@@ -364,6 +364,7 @@ class Session(object):
     """
     `Session` uses `contextvar` to enable transport to use only the same conn in session
     """
+
     def __init__(self, transport: "Transport"):
         self._transport: "Transport" = transport
         self._token: Optional[Token] = None
@@ -389,7 +390,7 @@ class Session(object):
     def conn(self) -> Connection:
         conn: Optional[Connection] = _conn_context.get()
         if conn is MISS_OBJECT:
-            raise RuntimeError('Session has not been created')
+            raise RuntimeError("Session has not been created")
         return conn
 
     async def request(self, method: str, *args, call_id=-1) -> Response:

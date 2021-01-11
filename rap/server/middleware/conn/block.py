@@ -12,6 +12,7 @@ class IpBlockMiddleware(BaseConnMiddleware):
         1. block ip
         2. allow ip
     """
+
     def __init__(self, allow_ip_list: List[str] = None, block_ip_list: List[str] = None):
         self.register(self._add_allow_ip)
         self.register(self._add_block_ip)
