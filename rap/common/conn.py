@@ -41,7 +41,9 @@ class BaseConnection:
             data = await asyncio.wait_for(self._reader.read(Constant.SOCKET_RECV_SIZE), timeout)
             logging.debug(f"recv data %s from %s", data, self.peer_tuple)
             if not data:
-                raise ConnectionError(f"Connection to {self.peer_tuple} closed")
+                e: Exception = ConnectionError(f"Connection to {self.peer_tuple} closed")
+                self.set_reader_exc(e)
+                raise e
             self._unpacker.feed(data)
             try:
                 return next(self._unpacker)
@@ -50,8 +52,9 @@ class BaseConnection:
         return None
 
     def set_reader_exc(self, exc: Exception):
+        if self.result_future and not self.result_future.cancelled():
+            self.result_future.set_exception(exc)
         self._reader.set_exception(exc)
-        self.result_future.set_exception(exc)
 
     def close(self):
         self._reader.feed_eof()
@@ -118,4 +121,5 @@ class ServerConnection(BaseConnection):
         self._writer = writer
         self.peer_tuple = self._writer.get_extra_info("peername")
         self.sock_tuple: Tuple[str, int] = self._writer.get_extra_info("sockname")
+        self.result_future: Optional[asyncio.Future] = asyncio.Future()
         self._is_closed = False

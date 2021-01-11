@@ -202,8 +202,7 @@ class Server(object):
                 logging.error(f"recv data from {conn.peer_tuple} timeout. close conn")
                 await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "keep alive timeout")))
                 break
-            except IOError as e:
-                logging.debug(f"close conn:%s info:%s", conn.peer_tuple, e)
+            except IOError:
                 break
             except Exception as e:
                 logging.error(f"recv data from {conn.peer_tuple} error:{e}, conn has been closed")
