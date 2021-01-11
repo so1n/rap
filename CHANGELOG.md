@@ -7,7 +7,17 @@
  - Feature: client support load balance
  - Feature: server HA middleware
 
-### 0.5.3.3[now]
+### 0.5.3.4[now]
+ - description: Add code comments; fix bugs; simplify the protocol
+ - Doc: add code comments
+ - Fix: fix server channel crypto&future cancel bug
+ - Feature: add load event
+ - Feature: support mutli server
+ - Feature: add conn sock name and modify client listen future id
+ - Refactor: refactor func manager
+ - Refactor: refactor server crypto nonce check
+ 
+### 0.5.3.3
  - description: support session & channel
  - Feature: add use_session column in header
  - Feature: add request_id column in header
