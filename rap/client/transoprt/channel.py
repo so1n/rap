@@ -7,7 +7,7 @@ from rap.client.model import Request, Response
 from rap.common.channel import BaseChannel
 from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError
-from rap.common.utlis import Constant, as_first_completed
+from rap.common.utlis import Constant
 
 if TYPE_CHECKING:
     from rap.client.transoprt.transport import Session
@@ -24,7 +24,7 @@ class Channel(BaseChannel):
         read: Callable[[str], Coroutine[Any, Any, Response]],
         write: Callable[[Request, Connection], Coroutine[Any, Any, str]],
         close: Callable[[str], Coroutine[Any, Any, Any]],
-        add_exc_queue: Callable[[str, Connection], None]
+        add_listen_conn_exc: Callable[[str, Connection], None]
     ):
         self.channel_id: str = str(uuid.uuid4())
         self._func_name: str = fun_name
@@ -33,25 +33,26 @@ class Channel(BaseChannel):
         self._read: Callable[[str], Coroutine[Any, Any, Response]] = read
         self._write: Callable[[Request, Connection], Coroutine[Any, Any, str]] = write
         self._close: Callable[[str], Coroutine[Any, Any, Any]] = close
-        self._add_exc_queue: Callable[[str, Connection], None] = add_exc_queue
+        self._add_listen_conn_exc: Callable[[str, Connection], None] = add_listen_conn_exc
         self._is_close: bool = True
 
     async def create(self):
-        """create and init channel, create session"""
+        """create and init channel, create session and listen conn exc"""
         if not self._is_close:
             raise ChannelError("channel already create")
+
+        # init channel data structure
         self._session.create()
         await self._create(self.channel_id)
+        self._add_listen_conn_exc(self.channel_id, self._session.conn)
         self._is_close = False
 
+        # init with server
         life_cycle: str = Constant.DECLARE
         await self._base_write(None, life_cycle)
         response: Response = await self._base_read()
         if response.header.get("channel_life_cycle") != life_cycle:
             raise ChannelError("channel life cycle error")
-        channel_id: str = response.header.get("channel_id")
-        self.channel_id = channel_id
-        self._add_exc_queue(channel_id, self._session.conn)
 
     async def _base_read(self) -> Response:
         """base read response msg from channel conn
@@ -93,7 +94,7 @@ class Channel(BaseChannel):
         ...     while await channel.loop(cnt < 3):
         ...         pass
         """
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(0)
         if self._is_close:
             return not self._is_close
         else:

@@ -56,6 +56,9 @@ class BaseConnection:
         return None
 
     def set_reader_exc(self, exc: Exception):
+        if not isinstance(exc, Exception):
+            return
+
         if self.result_future and not self.result_future.done():
             self.result_future.set_exception(exc)
             for func in self.exc_listen_list:

@@ -12,6 +12,7 @@ __all__ = [
     "Event",
     "MISS_OBJECT",
     "State",
+    "as_first_completed",
     "gen_random_time_id",
     "gen_random_str_id",
     "get_event_loop",

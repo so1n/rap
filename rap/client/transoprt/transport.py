@@ -12,7 +12,7 @@ from rap.client.transoprt.channel import Channel
 from rap.client.utils import get_rap_exc_dict, raise_rap_error
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
-from rap.common.exceptions import RPCError
+from rap.common.exceptions import ChannelError, RPCError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.common.utlis import MISS_OBJECT, Constant, Event, as_first_completed
 
@@ -65,10 +65,7 @@ class Transport(object):
         if host in self._conn_dict:
             await self._conn_dict[host].await_close()
 
-        conn: Connection = Connection(
-            self._timeout,
-            ssl_crt_path=self._ssl_crt_path,
-        )
+        conn: Connection = Connection(self._timeout, ssl_crt_path=self._ssl_crt_path)
         ip, port = host.split(":")
         await conn.connect(ip, int(port))
         future: asyncio.Future = asyncio.ensure_future(self._listen(conn))
@@ -82,10 +79,7 @@ class Transport(object):
         if not self._is_close:
             raise ConnectionError(f"{self.__class__.__name__} already connect")
         for host in self._host_list:
-            if host in self._conn_dict and not self._conn_dict[host].is_closed():
-                logging.warning(f"{host} already connected")
-            else:
-                await self._connect(host)
+            await self._connect(host)
         self._is_close = False
 
     async def await_close(self):
@@ -115,6 +109,7 @@ class Transport(object):
         except asyncio.CancelledError:
             pass
         except Exception as e:
+            conn.set_reader_exc(e)
             logging.exception(f"listen status:{self._is_close} error: {e}, close conn:{conn}")
             if not conn.is_closed():
                 conn.close()
@@ -126,16 +121,13 @@ class Transport(object):
             logging.debug(f"recv raw data: %s", response_msg)
         except asyncio.TimeoutError as e:
             logging.error(f"recv response from {conn.connection_info} timeout")
-            conn.set_reader_exc(e)
             raise e
         except asyncio.CancelledError:
             return
-        except Exception as e:
-            conn.set_reader_exc(e)
-            raise e
 
         if response_msg is None:
             raise ConnectionError("Connection has been closed")
+
         # parse response
         try:
             response: Response = Response(*response_msg)
@@ -154,25 +146,23 @@ class Transport(object):
         channel_id: Optional[str] = response.header.get("channel_id")
         is_channel_resp: bool = bool(channel_id) and (response.num == Constant.CHANNEL_RESPONSE)
 
-        if exc:
+        def put_exc_to_receiver(put_exc: Exception):
             if is_channel_resp and channel_id in self._channel_queue_dict:
-                self._channel_queue_dict[channel_id].put_nowait(exc)
+                self._channel_queue_dict[channel_id].put_nowait(put_exc)
             elif response.msg_id != -1 and resp_future_id in self._resp_future_dict:
-                self._resp_future_dict[resp_future_id].set_exception(exc)
+                self._resp_future_dict[resp_future_id].set_exception(put_exc)
             else:
-                logging.error(f"recv error msg:{response}")
+                logging.error(f"recv error msg:{response}, ignore")
+
+        if exc:
+            put_exc_to_receiver(exc)
             return
 
         # server error response handle
         if response.num == Constant.SERVER_ERROR_RESPONSE:
             status_code: int = response.header.get("status_code", 500)
             exc: Type["rap_exc.BaseRapError"] = self._rap_exc_dict.get(status_code, rap_exc.BaseRapError)
-            if is_channel_resp and channel_id in self._channel_queue_dict:
-                self._channel_queue_dict[channel_id].put_nowait(exc(response.body))
-            elif resp_future_id in self._resp_future_dict:
-                self._resp_future_dict[resp_future_id].set_exception(exc(response.body))
-            else:
-                logging.error(f"recv error msg:{response}")
+            put_exc_to_receiver(exc(response.body))
             return
 
         # server event msg handle
@@ -214,13 +204,13 @@ class Transport(object):
             conn = self.now_conn
         resp_future_id: str = await self.write(request, msg_id, conn)
         try:
-            return await as_first_completed([self.read(resp_future_id), conn.result_future])
+            return await self.read(resp_future_id, conn)
         finally:
             if resp_future_id in self._resp_future_dict:
                 del self._resp_future_dict[resp_future_id]
 
     @staticmethod
-    def before_request_handle(request: Request):
+    def before_request_handle(request: Request, conn: Connection):
         """check and header"""
         def set_header_value(header_key: str, header_Value: Any):
             """set header value"""
@@ -228,7 +218,9 @@ class Transport(object):
                 request.header[header_key] = header_Value
 
         use_session: bool = False
-        if _conn_context.get(MISS_OBJECT) is not MISS_OBJECT:
+
+        temp_conn: Connection = _conn_context.get(MISS_OBJECT)
+        if temp_conn is not MISS_OBJECT and temp_conn is conn:
             use_session = True
         request.header["use_session"] = use_session
 
@@ -239,32 +231,44 @@ class Transport(object):
     #######################
     # base write&read api #
     #######################
-    async def write(self, request: Request, msg_id: int, conn) -> str:
+    async def write(self, request: Request, msg_id: int, conn: Connection) -> str:
         """write msg to conn, If it is not a normal request, you need to set msg_id: -1"""
-        self.before_request_handle(request)
-        for process_request in self._process_request_list:
-            await process_request(request)
-        request_msg: BASE_REQUEST_TYPE = request.gen_request_msg(msg_id)
-        try:
-            await conn.write(request_msg)
-            logging.debug(f"send:%s to %s", request_msg, conn.connection_info)
-        except asyncio.TimeoutError as e:
-            logging.error(f"send to %s timeout, drop data:%s", conn.connection_info, request_msg)
-            raise e
-        except Exception as e:
-            raise e
 
-        if "channel_id" in request.header:
+        async def _write():
+            nonlocal conn
+            if not conn:
+                conn = self.now_conn
+            self.before_request_handle(request, conn)
+
+            for process_request in self._process_request_list:
+                await process_request(request)
+
+            request_msg: BASE_REQUEST_TYPE = request.gen_request_msg(msg_id)
+            try:
+                await conn.write(request_msg)
+            except asyncio.TimeoutError as e:
+                logging.error(f"send to %s timeout, drop data:%s", conn.connection_info, request_msg)
+                raise e
+            except Exception as e:
+                raise e
+
+        if request.num == Constant.CHANNEL_REQUEST:
+            if "channel_id" not in request.header:
+                raise ChannelError('not found channel id in header')
+            await _write()
             return request.header["channel_id"]
         else:
+            await _write()
             resp_future_id: str = f"{conn.sock_tuple}:{msg_id}"
             self._resp_future_dict[resp_future_id] = asyncio.Future()
             return resp_future_id
 
-    async def read(self, resp_future_id: str) -> Response:
+    async def read(self, resp_future_id: str, conn: Connection) -> Response:
         """write response msg(except channel response)"""
         try:
-            return await asyncio.wait_for(self._resp_future_dict[resp_future_id], self._timeout)
+            return await as_first_completed(
+                [asyncio.wait_for(self._resp_future_dict[resp_future_id], self._timeout), conn.result_future]
+            )
         except asyncio.TimeoutError:
             raise asyncio.TimeoutError(f"msg_id:{resp_future_id} request timeout")
 
@@ -276,7 +280,7 @@ class Transport(object):
     ) -> Response:
         """msg request handle"""
         request: Request = Request(Constant.MSG_REQUEST, func_name, {"call_id": call_id, "param": args})
-        if header is not None:
+        if header:
             request.header.update(header)
         response: Response = await self._base_request(request, conn)
         if response.num != Constant.MSG_RESPONSE:
@@ -319,15 +323,15 @@ class Transport(object):
         async def close(_call_id: str):
             del self._channel_queue_dict[_call_id]
 
-        def add_exc_queue(_channel_id: str, conn: Connection):
+        def listen_conn_exc(_channel_id: str, conn: Connection):
             async def _add_exc_queue(exc: Exception):
                 await self._channel_queue_dict[_channel_id].put(exc)
             conn.add_listen_func(_add_exc_queue)
 
-        return Channel(func_name, self.session, create, read, write, close, add_exc_queue)
+        return Channel(func_name, self.session, create, read, write, close, listen_conn_exc)
 
     ##############
-    # processor #
+    # processor  #
     ##############
     def load_processor(self, processor_list: List[BaseProcessor]):
         for middleware in processor_list:
@@ -368,11 +372,11 @@ class Session(object):
             raise RuntimeError("Session has not been created")
         return conn
 
-    async def request(self, method: str, *args, call_id=-1) -> Response:
-        return await self._transport.request(method, *args, call_id, self.conn)
+    async def request(self, method: str, *args, call_id=-1, header: Optional[dict] = None) -> Response:
+        return await self._transport.request(method, *args, call_id, self.conn, header)
 
     async def write(self, request: Request, msg_id: int) -> str:
         return await self._transport.write(request, msg_id, self.conn)
 
     async def read(self, resp_future_id: str) -> Response:
-        return await self._transport.read(resp_future_id)
+        return await self._transport.read(resp_future_id, self.conn)
