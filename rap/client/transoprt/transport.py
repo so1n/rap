@@ -14,7 +14,7 @@ from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
 from rap.common.exceptions import RPCError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
-from rap.common.utlis import MISS_OBJECT, Constant, Event
+from rap.common.utlis import MISS_OBJECT, Constant, Event, as_first_completed
 
 _conn_context: ContextVar[Connection] = ContextVar("conn_context", default=MISS_OBJECT)
 
@@ -214,8 +214,7 @@ class Transport(object):
             conn = self.now_conn
         resp_future_id: str = await self.write(request, msg_id, conn)
         try:
-            for coro in asyncio.as_completed([self.read(resp_future_id), conn.result_future]):
-                return await coro
+            return await as_first_completed([self.read(resp_future_id), conn.result_future])
         finally:
             if resp_future_id in self._resp_future_dict:
                 del self._resp_future_dict[resp_future_id]
@@ -320,7 +319,12 @@ class Transport(object):
         async def close(_call_id: str):
             del self._channel_queue_dict[_call_id]
 
-        return Channel(func_name, self.session, create, read, write, close)
+        def add_exc_queue(_channel_id: str, conn: Connection):
+            async def _add_exc_queue(exc: Exception):
+                await self._channel_queue_dict[_channel_id].put(exc)
+            conn.add_listen_func(_add_exc_queue)
+
+        return Channel(func_name, self.session, create, read, write, close, add_exc_queue)
 
     ##############
     # processor #

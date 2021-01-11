@@ -7,7 +7,7 @@ from rap.client.model import Request, Response
 from rap.common.channel import BaseChannel
 from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError
-from rap.common.utlis import Constant
+from rap.common.utlis import Constant, as_first_completed
 
 if TYPE_CHECKING:
     from rap.client.transoprt.transport import Session
@@ -24,6 +24,7 @@ class Channel(BaseChannel):
         read: Callable[[str], Coroutine[Any, Any, Response]],
         write: Callable[[Request, Connection], Coroutine[Any, Any, str]],
         close: Callable[[str], Coroutine[Any, Any, Any]],
+        add_exc_queue: Callable[[str, Connection], None]
     ):
         self.channel_id: str = str(uuid.uuid4())
         self._func_name: str = fun_name
@@ -32,6 +33,7 @@ class Channel(BaseChannel):
         self._read: Callable[[str], Coroutine[Any, Any, Response]] = read
         self._write: Callable[[Request, Connection], Coroutine[Any, Any, str]] = write
         self._close: Callable[[str], Coroutine[Any, Any, Any]] = close
+        self._add_exc_queue: Callable[[str, Connection], None] = add_exc_queue
         self._is_close: bool = True
 
     async def create(self):
@@ -49,6 +51,7 @@ class Channel(BaseChannel):
             raise ChannelError("channel life cycle error")
         channel_id: str = response.header.get("channel_id")
         self.channel_id = channel_id
+        self._add_exc_queue(channel_id, self._session.conn)
 
     async def _base_read(self) -> Response:
         """base read response msg from channel conn
@@ -56,10 +59,7 @@ class Channel(BaseChannel):
         """
         if self._is_close:
             raise ChannelError(f"channel is closed")
-        response: Union[Response, Exception] = ChannelError('read error')
-        for coro in asyncio.as_completed([self._read(self.channel_id), self._session.conn.result_future]):
-            response = await coro
-            break
+        response: Union[Response, Exception] = await self._read(self.channel_id)
 
         if isinstance(response, Exception):
             raise response
@@ -128,7 +128,6 @@ class Channel(BaseChannel):
         """Actively send a close message and close the channel"""
         if self._is_close:
             return
-        self._session.close()
         life_cycle: str = Constant.DROP
         await self._base_write(None, life_cycle)
 
@@ -144,6 +143,7 @@ class Channel(BaseChannel):
             await asyncio.wait_for(wait_drop_response(), 3)
         except asyncio.TimeoutError:
             logging.warning("wait drop response timeout")
+        self._session.close()
 
     ######################
     # async with support #

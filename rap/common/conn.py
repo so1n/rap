@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import ssl
-from typing import Optional, Tuple
+from typing import Callable, Coroutine, List, Optional, Tuple, Union
 
 import msgpack
 
@@ -23,6 +23,10 @@ class BaseConnection:
         self.result_future: Optional[asyncio.Future] = None
         self.peer_tuple: Optional[Tuple[str, int]] = None
         self.sock_tuple: Optional[Tuple[str, int]] = None
+        self.exc_listen_list: List[Union[Callable, Coroutine]] = []
+
+    def add_listen_func(self, func: Union[Callable, Coroutine]):
+        self.exc_listen_list.append(func)
 
     async def write(self, data: tuple, timeout: Optional[int] = None):
         logging.debug(f"sending %s to %s", data, self.peer_tuple)
@@ -52,8 +56,10 @@ class BaseConnection:
         return None
 
     def set_reader_exc(self, exc: Exception):
-        if self.result_future and not self.result_future.cancelled():
+        if self.result_future and not self.result_future.done():
             self.result_future.set_exception(exc)
+            for func in self.exc_listen_list:
+                asyncio.ensure_future(func(exc))
         self._reader.set_exception(exc)
 
     def close(self):
