@@ -4,7 +4,6 @@ import random
 import string
 import sys
 import time
-
 from dataclasses import dataclass
 from typing import Any, Callable, Coroutine, Dict, List, Set, Union
 
@@ -118,13 +117,13 @@ def gen_new_param_coro(coro: Coroutine, new_param_dict: Dict[str, Any]) -> Corou
     >>> assert value1 == value2
     """
     if not asyncio.iscoroutine(coro):
-        raise TypeError('')
-    qualname: str = coro.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0]
+        raise TypeError("")
+    qualname: str = coro.__qualname__.split(".<locals>", 1)[0].rsplit(".", 1)[0]
     func: Callable = getattr(inspect.getmodule(coro.cr_frame), qualname)
     old_param_dict: Dict[str, Any] = coro.cr_frame.f_locals
     for key, value in new_param_dict.items():
         if key not in old_param_dict:
-            raise KeyError(f'Not found {key} in {old_param_dict.keys()}')
+            raise KeyError(f"Not found {key} in {old_param_dict.keys()}")
         old_param_dict[key] = value
     return func(old_param_dict)
 

@@ -98,8 +98,8 @@ class Client:
         """
         await self.transport.connect()
 
-    def load_processor(self, middleware_list: List[BaseProcessor]):
-        self.transport.load_processor(middleware_list)
+    def load_processor(self, processor_list: List[BaseProcessor]):
+        self.transport.load_processor(processor_list)
 
     #####################
     # register func api #
@@ -142,7 +142,7 @@ class Client:
         *args: Any,
         conn: Optional[Connection] = None,
         header: Optional[dict] = None,
-        session: Optional["Session"] = None
+        session: Optional["Session"] = None,
     ) -> Any:
         """rpc client base call method"""
         response = await self.transport.request(method, *args, conn=conn, header=header, session=session)
@@ -154,14 +154,12 @@ class Client:
         *args: Any,
         conn: Optional[Connection] = None,
         header: Optional[dict] = None,
-        session: Optional["Session"] = None
+        session: Optional["Session"] = None,
     ) -> Any:
         """automatically resolve function names and call call_by_text"""
         return await self.raw_call(func.__name__, *args, conn=conn, header=header, session=session)
 
-    async def iterator_call(
-        self, method: str, *args: Any, header: Optional[dict] = None
-    ) -> Any:
+    async def iterator_call(self, method: str, *args: Any, header: Optional[dict] = None) -> Any:
         """Python-specific generator call"""
         async with AsyncIteratorCall(method, self, *args, header=header) as async_iterator:
             async for result in async_iterator:
@@ -180,3 +178,7 @@ class Client:
             return self._async_register(func)
         elif inspect.isasyncgenfunction(func):
             return self._async_gen_register(func)
+
+    @property
+    def session(self) -> "Session":
+        return self.transport.session

@@ -4,7 +4,8 @@ import random
 import uuid
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from inspect import isfunction
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple, Type, Union
 
 from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
@@ -17,7 +18,7 @@ from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.common.utlis import MISS_OBJECT, Constant, Event, as_first_completed
 
 _conn_context: ContextVar[Connection] = ContextVar("conn_context", default=MISS_OBJECT)
-_session_context: ContextVar['Session'] = ContextVar("session_context", default=MISS_OBJECT)
+_session_context: ContextVar["Session"] = ContextVar("session_context", default=MISS_OBJECT)
 
 
 @dataclass()
@@ -196,7 +197,7 @@ class Transport(object):
     # base one by one request response #
     ####################################
     async def _base_request(
-            self, request: Request, conn: Optional[Connection] = None, session: Optional['Session'] = None
+        self, request: Request, conn: Optional[Connection] = None, session: Optional["Session"] = None
     ) -> Response:
         """gen msg id, send and recv response"""
         msg_id: int = self._msg_id + 1
@@ -213,6 +214,7 @@ class Transport(object):
     @staticmethod
     def before_request_handle(request: Request):
         """check and header"""
+
         def set_header_value(header_key: str, header_Value: Any):
             """set header value"""
             if header_key not in request.header:
@@ -226,7 +228,7 @@ class Transport(object):
     # base write&read api #
     #######################
     async def write(
-            self, request: Request, msg_id: int, conn: Optional[Connection] = None, session: Optional['Session'] = None
+        self, request: Request, msg_id: int, conn: Optional[Connection] = None, session: Optional["Session"] = None
     ) -> Tuple[Connection, str]:
         """write msg to conn, If it is not a normal request, you need to set msg_id: -1"""
         if not session or not session.id:
@@ -254,7 +256,7 @@ class Transport(object):
 
         if request.num == Constant.CHANNEL_REQUEST:
             if "channel_id" not in request.header:
-                raise ChannelError('not found channel id in header')
+                raise ChannelError("not found channel id in header")
             await _write()
             return conn, request.header["channel_id"]
         else:
@@ -282,7 +284,7 @@ class Transport(object):
         call_id=-1,
         conn: Optional[Connection] = None,
         header: Optional[dict] = None,
-        session: Optional["Session"] = None
+        session: Optional["Session"] = None,
     ) -> Response:
         """msg request handle"""
         request: Request = Request(Constant.MSG_REQUEST, func_name, {"call_id": call_id, "param": args})
@@ -325,6 +327,7 @@ class Transport(object):
         def listen_conn_exc(_channel_id: str, conn: Connection):
             async def _add_exc_queue(exc: Exception):
                 await self._channel_queue_dict[_channel_id].put(exc)
+
             conn.add_listen_func(_add_exc_queue)
 
         return Channel(func_name, self.session, create, read, write, close, listen_conn_exc)
@@ -342,6 +345,7 @@ class Session(object):
     """
     `Session` uses `contextvar` to enable transport to use only the same conn in session
     """
+
     def __init__(self, transport: "Transport"):
         self._transport: "Transport" = transport
         self._token: Optional[Token] = None
@@ -374,10 +378,32 @@ class Session(object):
         return self._conn
 
     async def request(self, method: str, *args, call_id=-1, header: Optional[dict] = None) -> Any:
-        return await self._transport.request(method, *args, call_id, conn=self.conn, header=header, session=self)
+        return await self._transport.request(
+            method, *args, call_id=call_id, conn=self.conn, header=header, session=self
+        )
 
     async def write(self, request: Request, msg_id: int):
         await self._transport.write(request, msg_id, session=self)
 
     async def read(self, resp_future_id: str) -> Response:
         return await self._transport.read(resp_future_id, self.conn)
+
+    async def execute(
+        self,
+        obj: Union[Callable, Coroutine, str],
+        arg_list: Optional[List] = None,
+        kwarg_dict: Optional[Dict[str, Any]] = None,
+    ):
+        if asyncio.iscoroutine(obj):
+            assert obj.cr_frame.f_locals["self"].transport is self._transport
+            obj.cr_frame.f_locals["kwargs"]["session"] = self
+        elif isfunction(obj) and arg_list:
+            kwarg_dict = kwarg_dict if kwarg_dict else {}
+            response: Response = await self.request(obj.__name__, *arg_list, **kwarg_dict)
+            return response.body["result"]
+        elif type(obj) is str and arg_list:
+            kwarg_dict = kwarg_dict if kwarg_dict else {}
+            response: Response = await self.request(obj, *arg_list, **kwarg_dict)
+            return response.body["result"]
+        else:
+            raise TypeError(f"Not support {type(obj)}, obj type must: {Callable}, {Coroutine}, {str}")
