@@ -22,7 +22,7 @@ class Channel(BaseChannel):
         session: "Session",
         create: Callable[[str], Coroutine[Any, Any, Any]],
         read: Callable[[str], Coroutine[Any, Any, Response]],
-        write: Callable[[Request, Connection], Coroutine[Any, Any, str]],
+        write: Callable[[Request, "Session"], Coroutine[Any, Any, None]],
         close: Callable[[str], Coroutine[Any, Any, Any]],
         add_listen_conn_exc: Callable[[str, Connection], None]
     ):
@@ -31,7 +31,7 @@ class Channel(BaseChannel):
         self._session: "Session" = session
         self._create: Callable[[str], Coroutine[Any, Any, Any]] = create
         self._read: Callable[[str], Coroutine[Any, Any, Response]] = read
-        self._write: Callable[[Request, Connection], Coroutine[Any, Any, str]] = write
+        self._write: Callable[[Request, "Session"], Coroutine[Any, Any, None]] = write
         self._close: Callable[[str], Coroutine[Any, Any, Any]] = close
         self._add_listen_conn_exc: Callable[[str, Connection], None] = add_listen_conn_exc
         self._is_close: bool = True
@@ -100,7 +100,7 @@ class Channel(BaseChannel):
         else:
             return flag
 
-    async def _base_write(self, body: Any, life_cycle: str) -> str:
+    async def _base_write(self, body: Any, life_cycle: str):
         """base send body to channel"""
         if self._is_close:
             raise ChannelError(f"channel is closed")
@@ -110,7 +110,7 @@ class Channel(BaseChannel):
             body,
             {"channel_life_cycle": life_cycle, "channel_id": self.channel_id},
         )
-        return await self._write(request, self._session.conn)
+        await self._write(request, self._session)
 
     async def read(self) -> Response:
         response: Response = await self._base_read()

@@ -1,11 +1,12 @@
 import asyncio
+import inspect
 import random
 import string
 import sys
 import time
 
 from dataclasses import dataclass
-from typing import Any, Coroutine, Dict, List, Set, Union
+from typing import Any, Callable, Coroutine, Dict, List, Set, Union
 
 __all__ = [
     "Constant",
@@ -13,6 +14,7 @@ __all__ = [
     "MISS_OBJECT",
     "State",
     "as_first_completed",
+    "gen_new_param_coro",
     "gen_random_time_id",
     "gen_random_str_id",
     "get_event_loop",
@@ -105,6 +107,26 @@ def parse_error(exception: Optional[Exception]) -> Optional[Tuple[str, str]]:
     if exception:
         error_response = (type(exception).__name__, str(exception))
     return error_response
+
+
+def gen_new_param_coro(coro: Coroutine, new_param_dict: Dict[str, Any]) -> Coroutine:
+    """
+    >>> async def demo(a: int, b: int) -> int:
+    ...     return a + b
+    >>> value1: int = asyncio.run(demo(1, 3))
+    >>> value2: int = asyncio.run(gen_new_param_coro(demo(1, 5), {"b": 3}))
+    >>> assert value1 == value2
+    """
+    if not asyncio.iscoroutine(coro):
+        raise TypeError('')
+    qualname: str = coro.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0]
+    func: Callable = getattr(inspect.getmodule(coro.cr_frame), qualname)
+    old_param_dict: Dict[str, Any] = coro.cr_frame.f_locals
+    for key, value in new_param_dict.items():
+        if key not in old_param_dict:
+            raise KeyError(f'Not found {key} in {old_param_dict.keys()}')
+        old_param_dict[key] = value
+    return func(old_param_dict)
 
 
 async def as_first_completed(future_list: List[Union[Coroutine, asyncio.Future]], *, timeout=None):

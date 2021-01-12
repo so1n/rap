@@ -49,7 +49,7 @@ class AsyncIteratorCall:
         If no data, the server will return header.status_code = 301 and client must raise StopAsyncIteration Error.
         """
         response: Response = await self._client.transport.request(
-            self._method, *self._args, call_id=self._call_id, conn=self._session.conn, header=self._header
+            self._method, *self._args, call_id=self._call_id, header=self._header, session=self._session
         )
         self._call_id = response.body["call_id"]
         if response.header["status_code"] == 301:
@@ -137,21 +137,30 @@ class Client:
     # client base api #
     ###################
     async def raw_call(
-        self, method: str, *args: Any, conn: Optional[Connection] = None, header: Optional[dict] = None
+        self,
+        method: str,
+        *args: Any,
+        conn: Optional[Connection] = None,
+        header: Optional[dict] = None,
+        session: Optional["Session"] = None
     ) -> Any:
         """rpc client base call method"""
-
-        response = await self.transport.request(method, *args, conn=conn, header=header)
+        response = await self.transport.request(method, *args, conn=conn, header=header, session=session)
         return response.body["result"]
 
     async def call(
-        self, func: Callable, *args: Any, conn: Optional[Connection] = None, header: Optional[dict] = None
+        self,
+        func: Callable,
+        *args: Any,
+        conn: Optional[Connection] = None,
+        header: Optional[dict] = None,
+        session: Optional["Session"] = None
     ) -> Any:
         """automatically resolve function names and call call_by_text"""
-        return await self.raw_call(func.__name__, *args, conn=conn, header=header)
+        return await self.raw_call(func.__name__, *args, conn=conn, header=header, session=session)
 
     async def iterator_call(
-        self, method: str, *args: Any, conn: Optional[Connection] = None, header: Optional[dict] = None
+        self, method: str, *args: Any, header: Optional[dict] = None
     ) -> Any:
         """Python-specific generator call"""
         async with AsyncIteratorCall(method, self, *args, header=header) as async_iterator:
