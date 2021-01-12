@@ -4,7 +4,13 @@ from rap.client import Client
 from rap.client.processor.crypto import CryptoProcessor
 from rap.client.transoprt.channel import Channel
 
-client = Client()
+client = Client(
+    host_list=[
+        "localhost:9000",
+        "localhost:9001",
+        "localhost:9002",
+    ]
+)
 client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
 
 
