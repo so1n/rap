@@ -6,8 +6,14 @@
  - Feature: client support HA strategy
  - Feature: client support load balance
  - Feature: server HA middleware
+ 
+### 0.5.3.5[now]
+ - Remove: remove life cycle
+ - Feature: add conn result future(listen conn exc)
+ - Feature: read conn data add listen conn exc
+ - Refactor: refactor client session and add session execute
 
-### 0.5.3.4[now]
+### 0.5.3.4
  - description: Add code comments; fix bugs; simplify the protocol
  - Doc: add code comments
  - Fix: fix server channel crypto&future cancel bug

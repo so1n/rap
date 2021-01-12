@@ -1,8 +1,7 @@
 import asyncio
 
-from rap.client import Client
-from rap.client.processor.crypto import CryptoProcessor
-from rap.client.transoprt.channel import Channel
+from rap.client import Channel, Client
+from rap.client.processor import CryptoProcessor
 
 client = Client(
     host_list=[

@@ -21,6 +21,8 @@ from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
 from rap.server.response import Response
 
+__all__ = ["Channel", "Request"]
+
 
 class Channel(BaseChannel):
     def __init__(

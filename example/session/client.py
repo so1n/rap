@@ -1,9 +1,8 @@
 import asyncio
 import time
 
-from rap.client import Client, Session
-from rap.client.model import Request, Response
-from rap.client.processor.base import BaseProcessor
+from rap.client import Client, Request, Response, Session
+from rap.client.processor import BaseProcessor
 from rap.common.utlis import Constant
 
 

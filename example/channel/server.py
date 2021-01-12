@@ -3,9 +3,8 @@ import asyncio
 import aioredis
 
 from rap.manager.redis_manager import redis_manager
-from rap.server import Server
-from rap.server.processor.crypto import CryptoProcessor
-from rap.server.requests import Channel
+from rap.server import Channel, Server
+from rap.server.processor import CryptoProcessor
 
 
 async def init_redis():
