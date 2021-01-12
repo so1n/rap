@@ -24,7 +24,7 @@ class Channel(BaseChannel):
         read: Callable[[str], Coroutine[Any, Any, Response]],
         write: Callable[[Request, "Session"], Coroutine[Any, Any, None]],
         close: Callable[[str], Coroutine[Any, Any, Any]],
-        add_listen_conn_exc: Callable[[str, Connection], None]
+        add_listen_conn_exc: Callable[[str, Connection], None],
     ):
         self.channel_id: str = str(uuid.uuid4())
         self._func_name: str = fun_name

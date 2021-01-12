@@ -182,9 +182,7 @@ class Request(object):
                 except Exception:
                     break
 
-    async def channel_handle(
-        self, request: RequestModel, response: ResponseModel
-    ) -> Optional[ResponseModel]:
+    async def channel_handle(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
         func: Union[Callable, ResponseModel] = self.check_func(request, response, "channel")
         if isinstance(func, ResponseModel):
             return func
@@ -253,7 +251,7 @@ class Request(object):
             return response
 
         func: Callable = func_manager[func_key].func
-        if func_manager[func_key].group == 'root' and request.header["_host"] != "127.0.0.1":
+        if func_manager[func_key].group == "root" and request.header["_host"] != "127.0.0.1":
             response.body = FuncNotFoundError(extra_msg=f"func name: {request.func_name}")
             return response
         return func

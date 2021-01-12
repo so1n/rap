@@ -40,9 +40,7 @@ class Response(object):
                 error_response[1],
             )
         elif isinstance(resp.body, Event):
-            return ResponseModel(
-                Constant.SERVER_EVENT, resp.msg_id, resp.func_name, resp.header, resp.body.to_tuple()
-            )
+            return ResponseModel(Constant.SERVER_EVENT, resp.msg_id, resp.func_name, resp.header, resp.body.to_tuple())
         else:
             return resp
 
@@ -56,9 +54,7 @@ class Response(object):
         logging.debug(f"resp: %s", resp)
 
         try:
-            await self._conn.write(
-                (resp.num, resp.msg_id, resp.func_name, resp.header, resp.body), self._timeout
-            )
+            await self._conn.write((resp.num, resp.msg_id, resp.func_name, resp.header, resp.body), self._timeout)
             return True
         except asyncio.TimeoutError:
             raise asyncio.TimeoutError(f"response to {self._conn.peer_tuple} timeout. resp:{resp}")
