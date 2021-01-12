@@ -48,7 +48,11 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
-    rpc_server = Server(start_event_list=[init_redis()], stop_event_list=[close_redis()])
+    rpc_server = Server(
+        host=["localhost:9000", "localhost:9001", "localhost:9002"],
+        start_event_list=[init_redis()],
+        stop_event_list=[close_redis()],
+    )
     rpc_server.load_processor([CryptoProcessor({"test": "keyskeyskeyskeys"})])
     rpc_server.register(async_channel)
     rpc_server.register(echo)

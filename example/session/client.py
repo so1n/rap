@@ -1,9 +1,26 @@
 import asyncio
 import time
 
-from rap.client import Client
-from rap.common.conn import Connection
+from rap.client import Client, Session
+from rap.client.model import Request, Response
+from rap.client.processor.base import BaseProcessor
+from rap.common.utlis import Constant
 
+
+class CheckSessionProcessor(BaseProcessor):
+    def __init__(self):
+        self.session_id: str = ""
+
+    async def process_request(self, request: Request):
+        if request.num in (Constant.CHANNEL_REQUEST, Constant.MSG_REQUEST):
+            assert self.session_id == request.header["session_id"]
+
+    async def process_response(self, response: Response):
+        if response.num in (Constant.CHANNEL_RESPONSE, Constant.MSG_RESPONSE):
+            assert self.session_id == response.header["session_id"]
+
+
+check_session_processor: CheckSessionProcessor = CheckSessionProcessor()
 client = Client(
     host_list=[
         "localhost:9000",
@@ -11,6 +28,7 @@ client = Client(
         "localhost:9002",
     ]
 )
+client.load_processor([check_session_processor])
 
 
 def sync_sum(a: int, b: int) -> int:
@@ -29,22 +47,31 @@ async def async_gen(a: int):
     yield
 
 
-async def no_conn_param_run():
+async def no_param_run():
     print(f"sync result: {await client.call(sync_sum, 1, 2)}")
-    print(f"sync result: {await client.raw_call('sync_sum', 1, 2)}")
     print(f"async result: {await async_sum(1, 3)}")
 
-    # async iterator will reuse session
+    # async iterator will create session or reuse session
     async for i in async_gen(10):
         print(f"async gen result:{i}")
 
 
-async def conn_param_run(conn: Connection):
-    print(f"sync result: {await client.call(sync_sum, 1, 2, conn=conn)}")
-    print(f"sync result: {await client.raw_call('sync_sum', 1, 2, conn=conn)}")
-    print(f"async result: {await async_sum(1, 3, conn=conn)}")
+async def param_run(session: "Session"):
+    print(f"sync result: {await client.call(sync_sum, 1, 2, session=session)}")
+    print(f"sync result: {await client.raw_call('sync_sum', 1, 2, session=session)}")
+    print(f"async result: {await async_sum(1, 3, session=session)}")
 
-    # async iterator will create session
+    # async iterator will create session or reuse session
+    async for i in async_gen(10):
+        print(f"async gen result:{i}")
+
+
+async def execute(session: "Session"):
+    print(f"sync result: {await session.execute(sync_sum, arg_list=[1, 2])}")
+    print(f"sync result: {await session.execute('sync_sum', arg_list=[1, 2])}")
+    print(f"async result: {await session.execute(async_sum(1, 3))}")
+
+    # async iterator will create session or reuse session
     async for i in async_gen(10):
         print(f"async gen result:{i}")
 
@@ -52,9 +79,11 @@ async def conn_param_run(conn: Connection):
 async def run_once():
     s_t = time.time()
     await client.connect()
-    async with client.transport.session as s:
-        await no_conn_param_run()
-        await conn_param_run(s.conn)
+    async with client.session as s:
+        check_session_processor.session_id = s.id
+        await no_param_run()
+        await param_run(s)
+        await execute(s)
     print(time.time() - s_t)
     await client.wait_close()
 
