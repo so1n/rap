@@ -195,15 +195,15 @@ class Transport(object):
     ####################################
     # base one by one request response #
     ####################################
-    async def _base_request(self, request: Request, conn: Connection) -> Response:
+    async def _base_request(
+            self, request: Request, conn: Optional[Connection] = None, session: Optional['Session'] = None
+    ) -> Response:
         """gen msg id, send and recv response"""
         msg_id: int = self._msg_id + 1
         # Avoid too big numbers
         self._msg_id = msg_id & 65535
 
-        if not conn:
-            conn = self.now_conn
-        resp_future_id: str = await self.write(request, msg_id, conn)
+        conn, resp_future_id = await self.write(request, msg_id, conn, session)
         try:
             return await self.read(resp_future_id, conn)
         finally:
@@ -218,12 +218,6 @@ class Transport(object):
             if header_key not in request.header:
                 request.header[header_key] = header_Value
 
-        use_session: bool = False
-
-        session: 'Session' = _session_context.get(MISS_OBJECT)
-        if session is not MISS_OBJECT:
-            request.header["session_id"] = session.id
-
         set_header_value("version", Constant.VERSION)
         set_header_value("user_agent", Constant.USER_AGENT)
         set_header_value("request_id", str(uuid.uuid4()))
@@ -231,13 +225,19 @@ class Transport(object):
     #######################
     # base write&read api #
     #######################
-    async def write(self, request: Request, msg_id: int, conn: Connection) -> str:
+    async def write(
+            self, request: Request, msg_id: int, conn: Optional[Connection] = None, session: Optional['Session'] = None
+    ) -> Tuple[Connection, str]:
         """write msg to conn, If it is not a normal request, you need to set msg_id: -1"""
+        if not session or not session.id:
+            session = _session_context.get(None)
+        if session:
+            conn = session.conn
+            request.header["session_id"] = session.id
+        elif not conn:
+            conn = self.get_random_conn()
 
         async def _write():
-            nonlocal conn
-            if not conn:
-                conn = self.now_conn
             self.before_request_handle(request)
 
             for process_request in self._process_request_list:
@@ -256,12 +256,12 @@ class Transport(object):
             if "channel_id" not in request.header:
                 raise ChannelError('not found channel id in header')
             await _write()
-            return request.header["channel_id"]
+            return conn, request.header["channel_id"]
         else:
             await _write()
             resp_future_id: str = f"{conn.sock_tuple}:{msg_id}"
             self._resp_future_dict[resp_future_id] = asyncio.Future()
-            return resp_future_id
+            return conn, resp_future_id
 
     async def read(self, resp_future_id: str, conn: Connection) -> Response:
         """write response msg(except channel response)"""
@@ -276,13 +276,19 @@ class Transport(object):
     # one by one request #
     ######################
     async def request(
-        self, func_name: str, *args, call_id=-1, conn: Optional[Connection] = None, header: Optional[dict] = None
+        self,
+        func_name: str,
+        *args,
+        call_id=-1,
+        conn: Optional[Connection] = None,
+        header: Optional[dict] = None,
+        session: Optional["Session"] = None
     ) -> Response:
         """msg request handle"""
         request: Request = Request(Constant.MSG_REQUEST, func_name, {"call_id": call_id, "param": args})
         if header:
             request.header.update(header)
-        response: Response = await self._base_request(request, conn)
+        response: Response = await self._base_request(request, conn=conn, session=session)
         if response.num != Constant.MSG_RESPONSE:
             raise RPCError("request num error")
         if "exc" in response.body:
@@ -300,16 +306,6 @@ class Transport(object):
         return self._conn_dict[key].conn
 
     @property
-    def now_conn(self) -> Connection:
-        session: 'Session' = _session_context.get(MISS_OBJECT)
-        if session is MISS_OBJECT:
-            return self.get_random_conn()
-        elif session.conn is None:
-            return self.get_random_conn()
-        else:
-            return session.conn
-
-    @property
     def session(self) -> "Session":
         return Session(self)
 
@@ -320,8 +316,8 @@ class Transport(object):
         async def read(_channel_id: str) -> Response:
             return await self._channel_queue_dict[_channel_id].get()
 
-        async def write(request: Request, conn: Connection) -> str:
-            return await self.write(request, -1, conn)
+        async def write(request: Request, session: "Session"):
+            await self.write(request, -1, session=session)
 
         async def close(_call_id: str):
             del self._channel_queue_dict[_call_id]
@@ -377,11 +373,11 @@ class Session(object):
     def conn(self) -> Connection:
         return self._conn
 
-    async def request(self, method: str, *args, call_id=-1, header: Optional[dict] = None) -> Response:
-        return await self._transport.request(method, *args, call_id, self.conn, header)
+    async def request(self, method: str, *args, call_id=-1, header: Optional[dict] = None) -> Any:
+        return await self._transport.request(method, *args, call_id, conn=self.conn, header=header, session=self)
 
-    async def write(self, request: Request, msg_id: int) -> str:
-        return await self._transport.write(request, msg_id, self.conn)
+    async def write(self, request: Request, msg_id: int):
+        await self._transport.write(request, msg_id, session=self)
 
     async def read(self, resp_future_id: str) -> Response:
         return await self._transport.read(resp_future_id, self.conn)
