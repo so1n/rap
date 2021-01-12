@@ -2,8 +2,7 @@ import asyncio
 from typing import Iterator
 
 from rap.server import Server
-from rap.server.middleware.conn.conn_limit import ConnLimitMiddleware
-from rap.server.middleware.msg.access import AccessMsgMiddleware
+from rap.server.middleware import AccessMsgMiddleware, ConnLimitMiddleware
 
 
 def sync_sum(a: int, b: int) -> int:

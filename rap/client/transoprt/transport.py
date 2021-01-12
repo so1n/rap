@@ -17,8 +17,8 @@ from rap.common.exceptions import ChannelError, RPCError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.common.utlis import MISS_OBJECT, Constant, Event, as_first_completed
 
-_conn_context: ContextVar[Connection] = ContextVar("conn_context", default=MISS_OBJECT)
-_session_context: ContextVar["Session"] = ContextVar("session_context", default=MISS_OBJECT)
+_session_context: ContextVar["Optional[Session]"] = ContextVar("session_context", default=MISS_OBJECT)
+__all__ = ["Session", "Transport"]
 
 
 @dataclass()
@@ -212,11 +212,11 @@ class Transport(object):
                 del self._resp_future_dict[resp_future_id]
 
     @staticmethod
-    def before_request_handle(request: Request):
+    def before_write_handle(request: Request):
         """check and header"""
 
         def set_header_value(header_key: str, header_Value: Any):
-            """set header value"""
+            """if key not in header, set header value"""
             if header_key not in request.header:
                 request.header[header_key] = header_Value
 
@@ -240,7 +240,7 @@ class Transport(object):
             conn = self.get_random_conn()
 
         async def _write():
-            self.before_request_handle(request)
+            self.before_write_handle(request)
 
             for process_request in self._process_request_list:
                 await process_request(request)
@@ -332,9 +332,9 @@ class Transport(object):
 
         return Channel(func_name, self.session, create, read, write, close, listen_conn_exc)
 
-    ##############
-    # processor  #
-    ##############
+    #############
+    # processor #
+    #############
     def load_processor(self, processor_list: List[BaseProcessor]):
         for middleware in processor_list:
             self._process_request_list.append(middleware.process_request)

@@ -13,6 +13,9 @@ if TYPE_CHECKING:
     from rap.client.transoprt.transport import Session
 
 
+__all__ = ["Channel"]
+
+
 class Channel(BaseChannel):
     """support channel use"""
 

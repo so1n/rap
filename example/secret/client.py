@@ -1,7 +1,7 @@
 import asyncio
 
 from rap.client import Client
-from rap.client.processor.crypto import CryptoProcessor
+from rap.client.processor import CryptoProcessor
 
 client = Client()
 client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
