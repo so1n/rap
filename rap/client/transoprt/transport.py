@@ -283,11 +283,13 @@ class Transport(object):
         *args,
         call_id=-1,
         conn: Optional[Connection] = None,
+        group: str = "normal",
         header: Optional[dict] = None,
         session: Optional["Session"] = None,
     ) -> Response:
         """msg request handle"""
-        request: Request = Request(Constant.MSG_REQUEST, func_name, {"call_id": call_id, "param": args})
+        # if len([i for i in args if i is not MISS_OBJECT]) > 0
+        request: Request = Request(Constant.MSG_REQUEST, func_name, {"call_id": call_id, "param": args, "group": group})
         if header:
             request.header.update(header)
         response: Response = await self._base_request(request, conn=conn, session=session)
