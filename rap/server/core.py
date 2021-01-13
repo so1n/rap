@@ -179,7 +179,6 @@ class Server(object):
                 return
             try:
                 request: RequestModel = RequestModel(*_request_msg)
-                request.header["_host"] = conn.peer_tuple
             except Exception as closer_e:
                 logging.error(f"{conn.peer_tuple} send bad msg:{_request_msg}, error:{closer_e}")
                 await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "protocol error")))

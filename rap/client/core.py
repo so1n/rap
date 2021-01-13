@@ -142,10 +142,11 @@ class Client:
         *args: Any,
         conn: Optional[Connection] = None,
         header: Optional[dict] = None,
+        group: str = "normal",
         session: Optional["Session"] = None,
     ) -> Any:
         """rpc client base call method"""
-        response = await self.transport.request(method, *args, conn=conn, header=header, session=session)
+        response = await self.transport.request(method, *args, conn=conn, group=group, header=header, session=session)
         return response.body["result"]
 
     async def call(

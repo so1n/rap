@@ -155,7 +155,7 @@ class Request(object):
 
         # check type_id
         if response.num is Constant.SERVER_ERROR_RESPONSE:
-            logging.error(f"parse request data: {request} from {request.header['_host']} error")
+            logging.error(f"parse request data: {request} from {self._conn.peer_tuple} error")
             response.body = ServerError(error_content)
             return response
 
@@ -244,17 +244,17 @@ class Request(object):
             response.body = ChannelError("channel life cycle error")
             return response
 
-    @staticmethod
-    def check_func(request: RequestModel, response: ResponseModel, type_: str) -> Union[Callable, ResponseModel]:
-        func_key: str = f"normal:{type_}:{request.func_name}"
+    def check_func(self, request: RequestModel, response: ResponseModel, type_: str) -> Union[Callable, ResponseModel]:
+        group: str = request.body.get("group", "normal")
+        func_key: str = f"{group}:{type_}:{request.func_name}"
 
         if func_key not in func_manager:
             response.body = FuncNotFoundError(extra_msg=f"func name: {request.func_name}")
             return response
 
         func: Callable = func_manager[func_key].func
-        if func_manager[func_key].group == "root" and request.header["_host"] != "127.0.0.1":
-            response.body = FuncNotFoundError(extra_msg=f"func name: {request.func_name}")
+        if func_manager[func_key].group == "root" and self._conn.peer_tuple[0] != "127.0.0.1":
+            response.body = FuncNotFoundError(f"No permission to call:`{request.func_name}`")
             return response
         return func
 
