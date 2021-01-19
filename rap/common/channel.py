@@ -1,4 +1,33 @@
-from typing import Any
+from typing import Any, Union, TYPE_CHECKING
+
+from rap.common.exceptions import ChannelError
+
+if TYPE_CHECKING:
+    from rap.client.model import Response
+    from rap.server.model import ResponseModel
+
+
+class AsyncIterResponse(object):
+    def __init__(self, channel: "BaseChannel"):
+        self.channel = channel
+
+    def __aiter__(self) -> "AsyncIterResponse":
+        return self
+
+    async def __anext__(self) -> "Union[Response, ResponseModel]":
+        try:
+            return await self.channel.read()
+        except ChannelError:
+            raise StopAsyncIteration()
+
+
+class AsyncIterBody(AsyncIterResponse):
+
+    async def __anext__(self) -> "Union[Response, ResponseModel]":
+        try:
+            return await self.channel.read_body()
+        except ChannelError:
+            raise StopAsyncIteration()
 
 
 class BaseChannel(object):
@@ -52,8 +81,8 @@ class BaseChannel(object):
     #####################
     # async for support #
     #####################
-    def __aiter__(self) -> "BaseChannel":
-        raise NotImplementedError
+    def iter_response(self) -> AsyncIterResponse:
+        return AsyncIterResponse(self)
 
-    async def __anext__(self):
-        raise NotImplementedError
+    def iter_body(self) -> AsyncIterBody:
+        return AsyncIterBody(self)

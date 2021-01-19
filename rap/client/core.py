@@ -42,7 +42,7 @@ class AsyncIteratorCall:
     def __aiter__(self) -> "AsyncIteratorCall":
         return self
 
-    async def __anext__(self):
+    async def __anext__(self) -> Any:
         """
         The server will return the call id of the generator function,
         and the client can continue to get data based on the call id.
