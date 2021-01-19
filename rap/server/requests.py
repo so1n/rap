@@ -159,8 +159,12 @@ class Request(object):
             response.body = ServerError(error_content)
             return response
 
-        dispatch_func: Callable = self.dispatch_func_dict[request.num]
-        return await dispatch_func(request, response)
+        try:
+            dispatch_func: Callable = self.dispatch_func_dict[request.num]
+            return await dispatch_func(request, response)
+        except Exception as e:
+            response.body = RpcRunTimeError(str(e))
+            return response
 
     async def ping_event(self):
         while not self._conn.is_closed():
@@ -245,10 +249,16 @@ class Request(object):
             return response
 
     def check_func(self, request: RequestModel, response: ResponseModel, type_: str) -> Union[Callable, ResponseModel]:
-        group: str = request.body.get("group", "normal")
+        group: str = "normal"
+        try:
+            group: str = request.body.get("group", "normal")
+        except AttributeError:
+            pass
+
         func_key: str = f"{group}:{type_}:{request.func_name}"
 
         if func_key not in func_manager:
+            print(response)
             response.body = FuncNotFoundError(extra_msg=f"func name: {request.func_name}")
             return response
 

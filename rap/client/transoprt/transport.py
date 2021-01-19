@@ -146,10 +146,9 @@ class Transport(object):
 
         resp_future_id: str = f"{conn.sock_tuple}:{response.msg_id}"
         channel_id: Optional[str] = response.header.get("channel_id")
-        is_channel_resp: bool = bool(channel_id) and (response.num == Constant.CHANNEL_RESPONSE)
 
         def put_exc_to_receiver(put_exc: Exception):
-            if is_channel_resp and channel_id in self._channel_queue_dict:
+            if channel_id and channel_id in self._channel_queue_dict:
                 self._channel_queue_dict[channel_id].put_nowait(put_exc)
             elif response.msg_id != -1 and resp_future_id in self._resp_future_dict:
                 self._resp_future_dict[resp_future_id].set_exception(put_exc)
@@ -180,7 +179,7 @@ class Transport(object):
                 return
 
         # put msg to channel
-        if is_channel_resp:
+        if channel_id:
             if channel_id not in self._channel_queue_dict:
                 logging.error(f"recv {channel_id} msg, but {channel_id} not create")
             else:
