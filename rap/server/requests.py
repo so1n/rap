@@ -91,15 +91,6 @@ class Channel(BaseChannel):
             self.future.cancel()
         self._close()
 
-    def __aiter__(self) -> "Channel":
-        return self
-
-    async def __anext__(self):
-        try:
-            return await self.read_body()
-        except ChannelError:
-            raise StopAsyncIteration()
-
 
 class Request(object):
     def __init__(

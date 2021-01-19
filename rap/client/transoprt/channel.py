@@ -159,18 +159,6 @@ class Channel(BaseChannel):
     async def __aexit__(self, *args: Tuple):
         await self.close()
 
-    #####################
-    # async for support #
-    #####################
-    def __aiter__(self) -> "Channel":
-        return self
-
-    async def __anext__(self):
-        try:
-            return await self.read_body()
-        except ChannelError:
-            raise StopAsyncIteration()
-
     @property
     def is_close(self) -> bool:
         return self._is_close

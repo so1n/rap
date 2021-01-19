@@ -4,6 +4,7 @@ import aioredis
 
 from rap.manager.redis_manager import redis_manager
 from rap.server import Channel, Server
+from rap.server.model import ResponseModel
 from rap.server.processor import CryptoProcessor
 
 
@@ -29,14 +30,25 @@ async def async_channel(channel: Channel):
             await channel.write("I don't know")
 
 
-async def echo(channel: Channel):
+async def echo_body(channel: Channel):
     cnt: int = 0
-    async for body in channel:
+    async for body in channel.iter_body():
         await asyncio.sleep(1)
         cnt += 1
         if cnt > 10:
             break
         await channel.write(body)
+
+
+async def echo_response(channel: Channel):
+    cnt: int = 0
+    async for response in channel.iter_response():
+        response: ResponseModel = response  # IDE cannot check
+        await asyncio.sleep(1)
+        cnt += 1
+        if cnt > 10:
+            break
+        await channel.write(response.body)
 
 
 if __name__ == "__main__":
@@ -54,7 +66,8 @@ if __name__ == "__main__":
     )
     rpc_server.load_processor([CryptoProcessor({"test": "keyskeyskeyskeys"})])
     rpc_server.register(async_channel)
-    rpc_server.register(echo)
+    rpc_server.register(echo_body)
+    rpc_server.register(echo_response)
 
     loop.run_until_complete(rpc_server.create_server())
     try:
