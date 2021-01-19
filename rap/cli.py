@@ -1,6 +1,5 @@
 import argparse
 import asyncio
-
 from typing import List, Tuple, Union
 
 from rap.client import Client
@@ -35,7 +34,7 @@ def print_table(table_list: List[List[str]]):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--secret_key", default=None, help="conn server secret key")
-    parser.add_argument("-m", "--mode", help="`d` display func list, `r` run func", choices=['d', 'r'])
+    parser.add_argument("-m", "--mode", help="`d` display func list, `r` run func", choices=["d", "r"])
     parser.add_argument("-k", "--key", help="secret key")
 
     parser.add_argument("-n", "--name", help="func name")
@@ -49,7 +48,7 @@ if __name__ == "__main__":
     group: str = args.group
 
     if type(args) is str:
-        arg_list = arg.split(',')
+        arg_list = arg.split(",")
     else:
         arg_list = arg
 
@@ -59,16 +58,16 @@ if __name__ == "__main__":
         client.load_processor([CryptoProcessor(*secret_key.split(","))])
     loop.run_until_complete(client.connect())
 
-    if mode == 'd':
+    if mode == "d":
         result_tuple: Tuple[Tuple[str]] = loop.run_until_complete(client.raw_call("list", group="root"))
-        column_list: List[str] = ['Name', 'Group', 'Type', 'Path', 'Module']
+        column_list: List[str] = ["Name", "Group", "Type", "Path", "Module"]
         display_table_list: List[List[str]] = [column_list]
         for func_info in result_tuple:
             func_key, module_str, path_str = func_info
-            func_group, func_type, func_name = func_key.split(':')
+            func_group, func_type, func_name = func_key.split(":")
             display_table_list.append([func_name, func_group, func_type, path_str, module_str])
         print_table(display_table_list)
-    elif mode == 'r' and func_name:
+    elif mode == "r" and func_name:
         print(loop.run_until_complete(client.raw_call(func_name, *arg_list, group=group)))
 
     loop.run_until_complete(client.wait_close())

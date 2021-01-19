@@ -11,7 +11,10 @@
  - Remove: remove life cycle
  - Feature: add conn result future(listen conn exc)
  - Feature: read conn data add listen conn exc
+ - Feature: print cli func list table
+ - Feature: channel add method `iter_body` & `iter_response`
  - Refactor: refactor client session and add session execute
+ - Refactor: func manager call func
 
 ### 0.5.3.4
  - description: Add code comments; fix bugs; simplify the protocol

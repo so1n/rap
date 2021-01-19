@@ -1,4 +1,4 @@
-from typing import Any, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Union
 
 from rap.common.exceptions import ChannelError
 
@@ -22,7 +22,6 @@ class AsyncIterResponse(object):
 
 
 class AsyncIterBody(AsyncIterResponse):
-
     async def __anext__(self) -> "Union[Response, ResponseModel]":
         try:
             return await self.channel.read_body()
