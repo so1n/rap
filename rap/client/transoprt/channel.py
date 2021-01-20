@@ -73,36 +73,6 @@ class Channel(BaseChannel):
             raise ChannelError("recv drop event, close channel")
         return response
 
-    async def loop(self, flag: bool = True) -> bool:
-        """In the channel function, elegantly replace `while True`
-        bad demo
-        >>> async def channel_demo(channel: Channel):
-        ...     while True:
-        ...         pass
-
-        good demo
-        >>> async def channel_demo(channel: Channel):
-        ...     while await channel.loop():
-        ...         pass
-
-        bad demo
-        >>> cnt: int = 0
-        >>> async def channel_demo(channel: Channel):
-        ...     while cnt < 3:
-        ...         pass
-
-        good demo
-        >>> cnt: int = 0
-        >>> async def channel_demo(channel: Channel):
-        ...     while await channel.loop(cnt < 3):
-        ...         pass
-        """
-        await asyncio.sleep(0)
-        if self._is_close:
-            return not self._is_close
-        else:
-            return flag
-
     async def _base_write(self, body: Any, life_cycle: str):
         """base send body to channel"""
         if self._is_close:
@@ -158,7 +128,3 @@ class Channel(BaseChannel):
 
     async def __aexit__(self, *args: Tuple):
         await self.close()
-
-    @property
-    def is_close(self) -> bool:
-        return self._is_close

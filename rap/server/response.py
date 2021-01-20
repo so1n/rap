@@ -17,7 +17,7 @@ class Response(object):
         self,
         conn: ServerConnection,
         timeout: Optional[int] = None,
-        processor_list: Optional[List[BaseProcessor]] = None
+        processor_list: Optional[List[BaseProcessor]] = None,
     ):
         self._conn: ServerConnection = conn
         self._timeout: Optional[int] = timeout

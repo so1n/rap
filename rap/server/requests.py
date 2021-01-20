@@ -63,17 +63,6 @@ class Channel(BaseChannel):
         response: ResponseModel = await self.read()
         return response.body
 
-    @property
-    def is_close(self) -> bool:
-        return self._is_close
-
-    async def loop(self, flag: bool = True) -> bool:
-        await asyncio.sleep(0.01)
-        if self._is_close:
-            return not self._is_close
-        else:
-            return flag
-
     async def close(self):
         if self._is_close:
             logging.debug("already close channel %s", self.channel_id)
@@ -221,7 +210,7 @@ class Request(object):
             async def add_exc_to_queue(exc):
                 await channel.queue.put(exc)
 
-            self._conn.add_listen_func(add_exc_to_queue)
+            self._conn.add_listen_exc_func(add_exc_to_queue)
             channel.future = asyncio.ensure_future(channel_func())
             channel.future.add_done_callback(future_done_callback)
 
@@ -240,9 +229,9 @@ class Request(object):
             return response
 
     def check_func(self, request: RequestModel, response: ResponseModel, type_: str) -> Union[Callable, ResponseModel]:
-        group: str = "normal"
+        group: str = "default"
         try:
-            group: str = request.body.get("group", "normal")
+            group: str = request.body.get("group", "default")
         except AttributeError:
             pass
 
@@ -250,7 +239,7 @@ class Request(object):
 
         if func_key not in func_manager:
             print(response)
-            response.body = FuncNotFoundError(extra_msg=f"func name: {request.func_name}")
+            response.body = FuncNotFoundError(extra_msg=f"name: {request.func_name}")
             return response
 
         func: Callable = func_manager[func_key].func
@@ -300,11 +289,7 @@ class Request(object):
                         self._generator_dict[call_id] = result
                         result = await result.__anext__()
         except Exception as e:
-            if isinstance(e, BaseRapError):
-                result = e
-            else:
-                logging.exception(f"run:{func} param:{param} error:{e}.")
-                result = RpcRunTimeError("execute func error")
+            result = e
         return call_id, result
 
     async def msg_handle(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
@@ -315,7 +300,7 @@ class Request(object):
         try:
             call_id: int = request.body["call_id"]
         except KeyError:
-            response.body = ParseError("body miss params")
+            response.body = ParseError(extra_msg="body miss params")
             return response
         param: str = request.body.get("param")
         new_call_id, result = await self._msg_handle(request, call_id, func, param)

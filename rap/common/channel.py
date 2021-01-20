@@ -1,3 +1,4 @@
+import asyncio
 from typing import TYPE_CHECKING, Any, Union
 
 from rap.common.exceptions import ChannelError
@@ -30,6 +31,8 @@ class AsyncIterBody(AsyncIterResponse):
 
 
 class BaseChannel(object):
+    _is_close: bool
+
     async def loop(self, flag: bool = True) -> bool:
         """In the channel function, elegantly replace `while True`
         bad demo
@@ -54,7 +57,11 @@ class BaseChannel(object):
         ...     while await channel.loop(cnt < 3):
         ...         pass
         """
-        raise NotImplementedError
+        await asyncio.sleep(0)
+        if self._is_close:
+            return not self._is_close
+        else:
+            return flag
 
     async def read(self) -> Any:
         """read msg obj from channel"""
@@ -75,7 +82,7 @@ class BaseChannel(object):
     @property
     def is_close(self) -> bool:
         """whether the channel is closed"""
-        raise NotImplementedError
+        return self._is_close
 
     #####################
     # async for support #

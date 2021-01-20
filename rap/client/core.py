@@ -142,7 +142,7 @@ class Client:
         *args: Any,
         conn: Optional[Connection] = None,
         header: Optional[dict] = None,
-        group: str = "normal",
+        group: str = "default",
         session: Optional["Session"] = None,
     ) -> Any:
         """rpc client base call method"""

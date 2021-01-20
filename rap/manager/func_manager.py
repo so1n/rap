@@ -91,17 +91,19 @@ class FuncManager(object):
                 raise RegisteredError("Can't load root func")
 
             func = self._load_func(path, func_str)
+            if not name:
+                name = func.__name__
             self.register(func, name, group)
             return f"load {func_str} from {path} success"
         except Exception as e:
             raise RegisteredError(f"load {func_str} from {path} fail, {str(e)}")
 
-    def _reload(self, path: str, func_str: str, name: Optional[str] = None, group: str = "default") -> str:
+    def _reload(self, path: str, func_str: str, group: str = "default") -> str:
         try:
             if group == "root":
                 raise RegisteredError("Can't load root func")
-
             func = self._load_func(path, func_str)
+            name = func.__name__
             type_: str = self._get_func_type(func)
             func_key: str = f"{group}:{type_}:{name}"
             if func_key not in self.func_dict:

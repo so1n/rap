@@ -5,7 +5,7 @@ from types import FunctionType
 from typing import Any, Callable, Coroutine, List, Optional, Set, Union
 
 from rap.common.conn import ServerConnection
-from rap.common.exceptions import RpcRunTimeError
+from rap.common.exceptions import ServerError
 from rap.common.middleware import BaseMiddleware
 from rap.common.types import BASE_REQUEST_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utlis import Constant, Event
@@ -125,7 +125,7 @@ class Server(object):
                 self.load_stop_event(processor.stop_event_list)
 
     @staticmethod
-    def register(func: Optional[Callable], name: Optional[str] = None, group: str = "normal"):
+    def register(func: Optional[Callable], name: Optional[str] = None, group: str = "default"):
         func_manager.register(func, name, group=group)
 
     @staticmethod
@@ -190,7 +190,7 @@ class Server(object):
                 await response_handle(response)
             except Exception as closer_e:
                 logging.exception(f"raw_request handle error e")
-                await response_handle(ResponseModel(body=RpcRunTimeError(str(closer_e))))
+                await response_handle(ResponseModel(body=ServerError(str(closer_e))))
 
         while not conn.is_closed():
             try:

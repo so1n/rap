@@ -13,6 +13,11 @@ class BaseRapError(Exception):
         super().__init__(message)
 
 
+class RPCError(BaseRapError):
+    status_code: int = 500
+    message: str = "Rpc error"
+
+
 class AuthError(BaseRapError):
     status_code: int = 501
     message: str = "Auth Error"
@@ -41,11 +46,6 @@ class ProtocolError(BaseRapError):
 class RegisteredError(BaseRapError):
     status_code: int = 506
     message: str = "Register Error"
-
-
-class RPCError(BaseRapError):
-    status_code: int = 507
-    message: str = "Rpc error"
 
 
 class RpcRunTimeError(BaseRapError):
