@@ -159,14 +159,14 @@ class Server(object):
         await self._conn_handle(conn)
 
     async def _conn_handle(self, conn: ServerConnection):
-        response_handle: Response = Response(conn, self._timeout, filter_list=self._processor_list)
+        response_handle: Response = Response(conn, self._timeout, processor_list=self._processor_list)
         request_handle: Request = Request(
             conn,
             self._run_timeout,
             response_handle,
             self._ping_fail_cnt,
             self._ping_sleep_time,
-            filter_list=self._processor_list,
+            processor_list=self._processor_list,
         )
         for middleware in self._middleware_list:
             if isinstance(middleware, BaseMsgMiddleware):

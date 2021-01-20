@@ -32,10 +32,10 @@ class CryptoProcessor(BaseProcessor):
     def modify_nonce_timeout(self, timeout: int) -> None:
         self._nonce_timeout = timeout
 
-    async def process_request(self, request: RequestModel):
+    async def process_request(self, request: RequestModel) -> RequestModel:
         """decrypt request body"""
         if type(request.body) is not bytes:
-            return
+            return request
         crypto_id: str = request.header.get("crypto_id", None)
         crypto: Crypto = crypto_manager.get_crypto_by_key_id(crypto_id)
         # check crypto
@@ -62,15 +62,18 @@ class CryptoProcessor(BaseProcessor):
 
             # set share data
             request.stats.crypto = crypto
+
+            return request
         except Exception as e:
             raise CryptoError(str(e)) from e
 
-    async def process_response(self, response: ResponseModel):
+    async def process_response(self, response: ResponseModel) -> ResponseModel:
         """encrypt response body"""
         if response.body and response.num != Constant.SERVER_ERROR_RESPONSE:
             try:
                 crypto: Crypto = response.stats.crypto
             except AttributeError:
-                return
+                return response
             response.body = {"body": response.body, "timestamp": int(time.time()), "nonce": gen_random_time_id()}
             response.body = crypto.encrypt_object(response.body)
+        return response

@@ -140,7 +140,7 @@ class Transport(object):
         exc: Optional[Exception] = None
         try:
             for process_response in self._process_response_list:
-                await process_response(response)
+                response = await process_response(response)
         except Exception as e:
             exc = e
 
@@ -238,13 +238,13 @@ class Transport(object):
         elif not conn:
             conn = self.get_random_conn()
 
-        async def _write():
-            self.before_write_handle(request)
+        async def _write(_request: Request):
+            self.before_write_handle(_request)
 
             for process_request in self._process_request_list:
-                await process_request(request)
+                _request = await process_request(_request)
 
-            request_msg: BASE_REQUEST_TYPE = request.gen_request_msg(msg_id)
+            request_msg: BASE_REQUEST_TYPE = _request.gen_request_msg(msg_id)
             try:
                 await conn.write(request_msg)
             except asyncio.TimeoutError as e:
@@ -256,10 +256,10 @@ class Transport(object):
         if request.num == Constant.CHANNEL_REQUEST:
             if "channel_id" not in request.header:
                 raise ChannelError("not found channel id in header")
-            await _write()
+            await _write(request)
             return conn, request.header["channel_id"]
         else:
-            await _write()
+            await _write(request)
             resp_future_id: str = f"{conn.sock_tuple}:{msg_id}"
             self._resp_future_dict[resp_future_id] = asyncio.Future()
             return conn, resp_future_id

@@ -17,8 +17,8 @@ class BaseProcessor(object):
     def register(func: Callable, group: str = "processor"):
         func_manager.register(func, group=group)
 
-    async def process_request(self, request: RequestModel):
-        pass
+    async def process_request(self, request: RequestModel) -> RequestModel:
+        return request
 
-    async def process_response(self, response: ResponseModel):
-        pass
+    async def process_response(self, response: ResponseModel) -> RequestModel:
+        return response

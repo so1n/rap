@@ -100,14 +100,14 @@ class Request(object):
         response: Response,
         ping_fail_cnt: int,
         ping_sleep_time: int,
-        filter_list: Optional[List[BaseProcessor]] = None,
+        processor_list: Optional[List[BaseProcessor]] = None,
     ):
         self._conn: ServerConnection = conn
         self._run_timeout: int = run_timeout
         self._response: Response = response
         self._ping_sleep_time: int = ping_sleep_time
         self._ping_fail_cnt: int = ping_fail_cnt
-        self._filter_list: Optional[List[BaseProcessor]] = filter_list
+        self._processor_list: Optional[List[BaseProcessor]] = processor_list
 
         self.dispatch_func_dict: Dict[int, Callable] = {
             Constant.CLIENT_EVENT_RESPONSE: self.event,
@@ -138,8 +138,8 @@ class Request(object):
         response.header.update(request.header)
 
         try:
-            for filter_ in self._filter_list:
-                await filter_.process_request(request)
+            for processor in self._processor_list:
+                request = await processor.process_request(request)
         except Exception as e:
             response.body = e
             return response
