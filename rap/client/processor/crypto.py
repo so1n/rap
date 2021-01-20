@@ -61,16 +61,18 @@ class CryptoProcessor(BaseProcessor):
         else:
             self._nonce_set.add(nonce, self._timeout)
 
-    async def process_request(self, request: Request):
+    async def process_request(self, request: Request) -> Request:
         request.body = {"body": request.body, "timestamp": int(time.time()), "nonce": gen_random_time_id()}
         request.header["crypto_id"] = self._crypto_id
         request.body = self._crypto.encrypt_object(request.body)
+        return request
 
-    async def process_response(self, response: Response):
+    async def process_response(self, response: Response) -> Response:
         try:
             if type(response.body) is bytes:
                 response.body = self._crypto.decrypt_object(response.body)
                 self._body_handle(response.body)
                 response.body = response.body["body"]
+            return response
         except Exception as e:
             raise CryptoError(f"Can't decrypt body.") from e

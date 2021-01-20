@@ -14,11 +14,14 @@ __all__ = ["Response"]
 
 class Response(object):
     def __init__(
-        self, conn: ServerConnection, timeout: Optional[int] = None, filter_list: Optional[List[BaseProcessor]] = None
+        self,
+        conn: ServerConnection,
+        timeout: Optional[int] = None,
+        processor_list: Optional[List[BaseProcessor]] = None
     ):
         self._conn: ServerConnection = conn
         self._timeout: Optional[int] = timeout
-        self._filter_list: Optional[List[BaseProcessor]] = filter_list
+        self._processor_list: Optional[List[BaseProcessor]] = processor_list
 
     @staticmethod
     async def response_handle(resp: ResponseModel) -> ResponseModel:
@@ -51,8 +54,8 @@ class Response(object):
             return False
 
         resp = await self.response_handle(resp)
-        for filter_ in reversed(self._filter_list):
-            await filter_.process_response(resp)
+        for processor in reversed(self._processor_list):
+            resp = await processor.process_response(resp)
         logging.debug(f"resp: %s", resp)
 
         try:
