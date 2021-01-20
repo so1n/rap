@@ -10,13 +10,15 @@ class CheckSessionProcessor(BaseProcessor):
     def __init__(self):
         self.session_id: str = ""
 
-    async def process_request(self, request: Request):
+    async def process_request(self, request: Request) -> Request:
         if request.num in (Constant.CHANNEL_REQUEST, Constant.MSG_REQUEST):
             assert self.session_id == request.header["session_id"]
+        return request
 
-    async def process_response(self, response: Response):
+    async def process_response(self, response: Response) -> Response:
         if response.num in (Constant.CHANNEL_RESPONSE, Constant.MSG_RESPONSE):
             assert self.session_id == response.header["session_id"]
+        return response
 
 
 check_session_processor: CheckSessionProcessor = CheckSessionProcessor()

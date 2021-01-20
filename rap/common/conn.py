@@ -25,7 +25,7 @@ class BaseConnection:
         self.sock_tuple: Optional[Tuple[str, int]] = None
         self.exc_listen_set: Set[Union[Callable, Coroutine]] = set()
 
-    def add_listen_func(self, func: Union[Callable, Coroutine]):
+    def add_listen_exc_func(self, func: Union[Callable, Coroutine]):
         self.exc_listen_set.add(func)
 
     async def write(self, data: tuple, timeout: Optional[int] = None):

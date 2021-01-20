@@ -5,6 +5,7 @@ from rap.client.model import Request, Response
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError
 from rap.common.utlis import gen_random_time_id, get_event_loop
+
 from .base import BaseProcessor
 
 
@@ -36,7 +37,7 @@ class AutoExpireSet(object):
         for key in list(self._dict.keys()):
             if key not in self._dict:
                 continue
-            if self._dict[key] < now_timestamp:
+            elif self._dict[key] < now_timestamp:
                 del self._dict[key]
 
         get_event_loop().call_later(self._interval, self._auto_remove)

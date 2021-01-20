@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
     parser.add_argument("-n", "--name", help="func name")
     parser.add_argument("-a", "--arg", help="func param", default=tuple())
-    parser.add_argument("-g", "--group", help="func group", default="normal")
+    parser.add_argument("-g", "--group", help="func group", default="default")
     args, unknown = parser.parse_known_args()
     secret_key: str = args.secret_key
     mode: str = args.mode

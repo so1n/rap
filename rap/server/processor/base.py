@@ -20,5 +20,5 @@ class BaseProcessor(object):
     async def process_request(self, request: RequestModel) -> RequestModel:
         return request
 
-    async def process_response(self, response: ResponseModel) -> RequestModel:
+    async def process_response(self, response: ResponseModel) -> ResponseModel:
         return response

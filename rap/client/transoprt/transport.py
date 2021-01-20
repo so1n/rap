@@ -13,7 +13,7 @@ from rap.client.transoprt.channel import Channel
 from rap.client.utils import get_rap_exc_dict, raise_rap_error
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
-from rap.common.exceptions import ChannelError, RPCError
+from rap.common.exceptions import ChannelError, RPCError, RpcRunTimeError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.common.utlis import MISS_OBJECT, Constant, Event, as_first_completed
 
@@ -61,9 +61,7 @@ class Transport(object):
         self._channel_queue_dict: Dict[str, asyncio.Queue[Union[Response, Exception]]] = {}
 
     async def _connect(self, host: str):
-        """
-        create conn and listen future by host
-        """
+        """create conn and listen future by host"""
         if host in self._conn_dict:
             await self._conn_dict[host].await_close()
 
@@ -75,9 +73,7 @@ class Transport(object):
         logging.debug(f"Connection to %s...", conn.connection_info)
 
     async def connect(self):
-        """
-        create conn and listen future
-        """
+        """create conn and listen future"""
         if not self._is_close:
             raise ConnectionError(f"{self.__class__.__name__} already connect")
         for host in self._host_list:
@@ -148,7 +144,7 @@ class Transport(object):
         channel_id: Optional[str] = response.header.get("channel_id")
 
         def put_exc_to_receiver(put_exc: Exception):
-            if channel_id and channel_id in self._channel_queue_dict:
+            if channel_id in self._channel_queue_dict:
                 self._channel_queue_dict[channel_id].put_nowait(put_exc)
             elif response.msg_id != -1 and resp_future_id in self._resp_future_dict:
                 self._resp_future_dict[resp_future_id].set_exception(put_exc)
@@ -158,16 +154,14 @@ class Transport(object):
         if exc:
             put_exc_to_receiver(exc)
             return
-
-        # server error response handle
-        if response.num == Constant.SERVER_ERROR_RESPONSE:
+        elif response.num == Constant.SERVER_ERROR_RESPONSE:
+            # server error response handle
             status_code: int = response.header.get("status_code", 500)
             exc: Type["rap_exc.BaseRapError"] = self._rap_exc_dict.get(status_code, rap_exc.BaseRapError)
             put_exc_to_receiver(exc(response.body))
             return
-
-        # server event msg handle
         elif response.num == Constant.SERVER_EVENT:
+            # server event msg handle
             event, event_info = response.body
             if event == Constant.EVENT_CLOSE_CONN:
                 raise RuntimeError(f"recv close conn event, event info:{event_info}")
@@ -177,20 +171,19 @@ class Transport(object):
                 )
                 await self.write(request, -1, conn)
                 return
-
-        # put msg to channel
-        if channel_id:
+        elif channel_id:
+            # put msg to channel
             if channel_id not in self._channel_queue_dict:
                 logging.error(f"recv {channel_id} msg, but {channel_id} not create")
             else:
                 self._channel_queue_dict[channel_id].put_nowait(response)
             return
-
-        # set msg to future_dict's `future`
-        if resp_future_id not in self._resp_future_dict:
-            logging.error(f"recv listen future id: {resp_future_id} error, client not request")
+        elif resp_future_id in self._resp_future_dict:
+            # set msg to future_dict's `future`
+            self._resp_future_dict[resp_future_id].set_result(response)
+        else:
+            logging.error(f"Can' parse response: {response}, ignore")
             return
-        self._resp_future_dict[resp_future_id].set_result(response)
 
     ####################################
     # base one by one request response #
@@ -248,8 +241,7 @@ class Transport(object):
             try:
                 await conn.write(request_msg)
             except asyncio.TimeoutError as e:
-                logging.error(f"send to %s timeout, drop data:%s", conn.connection_info, request_msg)
-                raise e
+                raise asyncio.TimeoutError(f"send to %s timeout, drop data:%s", conn.connection_info, request_msg)
             except Exception as e:
                 raise e
 
@@ -282,7 +274,7 @@ class Transport(object):
         *args,
         call_id=-1,
         conn: Optional[Connection] = None,
-        group: str = "normal",
+        group: str = "default",
         header: Optional[dict] = None,
         session: Optional["Session"] = None,
     ) -> Response:
@@ -293,7 +285,7 @@ class Transport(object):
             request.header.update(header)
         response: Response = await self._base_request(request, conn=conn, session=session)
         if response.num != Constant.MSG_RESPONSE:
-            raise RPCError("request num error")
+            raise RPCError(f"request num must:{Constant.MSG_RESPONSE} not {response.num}")
         if "exc" in response.body:
             if response.header.get("user_agent") == Constant.USER_AGENT:
                 raise_rap_error(response.body["exc"], response.body.get("exc_info", ""))
@@ -329,7 +321,7 @@ class Transport(object):
             async def _add_exc_queue(exc: Exception):
                 await self._channel_queue_dict[_channel_id].put(exc)
 
-            conn.add_listen_func(_add_exc_queue)
+            conn.add_listen_exc_func(_add_exc_queue)
 
         return Channel(func_name, self.session, create, read, write, close, listen_conn_exc)
 

@@ -2,7 +2,7 @@ import time
 from typing import Dict
 
 from rap.common.crypto import Crypto
-from rap.common.exceptions import CryptoError, ServerError
+from rap.common.exceptions import CryptoError, ParseError
 from rap.common.utlis import MISS_OBJECT, Constant, gen_random_time_id
 from rap.manager.crypto_manager import crypto_manager
 from rap.manager.redis_manager import redis_manager
@@ -49,13 +49,13 @@ class CryptoProcessor(BaseProcessor):
         try:
             timestamp: int = request.body.get("timestamp", 0)
             if (int(time.time()) - timestamp) > 60:
-                raise ServerError("timeout error")
+                raise ParseError(extra_msg="timeout param error")
             nonce: str = request.body.get("nonce", "")
             if not nonce:
-                raise ServerError("nonce error")
+                raise ParseError(extra_msg="nonce param error")
             nonce = f"{self._nonce_key}:{nonce}"
             if await redis_manager.exists(nonce):
-                raise ServerError("nonce error")
+                raise ParseError(extra_msg="nonce param error")
             else:
                 await redis_manager.redis_pool.set(nonce, 1, expire=self._nonce_timeout)
             request.body = request.body["body"]
