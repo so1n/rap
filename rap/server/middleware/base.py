@@ -1,19 +1,21 @@
 from abc import ABC
-from typing import Any, Callable, Coroutine, List, Union
+from typing import Any, Callable, Coroutine, List, Union, TYPE_CHECKING
 
 from rap.common.conn import ServerConnection
 from rap.common.middleware import BaseMiddleware as _BaseMiddleware
-from rap.manager.func_manager import func_manager
 from rap.server.model import RequestModel
+
+if TYPE_CHECKING:
+    from rap.server import Server
 
 
 class BaseMiddleware(_BaseMiddleware, ABC):
+    app: "Server"
     start_event_list: List[Union[Callable, Coroutine]] = []
     stop_event_list: List[Union[Callable, Coroutine]] = []
 
-    @staticmethod
-    def register(func: Callable, is_root: bool = True, group: str = "middleware"):
-        func_manager.register(func, group=group)
+    def register(self, func: Callable, is_root: bool = True, group: str = "middleware"):
+        self.app.registry.register(func, group=group)
 
 
 class BaseConnMiddleware(BaseMiddleware):

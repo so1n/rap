@@ -18,7 +18,7 @@ class FuncModel(object):
     func: Callable
 
 
-class FuncManager(object):
+class RegistryManager(object):
     def __init__(self):
         self._cwd: str = os.getcwd()
         self.func_dict: Dict[str, FuncModel] = dict()
@@ -33,8 +33,12 @@ class FuncManager(object):
         func_arg_parameter: List[inspect.Parameter] = [i for i in sig.parameters.values() if i.default == i.empty]
 
         func_type: str = "normal"
-        if len(func_arg_parameter) == 1 and issubclass(func_arg_parameter[0].annotation, BaseChannel):
-            func_type = "channel"
+        try:
+            if len(func_arg_parameter) == 1 and issubclass(func_arg_parameter[0].annotation, BaseChannel):
+                func_type = "channel"
+        except TypeError:
+            # ignore error TypeError: issubclass() arg 1 must be a class
+            pass
         return func_type
 
     def register(self, func: Optional[Callable], name: Optional[str] = None, group: str = "default"):
@@ -127,6 +131,3 @@ class FuncManager(object):
 
     def __getitem__(self, key: str) -> FuncModel:
         return self.func_dict[key]
-
-
-func_manager: "FuncManager" = FuncManager()

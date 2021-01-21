@@ -6,15 +6,15 @@ from typing import Any, Callable, Coroutine, List, Optional, Set, Union
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import ServerError
-from rap.common.middleware import BaseMiddleware
 from rap.common.types import BASE_REQUEST_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utlis import Constant, Event
-from rap.manager.func_manager import func_manager
-from rap.server.middleware.base import BaseConnMiddleware, BaseMsgMiddleware
+from rap.server.middleware.base import BaseMiddleware, BaseConnMiddleware, BaseMsgMiddleware
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
 from rap.server.requests import Request
 from rap.server.response import Response
+from rap.server.crypto import CryptoManager
+from rap.server.registry import RegistryManager
 
 __all__ = ["Server"]
 
@@ -69,9 +69,12 @@ class Server(object):
         if processor_list:
             self.load_processor(processor_list)
 
+        self.registry: RegistryManager = RegistryManager()
+        self.crypto: CryptoManager = CryptoManager(self)
+
     def _load_event(self, event_list: List[Union[Callable, Coroutine]], event: Union[Callable, Coroutine]):
-        if not (isinstance(object, FunctionType) or asyncio.iscoroutine(event)):
-            raise ImportError(f"{event} must be fun or coroutine")
+        if not (isinstance(event, FunctionType) or asyncio.iscoroutine(event)):
+            raise ImportError(f"{event} must be fun or coroutine, not {type(event)}")
 
         if event not in self._depend_set:
             self._depend_set.add(event)
@@ -95,6 +98,7 @@ class Server(object):
             else:
                 raise ImportError(f"{middleware} middleware already load")
 
+            middleware.app = self
             if isinstance(middleware, BaseConnMiddleware):
                 middleware.load_sub_middleware(self._conn_handle)
                 self._conn_handle = middleware
@@ -115,6 +119,7 @@ class Server(object):
             else:
                 raise ImportError(f"{processor} processor already load")
             if isinstance(processor, BaseProcessor):
+                processor.app = self
                 self._processor_list.append(processor)
             else:
                 raise RuntimeError(f"{processor} must instance of {BaseProcessor}")
@@ -124,9 +129,8 @@ class Server(object):
             if processor.stop_event_list:
                 self.load_stop_event(processor.stop_event_list)
 
-    @staticmethod
-    def register(func: Optional[Callable], name: Optional[str] = None, group: str = "default"):
-        func_manager.register(func, name, group=group)
+    def register(self, func: Optional[Callable], name: Optional[str] = None, group: str = "default"):
+        self.registry.register(func, name, group=group)
 
     @staticmethod
     async def run_callback_list(callback_list: List[Union[Callable, Coroutine]]):
@@ -161,6 +165,7 @@ class Server(object):
     async def _conn_handle(self, conn: ServerConnection):
         response_handle: Response = Response(conn, self._timeout, processor_list=self._processor_list)
         request_handle: Request = Request(
+            self,
             conn,
             self._run_timeout,
             response_handle,

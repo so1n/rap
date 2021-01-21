@@ -12,7 +12,7 @@ from Crypto.Cipher import AES
 class Crypto(object):
     def __init__(self, key: str):
         if len(key) != 16:
-            raise ValueError("The length of the key must be 16")
+            raise ValueError(f"The length of the key must be 16, key content:{key}")
         self.key: str = key
         self._length = 16
         self._mode: "AES.MODE_CBC" = AES.MODE_CBC

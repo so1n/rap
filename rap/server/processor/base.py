@@ -1,7 +1,9 @@
-from typing import Callable, Coroutine, List, Union
+from typing import Callable, Coroutine, List, Union, TYPE_CHECKING
 
-from rap.manager.func_manager import func_manager
 from rap.server.model import RequestModel, ResponseModel
+
+if TYPE_CHECKING:
+    from rap.server import Server
 
 
 class BaseProcessor(object):
@@ -12,10 +14,10 @@ class BaseProcessor(object):
 
     start_event_list: List[Union[Callable, Coroutine]] = []
     stop_event_list: List[Union[Callable, Coroutine]] = []
+    app: "Server"
 
-    @staticmethod
-    def register(func: Callable, group: str = "processor"):
-        func_manager.register(func, group=group)
+    def register(self, func: Callable, group: str = "processor"):
+        self.app.register(func, group=group)
 
     async def process_request(self, request: RequestModel) -> RequestModel:
         return request
