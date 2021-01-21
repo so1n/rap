@@ -14,13 +14,6 @@ class IpBlockMiddleware(BaseConnMiddleware):
     """
 
     def __init__(self, allow_ip_list: List[str] = None, block_ip_list: List[str] = None):
-        self.register(self._add_allow_ip)
-        self.register(self._add_block_ip)
-        self.register(self._remove_allow_ip)
-        self.register(self._remove_block_ip)
-        self.register(self._get_allow_ip)
-        self.register(self._get_block_ip)
-
         self.block_key: str = redis_manager.namespace + "block_ip"
         self.allow_key: str = redis_manager.namespace + "allow_ip"
 
@@ -28,6 +21,16 @@ class IpBlockMiddleware(BaseConnMiddleware):
             self.start_event_list.append(self._add_allow_ip(allow_ip_list))
         if block_ip_list:
             self.start_event_list.append(self._add_block_ip(block_ip_list))
+
+        def _register():
+            self.register(self._add_allow_ip)
+            self.register(self._add_block_ip)
+            self.register(self._remove_allow_ip)
+            self.register(self._remove_block_ip)
+            self.register(self._get_allow_ip)
+            self.register(self._get_block_ip)
+
+        self.start_event_list.append(_register)
 
     @staticmethod
     def ip_network_handle(ip: str) -> List[str]:

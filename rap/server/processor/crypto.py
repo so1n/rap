@@ -4,7 +4,6 @@ from typing import Dict
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError, ParseError
 from rap.common.utlis import MISS_OBJECT, Constant, gen_random_time_id
-from rap.manager.crypto_manager import crypto_manager
 from rap.manager.redis_manager import redis_manager
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
@@ -12,19 +11,20 @@ from rap.server.processor.base import BaseProcessor
 
 class CryptoProcessor(BaseProcessor):
     def __init__(self, secret_dict: Dict[str, str] = None, timeout: int = 60, nonce_timeout: int = 60):
-        if not secret_dict and not crypto_manager:
+        if not secret_dict:
             raise ValueError("secret_dict must not None")
-        crypto_manager.load_aes_key_dict(secret_dict)
         self._nonce_key: str = redis_manager.namespace + "nonce"
         self._timeout: int = timeout
         self._nonce_timeout: int = nonce_timeout
 
-        self.register(self.modify_timeout)
-        self.register(self.modify_nonce_timeout)
+        def _post_init():
+            self.register(self.modify_timeout)
+            self.register(self.modify_nonce_timeout)
+            self.app.crypto.load_aes_key_dict(secret_dict)
+        self.start_event_list.append(_post_init)
 
-    @staticmethod
-    def add_secret_dict(secret_dict: Dict[str, str]):
-        crypto_manager.load_aes_key_dict(secret_dict)
+    def add_secret_dict(self, secret_dict: Dict[str, str]):
+        self.app.crypto.load_aes_key_dict(secret_dict)
 
     def modify_timeout(self, timeout: int) -> None:
         self._timeout = timeout
@@ -37,7 +37,7 @@ class CryptoProcessor(BaseProcessor):
         if type(request.body) is not bytes:
             return request
         crypto_id: str = request.header.get("crypto_id", None)
-        crypto: Crypto = crypto_manager.get_crypto_by_key_id(crypto_id)
+        crypto: Crypto = self.app.crypto.get_crypto_by_key_id(crypto_id)
         # check crypto
         if crypto == MISS_OBJECT:
             raise CryptoError("crypto id error")

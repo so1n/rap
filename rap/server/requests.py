@@ -2,12 +2,11 @@ import asyncio
 import inspect
 import logging
 import time
-from typing import Any, Callable, Coroutine, Dict, Generator, List, Optional, Tuple, Union
+from typing import Any, Callable, Coroutine, Dict, Generator, List, Optional, Tuple, Union, TYPE_CHECKING
 
 from rap.common.channel import BaseChannel
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import (
-    BaseRapError,
     ChannelError,
     FuncNotFoundError,
     ParseError,
@@ -16,10 +15,12 @@ from rap.common.exceptions import (
     ServerError,
 )
 from rap.common.utlis import MISS_OBJECT, Constant, Event, get_event_loop, parse_error, response_num_dict
-from rap.manager.func_manager import func_manager
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
 from rap.server.response import Response
+
+if TYPE_CHECKING:
+    from rap.server import Server
 
 __all__ = ["Channel", "Request"]
 
@@ -84,6 +85,7 @@ class Channel(BaseChannel):
 class Request(object):
     def __init__(
         self,
+        app: "Server",
         conn: ServerConnection,
         run_timeout: int,
         response: Response,
@@ -91,6 +93,7 @@ class Request(object):
         ping_sleep_time: int,
         processor_list: Optional[List[BaseProcessor]] = None,
     ):
+        self._app: "Server" = app
         self._conn: ServerConnection = conn
         self._run_timeout: int = run_timeout
         self._response: Response = response
@@ -237,13 +240,13 @@ class Request(object):
 
         func_key: str = f"{group}:{type_}:{request.func_name}"
 
-        if func_key not in func_manager:
+        if func_key not in self._app.registry:
             print(response)
             response.body = FuncNotFoundError(extra_msg=f"name: {request.func_name}")
             return response
 
-        func: Callable = func_manager[func_key].func
-        if func_manager[func_key].group == "root" and self._conn.peer_tuple[0] != "127.0.0.1":
+        func: Callable = self._app.registry[func_key].func
+        if self._app.registry[func_key].group == "root" and self._conn.peer_tuple[0] != "127.0.0.1":
             response.body = FuncNotFoundError(f"No permission to call:`{request.func_name}`")
             return response
         return func
