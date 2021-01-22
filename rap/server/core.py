@@ -13,7 +13,6 @@ from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
 from rap.server.requests import Request
 from rap.server.response import Response
-from rap.server.crypto import CryptoManager
 from rap.server.registry import RegistryManager
 
 __all__ = ["Server"]
@@ -70,7 +69,6 @@ class Server(object):
             self.load_processor(processor_list)
 
         self.registry: RegistryManager = RegistryManager()
-        self.crypto: CryptoManager = CryptoManager(self)
 
     def _load_event(self, event_list: List[Union[Callable, Coroutine]], event: Union[Callable, Coroutine]):
         if not (isinstance(event, FunctionType) or asyncio.iscoroutine(event)):

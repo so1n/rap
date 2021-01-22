@@ -1,5 +1,5 @@
 import time
-from typing import Dict
+from typing import Dict, List, Union
 
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError, ParseError
@@ -10,21 +10,44 @@ from rap.server.processor.base import BaseProcessor
 
 
 class CryptoProcessor(BaseProcessor):
-    def __init__(self, secret_dict: Dict[str, str] = None, timeout: int = 60, nonce_timeout: int = 60):
-        if not secret_dict:
-            raise ValueError("secret_dict must not None")
+    def __init__(self, secret_dict, timeout: int = 60, nonce_timeout: int = 60):
         self._nonce_key: str = redis_manager.namespace + "nonce"
         self._timeout: int = timeout
         self._nonce_timeout: int = nonce_timeout
 
+        self._key_dict: Dict[str, str] = {}
+        self._crypto_dict: Dict[str, "Crypto"] = {}
+
+        self.load_aes_key_dict(secret_dict)
+
         def _post_init():
             self.register(self.modify_timeout)
             self.register(self.modify_nonce_timeout)
-            self.app.crypto.load_aes_key_dict(secret_dict)
+
+            self.register(self.load_aes_key_dict, group="root")
+            self.register(self.remove_aes, group="root")
+
         self.start_event_list.append(_post_init)
 
-    def add_secret_dict(self, secret_dict: Dict[str, str]):
-        self.app.crypto.load_aes_key_dict(secret_dict)
+    def load_aes_key_dict(self, aes_key_dict: Dict[str, str]) -> None:
+        self._key_dict = aes_key_dict
+        for key, value in aes_key_dict.items():
+            self._key_dict[key] = value
+            self._crypto_dict[value] = Crypto(value)
+
+    def get_crypto_key_id_list(self) -> List[str]:
+        return list(self._key_dict.keys())
+
+    def get_crypto_by_key_id(self, key_id: str) -> "Union[Crypto, MISS_OBJECT]":
+        key: str = self._key_dict.get(key_id, "")
+        return self._crypto_dict.get(key, MISS_OBJECT)
+
+    def get_crypto_by_key(self, key: str) -> "Union[Crypto, MISS_OBJECT]":
+        return self._crypto_dict.get(key, MISS_OBJECT)
+
+    def remove_aes(self, key: str) -> None:
+        if key in self._crypto_dict:
+            del self._crypto_dict[key]
 
     def modify_timeout(self, timeout: int) -> None:
         self._timeout = timeout
@@ -37,7 +60,7 @@ class CryptoProcessor(BaseProcessor):
         if type(request.body) is not bytes:
             return request
         crypto_id: str = request.header.get("crypto_id", None)
-        crypto: Crypto = self.app.crypto.get_crypto_by_key_id(crypto_id)
+        crypto: Crypto = self.get_crypto_by_key_id(crypto_id)
         # check crypto
         if crypto == MISS_OBJECT:
             raise CryptoError("crypto id error")
