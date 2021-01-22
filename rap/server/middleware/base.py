@@ -15,7 +15,7 @@ class BaseMiddleware(_BaseMiddleware, ABC):
     stop_event_list: List[Union[Callable, Coroutine]] = []
 
     def register(self, func: Callable, is_root: bool = True, group: str = "middleware"):
-        self.app.registry.register(func, group=group)
+        self.app.register(func, group=group)
 
 
 class BaseConnMiddleware(BaseMiddleware):

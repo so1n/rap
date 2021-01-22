@@ -38,13 +38,8 @@ class Response(object):
         if isinstance(resp.body, BaseRapError):
             error_response: Optional[Tuple[str, str]] = parse_error(resp.body)
             resp.header["status_code"] = resp.body.status_code
-            return ResponseModel(
-                Constant.SERVER_ERROR_RESPONSE,
-                resp.msg_id,
-                resp.func_name,
-                resp.header,
-                error_response[1],
-            )
+            resp.body = error_response[1]
+            return resp
         elif isinstance(resp.body, Event):
             return ResponseModel(Constant.SERVER_EVENT, resp.msg_id, resp.func_name, resp.header, resp.body.to_tuple())
         else:

@@ -10,7 +10,7 @@ from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple, Type, 
 from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.transoprt.channel import Channel
-from rap.client.utils import get_rap_exc_dict, raise_rap_error
+from rap.client.utils import get_exc_status_code_dict, raise_rap_error
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError, RPCError, RpcRunTimeError
@@ -56,7 +56,7 @@ class Transport(object):
         self._process_response_list: List = []
 
         self._msg_id: int = random.randrange(65535)
-        self._rap_exc_dict = get_rap_exc_dict()
+        self._exc_status_code_dict = get_exc_status_code_dict()
         self._resp_future_dict: Dict[str, asyncio.Future[Response]] = {}
         self._channel_queue_dict: Dict[str, asyncio.Queue[Union[Response, Exception]]] = {}
 
@@ -142,6 +142,7 @@ class Transport(object):
 
         resp_future_id: str = f"{conn.sock_tuple}:{response.msg_id}"
         channel_id: Optional[str] = response.header.get("channel_id")
+        status_code: int = response.header.get("status_code", 500)
 
         def put_exc_to_receiver(put_exc: Exception):
             if channel_id in self._channel_queue_dict:
@@ -154,10 +155,9 @@ class Transport(object):
         if exc:
             put_exc_to_receiver(exc)
             return
-        elif response.num == Constant.SERVER_ERROR_RESPONSE:
+        elif response.num == Constant.SERVER_ERROR_RESPONSE or status_code in self._exc_status_code_dict:
             # server error response handle
-            status_code: int = response.header.get("status_code", 500)
-            exc: Type["rap_exc.BaseRapError"] = self._rap_exc_dict.get(status_code, rap_exc.BaseRapError)
+            exc: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(status_code, rap_exc.BaseRapError)
             put_exc_to_receiver(exc(response.body))
             return
         elif response.num == Constant.SERVER_EVENT:
@@ -167,7 +167,7 @@ class Transport(object):
                 raise RuntimeError(f"recv close conn event, event info:{event_info}")
             elif event == Constant.PING_EVENT:
                 request: Request = Request(
-                    Constant.CLIENT_EVENT_RESPONSE, "", Event(Constant.PONG_EVENT, "").to_tuple()
+                    Constant.CLIENT_EVENT, "", Event(Constant.PONG_EVENT, "").to_tuple()
                 )
                 await self.write(request, -1, conn)
                 return
