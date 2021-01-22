@@ -28,18 +28,17 @@ _STR_LD = string.ascii_letters + string.digits
 
 
 class Constant(object):
-    VERSION: str = "0.5.3.5"
-    USER_AGENT: str = "Python3"
+    VERSION: str = "0.1"  # protocol version
+    USER_AGENT: str = "Python3-0.5.3"
     SOCKET_RECV_SIZE: int = 1024 ** 1
 
+    SERVER_ERROR_RESPONSE: int = 100
     MSG_REQUEST: int = 101
     MSG_RESPONSE: int = 201
     CHANNEL_REQUEST: int = 102
     CHANNEL_RESPONSE: int = 202
     CLIENT_EVENT: int = 103
-    CLIENT_EVENT_RESPONSE: int = 203
-    SERVER_EVENT: int = 104
-    SERVER_ERROR_RESPONSE: int = 204
+    SERVER_EVENT: int = 203
 
     EVENT_CLOSE_CONN: str = "event_close_conn"
     PING_EVENT: str = "ping"
@@ -175,5 +174,5 @@ async def as_first_completed(future_list: List[Union[Coroutine, asyncio.Future]]
 response_num_dict: Dict[int, int] = {
     Constant.MSG_REQUEST: Constant.MSG_RESPONSE,
     Constant.CHANNEL_REQUEST: Constant.CHANNEL_RESPONSE,
-    Constant.CLIENT_EVENT_RESPONSE: -1,
+    Constant.CLIENT_EVENT: -1,
 }

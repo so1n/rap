@@ -102,7 +102,7 @@ class Request(object):
         self._processor_list: Optional[List[BaseProcessor]] = processor_list
 
         self.dispatch_func_dict: Dict[int, Callable] = {
-            Constant.CLIENT_EVENT_RESPONSE: self.event,
+            Constant.CLIENT_EVENT: self.event,
             Constant.MSG_REQUEST: self.msg_handle,
             Constant.CHANNEL_REQUEST: self.channel_handle,
         }
@@ -113,12 +113,7 @@ class Request(object):
         self._channel_dict: Dict[str, Channel] = {}
 
     async def dispatch(self, request: RequestModel) -> Optional[ResponseModel]:
-        if request.num not in self.dispatch_func_dict:
-            response_num: int = Constant.SERVER_ERROR_RESPONSE
-            error_content: str = "life cycle error"
-        else:
-            response_num: int = response_num_dict.get(request.num, Constant.SERVER_ERROR_RESPONSE)
-            error_content: str = "request num error"
+        response_num: int = response_num_dict.get(request.num, Constant.SERVER_ERROR_RESPONSE)
 
         # gen response object
         response: "ResponseModel" = ResponseModel(
@@ -139,7 +134,7 @@ class Request(object):
         # check type_id
         if response.num is Constant.SERVER_ERROR_RESPONSE:
             logging.error(f"parse request data: {request} from {self._conn.peer_tuple} error")
-            response.body = ServerError(error_content)
+            response.body = ServerError("Illegal request")
             return response
 
         try:
@@ -172,9 +167,11 @@ class Request(object):
                     break
 
     async def channel_handle(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
-        func: Union[Callable, ResponseModel] = self.check_func(request, response, "channel")
-        if isinstance(func, ResponseModel):
-            return func
+        try:
+            func: Callable = self.check_func(request, "channel")
+        except FuncNotFoundError as e:
+            response.body = e
+            return response
         # declare var
         channel_id: str = request.header.get("channel_id")
         life_cycle: str = request.header.get("channel_life_cycle", "error")
@@ -231,24 +228,19 @@ class Request(object):
             response.body = ChannelError("channel life cycle error")
             return response
 
-    def check_func(self, request: RequestModel, response: ResponseModel, type_: str) -> Union[Callable, ResponseModel]:
+    def check_func(self, request: RequestModel, type_: str) -> Callable:
         group: str = "default"
-        try:
-            group: str = request.body.get("group", "default")
-        except AttributeError:
-            pass
+        if type(request.body) is dict:
+            group = request.body.get("group", "default")
 
         func_key: str = f"{group}:{type_}:{request.func_name}"
 
         if func_key not in self._app.registry:
-            print(response)
-            response.body = FuncNotFoundError(extra_msg=f"name: {request.func_name}")
-            return response
+            raise FuncNotFoundError(extra_msg=f"name: {request.func_name}")
 
         func: Callable = self._app.registry[func_key].func
         if self._app.registry[func_key].group == "root" and self._conn.peer_tuple[0] != "127.0.0.1":
-            response.body = FuncNotFoundError(f"No permission to call:`{request.func_name}`")
-            return response
+            raise FuncNotFoundError(f"No permission to call:`{request.func_name}`")
         return func
 
     async def _msg_handle(self, request: RequestModel, call_id: int, func: Callable, param: str) -> Tuple[int, Any]:
@@ -296,9 +288,11 @@ class Request(object):
         return call_id, result
 
     async def msg_handle(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
-        func: Union[Callable, ResponseModel] = self.check_func(request, response, "normal")
-        if isinstance(func, ResponseModel):
-            return func
+        try:
+            func: Callable = self.check_func(request, "normal")
+        except FuncNotFoundError as e:
+            response.body = e
+            return response
 
         try:
             call_id: int = request.body["call_id"]
@@ -323,7 +317,7 @@ class Request(object):
         event_name: str = request.body[0]
         if event_name == Constant.PONG_EVENT:
             self._keepalive_timestamp = int(time.time())
-        return None
+            return None
 
     def __del__(self):
         if self._ping_pong_future and self._ping_pong_future.cancelled():

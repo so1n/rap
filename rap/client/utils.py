@@ -5,7 +5,7 @@ from rap.common import exceptions as rap_exc
 from rap.common.exceptions import RPCError
 
 
-def get_rap_exc_dict() -> Dict[int, Type[rap_exc.BaseRapError]]:
+def get_exc_status_code_dict() -> Dict[int, Type[rap_exc.BaseRapError]]:
     exc_dict: Dict[int, Type[rap_exc.BaseRapError]] = {}
     for exc_name in dir(rap_exc):
         class_: Type = getattr(rap_exc, exc_name)
