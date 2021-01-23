@@ -2,6 +2,8 @@
 rap(par[::-1]) is advanced and fast python async rpc
 
 > Inspired by the sky [aiorpc](https://github.com/choleraehyq/aiorpc)
+
+[中文文档](https://github.com/so1n/rap/blob/master/README_CH.md)
 # Installation
 ```Bash
 pip install rap

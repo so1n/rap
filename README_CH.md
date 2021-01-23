@@ -109,6 +109,7 @@ asyncio.run(main())
 # 2.功能介绍
 ## 2.1.session
 [示例代码](https://github.com/so1n/rap/tree/master/example/session)
+
 `rap`客户端支持会话功能, 在启用会话后,所有请求都只会通过当前会话的链接请求到对应的服务端,同时每次请求时,会在header的session_id设置当前会话id,方便服务端识别.
 `rap`的会话支持显式设置和隐式设置,各有优缺点,不做强制限制.
 ```Python
@@ -180,6 +181,7 @@ async def run_once():
 ```
 ## 2.2.channel
 [示例代码](https://github.com/so1n/rap/tree/master/example/channel)
+
 channel支持客户端与服务端以双工的方式进行交互,类似于Http的WebSocket.
 客户端中只支持`@client.register`注册channel函数, channel函数的特点是函数的参数只有一个, 且类型为`Channel`:
 channel会维持一个会话,在channel启用到关闭之前只会通过一个链接与服务端保持通信.
@@ -221,6 +223,7 @@ async def echo_response(channel: Channel):
 ```
 ## 2.3.ssl支持
 [示例代码](https://github.com/so1n/rap/tree/master/example/ssl)
+
 得益于`Python asyncio`模块的封装, `rap`能非常方便的使用ssl
 ```bash
 # 快速生成ssl.crt和ssl.key
