@@ -10,7 +10,7 @@ from rap.server.processor.base import BaseProcessor
 
 
 class CryptoProcessor(BaseProcessor):
-    def __init__(self, secret_dict, timeout: int = 60, nonce_timeout: int = 60):
+    def __init__(self, secret_dict, timeout: int = 60, nonce_timeout: int = 120):
         self._nonce_key: str = redis_manager.namespace + "nonce"
         self._timeout: int = timeout
         self._nonce_timeout: int = nonce_timeout

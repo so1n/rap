@@ -150,7 +150,7 @@ class Server(object):
         for server in self._server_list:
             server.close()
             await server.wait_closed()
-            await self.run_callback_list(self._stop_event_list)
+        await self.run_callback_list(self._stop_event_list)
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE):
         conn: ServerConnection = ServerConnection(reader, writer, self._timeout)
