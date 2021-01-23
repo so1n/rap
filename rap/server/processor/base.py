@@ -12,9 +12,13 @@ class BaseProcessor(object):
     ps: If you need to share data, please use `request.stats` and `response.stats`
     """
 
-    start_event_list: List[Union[Callable, Coroutine]] = []
-    stop_event_list: List[Union[Callable, Coroutine]] = []
     app: "Server"
+
+    def start_event_handle(self):
+        pass
+
+    def stop_event_handle(self):
+        pass
 
     def register(self, func: Callable, group: str = "processor"):
         self.app.register(func, group=group)

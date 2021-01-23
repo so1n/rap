@@ -20,14 +20,13 @@ class CryptoProcessor(BaseProcessor):
 
         self.load_aes_key_dict(secret_dict)
 
-        def _post_init():
-            self.register(self.modify_timeout)
-            self.register(self.modify_nonce_timeout)
+    def start_event_handle(self):
+        self.register(self.modify_crypto_timeout, group="crypto")
+        self.register(self.modify_crypto_nonce_timeout, group="crypto")
 
-            self.register(self.load_aes_key_dict, group="root")
-            self.register(self.remove_aes, group="root")
-
-        self.start_event_list.append(_post_init)
+        self.register(self.get_crypto_key_id_list, group="crypto")
+        self.register(self.load_aes_key_dict, group="crypto")
+        self.register(self.remove_aes, group="crypto")
 
     def load_aes_key_dict(self, aes_key_dict: Dict[str, str]) -> None:
         self._key_dict = aes_key_dict
@@ -49,10 +48,10 @@ class CryptoProcessor(BaseProcessor):
         if key in self._crypto_dict:
             del self._crypto_dict[key]
 
-    def modify_timeout(self, timeout: int) -> None:
+    def modify_crypto_timeout(self, timeout: int) -> None:
         self._timeout = timeout
 
-    def modify_nonce_timeout(self, timeout: int) -> None:
+    def modify_crypto_nonce_timeout(self, timeout: int) -> None:
         self._nonce_timeout = timeout
 
     async def process_request(self, request: RequestModel) -> RequestModel:
