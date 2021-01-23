@@ -1,7 +1,7 @@
 import asyncio
+import inspect
 import logging
 import ssl
-from types import FunctionType
 from typing import Any, Callable, Coroutine, List, Optional, Set, Union
 
 from rap.common.conn import ServerConnection
@@ -71,7 +71,7 @@ class Server(object):
         self.registry: RegistryManager = RegistryManager()
 
     def _load_event(self, event_list: List[Union[Callable, Coroutine]], event: Union[Callable, Coroutine]):
-        if not (isinstance(event, FunctionType) or asyncio.iscoroutine(event)):
+        if not (inspect.isfunction(event) or asyncio.iscoroutine(event) or inspect.ismethod(event)):
             raise ImportError(f"{event} must be fun or coroutine, not {type(event)}")
 
         if event not in self._depend_set:
@@ -105,10 +105,8 @@ class Server(object):
             else:
                 raise RuntimeError(f"{middleware} must instance of {BaseMiddleware}")
 
-            if middleware.start_event_list:
-                self.load_start_event(middleware.start_event_list)
-            if middleware.stop_event_list:
-                self.load_stop_event(middleware.stop_event_list)
+            self.load_start_event([middleware.start_event_handle])
+            self.load_stop_event([middleware.stop_event_handle])
 
     def load_processor(self, processor_list: List[BaseProcessor]):
         for processor in processor_list:
@@ -122,10 +120,8 @@ class Server(object):
             else:
                 raise RuntimeError(f"{processor} must instance of {BaseProcessor}")
 
-            if processor.start_event_list:
-                self.load_start_event(processor.start_event_list)
-            if processor.stop_event_list:
-                self.load_stop_event(processor.stop_event_list)
+            self.load_start_event([processor.start_event_handle])
+            self.load_stop_event([processor.stop_event_handle])
 
     def register(self, func: Optional[Callable], name: Optional[str] = None, group: str = "default"):
         self.registry.register(func, name, group=group)

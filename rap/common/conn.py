@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import ssl
-from typing import Callable, Coroutine, List, Optional, Set, Tuple, Union
+from typing import Callable, Coroutine, Optional, Set, Tuple, Union
 
 import msgpack
 
@@ -46,7 +46,7 @@ class BaseConnection:
             logging.debug(f"recv data %s from %s", data, self.peer_tuple)
             if not data:
                 e: Exception = ConnectionError(f"Connection to {self.peer_tuple} closed")
-                self.set_reader_exc(e)
+                # self.set_reader_exc(e)
                 raise e
             self._unpacker.feed(data)
             try:

@@ -11,11 +11,15 @@ if TYPE_CHECKING:
 
 class BaseMiddleware(_BaseMiddleware, ABC):
     app: "Server"
-    start_event_list: List[Union[Callable, Coroutine]] = []
-    stop_event_list: List[Union[Callable, Coroutine]] = []
 
     def register(self, func: Callable, is_root: bool = True, group: str = "middleware"):
         self.app.register(func, group=group)
+
+    def start_event_handle(self):
+        pass
+
+    def stop_event_handle(self):
+        pass
 
 
 class BaseConnMiddleware(BaseMiddleware):
@@ -37,8 +41,7 @@ class BaseConnMiddleware(BaseMiddleware):
 
 
 class BaseMsgMiddleware(BaseMiddleware):
-    @staticmethod
-    def register(func: Callable, is_root: bool = True, group: str = "msg_middleware"):
+    def register(self, func: Callable, is_root: bool = True, group: str = "msg_middleware"):
         super().register(func, is_root, group)
 
     async def dispatch(self, request: RequestModel, call_id: int, func: Callable, param: str) -> Union[dict, Exception]:

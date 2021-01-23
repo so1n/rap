@@ -50,8 +50,9 @@ class Response(object):
             return False
 
         resp = await self.response_handle(resp)
-        for processor in reversed(self._processor_list):
-            resp = await processor.process_response(resp)
+        if self._processor_list:
+            for processor in reversed(self._processor_list):
+                resp = await processor.process_response(resp)
         logging.debug(f"resp: %s", resp)
 
         try:
