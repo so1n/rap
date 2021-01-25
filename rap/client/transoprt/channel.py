@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Optional, Tuple, Union
 
 from rap.client.model import Request, Response
 from rap.common.channel import BaseChannel

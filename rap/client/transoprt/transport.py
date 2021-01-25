@@ -272,12 +272,14 @@ class Transport(object):
         *args,
         call_id=-1,
         conn: Optional[Connection] = None,
-        group: str = "default",
+        group: Optional[str] = None,
         header: Optional[dict] = None,
         session: Optional["Session"] = None,
     ) -> Response:
         """msg request handle"""
         # if len([i for i in args if i is not MISS_OBJECT]) > 0
+        if not group:
+            group = "default"
         request: Request = Request(Constant.MSG_REQUEST, func_name, {"call_id": call_id, "param": args, "group": group})
         if header:
             request.header.update(header)
@@ -301,6 +303,10 @@ class Transport(object):
     @property
     def session(self) -> "Session":
         return Session(self)
+
+    @staticmethod
+    def get_now_session() -> "Session":
+        return _session_context.get(MISS_OBJECT)
 
     def channel(self, func_name: str) -> "Channel":
         async def create(_channel_id: str):
