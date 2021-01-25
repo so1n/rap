@@ -3,8 +3,8 @@ import time
 from typing import Callable, Dict, Optional
 
 from rap.common.conn import ServerConnection
+from rap.common.redis import AsyncRedis
 from rap.common.utlis import Constant, Event
-from rap.manager.redis_manager import redis_manager
 from rap.server.middleware.base import BaseConnMiddleware
 from rap.server.model import ResponseModel
 from rap.server.response import Response
@@ -71,10 +71,14 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
     """
 
     def __init__(self, ip_max_conn: int = 128, timeout: int = 180):
+        self._redis: Optional[AsyncRedis] = None
         self._ip_max_conn: int = ip_max_conn
         self._timeout: int = timeout
 
     def start_event_handle(self):
+        if not self.app.redis.enable_redis:
+            raise RuntimeError("redis has not been initialized")
+        self._redis = self.app.redis
         self.register(self.modify_max_ip_max_conn, group="ip_max_conn")
         self.register(self.modify_ip_max_timeout, group="ip_max_conn")
 
@@ -85,8 +89,8 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
         self._timeout = timeout
 
     async def dispatch(self, conn: ServerConnection):
-        key: str = redis_manager.namespace + conn.peer_tuple[0]
-        if (await redis_manager.redis_pool.get(key)) > self._ip_max_conn:
+        key: str = f"{self.__class__.__name__}:conn.peer_tuple[0]"
+        if (await self._redis.client.get(key)) > self._ip_max_conn:
             logging.error(f"Currently exceeding the maximum number of ip conn limit, close {conn.peer_tuple}")
             await Response(conn)(
                 ResponseModel(
@@ -96,9 +100,9 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
             await conn.await_close()
             return
         else:
-            await redis_manager.redis_pool.incr(key)
+            await self._redis.client.incr(key)
             try:
                 await self.call_next(conn)
             finally:
-                await redis_manager.redis_pool.decr(key)
-                await redis_manager.redis_pool.expire(key, self._timeout)
+                await self._redis.client.decr(key)
+                await self._redis.client.expire(key, self._timeout)
