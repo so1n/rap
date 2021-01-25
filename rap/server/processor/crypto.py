@@ -1,5 +1,5 @@
 import time
-from typing import Dict, List, Union
+from typing import Callable, Dict, List, Optional, Union
 
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError, ParseError
@@ -21,12 +21,17 @@ class CryptoProcessor(BaseProcessor):
         self.load_aes_key_dict(secret_dict)
 
     def start_event_handle(self):
-        self.register(self.modify_crypto_timeout, group="crypto")
-        self.register(self.modify_crypto_nonce_timeout, group="crypto")
+        self.register(self.modify_crypto_timeout)
+        self.register(self.modify_crypto_nonce_timeout)
 
-        self.register(self.get_crypto_key_id_list, group="crypto")
-        self.register(self.load_aes_key_dict, group="crypto")
-        self.register(self.remove_aes, group="crypto")
+        self.register(self.get_crypto_key_id_list)
+        self.register(self.load_aes_key_dict)
+        self.register(self.remove_aes)
+
+    def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None):
+        if not group:
+            group = self.__class__.__name__
+        super(CryptoProcessor, self).register(func, group=group)
 
     def load_aes_key_dict(self, aes_key_dict: Dict[str, str]) -> None:
         """load aes key dict. eg{'key_id': 'xxxxxxxxxxxxxxxx'}"""

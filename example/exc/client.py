@@ -2,6 +2,7 @@ import asyncio
 import time
 
 from rap.client import Client
+from rap.common.exceptions import FuncNotFoundError
 
 client = Client()
 
@@ -24,11 +25,11 @@ async def main():
     try:
         await raise_msg_exc(1, 2)
     except Exception as e:
-        logging.exception(f"error: {e}")
+        assert isinstance(e, ZeroDivisionError)
     try:
         await raise_server_not_found_func_exc(1)
     except Exception as e:
-        logging.exception(f"error: {e}")
+        assert isinstance(e, FuncNotFoundError)
     print(time.time() - s_t)
     await client.wait_close()
 

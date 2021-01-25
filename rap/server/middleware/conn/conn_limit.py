@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Dict
+from typing import Callable, Dict, Optional
 
 from rap.common.conn import ServerConnection
 from rap.common.utlis import Constant, Event
@@ -22,21 +22,28 @@ class ConnLimitMiddleware(BaseConnMiddleware):
         self._release_timestamp: int = int(time.time())
 
     def start_event_handle(self):
-        self.register(self.get_conn_limit_info, group="conn_limit")
-        self.register(self.modify_max_conn, group="conn_limit")
-        self.register(self.modify_release_timestamp, group="conn_limit")
+        self.register(self._get_conn_limit_info)
+        self.register(self._modify_max_conn)
+        self.register(self._modify_release_timestamp)
 
-    def get_conn_limit_info(self) -> Dict[str, int]:
+    def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None):
+        if not group:
+            group = self.__class__.__name__
+        if not name:
+            name = func.__name__.strip("_")
+        super(BaseConnMiddleware, self).register(func, name, group)
+
+    def _get_conn_limit_info(self) -> Dict[str, int]:
         return {
             "release_timestamp": self._release_timestamp,
             "conn_count": self._conn_count,
             "max_conn": self._max_conn,
         }
 
-    def modify_release_timestamp(self, timestamp: int) -> None:
+    def _modify_release_timestamp(self, timestamp: int) -> None:
         self._release_timestamp = timestamp
 
-    def modify_max_conn(self, max_conn: int) -> None:
+    def _modify_max_conn(self, max_conn: int) -> None:
         self._max_conn = max_conn
 
     async def dispatch(self, conn: ServerConnection):
