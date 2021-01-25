@@ -1,6 +1,7 @@
 import argparse
 import asyncio
-from typing import List, Tuple, Union
+import json
+from typing import Dict, List, Tuple, Union
 
 from rap.client import Client
 from rap.client.processor import CryptoProcessor
@@ -59,14 +60,15 @@ if __name__ == "__main__":
     loop.run_until_complete(client.connect())
 
     if mode == "d":
-        result_tuple: Tuple[Tuple[str]] = loop.run_until_complete(client.raw_call("list", group="root"))
-        column_list: List[str] = ["Name", "Group", "Type", "Path", "Module"]
-        display_table_list: List[List[str]] = [column_list]
-        for func_info in result_tuple:
-            func_key, module_str, path_str = func_info
-            func_group, func_type, func_name = func_key.split(":")
-            display_table_list.append([func_name, func_group, func_type, path_str, module_str])
-        print_table(display_table_list)
+        result_tuple: Tuple[Dict[str, str]] = loop.run_until_complete(client.raw_call("list", group="registry"))
+        print(json.dumps(result_tuple, indent=2))
+        # column_list: List[str] = ["Name", "Group", "Type", "Path", "Module"]
+        # display_table_list: List[List[str]] = [column_list]
+        # for func_info in result_tuple:
+        #     func_key, module_str, path_str = func_info
+        #     func_group, func_type, func_name = func_key.split(":")
+        #     display_table_list.append([func_name, func_group, func_type, path_str, module_str])
+        # print_table(display_table_list)
     elif mode == "r" and func_name:
         print(loop.run_until_complete(client.raw_call(func_name, *arg_list, group=group)))
 

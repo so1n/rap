@@ -30,7 +30,7 @@ class ConnLimitMiddleware(BaseConnMiddleware):
         return {
             "release_timestamp": self._release_timestamp,
             "conn_count": self._conn_count,
-            "max_conn": self._max_conn
+            "max_conn": self._max_conn,
         }
 
     def modify_release_timestamp(self, timestamp: int) -> None:

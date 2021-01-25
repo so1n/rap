@@ -9,7 +9,6 @@ from rap.common.utlis import Constant, Event, parse_error
 from rap.server.model import ResponseModel
 from rap.server.processor.base import BaseProcessor
 
-
 __all__ = ["Response"]
 
 

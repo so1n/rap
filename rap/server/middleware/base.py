@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Any, Callable, Coroutine, List, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, List, Union
 
 from rap.common.conn import ServerConnection
 from rap.common.middleware import BaseMiddleware as _BaseMiddleware
@@ -12,8 +12,8 @@ if TYPE_CHECKING:
 class BaseMiddleware(_BaseMiddleware, ABC):
     app: "Server"
 
-    def register(self, func: Callable, is_root: bool = True, group: str = "middleware"):
-        self.app.register(func, group=group)
+    def register(self, func: Callable, group: str = "middleware"):
+        self.app.register(func, group=group, is_private=True)
 
     def start_event_handle(self):
         pass
@@ -30,8 +30,8 @@ class BaseConnMiddleware(BaseMiddleware):
     async def __call__(self, *args, **kwargs):
         return await self.dispatch(*args)
 
-    def register(self, func: Callable, is_root: bool = True, group: str = "conn_middleware"):
-        super().register(func, is_root, group)
+    def register(self, func: Callable, group: str = "conn_middleware"):
+        super().register(func, group)
 
     async def call_next(self, value: Any):
         pass
@@ -41,8 +41,8 @@ class BaseConnMiddleware(BaseMiddleware):
 
 
 class BaseMsgMiddleware(BaseMiddleware):
-    def register(self, func: Callable, is_root: bool = True, group: str = "msg_middleware"):
-        super().register(func, is_root, group)
+    def register(self, func: Callable, group: str = "msg_middleware"):
+        super().register(func, group)
 
     async def dispatch(self, request: RequestModel, call_id: int, func: Callable, param: str) -> Union[dict, Exception]:
         raise NotImplementedError
