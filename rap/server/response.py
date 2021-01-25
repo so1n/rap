@@ -33,6 +33,7 @@ class Response(object):
         set_header_value("version", Constant.VERSION)
         set_header_value("user_agent", Constant.USER_AGENT)
         set_header_value("request_id", str(uuid.uuid4()))
+        set_header_value("status_code", 200)
 
         if isinstance(resp.body, BaseRapError):
             error_response: Optional[Tuple[str, str]] = parse_error(resp.body)

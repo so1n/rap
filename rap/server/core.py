@@ -2,10 +2,11 @@ import asyncio
 import inspect
 import logging
 import ssl
-from typing import Any, Callable, Coroutine, List, Optional, Set, Union
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Union
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import ServerError
+from rap.common.redis import AsyncRedis
 from rap.common.types import BASE_REQUEST_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utlis import Constant, Event
 from rap.server.middleware.base import BaseConnMiddleware, BaseMiddleware, BaseMsgMiddleware
@@ -34,6 +35,8 @@ class Server(object):
         stop_event_list: List[Union[Callable, Coroutine]] = None,
         middleware_list: List[BaseMiddleware] = None,
         processor_list: List[BaseProcessor] = None,
+        redis_url: Optional[str] = None,
+        redis_kwargs: Dict[str, Any] = None,
     ):
         if type(host) is str:
             self._host = [host]
@@ -58,6 +61,15 @@ class Server(object):
         self._middleware_list: List[BaseMiddleware] = []
         self._processor_list: List[BaseProcessor] = []
         self._depend_set: Set[Any] = set()  # Check whether any components have been re-introduced
+
+        redis_kwargs = redis_kwargs if redis_kwargs else {}
+        self.redis: AsyncRedis = AsyncRedis(url=redis_url, **redis_kwargs)
+        if redis_url:
+            # check aredis module
+            if not self.redis.is_install_redis:
+                raise ImportError("Can not found aredis module")
+            # check conn redis
+            self._start_event_list.append(self.redis.client.info())
 
         if start_event_list:
             self.load_start_event(start_event_list)
