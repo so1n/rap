@@ -24,7 +24,7 @@ async def async_channel(channel: Channel):
     return
 
 
-@client.register
+@client.register()
 async def echo_body(channel: Channel):
     await channel.write("hi!")
     async for body in channel.iter_body():
@@ -32,7 +32,7 @@ async def echo_body(channel: Channel):
         await channel.write(body)
 
 
-@client.register
+@client.register()
 async def echo_response(channel: Channel):
     await channel.write("hi!")
     async for response in channel.iter_response():

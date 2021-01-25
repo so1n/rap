@@ -6,7 +6,7 @@ client = Client(ssl_crt_path="./rap_ssl.crt")  # enable secret
 
 
 # in register, must use async def...
-@client.register
+@client.register()
 async def async_sum(a: int, b: int) -> int:
     pass
 

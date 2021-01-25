@@ -8,7 +8,7 @@ client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
 
 
 # in register, must use async def...
-@client.register
+@client.register()
 async def async_sum(a: int, b: int) -> int:
     pass
 
