@@ -5,7 +5,7 @@ from rap.client import Client
 client = Client()
 
 
-@client.register
+@client.register()
 async def sync_sum(a: int, b: int) -> int:
     pass
 

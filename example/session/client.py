@@ -37,13 +37,13 @@ def sync_sum(a: int, b: int) -> int:
 
 
 # in register, must use async def...
-@client.register
+@client.register()
 async def async_sum(a: int, b: int) -> int:
     pass
 
 
 # in register, must use async def...
-@client.register
+@client.register()
 async def async_gen(a: int):
     yield
 
