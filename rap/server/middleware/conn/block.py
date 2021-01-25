@@ -1,5 +1,5 @@
 import ipaddress
-from typing import List, Union
+from typing import Callable, List, Optional, Union
 
 from rap.common.conn import ServerConnection
 from rap.manager.redis_manager import redis_manager
@@ -21,15 +21,22 @@ class IpBlockMiddleware(BaseConnMiddleware):
         self._block_ip_list: List[str] = block_ip_list
 
     async def start_event_handle(self):
-        self.register(self._add_allow_ip, group="ip_block")
-        self.register(self._add_block_ip, group="ip_block")
-        self.register(self._remove_allow_ip, group="ip_block")
-        self.register(self._remove_block_ip, group="ip_block")
-        self.register(self._get_allow_ip, group="ip_block")
-        self.register(self._get_block_ip, group="ip_block")
+        self.register(self._add_allow_ip)
+        self.register(self._add_block_ip)
+        self.register(self._remove_allow_ip)
+        self.register(self._remove_block_ip)
+        self.register(self._get_allow_ip)
+        self.register(self._get_block_ip)
 
         await self._add_allow_ip(self._allow_ip_list)
         await self._add_block_ip(self._block_ip_list)
+
+    def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None):
+        if not group:
+            group = self.__class__.__name__
+        if not name:
+            name = func.__name__.strip("_")
+        super(BaseConnMiddleware, self).register(func, name, group)
 
     @staticmethod
     def ip_network_handle(ip: str) -> List[str]:

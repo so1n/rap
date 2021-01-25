@@ -13,7 +13,7 @@ async def sync_sum(a: int, b: int) -> int:
 async def main():
     await client.connect()
     print(f"sync result: {await client.call(sync_sum, 1, 2)}")
-    print(f"reload :{ await client.raw_call('reload', 'test_module', 'sync_sum', group='root')}")
+    print(f"reload :{ await client.raw_call('reload', 'test_module', 'sync_sum', group='registry')}")
     print(f"sync result: {await client.raw_call('sync_sum', 1, 2)}")
 
 
