@@ -2,7 +2,7 @@ import asyncio
 import inspect
 import logging
 import time
-from typing import Any, Callable, Coroutine, Dict, Generator, List, Optional, Tuple, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, Generator, List, Optional, Tuple
 
 from rap.common.channel import BaseChannel
 from rap.common.conn import ServerConnection
@@ -17,6 +17,7 @@ from rap.common.exceptions import (
 from rap.common.utlis import MISS_OBJECT, Constant, Event, get_event_loop, parse_error, response_num_dict
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
+from rap.server.registry import FuncModel
 from rap.server.response import Response
 
 if TYPE_CHECKING:
@@ -238,10 +239,10 @@ class Request(object):
         if func_key not in self._app.registry:
             raise FuncNotFoundError(extra_msg=f"name: {request.func_name}")
 
-        func: Callable = self._app.registry[func_key].func
-        if self._app.registry[func_key].group == "root" and self._conn.peer_tuple[0] != "127.0.0.1":
+        func_model: FuncModel = self._app.registry[func_key]
+        if func_model.is_private and self._conn.peer_tuple[0] != "127.0.0.1":
             raise FuncNotFoundError(f"No permission to call:`{request.func_name}`")
-        return func
+        return func_model.func
 
     async def _msg_handle(self, request: RequestModel, call_id: int, func: Callable, param: str) -> Tuple[int, Any]:
         user_agent: str = request.header.get("user_agent")

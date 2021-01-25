@@ -166,9 +166,7 @@ class Transport(object):
             if event == Constant.EVENT_CLOSE_CONN:
                 raise RuntimeError(f"recv close conn event, event info:{event_info}")
             elif event == Constant.PING_EVENT:
-                request: Request = Request(
-                    Constant.CLIENT_EVENT, "", Event(Constant.PONG_EVENT, "").to_tuple()
-                )
+                request: Request = Request(Constant.CLIENT_EVENT, "", Event(Constant.PONG_EVENT, "").to_tuple())
                 await self.write(request, -1, conn)
                 return
         elif channel_id:

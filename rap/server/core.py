@@ -8,12 +8,12 @@ from rap.common.conn import ServerConnection
 from rap.common.exceptions import ServerError
 from rap.common.types import BASE_REQUEST_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utlis import Constant, Event
-from rap.server.middleware.base import BaseMiddleware, BaseConnMiddleware, BaseMsgMiddleware
+from rap.server.middleware.base import BaseConnMiddleware, BaseMiddleware, BaseMsgMiddleware
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
+from rap.server.registry import RegistryManager
 from rap.server.requests import Request
 from rap.server.response import Response
-from rap.server.registry import RegistryManager
 
 __all__ = ["Server"]
 
@@ -123,8 +123,15 @@ class Server(object):
             self.load_start_event([processor.start_event_handle])
             self.load_stop_event([processor.stop_event_handle])
 
-    def register(self, func: Optional[Callable], name: Optional[str] = None, group: str = "default"):
-        self.registry.register(func, name, group=group)
+    def register(
+        self,
+        func: Optional[Callable],
+        name: Optional[str] = None,
+        group: str = "default",
+        is_private: bool = False,
+        doc: Optional[str] = None,
+    ):
+        self.registry.register(func, name, group=group, is_private=is_private, doc=doc)
 
     @staticmethod
     async def run_callback_list(callback_list: List[Union[Callable, Coroutine]]):

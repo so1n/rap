@@ -1,4 +1,4 @@
-from typing import Callable, Coroutine, List, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Coroutine, List, Union
 
 from rap.server.model import RequestModel, ResponseModel
 
@@ -21,7 +21,7 @@ class BaseProcessor(object):
         pass
 
     def register(self, func: Callable, group: str = "processor"):
-        self.app.register(func, group=group)
+        self.app.register(func, group=group, is_private=True)
 
     async def process_request(self, request: RequestModel) -> RequestModel:
         return request

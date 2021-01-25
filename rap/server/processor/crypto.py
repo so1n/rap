@@ -29,12 +29,14 @@ class CryptoProcessor(BaseProcessor):
         self.register(self.remove_aes, group="crypto")
 
     def load_aes_key_dict(self, aes_key_dict: Dict[str, str]) -> None:
+        """load aes key dict. eg{'key_id': 'xxxxxxxxxxxxxxxx'}"""
         self._key_dict = aes_key_dict
         for key, value in aes_key_dict.items():
             self._key_dict[key] = value
             self._crypto_dict[value] = Crypto(value)
 
     def get_crypto_key_id_list(self) -> List[str]:
+        """get crypto key in list"""
         return list(self._key_dict.keys())
 
     def get_crypto_by_key_id(self, key_id: str) -> "Union[Crypto, MISS_OBJECT]":
@@ -45,13 +47,16 @@ class CryptoProcessor(BaseProcessor):
         return self._crypto_dict.get(key, MISS_OBJECT)
 
     def remove_aes(self, key: str) -> None:
+        """delete aes value by key"""
         if key in self._crypto_dict:
             del self._crypto_dict[key]
 
     def modify_crypto_timeout(self, timeout: int) -> None:
+        """modify crypto timeout param"""
         self._timeout = timeout
 
     def modify_crypto_nonce_timeout(self, timeout: int) -> None:
+        """modify crypto nonce timeout param"""
         self._nonce_timeout = timeout
 
     async def process_request(self, request: RequestModel) -> RequestModel:
@@ -70,7 +75,7 @@ class CryptoProcessor(BaseProcessor):
 
         try:
             timestamp: int = request.body.get("timestamp", 0)
-            if (int(time.time()) - timestamp) > 60:
+            if (int(time.time()) - timestamp) > self._timeout:
                 raise ParseError(extra_msg="timeout param error")
             nonce: str = request.body.get("nonce", "")
             if not nonce:
