@@ -4,7 +4,7 @@ import uuid
 from typing import Any, List, Optional, Tuple
 
 from rap.common.conn import ServerConnection
-from rap.common.exceptions import BaseRapError
+from rap.common.exceptions import BaseRapError, ServerError
 from rap.common.utlis import Constant, Event, parse_error
 from rap.server.model import ResponseModel
 from rap.server.processor.base import BaseProcessor
@@ -34,6 +34,10 @@ class Response(object):
         set_header_value("user_agent", Constant.USER_AGENT)
         set_header_value("request_id", str(uuid.uuid4()))
         set_header_value("status_code", 200)
+
+        if isinstance(resp.body, Exception) and not isinstance(resp.body, BaseRapError):
+            logging.error(resp.body)
+            resp.body = ServerError()
 
         if isinstance(resp.body, BaseRapError):
             error_response: Optional[Tuple[str, str]] = parse_error(resp.body)

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, Generator, Lis
 from rap.common.channel import BaseChannel
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import (
+    BaseRapError,
     ChannelError,
     FuncNotFoundError,
     ParseError,
@@ -128,8 +129,12 @@ class Request(object):
         try:
             for processor in self._processor_list:
                 request = await processor.process_request(request)
-        except Exception as e:
+        except BaseRapError as e:
             response.body = e
+            return response
+        except Exception as e:
+            logging.exception(e)
+            response.body = ServerError(str(e))
             return response
 
         # check type_id
