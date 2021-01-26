@@ -204,6 +204,7 @@ class Server(object):
                 return
 
             try:
+                request.header["host"] = conn.peer_tuple
                 response: Optional[ResponseModel] = await request_handle.dispatch(request)
                 await response_handle(response)
             except Exception as closer_e:

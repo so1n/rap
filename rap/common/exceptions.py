@@ -66,3 +66,8 @@ class CryptoError(BaseRapError):
 class ChannelError(BaseRapError):
     status_code: int = 510
     message: str = "Channel Error"
+
+
+class TooManyRequest(BaseRapError):
+    status_code: int = 511
+    message: str = "This user has exceeded an allotted request count. Try again later."
