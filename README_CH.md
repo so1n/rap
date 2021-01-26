@@ -146,6 +146,7 @@ server.register(demo2, group='root', is_private=True)  # 注册并设定要注�
 注意: 使用`client.register`时, 一定要使用`async def ...`.
 ```Python
 from typing import Iterator
+
 from rap.client import Client
 
 client: Client = Client()
@@ -178,7 +179,6 @@ async def demo2(a: int, b: int) -> int: pass
 `rap`的会话支持显式设置和隐式设置,各有优缺点,不做强制限制.
 ```Python
 from rap.client import Client
-
 
 client = Client()
 
@@ -308,7 +308,6 @@ rpc_server = Server(
 ```
 ## 3.5.event
 在服务端中支持`start_event`和`stop_event`分别用于启动之前和关闭之后的事件处理.
-如插件需要用到redis时,需要在rap.server启动之前启动,并在关闭之后关闭:
 ```Python
 from rap.server import Server
 
@@ -395,7 +394,6 @@ client.load_processor([CryptoProcessor('demo_id', 'xxxxxxxxxxxxxxxx', timeout=60
 from rap.server import Server
 from rap.server.processor import CryptoProcessor
 
-
 server = Server()
 # 第一个参数为秘钥键值对,key为秘钥id, value为秘钥
 # timeout: 与当前timestamp对比超过timeout的值的请求会被抛弃
@@ -406,8 +404,7 @@ server.load_processor([CryptoProcessor({"demo_id": "xxxxxxxxxxxxxxxx"}, timeout=
 仅限服务端使用,可以限制服务端的最大链接数,超过设定值则不会处理新的请求
 ```Python
 from rap.server import Server
-from rap.server.middleware import ConnLimitMiddleware, IpMaxConnMiddleware 
-
+from rap.server.middleware import ConnLimitMiddleware, IpMaxConnMiddleware
 
 server = Server()
 server.load_middleware(
@@ -425,8 +422,7 @@ server.load_middleware(
 支持限制单个ip或者整个网段的ip, 同时支持白名单和黑名单模式,如果启用白名单,则默认禁用黑名单模式
 ```Python
 from rap.server import Server
-from rap.server.middleware import IpBlockMiddleware 
-
+from rap.server.middleware import IpBlockMiddleware
 
 server = Server()
 # allow_ip_list: 白名单列表,支持网段ip, 如果填了allow_ip_list, black_ip_list会失效
