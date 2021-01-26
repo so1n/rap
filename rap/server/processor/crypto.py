@@ -1,31 +1,34 @@
 import time
 from typing import Callable, Dict, List, Optional, Union
 
+from aredis import StrictRedis, StrictRedisCluster
+
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError, ParseError
-from rap.common.redis import AsyncRedis
 from rap.common.utlis import MISS_OBJECT, Constant, gen_random_time_id
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
 
 
 class CryptoProcessor(BaseProcessor):
-    def __init__(self, secret_dict, timeout: int = 60, nonce_timeout: int = 120):
+    def __init__(
+        self,
+        secret_dict: Dict[str, str],
+        redis: Union[StrictRedis, StrictRedisCluster],
+        timeout: int = 60,
+        nonce_timeout: int = 120,
+    ):
         self._timeout: int = timeout
         self._nonce_timeout: int = nonce_timeout
         self._nonce_key = f"{self.__class__.__name__}:nonce_key"
 
-        self._redis: Optional[AsyncRedis] = None
+        self._redis: Union[StrictRedis, StrictRedisCluster] = redis
         self._key_dict: Dict[str, str] = {}
         self._crypto_dict: Dict[str, "Crypto"] = {}
 
         self.load_aes_key_dict(secret_dict)
 
     def start_event_handle(self):
-        if not self.app.redis.enable_redis:
-            raise RuntimeError("redis has not been initialized")
-        self._redis = self.app.redis
-
         self.register(self.modify_crypto_timeout)
         self.register(self.modify_crypto_nonce_timeout)
 
@@ -91,10 +94,10 @@ class CryptoProcessor(BaseProcessor):
             if not nonce:
                 raise ParseError(extra_msg="nonce param error")
             nonce = f"{self._nonce_key}:{nonce}"
-            if await self._redis.client.exists(nonce):
+            if await self._redis.exists(nonce):
                 raise ParseError(extra_msg="nonce param error")
             else:
-                await self._redis.client.set(nonce, 1, ex=self._nonce_timeout)
+                await self._redis.set(nonce, 1, ex=self._nonce_timeout)
             request.body = request.body["body"]
 
             # set share data

@@ -1,5 +1,2 @@
 from .base import BaseLimitBackend
-from .redis import BaseRedisBackend
-from .redis import RedisCellBackend
-from .redis import RedisFixedWindowBackend
-from .redis import RedisTokenBucketBackend
+from .redis import BaseRedisBackend, RedisCellBackend, RedisFixedWindowBackend, RedisTokenBucketBackend

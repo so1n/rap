@@ -1,8 +1,9 @@
 import ipaddress
 from typing import Callable, List, Optional, Union
 
+from aredis import StrictRedis, StrictRedisCluster
+
 from rap.common.conn import ServerConnection
-from rap.common.redis import AsyncRedis
 from rap.server.middleware.base import BaseConnMiddleware
 
 
@@ -13,8 +14,13 @@ class IpBlockMiddleware(BaseConnMiddleware):
         2. allow ip
     """
 
-    def __init__(self, allow_ip_list: List[str] = None, block_ip_list: List[str] = None):
-        self._redis: Optional[AsyncRedis] = None
+    def __init__(
+        self,
+        redis: Union[StrictRedis, StrictRedisCluster],
+        allow_ip_list: List[str] = None,
+        block_ip_list: List[str] = None,
+    ):
+        self._redis: Union[StrictRedis, StrictRedisCluster] = redis
         self.block_key: str = f"{self.__class__.__name__}:block_ip"
         self.allow_key: str = f"{self.__class__.__name__}:allow_ip"
 
@@ -22,9 +28,6 @@ class IpBlockMiddleware(BaseConnMiddleware):
         self._block_ip_list: List[str] = block_ip_list
 
     async def start_event_handle(self):
-        if not self.app.redis.enable_redis:
-            raise RuntimeError("redis has not been initialized")
-        self._redis = self.app.redis
 
         self.register(self._add_allow_ip)
         self.register(self._add_block_ip)
@@ -65,38 +68,38 @@ class IpBlockMiddleware(BaseConnMiddleware):
 
     async def _add_allow_ip(self, ip: Union[str, List]):
         ip_list = self.ip_handle(ip)
-        await self._redis.client.sadd(self.allow_key, ip_list[0], ip_list[1:])
-        await self._redis.client.srem(self.block_key, ip_list[0], ip_list[1:])
+        await self._redis.sadd(self.allow_key, ip_list[0], ip_list[1:])
+        await self._redis.srem(self.block_key, ip_list[0], ip_list[1:])
 
     async def _add_block_ip(self, ip: Union[str, List]):
         ip_list = self.ip_handle(ip)
-        await self._redis.client.sadd(self.block_key, ip_list[0], ip_list[1:])
-        await self._redis.client.srem(self.allow_key, ip_list[0], ip_list[1:])
+        await self._redis.sadd(self.block_key, ip_list[0], ip_list[1:])
+        await self._redis.srem(self.allow_key, ip_list[0], ip_list[1:])
 
     async def _remove_allow_ip(self, ip: Union[str, List]):
         ip_list = self.ip_handle(ip)
-        await self._redis.client.redis_pool.srem(self.allow_key, ip_list[0], ip_list[1:])
+        await self._redis.srem(self.allow_key, ip_list[0], ip_list[1:])
 
     async def _remove_block_ip(self, ip: Union[str, List]):
         ip_list = self.ip_handle(ip)
-        await self._redis.client.redis_pool.srem(self.block_key, ip_list[0], ip_list[1:])
+        await self._redis.srem(self.block_key, ip_list[0], ip_list[1:])
 
     async def _get_allow_ip(self) -> List[str]:
-        return [ip async for ip in self._redis.client.redis_pool.isscan(self.allow_key)]
+        return [ip async for ip in self._redis.isscan(self.allow_key)]
 
     async def _get_block_ip(self) -> List[str]:
-        return [ip async for ip in self._redis.client.redis_pool.isscan(self.block_key)]
+        return [ip async for ip in self._redis.isscan(self.block_key)]
 
     async def dispatch(self, conn: ServerConnection):
         ip: str = conn.peer_tuple[0]
-        enable_allow: bool = await self._redis.client.redis_pool.scard(self.allow_key) > 0
+        enable_allow: bool = await self._redis.scard(self.allow_key) > 0
         if enable_allow:
-            is_allow: int = await self._redis.client.redis_pool.sismember(self.allow_key, ip)
+            is_allow: int = await self._redis.sismember(self.allow_key, ip)
             if not is_allow:
                 await conn.await_close()
                 return
         else:
-            is_block: int = await self._redis.client.redis_pool.sismember(self.block_key, ip)
+            is_block: int = await self._redis.sismember(self.block_key, ip)
             if is_block:
                 await conn.await_close()
                 return

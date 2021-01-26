@@ -1,9 +1,10 @@
 import logging
 import time
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Union
+
+from aredis import StrictRedis, StrictRedisCluster
 
 from rap.common.conn import ServerConnection
-from rap.common.redis import AsyncRedis
 from rap.common.utlis import Constant, Event
 from rap.server.middleware.base import BaseConnMiddleware
 from rap.server.model import ResponseModel
@@ -70,15 +71,12 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
     feat: Limit the number of connections of a specified IP within a unit time
     """
 
-    def __init__(self, ip_max_conn: int = 128, timeout: int = 180):
-        self._redis: Optional[AsyncRedis] = None
+    def __init__(self, redis: Union[StrictRedis, StrictRedisCluster], ip_max_conn: int = 128, timeout: int = 180):
+        self._redis: Union[StrictRedis, StrictRedisCluster] = redis
         self._ip_max_conn: int = ip_max_conn
         self._timeout: int = timeout
 
     def start_event_handle(self):
-        if not self.app.redis.enable_redis:
-            raise RuntimeError("redis has not been initialized")
-        self._redis = self.app.redis
         self.register(self.modify_max_ip_max_conn, group="ip_max_conn")
         self.register(self.modify_ip_max_timeout, group="ip_max_conn")
 
@@ -90,7 +88,9 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
 
     async def dispatch(self, conn: ServerConnection):
         key: str = f"{self.__class__.__name__}:conn.peer_tuple[0]"
-        if (await self._redis.client.get(key)) > self._ip_max_conn:
+        now_cnt: Optional[int] = await self._redis.get(key)
+        now_cnt = int(now_cnt) if now_cnt else 0
+        if now_cnt > self._ip_max_conn:
             logging.error(f"Currently exceeding the maximum number of ip conn limit, close {conn.peer_tuple}")
             await Response(conn)(
                 ResponseModel(
@@ -100,9 +100,9 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
             await conn.await_close()
             return
         else:
-            await self._redis.client.incr(key)
+            await self._redis.incr(key)
             try:
                 await self.call_next(conn)
             finally:
-                await self._redis.client.decr(key)
-                await self._redis.client.expire(key, self._timeout)
+                await self._redis.decr(key)
+                await self._redis.expire(key, self._timeout)

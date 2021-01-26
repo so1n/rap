@@ -342,6 +342,7 @@ server.load_stop_event([mock_stop()])
 from rap.server import Server
 from rap.server.middleware import AccessMsgMiddleware, ConnLimitMiddleware
 
+
 rpc_server = Server()
 rpc_server.load_middleware([ConnLimitMiddleware(), AccessMsgMiddleware()])
 ```
@@ -364,11 +365,14 @@ client.load_processor([CryptoProcessor('key_id', 'xxxxxxxxxxxxxxxx')])
 ```
 `rap.server`引入processor方法
 ```Python
+from aredis import StrictRedis
 from rap.server import Server
 from rap.server.processor import CryptoProcessor
 
+
+redis: StrictRedis = StrictRedis("redis://localhost")
 server = Server()
-server.load_processor([CryptoProcessor({'key_id': 'xxxxxxxxxxxxxxxx'})])
+server.load_processor([CryptoProcessor({'key_id': 'xxxxxxxxxxxxxxxx'}, redis)])
 ```
 
 # 4.插件
@@ -391,21 +395,27 @@ client.load_processor([CryptoProcessor('demo_id', 'xxxxxxxxxxxxxxxx', timeout=60
 ```
 服务端示例:
 ```Python
+from aredis import StrictRedis
 from rap.server import Server
 from rap.server.processor import CryptoProcessor
 
+
+redis: StrictRedis = StrictRedis("redis://localhost")
 server = Server()
 # 第一个参数为秘钥键值对,key为秘钥id, value为秘钥
 # timeout: 与当前timestamp对比超过timeout的值的请求会被抛弃
 # nonce_timeout: nonce的过期时间,最好大于timeout
-server.load_processor([CryptoProcessor({"demo_id": "xxxxxxxxxxxxxxxx"}, timeout=60, nonce_timeout=120)])
+server.load_processor([CryptoProcessor({"demo_id": "xxxxxxxxxxxxxxxx"}, redis, timeout=60, nonce_timeout=120)])
 ```
 ## 4.2.限制最大链接数
 仅限服务端使用,可以限制服务端的最大链接数,超过设定值则不会处理新的请求
 ```Python
+from aredis import StrictRedis
 from rap.server import Server
 from rap.server.middleware import ConnLimitMiddleware, IpMaxConnMiddleware
 
+
+redis: StrictRedis = StrictRedis("redis://localhost")
 server = Server()
 server.load_middleware(
     [
@@ -414,20 +424,23 @@ server.load_middleware(
         ConnLimitMiddleware(max_conn=100, block_time=60),
         # ip_max_conn: 每个ip的最大链接数
         # timeout: 统计周期, 如果超过该时间没有访问,相关IP的统计会被清零 
-        IpMaxConnMiddleware(ip_max_conn=10, timeout=60),
+        IpMaxConnMiddleware(redis, ip_max_conn=10, timeout=60),
     ]
 )
 ```
 ## 4.3.限制ip访问
 支持限制单个ip或者整个网段的ip, 同时支持白名单和黑名单模式,如果启用白名单,则默认禁用黑名单模式
 ```Python
+from aredis import StrictRedis
 from rap.server import Server
 from rap.server.middleware import IpBlockMiddleware
 
+
+redis: StrictRedis = StrictRedis("redis://localhost")
 server = Server()
 # allow_ip_list: 白名单列表,支持网段ip, 如果填了allow_ip_list, black_ip_list会失效
 # black_ip_list: 黑名单列表,支持网段ip
-server.load_middleware([IpBlockMiddleware(allow_ip_list=['192.168.0.0/31'], block_ip_list=['192.168.0.2'])])
+server.load_middleware([IpBlockMiddleware(redis, allow_ip_list=['192.168.0.0/31'], block_ip_list=['192.168.0.2'])])
 ```
 # 5.高级功能
 **TODO**, 本功能暂未实现
