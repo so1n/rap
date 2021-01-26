@@ -7,7 +7,14 @@
  - Feature: client support load balance
  - Feature: server HA middleware
  
-### 0.5.3.5[now]
+### 0.5.3.6[Now]
+ - Fix: client crypto memory bug
+ - Feature: server support register private func   
+ - Feature: client register support alias & group
+ - Refactor: server start event&stop event
+ - Refactor: protocol's event flag & header column & error response
+
+### 0.5.3.5
  - Remove: remove life cycle
  - Feature: add conn result future(listen conn exc)
  - Feature: read conn data add listen conn exc
