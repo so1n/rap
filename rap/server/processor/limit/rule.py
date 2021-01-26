@@ -13,8 +13,8 @@ class Rule(object):
     week: int = 0
 
     # token config
-    max_token: Optional[int] = 100    # Maximum number of tokens per bucket
-    gen_token: int = 1                # The number of tokens generated per unit time
+    max_token: Optional[int] = 100  # Maximum number of tokens per bucket
+    gen_token: int = 1  # The number of tokens generated per unit time
     init_token: Optional[int] = None  # The initial number of tokens in the bucket
 
     group: Optional[str] = None

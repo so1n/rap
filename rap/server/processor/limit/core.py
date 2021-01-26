@@ -5,7 +5,6 @@ from rap.common.exceptions import TooManyRequest
 from rap.common.utlis import Constant
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
-
 from rap.server.processor.limit.backend import BaseLimitBackend
 from rap.server.processor.limit.rule import Rule
 from rap.server.processor.limit.util import RULE_FUNC_TYPE

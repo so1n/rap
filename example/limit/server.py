@@ -1,5 +1,7 @@
 import asyncio
 
+from aredis import StrictRedis, StrictRedisCluster
+
 from rap.server import Server
 from rap.server.model import RequestModel
 from rap.server.processor import limit
@@ -14,7 +16,7 @@ async def demo1(a: int, b: int) -> int:
 
 
 def match_demo_request(request: RequestModel) -> limit.RULE_FUNC_RETURN_TYPE:
-    if request.func_name == 'demo':
+    if request.func_name == "demo":
         return request.func_name
     else:
         return None
@@ -36,15 +38,16 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
+    redis: StrictRedis = StrictRedis.from_url("redis://localhost")
     rpc_server = Server()
     rpc_server.register(demo)
     rpc_server.register(demo1)
     limit_processor = limit.LimitProcessor(
-        limit.backend.RedisTokenBucketBackend(rpc_server.redis),
+        limit.backend.RedisTokenBucketBackend(redis),
         [
             (match_demo_request, limit.Rule(second=5, gen_token=1, init_token=1, max_token=10, block_time=10)),
-            (match_ip_request, limit.Rule(second=5, gen_token=1, init_token=1, max_token=10, block_time=10))
-        ]
+            (match_ip_request, limit.Rule(second=5, gen_token=1, init_token=1, max_token=10, block_time=10)),
+        ],
     )
     rpc_server.load_processor([limit_processor])
     loop.run_until_complete(rpc_server.create_server())

@@ -4,6 +4,7 @@ from typing import Callable
 
 from rap.client import Client
 from rap.common.exceptions import TooManyRequest
+
 client = Client()
 
 
@@ -14,7 +15,7 @@ async def demo(a: int, b: int) -> int:
 
 
 @client.register()
-async def demo1(a: int, b:int) -> int:
+async def demo1(a: int, b: int) -> int:
     pass
 
 
@@ -25,9 +26,10 @@ async def retry_handle(func: Callable):
                 print(await func(i, 0))
                 break
             except TooManyRequest as e:
-                print(f'recv error: {e}')
-                print('limiting...sleep 10')
+                print(f"recv error: {e}")
+                print("limiting...sleep 10")
                 await asyncio.sleep(10)
+
 
 async def main():
     s_t = time.time()

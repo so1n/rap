@@ -16,13 +16,13 @@ class AsyncIteratorCall:
     """let client support async iterator (keep sending and receiving messages under the same conn)"""
 
     def __init__(
-            self,
-            method: str,
-            client: "Client",
-            *args: Tuple,
-            header: Optional[dict] = None,
-            group: Optional[str] = None,
-            session: Optional[Session] = None,
+        self,
+        method: str,
+        client: "Client",
+        *args: Tuple,
+        header: Optional[dict] = None,
+        group: Optional[str] = None,
+        session: Optional[Session] = None,
     ):
         self.group: Optional[str] = group
         self._method: str = method
@@ -70,7 +70,7 @@ class AsyncIteratorCall:
             call_id=self._call_id,
             header=self._header,
             session=self._session,
-            group=self.group
+            group=self.group,
         )
         self._call_id = response.body["call_id"]
         if response.header["status_code"] == 301:
@@ -80,11 +80,11 @@ class AsyncIteratorCall:
 
 class Client:
     def __init__(
-            self,
-            host_list: Optional[List[str]] = None,
-            timeout: int = 9,
-            keep_alive_time: int = 1200,
-            ssl_crt_path: Optional[str] = None,
+        self,
+        host_list: Optional[List[str]] = None,
+        timeout: int = 9,
+        keep_alive_time: int = 1200,
+        ssl_crt_path: Optional[str] = None,
     ):
         """
         host_list:
@@ -161,13 +161,13 @@ class Client:
     # client base api #
     ###################
     async def raw_call(
-            self,
-            method: str,
-            *args: Any,
-            conn: Optional[Connection] = None,
-            header: Optional[dict] = None,
-            group: Optional[str] = None,
-            session: Optional["Session"] = None,
+        self,
+        method: str,
+        *args: Any,
+        conn: Optional[Connection] = None,
+        header: Optional[dict] = None,
+        group: Optional[str] = None,
+        session: Optional["Session"] = None,
     ) -> Any:
         """rpc client base call method
         method: func name
@@ -183,13 +183,13 @@ class Client:
         return response.body["result"]
 
     async def call(
-            self,
-            func: Callable,
-            *args: Any,
-            conn: Optional[Connection] = None,
-            header: Optional[dict] = None,
-            group: Optional[str] = None,
-            session: Optional["Session"] = None,
+        self,
+        func: Callable,
+        *args: Any,
+        conn: Optional[Connection] = None,
+        header: Optional[dict] = None,
+        group: Optional[str] = None,
+        session: Optional["Session"] = None,
     ) -> Any:
         """automatically resolve function names and call raw_call
         func: rpc func
@@ -204,12 +204,12 @@ class Client:
         return await self.raw_call(func.__name__, *args, conn=conn, group=group, header=header, session=session)
 
     async def iterator_call(
-            self,
-            method: str,
-            *args: Any,
-            header: Optional[dict] = None,
-            group: Optional[str] = None,
-            session: Optional["Session"] = None
+        self,
+        method: str,
+        *args: Any,
+        header: Optional[dict] = None,
+        group: Optional[str] = None,
+        session: Optional["Session"] = None,
     ) -> Any:
         """Python-specific generator call
         method: func name
@@ -219,7 +219,7 @@ class Client:
         session: conn session
         """
         async with AsyncIteratorCall(
-                method, self, *args, header=header, group=group, session=session
+            method, self, *args, header=header, group=group, session=session
         ) as async_iterator:
             async for result in async_iterator:
                 yield result
