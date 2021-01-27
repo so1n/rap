@@ -32,13 +32,13 @@ class Channel(BaseChannel):
         self,
         channel_id: str,
         func_name: str,
-        write: Callable[[ResponseModel], Coroutine[Any, Any, Any]],
+        write: Callable[[Any, Dict[str, Any]], Coroutine[Any, Any, Any]],
         close: Callable,
         conn: ServerConnection,
     ):
         self._func_name: str = func_name
         self._close: Callable = close
-        self._write: Callable[[ResponseModel], Coroutine[Any, Any, Any]] = write
+        self._write: Callable[[Any, Dict[str, Any]], Coroutine[Any, Any, Any]] = write
         self._conn: ServerConnection = conn
         self.queue: asyncio.Queue = asyncio.Queue()
         self.channel_id: str = channel_id
@@ -48,14 +48,7 @@ class Channel(BaseChannel):
     async def write(self, body: Any):
         if self.is_close:
             raise ChannelError(f"channel{self.channel_id} is close")
-        response: "ResponseModel" = ResponseModel(
-            num=Constant.CHANNEL_RESPONSE,
-            msg_id=-1,
-            func_name=self._func_name,
-            header={"channel_id": self.channel_id, "channel_life_cycle": Constant.MSG},
-            body=body,
-        )
-        await self._write(response)
+        await self._write(body, {"channel_life_cycle": Constant.MSG})
 
     async def read(self) -> ResponseModel:
         if self.is_close:
@@ -72,13 +65,7 @@ class Channel(BaseChannel):
             return
         self._is_close = True
         if not self._conn.is_closed():
-            response: "ResponseModel" = ResponseModel(
-                num=Constant.CHANNEL_RESPONSE,
-                msg_id=-1,
-                func_name=self._func_name,
-                header={"channel_id": self.channel_id, "channel_life_cycle": Constant.DROP},
-            )
-            await self._write(response)
+            await self._write(None, {"channel_life_cycle": Constant.DROP})
         if not self.future.cancelled():
             self.future.cancel()
         self._close()
@@ -120,8 +107,9 @@ class Request(object):
         # gen response object
         response: "ResponseModel" = ResponseModel(
             num=response_num,
-            func_name=request.func_name,
             msg_id=request.msg_id,
+            group=request.group,
+            func_name=request.func_name,
             stats=request.stats,
         )
         response.header.update(request.header)
@@ -194,8 +182,16 @@ class Request(object):
                 response.body = ChannelError("channel already create")
                 return response
 
-            async def write(_response: ResponseModel):
-                _response.stats = response.stats
+            async def write(body: Any, header: Dict[str, Any]):
+                header["channel_id"] = channel_id
+                _response: "ResponseModel" = ResponseModel(
+                    num=Constant.CHANNEL_RESPONSE,
+                    msg_id=-1,
+                    group=response.group,
+                    func_name=response.func_name,
+                    header=header,
+                    body=body
+                )
                 await self._response(_response)
 
             def close():
@@ -235,12 +231,7 @@ class Request(object):
             return response
 
     def check_func(self, request: RequestModel, type_: str) -> Callable:
-        group: str = "default"
-        if type(request.body) is dict:
-            group = request.body.get("group", "default")
-
-        func_key: str = f"{group}:{type_}:{request.func_name}"
-
+        func_key: str = self._app.registry.gen_key(request.group, request.func_name, type_)
         if func_key not in self._app.registry:
             raise FuncNotFoundError(extra_msg=f"name: {request.func_name}")
 

@@ -4,9 +4,9 @@ from typing import Any, List, Optional, Set, Tuple, Type, Union, _GenericAlias
 
 import msgpack
 
-# request num, msg id, func name, header, body
-BASE_REQUEST_TYPE = Tuple[int, int, str, dict, Any]
-BASE_RESPONSE_TYPE = Optional[Tuple[int, int, str, dict, Any]]
+# request num, msg id, group, func name, header, body
+BASE_REQUEST_TYPE = Tuple[int, int, str, str, dict, Any]
+BASE_RESPONSE_TYPE = Optional[Tuple[int, int, str, str, dict, Any]]
 LOOP_TYPE = asyncio.get_event_loop
 READER_TYPE = asyncio.streams.StreamReader
 WRITER_TYPE = asyncio.streams.StreamWriter

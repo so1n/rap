@@ -146,13 +146,13 @@ class Client:
 
         return cast(Callable, wrapper)
 
-    def _async_channel_register(self, func: Callable, name: Optional[str] = None):
+    def _async_channel_register(self, func: Callable, group: Optional[str], name: Optional[str] = None):
         """Decoration channel function"""
         name: str = name if name else func.__name__
 
         @wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
-            async with self.transport.channel(name) as channel:
+            async with self.transport.channel(name, group) as channel:
                 await func(channel)
 
         return cast(Callable, wrapper)
@@ -238,9 +238,7 @@ class Client:
                 i for i in func_sig.parameters.values() if i.default == i.empty
             ]
             if len(func_arg_parameter) == 1 and func_arg_parameter[0].annotation is Channel:
-                if group:
-                    raise RuntimeError("channel func not support group")
-                return self._async_channel_register(func, name=name)
+                return self._async_channel_register(func, group, name=name)
             if inspect.iscoroutinefunction(func):
                 return self._async_register(func, group, name=name)
             elif inspect.isasyncgenfunction(func):

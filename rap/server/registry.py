@@ -36,6 +36,10 @@ class RegistryManager(object):
         self.register(self._reload, "reload", group="registry", is_private=True)
         self.register(self._get_register_func, "list", group="registry", is_private=True)
 
+    @classmethod
+    def gen_key(cls, group: str, name: str, type_: str) -> str:
+        return f"{type_}:{group}:{name}"
+
     @staticmethod
     def _get_func_type(func: Callable) -> str:
         sig: "inspect.Signature" = inspect.signature(func)
@@ -93,7 +97,7 @@ class RegistryManager(object):
         else:
             raise RegisteredError("func must be func or method")
 
-        func_key: str = f"{group}:{type_}:{name}"
+        func_key: str = self.gen_key(group, name, type_)
         if func_key in self.func_dict:
             raise RegisteredError(f"Name: {name} has already been used")
         self.func_dict[func_key] = FuncModel(
@@ -128,7 +132,7 @@ class RegistryManager(object):
                 name = func.__name__
 
             type_: str = self._get_func_type(func)
-            func_key: str = f"{group}:{type_}:{name}"
+            func_key: str = self.gen_key(group, name, type_)
             if func_key in self.func_dict:
                 raise RegisteredError(f"{name} already exists in group {group}")
 
@@ -146,7 +150,7 @@ class RegistryManager(object):
             if not name:
                 name = func.__name__
             type_: str = self._get_func_type(func)
-            func_key: str = f"{group}:{type_}:{name}"
+            func_key: str = self.gen_key(group, name, type_)
             if func_key not in self.func_dict:
                 raise RegisteredError(f"{name} not in group {group}")
 
