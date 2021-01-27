@@ -184,7 +184,7 @@ class Server(object):
                 await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "request is empty")))
                 return
             try:
-                request: RequestModel = RequestModel(*_request_msg)
+                request: RequestModel = RequestModel.from_msg(_request_msg)
             except Exception as closer_e:
                 logging.error(f"{conn.peer_tuple} send bad msg:{_request_msg}, error:{closer_e}")
                 await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "protocol error")))

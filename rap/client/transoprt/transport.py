@@ -13,7 +13,7 @@ from rap.client.transoprt.channel import Channel
 from rap.client.utils import get_exc_status_code_dict, raise_rap_error
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
-from rap.common.exceptions import ChannelError, RPCError, RpcRunTimeError
+from rap.common.exceptions import ChannelError, RPCError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.common.utlis import MISS_OBJECT, Constant, Event, as_first_completed
 
@@ -128,7 +128,7 @@ class Transport(object):
 
         # parse response
         try:
-            response: Response = Response(*response_msg)
+            response: Response = Response.from_msg(response_msg)
         except ValueError:
             logging.error(f"recv wrong response:{response_msg}")
             return
@@ -280,7 +280,7 @@ class Transport(object):
         # if len([i for i in args if i is not MISS_OBJECT]) > 0
         if not group:
             group = "default"
-        request: Request = Request(Constant.MSG_REQUEST, func_name, {"call_id": call_id, "param": args, "group": group})
+        request: Request = Request(Constant.MSG_REQUEST, func_name, {"call_id": call_id, "param": args}, group=group)
         if header:
             request.header.update(header)
         response: Response = await self._base_request(request, conn=conn, session=session)
@@ -308,7 +308,7 @@ class Transport(object):
     def get_now_session() -> "Session":
         return _session_context.get(MISS_OBJECT)
 
-    def channel(self, func_name: str) -> "Channel":
+    def channel(self, func_name: str, group: Optional[str] = None) -> "Channel":
         async def create(_channel_id: str):
             self._channel_queue_dict[_channel_id] = asyncio.Queue()
 
@@ -327,7 +327,7 @@ class Transport(object):
 
             conn.add_listen_exc_func(_add_exc_queue)
 
-        return Channel(func_name, self.session, create, read, write, close, listen_conn_exc)
+        return Channel(func_name, self.session, create, read, write, close, listen_conn_exc, group=group)
 
     #############
     # processor #

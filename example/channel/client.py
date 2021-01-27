@@ -14,7 +14,7 @@ client = Client(
 client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
 
 
-@client.register
+@client.register()
 async def async_channel(channel: Channel):
     await channel.write("hello")
     cnt: int = 0

@@ -1,5 +1,6 @@
 import asyncio
 
+from aredis import StrictRedis
 from rap.server import Channel, Server
 from rap.server.model import ResponseModel
 from rap.server.processor import CryptoProcessor
@@ -47,8 +48,9 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
+    redis: StrictRedis = StrictRedis.from_url("redis://localhost")
     rpc_server = Server(host=["localhost:9000", "localhost:9001", "localhost:9002"])
-    rpc_server.load_processor([CryptoProcessor({"test": "keyskeyskeyskeys"})])
+    rpc_server.load_processor([CryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])
     rpc_server.register(async_channel)
     rpc_server.register(echo_body)
     rpc_server.register(echo_response)
