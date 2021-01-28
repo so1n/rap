@@ -140,8 +140,9 @@ class Client:
 
         @wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
-            async for result in self.iterator_call(name, *args, group=group, **kwargs):
-                yield result
+            async with AsyncIteratorCall(name, self, *args, group=group) as async_iterator:
+                async for result in async_iterator:
+                    yield result
 
         return cast(Callable, wrapper)
 
@@ -196,21 +197,21 @@ class Client:
 
     async def iterator_call(
         self,
-        method: str,
+        func: Callable,
         *args: Any,
         header: Optional[dict] = None,
         group: Optional[str] = None,
         session: Optional["Session"] = None,
     ) -> Any:
         """Python-specific generator call
-        method: func name
+        func: rap func
         args: python args
         header: request's header
         group: func's group, default group value is `default`
         session: conn session
         """
         async with AsyncIteratorCall(
-            method, self, *args, header=header, group=group, session=session
+            func.__name__, self, *args, header=header, group=group, session=session
         ) as async_iterator:
             async for result in async_iterator:
                 yield result
