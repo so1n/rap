@@ -181,13 +181,13 @@ class Server(object):
 
         async def recv_msg_handle(_request_msg: Optional[BASE_REQUEST_TYPE]):
             if _request_msg is None:
-                await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "request is empty")))
+                await response_handle(ResponseModel.from_event(Event(Constant.EVENT_CLOSE_CONN, "request is empty")))
                 return
             try:
                 request: RequestModel = RequestModel.from_msg(_request_msg)
             except Exception as closer_e:
                 logging.error(f"{conn.peer_tuple} send bad msg:{_request_msg}, error:{closer_e}")
-                await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "protocol error")))
+                await response_handle(ResponseModel.from_event(Event(Constant.EVENT_CLOSE_CONN, "protocol error")))
                 await conn.wait_closed()
                 return
 
@@ -197,7 +197,7 @@ class Server(object):
                 await response_handle(response)
             except Exception as closer_e:
                 logging.exception(f"raw_request handle error e")
-                await response_handle(ResponseModel(body=ServerError(str(closer_e))))
+                await response_handle(ResponseModel.from_exc(ServerError(str(closer_e))))
 
         while not conn.is_closed():
             try:
@@ -206,7 +206,7 @@ class Server(object):
                 asyncio.ensure_future(recv_msg_handle(request_msg))
             except asyncio.TimeoutError:
                 logging.error(f"recv data from {conn.peer_tuple} timeout. close conn")
-                await response_handle(ResponseModel(body=Event(Constant.EVENT_CLOSE_CONN, "keep alive timeout")))
+                await response_handle(ResponseModel.from_event(Event(Constant.EVENT_CLOSE_CONN, "keep alive timeout")))
                 break
             except IOError:
                 break

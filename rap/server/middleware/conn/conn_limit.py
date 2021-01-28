@@ -52,9 +52,9 @@ class ConnLimitMiddleware(BaseConnMiddleware):
         if self._release_timestamp > now_timestamp or self._conn_count > self._max_conn:
             self._release_timestamp = now_timestamp + self._block_time
             await Response(conn)(
-                ResponseModel(
-                    body=Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of connections limit")
-                ),
+                ResponseModel.from_event(
+                    Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of connections limit")
+                )
             )
             await conn.await_close()
             return
@@ -93,9 +93,9 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
         if now_cnt > self._ip_max_conn:
             logging.error(f"Currently exceeding the maximum number of ip conn limit, close {conn.peer_tuple}")
             await Response(conn)(
-                ResponseModel(
-                    body=Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of ip conn limit")
-                ),
+                ResponseModel.from_event(
+                    Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of ip conn limit")
+                )
             )
             await conn.await_close()
             return

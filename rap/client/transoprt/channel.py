@@ -28,7 +28,7 @@ class Channel(BaseChannel):
         write: Callable[[Request, "Session"], Coroutine[Any, Any, None]],
         close: Callable[[str], Coroutine[Any, Any, Any]],
         add_listen_conn_exc: Callable[[str, Connection], None],
-        group: Optional[str] = None
+        group: Optional[str] = None,
     ):
         self.channel_id: str = str(uuid.uuid4())
         self._func_name: str = fun_name
@@ -84,7 +84,7 @@ class Channel(BaseChannel):
             self._func_name,
             body,
             group=self._group,
-            header={"channel_life_cycle": life_cycle, "channel_id": self.channel_id}
+            header={"channel_life_cycle": life_cycle, "channel_id": self.channel_id},
         )
         await self._write(request, self._session)
 
