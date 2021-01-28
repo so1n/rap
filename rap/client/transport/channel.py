@@ -10,7 +10,7 @@ from rap.common.exceptions import ChannelError
 from rap.common.utlis import Constant
 
 if TYPE_CHECKING:
-    from rap.client.transoprt.transport import Session
+    from rap.client.transport.transport import Session
 
 
 __all__ = ["Channel"]

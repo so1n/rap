@@ -9,7 +9,7 @@ from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple, Type, 
 
 from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
-from rap.client.transoprt.channel import Channel
+from rap.client.transport.channel import Channel
 from rap.client.utils import get_exc_status_code_dict, raise_rap_error
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
