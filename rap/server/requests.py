@@ -118,38 +118,36 @@ class Request(object):
             for processor in self._processor_list:
                 request = await processor.process_request(request)
         except BaseRapError as e:
-            response.body = e
+            response.set_exception(e)
             return response
         except Exception as e:
             logging.exception(e)
-            response.body = ServerError(str(e))
+            response.set_exception(e)
             return response
 
         # check type_id
         if response.num is Constant.SERVER_ERROR_RESPONSE:
             logging.error(f"parse request data: {request} from {self._conn.peer_tuple} error")
-            response.body = ServerError("Illegal request")
+            response.set_exception(ServerError("Illegal request"))
             return response
 
         try:
             dispatch_func: Callable = self.dispatch_func_dict[request.num]
             return await dispatch_func(request, response)
         except Exception as e:
-            response.body = RpcRunTimeError(str(e))
+            response.set_exception(RpcRunTimeError(str(e)))
             return response
 
     async def ping_event(self):
         while not self._conn.is_closed():
             diff_time: int = int(time.time()) - self._keepalive_timestamp
             if diff_time > (self._ping_sleep_time * self._ping_fail_cnt) + 10:
-                await self._response(
-                    ResponseModel(Constant.SERVER_EVENT, body=Event(Constant.EVENT_CLOSE_CONN, "recv pong timeout"))
-                )
+                await self._response(ResponseModel.from_event(Event(Constant.EVENT_CLOSE_CONN, "recv pong timeout")))
                 if not self._conn.is_closed():
                     self._conn.close()
                 break
             else:
-                await self._response(ResponseModel(Constant.SERVER_EVENT, body=Event(Constant.PING_EVENT, "")))
+                await self._response(ResponseModel.from_event(Event(Constant.PING_EVENT, "")))
 
                 try:
                     # check conn exc
@@ -164,7 +162,7 @@ class Request(object):
         try:
             func: Callable = self.check_func(request, "channel")
         except FuncNotFoundError as e:
-            response.body = e
+            response.set_exception(e)
             return response
         # declare var
         channel_id: str = request.header.get("channel_id")
@@ -174,12 +172,12 @@ class Request(object):
         channel: Channel = self._channel_dict.get(channel_id, MISS_OBJECT)
         if life_cycle == Constant.MSG:
             if channel is MISS_OBJECT:
-                response.body = ChannelError("channel not create")
+                response.set_exception(ChannelError("channel not create"))
                 return response
             await channel.queue.put(request)
         elif life_cycle == Constant.DECLARE:
             if channel is not MISS_OBJECT:
-                response.body = ChannelError("channel already create")
+                response.set_exception(ChannelError("channel already create"))
                 return response
 
             async def write(body: Any, header: Dict[str, Any]):
@@ -190,7 +188,7 @@ class Request(object):
                     group=response.group,
                     func_name=response.func_name,
                     header=header,
-                    body=body
+                    body=body,
                 )
                 await self._response(_response)
 
@@ -221,13 +219,13 @@ class Request(object):
             return response
         elif life_cycle == Constant.DROP:
             if channel is MISS_OBJECT:
-                response.body = ChannelError("channel not create")
+                response.set_exception(ChannelError("channel not create"))
                 return response
             else:
                 await channel.close()
                 return
         else:
-            response.body = ChannelError("channel life cycle error")
+            response.set_exception(ChannelError("channel life cycle error"))
             return response
 
     def check_func(self, request: RequestModel, type_: str) -> Callable:
@@ -288,13 +286,13 @@ class Request(object):
         try:
             func: Callable = self.check_func(request, "normal")
         except FuncNotFoundError as e:
-            response.body = e
+            response.set_exception(e)
             return response
 
         try:
             call_id: int = request.body["call_id"]
         except KeyError:
-            response.body = ParseError(extra_msg="body miss params")
+            response.set_exception(ParseError(extra_msg="body miss params"))
             return response
         param: str = request.body.get("param")
         new_call_id, result = await self._msg_handle(request, call_id, func, param)
@@ -311,8 +309,7 @@ class Request(object):
         return response
 
     async def event(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
-        event_name: str = request.body[0]
-        if event_name == Constant.PONG_EVENT:
+        if request.func_name == Constant.PONG_EVENT:
             self._keepalive_timestamp = int(time.time())
             return None
 

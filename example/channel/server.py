@@ -1,6 +1,7 @@
 import asyncio
 
 from aredis import StrictRedis
+
 from rap.server import Channel, Server
 from rap.server.model import ResponseModel
 from rap.server.processor import CryptoProcessor
