@@ -4,9 +4,8 @@ from typing import Any, Callable, List, Optional, Tuple, cast
 
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
-from rap.client.transoprt.channel import Channel
-from rap.client.transoprt.transport import Session, Transport
-from rap.common.conn import Connection
+from rap.client.transport.channel import Channel
+from rap.client.transport.transport import Session, Transport
 from rap.common.utlis import MISS_OBJECT
 
 __all__ = ["Client"]
