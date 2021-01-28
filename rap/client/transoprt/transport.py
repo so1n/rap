@@ -185,15 +185,13 @@ class Transport(object):
     ####################################
     # base one by one request response #
     ####################################
-    async def _base_request(
-        self, request: Request, conn: Optional[Connection] = None, session: Optional["Session"] = None
-    ) -> Response:
+    async def _base_request(self, request: Request, session: Optional["Session"] = None) -> Response:
         """gen msg id, send and recv response"""
         msg_id: int = self._msg_id + 1
         # Avoid too big numbers
         self._msg_id = msg_id & 65535
 
-        conn, resp_future_id = await self.write(request, msg_id, conn, session)
+        conn, resp_future_id = await self.write(request, msg_id, session)
         try:
             return await self.read(resp_future_id, conn)
         finally:
@@ -237,7 +235,7 @@ class Transport(object):
             request_msg: BASE_REQUEST_TYPE = _request.gen_request_msg(msg_id)
             try:
                 await conn.write(request_msg)
-            except asyncio.TimeoutError as e:
+            except asyncio.TimeoutError:
                 raise asyncio.TimeoutError(f"send to %s timeout, drop data:%s", conn.connection_info, request_msg)
             except Exception as e:
                 raise e
@@ -270,7 +268,6 @@ class Transport(object):
         func_name: str,
         *args,
         call_id=-1,
-        conn: Optional[Connection] = None,
         group: Optional[str] = None,
         header: Optional[dict] = None,
         session: Optional["Session"] = None,
@@ -282,7 +279,7 @@ class Transport(object):
         request: Request = Request(Constant.MSG_REQUEST, func_name, {"call_id": call_id, "param": args}, group=group)
         if header:
             request.header.update(header)
-        response: Response = await self._base_request(request, conn=conn, session=session)
+        response: Response = await self._base_request(request, session=session)
         if response.num != Constant.MSG_RESPONSE:
             raise RPCError(f"request num must:{Constant.MSG_RESPONSE} not {response.num}")
         if "exc" in response.body:
@@ -374,9 +371,7 @@ class Session(object):
         return self._conn
 
     async def request(self, method: str, *args, call_id=-1, header: Optional[dict] = None) -> Any:
-        return await self._transport.request(
-            method, *args, call_id=call_id, conn=self.conn, header=header, session=self
-        )
+        return await self._transport.request(method, *args, call_id=call_id, header=header, session=self)
 
     async def write(self, request: Request, msg_id: int):
         await self._transport.write(request, msg_id, session=self)

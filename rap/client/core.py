@@ -164,7 +164,6 @@ class Client:
         self,
         method: str,
         *args: Any,
-        conn: Optional[Connection] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
         session: Optional["Session"] = None,
@@ -172,21 +171,17 @@ class Client:
         """rpc client base call method
         method: func name
         args: python args
-        conn: rap.client conn
-          if conn is None, rap will random choice conn from transport
-          if session is not None, rap.client will not use conn
         header: request's header
         group: func's group, default group value is `default`
         session: conn session
         """
-        response = await self.transport.request(method, *args, conn=conn, group=group, header=header, session=session)
+        response = await self.transport.request(method, *args, group=group, header=header, session=session)
         return response.body["result"]
 
     async def call(
         self,
         func: Callable,
         *args: Any,
-        conn: Optional[Connection] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
         session: Optional["Session"] = None,
@@ -194,14 +189,11 @@ class Client:
         """automatically resolve function names and call raw_call
         func: rpc func
         args: python args
-        conn: rap.client conn
-          if conn is None, rap will random choice conn from transport
-          if session is not None, rap.client will not use conn
         header: request's header
         group: func's group, default group value is `default`
         session: conn session
         """
-        return await self.raw_call(func.__name__, *args, conn=conn, group=group, header=header, session=session)
+        return await self.raw_call(func.__name__, *args, group=group, header=header, session=session)
 
     async def iterator_call(
         self,
