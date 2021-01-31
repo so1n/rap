@@ -36,8 +36,6 @@ class ResponseModel(object):
         if isinstance(exc, Exception) and not isinstance(exc, BaseRapError):
             logging.error(exc)
             exc = ServerError(str(exc))
-        else:
-            raise TypeError(f"{exc} type must {BaseRapError.__name__}")
         self.body = str(exc)
         self.header["status_code"] = exc.status_code
 

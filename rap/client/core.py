@@ -1,12 +1,14 @@
 import inspect
 from functools import wraps
-from typing import Any, Callable, List, Optional, Tuple, cast
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, cast
 
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.transport.channel import Channel
 from rap.client.transport.transport import Session, Transport
+from rap.client.utils import check_func_type, get_func_arg_type_list, is_type
 from rap.common.utlis import MISS_OBJECT
+from rap.common.types import FunctionType
 
 __all__ = ["Client"]
 
@@ -37,7 +39,6 @@ class AsyncIteratorCall:
             if self._session is MISS_OBJECT:
                 self._session = self._client.transport.session
         self.in_session: bool = self._session.in_session
-        print(self.in_session)
 
     ###################
     # session support #
@@ -124,24 +125,39 @@ class Client:
     #####################
     # register func api #
     #####################
-    def _async_register(self, func: Callable, group: Optional[str], name: Optional[str] = None):
+    def _async_register(self, func: FunctionType, group: Optional[str], name: Optional[str] = None):
         """Decorate normal function"""
         name: str = name if name else func.__name__
+        param_type_list: List[Type] = get_func_arg_type_list(func)
+        return_type: Type = func.__annotations__["return"]
 
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            return await self.raw_call(name, *args, group=group, **kwargs)
+            for index, arg_type in enumerate(param_type_list):
+                if not is_type(type(args[index]), arg_type):
+                    raise TypeError(f"{param_type_list[index]} type must: {arg_type}")
+            result: Any = await self.raw_call(name, *args, group=group, **kwargs)
+            if not is_type(return_type, type(result)):
+                raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
+            return result
 
         return cast(Callable, wrapper)
 
-    def _async_gen_register(self, func: Callable, group: Optional[str], name: Optional[str] = None):
+    def _async_gen_register(self, func: FunctionType, group: Optional[str], name: Optional[str] = None):
         """Decoration generator function"""
         name: str = name if name else func.__name__
+        param_type_list: List[Type] = get_func_arg_type_list(func)
+        return_type: Type = func.__annotations__["return"]
 
         @wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
+            for index, arg_type in enumerate(param_type_list):
+                if not is_type(type(args[index]), arg_type):
+                    raise TypeError(f"{param_type_list[index]} type must: {arg_type}")
             async with AsyncIteratorCall(name, self, *args, group=group) as async_iterator:
                 async for result in async_iterator:
+                    if not is_type(return_type, type(result)):
+                        raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
                     yield result
 
         return cast(Callable, wrapper)
@@ -162,25 +178,26 @@ class Client:
     ###################
     async def raw_call(
         self,
-        method: str,
+        name: str,
         *args: Any,
         header: Optional[dict] = None,
         group: Optional[str] = None,
         session: Optional["Session"] = None,
     ) -> Any:
         """rpc client base call method
-        method: func name
+        Note: This method does not support parameter type checking, nor does it support channels;
+        name: func name
         args: python args
         header: request's header
-        group: func's group, default group value is `default`
+        group: func group, default group value is `default`
         session: conn session
         """
-        response = await self.transport.request(method, *args, group=group, header=header, session=session)
+        response = await self.transport.request(name, *args, group=group, header=header, session=session)
         return response.body["result"]
 
     async def call(
         self,
-        func: Callable,
+        func: FunctionType,
         *args: Any,
         header: Optional[dict] = None,
         group: Optional[str] = None,
@@ -193,11 +210,16 @@ class Client:
         group: func's group, default group value is `default`
         session: conn session
         """
-        return await self.raw_call(func.__name__, *args, group=group, header=header, session=session)
+        check_func_type(func, args)
+        result: Any = await self.raw_call(func.__name__, *args, group=group, header=header, session=session)
+        return_type: Type = func.__annotations__["return"]
+        if not is_type(return_type, type(result)):
+            raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
+        return result
 
     async def iterator_call(
         self,
-        func: Callable,
+        func: FunctionType,
         *args: Any,
         header: Optional[dict] = None,
         group: Optional[str] = None,
@@ -210,10 +232,13 @@ class Client:
         group: func's group, default group value is `default`
         session: conn session
         """
+        return_type: Type = func.__annotations__["return"]
         async with AsyncIteratorCall(
             func.__name__, self, *args, header=header, group=group, session=session
         ) as async_iterator:
             async for result in async_iterator:
+                if not is_type(return_type, type(result)):
+                    raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
                 yield result
 
     def register(self, name: Optional[str] = None, group: Optional[str] = None) -> Any:
@@ -224,7 +249,7 @@ class Client:
         group: func's group, default group value is `default`
         """
 
-        def wrapper(func: Callable):
+        def wrapper(func: FunctionType):
             func_sig: inspect.Signature = inspect.signature(func)
             func_arg_parameter: List[inspect.Parameter] = [
                 i for i in func_sig.parameters.values() if i.default == i.empty

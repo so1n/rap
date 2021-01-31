@@ -15,7 +15,7 @@ pip install rap
 ## 服务端 
 ```Python
 import asyncio
-from typing import Iterator
+from typing import AsyncIterator 
 
 from rap.server import Server
 
@@ -29,7 +29,7 @@ async def async_sum(a: int, b: int) -> int:
     return a + b
 
 
-async def async_gen(a: int) -> Iterator[int]:
+async def async_gen(a: int) -> AsyncIterator[int]:
     for i in range(a):
         yield i
 
@@ -61,7 +61,7 @@ async def demo(): pass
 快速上手例子:
 ```Python
 import asyncio
-from typing import Iterator
+from typing import AsyncIterator 
 
 from rap.client import Client
 
@@ -81,7 +81,7 @@ async def sync_sum(a: int, b: int) -> int:
 
 # 被装饰的函数一定是async def函数,由于该函数是生成器语法, 要以yield代替pass 
 @client.register()
-async def async_gen(a: int) -> Iterator:
+async def async_gen(a: int) -> AsyncIterator[int]:
     yield
 
 
@@ -113,7 +113,7 @@ asyncio.run(main())
 此外,注册时可以设置`is_private`为True,设置后的函数只能被本机的rap.client调用.
 ```Python
 import asyncio
-from typing import Iterator
+from typing import AsyncIterator 
 
 from rap.server import Server
 
@@ -127,7 +127,7 @@ async def demo2(a: int, b: int) -> int:
     return a + b
 
 
-async def demo_gen(a: int) -> Iterator[int]:
+async def demo_gen(a: int) -> AsyncIterator[int]:
     for i in range(a):
         yield i
 
@@ -145,7 +145,7 @@ server.register(demo2, group='root', is_private=True)  # 注册并设定要注�
 可以让调用者像调用普通函数一样去调用,同时因为TypeHint的特性,可以利用现有的工具对函数进行检查.
 注意: 使用`client.register`时, 一定要使用`async def ...`.
 ```Python
-from typing import Iterator
+from typing import AsyncIterator 
 
 from rap.client import Client
 
@@ -160,7 +160,7 @@ async def demo1(a: int, b: int) -> int: pass
 # 注册async iterator函数, pass替换为yield
 # 由于会进行多次请求,必须保持所有请求都会基于同一个链接进行请求, 所以在启动时会检测是否启动会话,如果启动会自动复用当前的会话, 否则创建会话
 @client.register()
-async def demo_gen(a: int) -> Iterator: yield 
+async def demo_gen(a: int) -> AsyncIterator: yield 
 
 
 # 注册普通函数,并且设置名字为demo2-alias
@@ -256,7 +256,7 @@ client = Client()
 
 
 @client.register()
-async def async_channel(channel: Channel):
+async def async_channel(channel: Channel) -> None:
     await channel.write("hello")  # 发送数据
     cnt: int = 0
     while await channel.loop(cnt < 3):
@@ -266,7 +266,7 @@ async def async_channel(channel: Channel):
 
 
 @client.register()
-async def echo_body(channel: Channel):
+async def echo_body(channel: Channel) -> None:
     await channel.write("hi!")
     # 读取数据, 只有读取到数据才会返回, 如果收到关闭channel的信令, 则会退出循环
     async for body in channel.iter_body():
@@ -275,7 +275,7 @@ async def echo_body(channel: Channel):
 
 
 @client.register()
-async def echo_response(channel: Channel):
+async def echo_response(channel: Channel) -> None:
     await channel.write("hi!")
     # 读取响应数据(包括header等数据), 只有读取到数据才会返回, 如果收到关闭channel的信令, 则会退出循环
     async for response in channel.iter_response():

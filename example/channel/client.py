@@ -15,7 +15,7 @@ client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
 
 
 @client.register()
-async def async_channel(channel: Channel):
+async def async_channel(channel: Channel) -> None:
     await channel.write("hello")
     cnt: int = 0
     while await channel.loop(cnt < 3):
@@ -25,7 +25,7 @@ async def async_channel(channel: Channel):
 
 
 @client.register()
-async def echo_body(channel: Channel):
+async def echo_body(channel: Channel) -> None:
     await channel.write("hi!")
     async for body in channel.iter_body():
         print(f"body:{body}")
@@ -33,7 +33,7 @@ async def echo_body(channel: Channel):
 
 
 @client.register()
-async def echo_response(channel: Channel):
+async def echo_response(channel: Channel) -> None:
     await channel.write("hi!")
     async for response in channel.iter_response():
         response: Response = response  # IDE cannot check

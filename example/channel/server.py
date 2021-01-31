@@ -7,7 +7,7 @@ from rap.server.model import ResponseModel
 from rap.server.processor import CryptoProcessor
 
 
-async def async_channel(channel: Channel):
+async def async_channel(channel: Channel) -> None:
     while await channel.loop():
         body: any = await channel.read_body()
         if body == "hello":
@@ -20,7 +20,7 @@ async def async_channel(channel: Channel):
             await channel.write("I don't know")
 
 
-async def echo_body(channel: Channel):
+async def echo_body(channel: Channel) -> None:
     cnt: int = 0
     async for body in channel.iter_body():
         await asyncio.sleep(1)
@@ -30,7 +30,7 @@ async def echo_body(channel: Channel):
         await channel.write(body)
 
 
-async def echo_response(channel: Channel):
+async def echo_response(channel: Channel) -> None:
     cnt: int = 0
     async for response in channel.iter_response():
         response: ResponseModel = response  # IDE cannot check

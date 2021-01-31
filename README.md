@@ -18,7 +18,7 @@ pip install rap
 ## Server
 ```Python
 import asyncio
-from typing import Iterator
+from typing import AsyncIterator
 
 from rap.server import Server
 
@@ -32,7 +32,7 @@ async def async_sum(a: int, b: int) -> int:
     return a + b
 
 
-async def async_gen(a: int) -> Iterator[int]:
+async def async_gen(a: int) -> AsyncIterator[int]:
     for i in range(a):
         yield i
 
@@ -66,7 +66,7 @@ async def demo(): pass
 example: 
 ```Python
 import asyncio
-from typing import Iterator
+from typing import AsyncIterator 
 
 from rap.client import Client
 
@@ -86,7 +86,7 @@ async def sync_sum(a: int, b: int) -> int:
 
 # The decorated function must be the async def function, because the function is a generator syntax, to `yield` instead of `pass` 
 @client.register()
-async def async_gen(a: int) -> Iterator:
+async def async_gen(a: int) -> AsyncIterator:
     yield
 
 
@@ -120,7 +120,7 @@ The server comes with a registration library. If there are duplicate registratio
 In addition, you can set `is_private` to True when registering, so that the function can only be called by the local rap.client.
 ```Python
 import asyncio
-from typing import Iterator
+from typing import AsyncIterator 
 
 from rap.server import Server
 
@@ -134,7 +134,7 @@ async def demo2(a: int, b: int) -> int:
     return a + b
 
 
-async def demo_gen(a: int) -> Iterator[int]:
+async def demo_gen(a: int) -> AsyncIterator[int]:
     for i in range(a):
         yield i
 
@@ -152,7 +152,7 @@ For clients, it is recommended to use `client.register` instead of `client.call`
 It allows the caller to call the function as if it were a normal function, and the function can be checked through tools using the TypeHint feature.
 Note: When using `client.register`, be sure to use `async def ... `.
 ```Python
-from typing import Iterator
+from typing import AsyncIterator 
 from rap.client import Client
 
 client: Client = Client()
@@ -166,7 +166,7 @@ async def demo1(a: int, b: int) -> int: pass
 # register async iterator fun, replace `pass` with `yield` 
 # Since `async for` will make multiple requests to the same conn over time, it will check if the session is enabled and automatically reuse the current session if it is enabled, otherwise it will create a new session and use it. 
 @client.register()
-async def demo_gen(a: int) -> Iterator: yield 
+async def demo_gen(a: int) -> AsyncIterator: yield 
 
 
 # Register the general function and set the name to demo2-alias 
@@ -184,6 +184,7 @@ async def demo2(a: int, b: int) -> int: pass
 `rap` client support session function, after enabling the session, all requests will only be requested through the current session's conn to the corresponding server, while each request, the session_id in the header will set the current session id, convenient for the server to identify.
 `rap` sessions support explicit and implicit settings, each with its own advantages and disadvantages, without mandatory restrictions.
 ```Python
+from typing import AsyncIterator
 from rap.client import Client
 
 client = Client()
@@ -199,7 +200,7 @@ async def async_sum(a: int, b: int) -> int:
 
 
 @client.register()
-async def async_gen(a: int):
+async def async_gen(a: int) -> AsyncIterator[int]:
     yield
 
 
@@ -262,17 +263,16 @@ client = Client()
 
 
 @client.register()
-async def async_channel(channel: Channel):
+async def async_channel(channel: Channel) -> None:
     await channel.write("hello")  # send data
     cnt: int = 0
     while await channel.loop(cnt < 3):
         cnt += 1
         print(await channel.read_body())  # read data 
-    return
 
 
 @client.register()
-async def echo_body(channel: Channel):
+async def echo_body(channel: Channel) -> None:
     await channel.write("hi!")
     # Reads data, returns only when data is read, and exits the loop if it receives a signal to close the channel 
     async for body in channel.iter_body():
@@ -281,7 +281,7 @@ async def echo_body(channel: Channel):
 
 
 @client.register()
-async def echo_response(channel: Channel):
+async def echo_response(channel: Channel) -> None:
     await channel.write("hi!")
     # Read the response data (including header data), and return only if the data is read, or exit the loop if a signal is received to close the channel 
     async for response in channel.iter_response():
@@ -396,7 +396,7 @@ client = Client()
 # The second parameter is the key of the secret key, currently only support the length of 16 bits of the secret key 
 # timeout: Requests that exceed the timeout value compared to the current timestamp will be discarded
 # interval: Clear the nonce interval, the shorter the interval, the more frequent the execution, the greater the useless work, the longer the interval, the more likely to occupy memory, the recommended value is the timeout value is 2 times 
-client.load_processor([CryptoProcessor('demo_id', 'xxxxxxxxxxxxxxxx', timeout=60, interval=120)])
+client.load_processor([CryptoProcessor("demo_id", "xxxxxxxxxxxxxxxx", timeout=60, interval=120)])
 ```
 server example:
 ```Python

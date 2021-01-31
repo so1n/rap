@@ -1,4 +1,5 @@
 import asyncio
+from typing import AsyncIterator
 
 from rap.client import Client
 
@@ -17,7 +18,7 @@ async def sync_sum(a: int, b: int) -> int:
 
 # in register, must use async def...
 @client.register()
-async def async_gen(a: int):
+async def async_gen(a: int) -> AsyncIterator[int]:
     yield
 
 
