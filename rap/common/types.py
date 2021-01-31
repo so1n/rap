@@ -1,8 +1,12 @@
 import asyncio
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from typing import Any, List, Optional, Set, Tuple, Type, Union, _GenericAlias
 
 import msgpack
+
+
+def _f(*args, **kwargs): pass
+
 
 # request num, msg id, group, func name, header, body
 BASE_REQUEST_TYPE = Tuple[int, int, str, str, dict, Any]
@@ -13,6 +17,7 @@ WRITER_TYPE = asyncio.streams.StreamWriter
 UNPACKER_TYPE = msgpack.Unpacker
 
 _CAN_JSON_TYPE_SET: Set[type] = {bool, dict, float, int, list, str, tuple, type(None), None}
+FunctionType = type(_f)
 
 
 def parse_typing(_type: Type) -> Union[List[Type], Type]:
@@ -34,7 +39,7 @@ def parse_typing(_type: Type) -> Union[List[Type], Type]:
         origin: type = _type.__origin__
         if origin is Union:
             return [parse_typing(i) for i in _type.__args__]
-        elif origin == Iterator:
+        elif origin in (AsyncIterator, Iterator):
             return _type.__args__[0]
         return origin
     elif _type in _CAN_JSON_TYPE_SET:
@@ -43,22 +48,29 @@ def parse_typing(_type: Type) -> Union[List[Type], Type]:
         raise RuntimeError(f"Can not parse {_type} origin type")
 
 
-def check_is_json_type(_type: Type) -> bool:
+def is_json_type(_type: Type) -> bool:
     """
     check type is legal json type
     >>> from typing import Dict, Optional
-    >>> assert check_is_json_type(parse_typing(dict))
-    >>> assert check_is_json_type(parse_typing(List))
-    >>> assert check_is_json_type(parse_typing(Dict))
-    >>> assert check_is_json_type(parse_typing(Optional[Dict]))
-    >>> assert check_is_json_type(parse_typing(Optional[Dict]))
-    >>> assert check_is_json_type(parse_typing(Optional[dict]))
-    >>> assert check_is_json_type(parse_typing(Optional[dict]))
-    >>> assert check_is_json_type(parse_typing(Union[dict]))
-    >>> assert check_is_json_type(parse_typing(Union[Dict]))
-    >>> assert check_is_json_type(parse_typing(Union[Dict[str, Any]]))
+    >>> assert is_json_type(parse_typing(dict))
+    >>> assert is_json_type(parse_typing(List))
+    >>> assert is_json_type(parse_typing(Dict))
+    >>> assert is_json_type(parse_typing(Optional[Dict]))
+    >>> assert is_json_type(parse_typing(Optional[Dict]))
+    >>> assert is_json_type(parse_typing(Optional[dict]))
+    >>> assert is_json_type(parse_typing(Optional[dict]))
+    >>> assert is_json_type(parse_typing(Union[dict]))
+    >>> assert is_json_type(parse_typing(Union[Dict]))
+    >>> assert is_json_type(parse_typing(Union[Dict[str, Any]]))
     """
     origin_type: Union[List[Type], Type] = parse_typing(_type)
     if type(origin_type) is list:
         return not bool(set(origin_type) - _CAN_JSON_TYPE_SET)
     return origin_type in _CAN_JSON_TYPE_SET
+
+
+def is_type(source_type: Type, target_type: Type) -> bool:
+    origin_type: Union[List[Type], Type] = parse_typing(source_type)
+    if type(origin_type) is not list:
+        origin_type = [origin_type]
+    return target_type in origin_type

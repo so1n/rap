@@ -1,5 +1,5 @@
 import asyncio
-from typing import Iterator
+from typing import AsyncIterator
 
 from rap.server import Server
 
@@ -13,7 +13,7 @@ async def async_sum(a: int, b: int) -> int:
     return a + b
 
 
-async def async_gen(a: int) -> Iterator[int]:
+async def async_gen(a: int) -> AsyncIterator[int]:
     for i in range(a):
         yield i
 

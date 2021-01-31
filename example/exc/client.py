@@ -15,7 +15,7 @@ async def raise_msg_exc(a: int, b: int) -> int:
 
 # in register, must use async def...
 @client.register()
-async def raise_server_not_found_func_exc(a: int):
+async def raise_server_not_found_func_exc(a: int) -> None:
     pass
 
 

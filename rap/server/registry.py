@@ -2,29 +2,38 @@ import importlib
 import inspect
 import logging
 import os
-from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Type
 
 from rap.common.channel import BaseChannel
 from rap.common.exceptions import RegisteredError
-from rap.common.types import check_is_json_type
+from rap.common.types import FunctionType, is_json_type
 
 
 @dataclass()
 class FuncModel(object):
     group: str
     type_: str
-    func: Callable
+    func: FunctionType
 
     is_private: bool
     doc: Optional[str] = None
     name: Optional[str] = None
+    arg_type_list: Optional[List[Type]] = field(default_factory=list)
+    return_type: Optional[Type] = None
 
     def __post_init__(self):
         if not self.doc:
             self.doc = self.func.__doc__
         if not self.name:
             self.name = self.func.__name__
+
+        var_name_list: List[str] = self.func.__code__.co_varnames
+        annotation_dict: Dict[str, Type] = self.func.__annotations__
+        for var_name in var_name_list:
+            if var_name in annotation_dict:
+                self.arg_type_list.append(annotation_dict[var_name])
+        self.return_type = annotation_dict["return"]
 
 
 class RegistryManager(object):
@@ -41,7 +50,7 @@ class RegistryManager(object):
         return f"{type_}:{group}:{name}"
 
     @staticmethod
-    def _get_func_type(func: Callable) -> str:
+    def _get_func_type(func: FunctionType) -> str:
         sig: "inspect.Signature" = inspect.signature(func)
         func_arg_parameter: List[inspect.Parameter] = [i for i in sig.parameters.values() if i.default == i.empty]
 
@@ -56,7 +65,7 @@ class RegistryManager(object):
 
     def register(
         self,
-        func: Optional[Callable],
+        func: FunctionType,
         name: Optional[str] = None,
         group: str = "default",
         is_private: bool = False,
@@ -79,12 +88,12 @@ class RegistryManager(object):
             # check func param&return value type hint
             if sig.return_annotation is sig.empty:
                 raise RegisteredError(f"{func.__name__} must use TypeHints")
-            if not check_is_json_type(sig.return_annotation):
+            if not is_json_type(sig.return_annotation):
                 raise RegisteredError(f"{func.__name__} return type:{sig.return_annotation} is not json type")
             for param in sig.parameters.values():
                 if param.annotation is sig.empty:
                     raise RegisteredError(f"{func.__name__} param:{param.name} must use TypeHints")
-                if not check_is_json_type(param.annotation):
+                if not is_json_type(param.annotation):
                     raise RegisteredError(
                         f"{func.__name__} param:{param.name} type:{param.annotation} is not json type"
                     )
@@ -109,7 +118,7 @@ class RegistryManager(object):
             logging.info(f"register func:{func_key}")
 
     @staticmethod
-    def _load_func(path: str, func_str: str) -> Callable:
+    def _load_func(path: str, func_str: str) -> FunctionType:
         reload_module = importlib.import_module(path)
         func = getattr(reload_module, func_str)
         if not hasattr(func, "__call__"):

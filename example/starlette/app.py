@@ -1,3 +1,4 @@
+from typing import AsyncIterator
 import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -15,7 +16,7 @@ async def sync_sum(a: int, b: int) -> int: pass
 
 
 @client.register()
-async def async_gen(a: int): yield
+async def async_gen(a: int) -> AsyncIterator[int]: yield
 
 
 async def start_client():

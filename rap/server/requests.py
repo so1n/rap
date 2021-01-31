@@ -15,6 +15,7 @@ from rap.common.exceptions import (
     RpcRunTimeError,
     ServerError,
 )
+from rap.common.types import is_type
 from rap.common.utlis import MISS_OBJECT, Constant, Event, get_event_loop, parse_error, response_num_dict
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
@@ -238,7 +239,13 @@ class Request(object):
             raise FuncNotFoundError(f"No permission to call:`{request.func_name}`")
         return func_model.func
 
-    async def _msg_handle(self, request: RequestModel, call_id: int, func: Callable, param: str) -> Tuple[int, Any]:
+    def get_func_model(self, request: RequestModel) -> FuncModel:
+        func_key: str = self._app.registry.gen_key(request.group, request.func_name, "normal")
+        if func_key not in self._app.registry:
+            raise FuncNotFoundError(extra_msg=f"name: {request.func_name}")
+        return self._app.registry[func_key]
+
+    async def _msg_handle(self, request: RequestModel, call_id: int, func: Callable, param: list) -> Tuple[int, Any]:
         user_agent: str = request.header.get("user_agent")
         try:
             if call_id in self._generator_dict:
@@ -289,12 +296,27 @@ class Request(object):
             response.set_exception(e)
             return response
 
+        func_model: FuncModel = self.get_func_model(request)
         try:
             call_id: int = request.body["call_id"]
         except KeyError:
             response.set_exception(ParseError(extra_msg="body miss params"))
             return response
-        param: str = request.body.get("param")
+        param: list = request.body.get("param")
+        if func_model.arg_type_list:
+            if len(func_model.arg_type_list) != len(param):
+                response.set_exception(
+                    ParseError(
+                        extra_msg=f"{func_model.name} takes {len(func_model.arg_type_list)}"
+                                  f" positional arguments but {len(param)} were given"
+                    )
+                )
+                return response
+            for index, arg_type in enumerate(func_model.arg_type_list):
+                if not is_type(type(param[index]), arg_type):
+                    response.set_exception(ParseError(extra_msg=f"{param[index]} type must: {arg_type}"))
+                    return response
+
         new_call_id, result = await self._msg_handle(request, call_id, func, param)
         response.body = {"call_id": new_call_id}
         if isinstance(result, StopAsyncIteration) or isinstance(result, StopIteration):
@@ -306,6 +328,9 @@ class Request(object):
                 response.body["exc"] = exc
         else:
             response.body["result"] = result
+            if not is_type(func_model.return_type, type(result)):
+                logging.warning(f"{func} return type is {func_model.return_type}, but result type is {type(result)}")
+                response.header["status_code"] = 302
         return response
 
     async def event(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:

@@ -1,5 +1,6 @@
 import asyncio
 import time
+from typing import AsyncIterator
 
 from rap.client import Client, Request, Response, Session
 from rap.client.processor import BaseProcessor
@@ -44,7 +45,7 @@ async def async_sum(a: int, b: int) -> int:
 
 # in register, must use async def...
 @client.register()
-async def async_gen(a: int):
+async def async_gen(a: int) -> AsyncIterator[int]:
     yield
 
 
