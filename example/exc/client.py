@@ -31,7 +31,7 @@ async def main():
     except Exception as e:
         assert isinstance(e, FuncNotFoundError)
     print(time.time() - s_t)
-    await client.wait_close()
+    await client.await_close()
 
 
 if __name__ == "__main__":

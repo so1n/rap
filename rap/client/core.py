@@ -1,12 +1,12 @@
 import inspect
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, cast
+from typing import Any, Callable, List, Optional, Tuple, Type, cast
 
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.transport.channel import Channel
 from rap.client.transport.transport import Session, Transport
-from rap.client.utils import check_func_type, get_func_arg_type_list, is_type
+from rap.client.utils import get_func_arg_type_list, is_type
 from rap.common.utlis import MISS_OBJECT
 from rap.common.types import FunctionType
 
@@ -18,7 +18,7 @@ class AsyncIteratorCall:
 
     def __init__(
         self,
-        method: str,
+        name: str,
         client: "Client",
         *args: Tuple,
         header: Optional[dict] = None,
@@ -26,7 +26,7 @@ class AsyncIteratorCall:
         session: Optional[Session] = None,
     ):
         self.group: Optional[str] = group
-        self._method: str = method
+        self._name: str = name
         self._call_id: Optional[int] = None
         self._args: Tuple = args
         self._client: "Client" = client
@@ -65,16 +65,16 @@ class AsyncIteratorCall:
         If no data, the server will return header.status_code = 301 and client must raise StopAsyncIteration Error.
         """
         response: Response = await self._client.transport.request(
-            self._method,
+            self._name,
             *self._args,
             call_id=self._call_id,
             header=self._header,
             session=self._session,
             group=self.group,
         )
-        self._call_id = response.body["call_id"]
         if response.header["status_code"] == 301:
             raise StopAsyncIteration()
+        self._call_id = response.body["call_id"]
         return response.body["result"]
 
 
@@ -107,32 +107,38 @@ class Client:
     ##################
     # connect& close #
     ##################
-    async def wait_close(self):
-        """close client"""
+    async def await_close(self):
+        """close client transport"""
         await self.transport.await_close()
 
     async def connect(self):
-        """
-        Create&conn connection;
-        start listen response;
-        send declare msg to server
-        """
+        """Create client transport"""
         await self.transport.connect()
 
     def load_processor(self, processor_list: List[BaseProcessor]):
         self.transport.load_processor(processor_list)
 
+    @property
+    def session(self) -> "Session":
+        return self.transport.session
+
     #####################
     # register func api #
     #####################
-    def _async_register(self, func: FunctionType, group: Optional[str], name: Optional[str] = None):
+    def _async_register(
+            self,
+            func: FunctionType,
+            group: Optional[str],
+            name: Optional[str] = None,
+            enable_type_check: bool = True
+    ):
         """Decorate normal function"""
         name: str = name if name else func.__name__
         param_type_list: List[Type] = get_func_arg_type_list(func)
         return_type: Type = func.__annotations__["return"]
 
         @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        async def type_check_wrapper(*args: Any, **kwargs: Any) -> Any:
             for index, arg_type in enumerate(param_type_list):
                 if not is_type(type(args[index]), arg_type):
                     raise TypeError(f"{param_type_list[index]} type must: {arg_type}")
@@ -141,16 +147,29 @@ class Client:
                 raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
             return result
 
-        return cast(Callable, wrapper)
+        @wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            return await self.raw_call(name, *args, group=group, **kwargs)
 
-    def _async_gen_register(self, func: FunctionType, group: Optional[str], name: Optional[str] = None):
+        if enable_type_check:
+            return cast(Callable, type_check_wrapper)
+        else:
+            return cast(Callable, wrapper)
+
+    def _async_gen_register(
+            self,
+            func: FunctionType,
+            group: Optional[str],
+            name: Optional[str] = None,
+            enable_type_check: bool = True
+    ):
         """Decoration generator function"""
         name: str = name if name else func.__name__
         param_type_list: List[Type] = get_func_arg_type_list(func)
         return_type: Type = func.__annotations__["return"]
 
         @wraps(func)
-        async def wrapper(*args, **kwargs) -> Any:
+        async def type_check_wrapper(*args, **kwargs) -> Any:
             for index, arg_type in enumerate(param_type_list):
                 if not is_type(type(args[index]), arg_type):
                     raise TypeError(f"{param_type_list[index]} type must: {arg_type}")
@@ -160,7 +179,16 @@ class Client:
                         raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
                     yield result
 
-        return cast(Callable, wrapper)
+        @wraps(func)
+        async def wrapper(*args, **kwargs) -> Any:
+            async with AsyncIteratorCall(name, self, *args, group=group) as async_iterator:
+                async for result in async_iterator:
+                    yield result
+
+        if enable_type_check:
+            return cast(Callable, type_check_wrapper)
+        else:
+            return cast(Callable, wrapper)
 
     def _async_channel_register(self, func: Callable, group: Optional[str], name: Optional[str] = None):
         """Decoration channel function"""
@@ -210,12 +238,7 @@ class Client:
         group: func's group, default group value is `default`
         session: conn session
         """
-        check_func_type(func, args)
-        result: Any = await self.raw_call(func.__name__, *args, group=group, header=header, session=session)
-        return_type: Type = func.__annotations__["return"]
-        if not is_type(return_type, type(result)):
-            raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
-        return result
+        return await self.raw_call(func.__name__, *args, group=group, header=header, session=session)
 
     async def iterator_call(
         self,
@@ -232,21 +255,18 @@ class Client:
         group: func's group, default group value is `default`
         session: conn session
         """
-        return_type: Type = func.__annotations__["return"]
         async with AsyncIteratorCall(
-            func.__name__, self, *args, header=header, group=group, session=session
+                func.__name__, self, *args, header=header, group=group, session=session
         ) as async_iterator:
             async for result in async_iterator:
-                if not is_type(return_type, type(result)):
-                    raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
                 yield result
 
-    def register(self, name: Optional[str] = None, group: Optional[str] = None) -> Any:
+    def register(self, name: Optional[str] = None, group: Optional[str] = None, enable_type_check: bool = True) -> Any:
         """Using this method to decorate a fake function can help you use it better.
         (such as ide completion, ide reconstruction and type hints)
         and will be automatically registered according to the function type
 
-        group: func's group, default group value is `default`
+        group: func group, default group value is `default`
         """
 
         def wrapper(func: FunctionType):
@@ -257,12 +277,8 @@ class Client:
             if len(func_arg_parameter) == 1 and func_arg_parameter[0].annotation is Channel:
                 return self._async_channel_register(func, group, name=name)
             if inspect.iscoroutinefunction(func):
-                return self._async_register(func, group, name=name)
+                return self._async_register(func, group, name=name, enable_type_check=enable_type_check)
             elif inspect.isasyncgenfunction(func):
-                return self._async_gen_register(func, group, name=name)
+                return self._async_gen_register(func, group, name=name, enable_type_check=enable_type_check)
 
         return wrapper
-
-    @property
-    def session(self) -> "Session":
-        return self.transport.session

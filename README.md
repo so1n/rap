@@ -183,6 +183,7 @@ async def demo2(a: int, b: int) -> int: pass
 
 `rap` client support session function, after enabling the session, all requests will only be requested through the current session's conn to the corresponding server, while each request, the session_id in the header will set the current session id, convenient for the server to identify.
 `rap` sessions support explicit and implicit settings, each with its own advantages and disadvantages, without mandatory restrictions.
+
 ```Python
 from typing import AsyncIterator
 from rap.client import Client
@@ -191,61 +192,61 @@ client = Client()
 
 
 def sync_sum(a: int, b: int) -> int:
-    pass
+  pass
 
 
 @client.register()
 async def async_sum(a: int, b: int) -> int:
-    pass
+  pass
 
 
 @client.register()
 async def async_gen(a: int) -> AsyncIterator[int]:
-    yield
+  yield
 
 
 async def no_param_run():
-    # The rap internal implementation uses the session implicitly via the `contextvar` module 
-    print(f"sync result: {await client.call(sync_sum, 1, 2)}")
-    print(f"async result: {await async_sum(1, 3)}")
+  # The rap internal implementation uses the session implicitly via the `contextvar` module 
+  print(f"sync result: {await client.call(sync_sum, 1, 2)}")
+  print(f"async result: {await async_sum(1, 3)}")
 
-    # The asynchronous generator detects if a session is enabled, and if so, it automatically reuses the current session, otherwise it creates a session 
-    async for i in async_gen(10):
-        print(f"async gen result:{i}")
+  # The asynchronous generator detects if a session is enabled, and if so, it automatically reuses the current session, otherwise it creates a session 
+  async for i in async_gen(10):
+    print(f"async gen result:{i}")
 
 
 async def param_run(session: "Session"):
-    # By explicitly passing the session parameters in 
-    print(f"sync result: {await client.call(sync_sum, 1, 2, session=session)}")
-    print(f"sync result: {await client.raw_call('sync_sum', 1, 2, session=session)}")
-    # May be a bit unfriendly 
-    print(f"async result: {await async_sum(1, 3, session=session)}")
+  # By explicitly passing the session parameters in 
+  print(f"sync result: {await client.call(sync_sum, 1, 2, session=session)}")
+  print(f"sync result: {await client.raw_call('sync_sum', 1, 2, session=session)}")
+  # May be a bit unfriendly 
+  print(f"async result: {await async_sum(1, 3, session=session)}")
 
-    # The asynchronous generator detects if a session is enabled, and if so, it automatically reuses the current session, otherwise it creates a session 
-    async for i in async_gen(10):
-        print(f"async gen result:{i}")
+  # The asynchronous generator detects if a session is enabled, and if so, it automatically reuses the current session, otherwise it creates a session 
+  async for i in async_gen(10):
+    print(f"async gen result:{i}")
 
 
 async def execute(session: "Session"):
-    # The best way to call a session explicitly, using a method similar to the mysql cursor 
-    # execute will automatically recognize the type of call 
-    print(f"sync result: {await session.execute(sync_sum, arg_list=[1, 2])}")
-    print(f"sync result: {await session.execute('sync_sum', arg_list=[1, 2])}")
-    print(f"async result: {await session.execute(async_sum(1, 3))}")
+  # The best way to call a session explicitly, using a method similar to the mysql cursor 
+  # execute will automatically recognize the type of call 
+  print(f"sync result: {await session.execute(sync_sum, arg_list=[1, 2])}")
+  print(f"sync result: {await session.execute('sync_sum', arg_list=[1, 2])}")
+  print(f"async result: {await session.execute(async_sum(1, 3))}")
 
-    # The asynchronous generator detects if a session is enabled, and if so, it automatically reuses the current session, otherwise it creates a session 
-    async for i in async_gen(10):
-        print(f"async gen result:{i}")
+  # The asynchronous generator detects if a session is enabled, and if so, it automatically reuses the current session, otherwise it creates a session 
+  async for i in async_gen(10):
+    print(f"async gen result:{i}")
 
 
 async def run_once():
-    await client.connect()
-    # init session
-    async with client.session as s:
-        await no_param_run()
-        await param_run(s)
-        await execute(s)
-    await client.wait_close()
+  await client.connect()
+  # init session
+  async with client.session as s:
+    await no_param_run()
+    await param_run(s)
+    await execute(s)
+  await client.await_close()
 ```
 ## 3.3.channel
 [example](https://github.com/so1n/rap/tree/master/example/channel)

@@ -87,7 +87,7 @@ async def run_once():
         await param_run(s)
         await execute(s)
     print(time.time() - s_t)
-    await client.wait_close()
+    await client.await_close()
 
 
 if __name__ == "__main__":

@@ -130,7 +130,7 @@ class Transport(object):
         try:
             response: Response = Response.from_msg(response_msg)
         except ValueError:
-            logging.error(f"recv wrong response:{response_msg}")
+            logging.error(f"recv wrong response:{response_msg}, ignore")
             return
 
         exc: Optional[Exception] = None
@@ -202,14 +202,14 @@ class Transport(object):
     def before_write_handle(request: Request):
         """check and header"""
 
-        def set_header_value(header_key: str, header_Value: Any):
+        def set_header_value(header_key: str, header_Value: Any, is_cover: bool = False):
             """if key not in header, set header value"""
-            if header_key not in request.header:
+            if is_cover or header_key not in request.header:
                 request.header[header_key] = header_Value
 
-        set_header_value("version", Constant.VERSION)
-        set_header_value("user_agent", Constant.USER_AGENT)
-        set_header_value("request_id", str(uuid.uuid4()))
+        set_header_value("version", Constant.VERSION, is_cover=True)
+        set_header_value("user_agent", Constant.USER_AGENT, is_cover=True)
+        set_header_value("request_id", str(uuid.uuid4()), is_cover=True)
 
     #######################
     # base write&read api #
@@ -273,7 +273,6 @@ class Transport(object):
         session: Optional["Session"] = None,
     ) -> Response:
         """msg request handle"""
-        # if len([i for i in args if i is not MISS_OBJECT]) > 0
         if not group:
             group = "default"
         request: Request = Request(Constant.MSG_REQUEST, func_name, {"call_id": call_id, "param": args}, group=group)
@@ -283,10 +282,11 @@ class Transport(object):
         if response.num != Constant.MSG_RESPONSE:
             raise RPCError(f"request num must:{Constant.MSG_RESPONSE} not {response.num}")
         if "exc" in response.body:
+            exc_info: str = response.body.get("exc_info", "")
             if response.header.get("user_agent") == Constant.USER_AGENT:
-                raise_rap_error(response.body["exc"], response.body.get("exc_info", ""))
+                raise_rap_error(response.body["exc"], exc_info)
             else:
-                raise RuntimeError(response.body.get("ext_info", ""))
+                raise RuntimeError(exc_info)
         return response
 
     ############
@@ -370,8 +370,8 @@ class Session(object):
     def conn(self) -> Connection:
         return self._conn
 
-    async def request(self, method: str, *args, call_id=-1, header: Optional[dict] = None) -> Any:
-        return await self._transport.request(method, *args, call_id=call_id, header=header, session=self)
+    async def request(self, name: str, *args, call_id=-1, header: Optional[dict] = None) -> Any:
+        return await self._transport.request(name, *args, call_id=call_id, header=header, session=self)
 
     async def write(self, request: Request, msg_id: int):
         await self._transport.write(request, msg_id, session=self)
