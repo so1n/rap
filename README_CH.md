@@ -177,6 +177,7 @@ async def demo2(a: int, b: int) -> int: pass
 
 `rap`客户端支持会话功能, 在启用会话后,所有请求都只会通过当前会话的链接请求到对应的服务端,同时每次请求时,会在header的session_id设置当前会话id,方便服务端识别.
 `rap`的会话支持显式设置和隐式设置,各有优缺点,不做强制限制.
+
 ```Python
 from rap.client import Client
 
@@ -184,61 +185,61 @@ client = Client()
 
 
 def sync_sum(a: int, b: int) -> int:
-    pass
+  pass
 
 
 @client.register()
 async def async_sum(a: int, b: int) -> int:
-    pass
+  pass
 
 
 @client.register()
 async def async_gen(a: int):
-    yield
+  yield
 
 
 async def no_param_run():
-    # rap内部会通过contextvar模块隐式的调用到会话, 下面的调用方法与平常没有区别
-    print(f"sync result: {await client.call(sync_sum, 1, 2)}")
-    print(f"async result: {await async_sum(1, 3)}")
+  # rap内部会通过contextvar模块隐式的调用到会话, 下面的调用方法与平常没有区别
+  print(f"sync result: {await client.call(sync_sum, 1, 2)}")
+  print(f"async result: {await async_sum(1, 3)}")
 
-    # 异步生成器在启动时会检测是否启动会话,如果启动会自动复用当前的会话, 否则创建会话
-    async for i in async_gen(10):
-        print(f"async gen result:{i}")
+  # 异步生成器在启动时会检测是否启动会话,如果启动会自动复用当前的会话, 否则创建会话
+  async for i in async_gen(10):
+    print(f"async gen result:{i}")
 
 
 async def param_run(session: "Session"):
-    # 通过参数显式的把session传进去,被rap使用 
-    print(f"sync result: {await client.call(sync_sum, 1, 2, session=session)}")
-    print(f"sync result: {await client.raw_call('sync_sum', 1, 2, session=session)}")
-    # 对于@client.register的调用方式有点不友好
-    print(f"async result: {await async_sum(1, 3, session=session)}")
+  # 通过参数显式的把session传进去,被rap使用 
+  print(f"sync result: {await client.call(sync_sum, 1, 2, session=session)}")
+  print(f"sync result: {await client.raw_call('sync_sum', 1, 2, session=session)}")
+  # 对于@client.register的调用方式有点不友好
+  print(f"async result: {await async_sum(1, 3, session=session)}")
 
-    # 异步生成器在启动时会检测是否启动会话,如果启动会自动复用当前的会话, 否则创建会话
-    async for i in async_gen(10):
-        print(f"async gen result:{i}")
+  # 异步生成器在启动时会检测是否启动会话,如果启动会自动复用当前的会话, 否则创建会话
+  async for i in async_gen(10):
+    print(f"async gen result:{i}")
 
 
 async def execute(session: "Session"):
-    # 使用类似于mysql cursor的方法进行调用,显式调用会话的最好方法
-    # execute会自动识别调用类型
-    print(f"sync result: {await session.execute(sync_sum, arg_list=[1, 2])}")
-    print(f"sync result: {await session.execute('sync_sum', arg_list=[1, 2])}")
-    print(f"async result: {await session.execute(async_sum(1, 3))}")
+  # 使用类似于mysql cursor的方法进行调用,显式调用会话的最好方法
+  # execute会自动识别调用类型
+  print(f"sync result: {await session.execute(sync_sum, arg_list=[1, 2])}")
+  print(f"sync result: {await session.execute('sync_sum', arg_list=[1, 2])}")
+  print(f"async result: {await session.execute(async_sum(1, 3))}")
 
-    # 异步生成器在启动时会检测是否启动会话,如果启动会自动复用当前的会话, 否则创建会话
-    async for i in async_gen(10):
-        print(f"async gen result:{i}")
+  # 异步生成器在启动时会检测是否启动会话,如果启动会自动复用当前的会话, 否则创建会话
+  async for i in async_gen(10):
+    print(f"async gen result:{i}")
 
 
 async def run_once():
-    await client.connect()
-    # 初始化会话, 使用`async with`语法会优雅的关闭会话
-    async with client.session as s:
-        await no_param_run()
-        await param_run(s)
-        await execute(s)
-    await client.wait_close()
+  await client.connect()
+  # 初始化会话, 使用`async with`语法会优雅的关闭会话
+  async with client.session as s:
+    await no_param_run()
+    await param_run(s)
+    await execute(s)
+  await client.await_close()
 ```
 ## 3.3.channel
 [示例代码](https://github.com/so1n/rap/tree/master/example/channel)

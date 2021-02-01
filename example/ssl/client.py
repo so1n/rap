@@ -18,7 +18,7 @@ async def main():
     """
     await client.connect()
     print(f"async result: {await async_sum(1, 3)}")
-    await client.wait_close()
+    await client.await_close()
 
 
 if __name__ == "__main__":

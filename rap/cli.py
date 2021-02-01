@@ -72,4 +72,4 @@ if __name__ == "__main__":
     elif mode == "r" and func_name:
         print(loop.run_until_complete(client.raw_call(func_name, *arg_list, group=group)))
 
-    loop.run_until_complete(client.wait_close())
+    loop.run_until_complete(client.await_close())

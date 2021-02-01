@@ -46,7 +46,7 @@ async def run_once():
     await echo_body()
     await echo_response()
     await async_channel()
-    await client.wait_close()
+    await client.await_close()
 
 
 if __name__ == "__main__":

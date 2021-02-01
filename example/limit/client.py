@@ -38,7 +38,7 @@ async def main():
     await retry_handle(demo1)
 
     print(time.time() - s_t)
-    await client.wait_close()
+    await client.await_close()
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ async def start_client():
 
 
 async def stop_client():
-    await client.wait_close()
+    await client.await_close()
 
 
 async def demo1(request: Request) -> JSONResponse:
