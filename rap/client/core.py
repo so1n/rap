@@ -1,6 +1,6 @@
 import inspect
 from functools import wraps
-from typing import Any, Callable, List, Optional, Tuple, Type, cast
+from typing import Any, Callable, List, Optional, Tuple, Type, TypeVar
 
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
@@ -11,6 +11,8 @@ from rap.common.utlis import MISS_OBJECT
 from rap.common.types import FunctionType
 
 __all__ = ["Client"]
+F = TypeVar('F', bound=FunctionType)
+CHANNEL_F = Callable[[Channel], Any]
 
 
 class AsyncIteratorCall:
@@ -131,7 +133,7 @@ class Client:
             group: Optional[str],
             name: Optional[str] = None,
             enable_type_check: bool = True
-    ):
+    ) -> FunctionType:
         """Decorate normal function"""
         name: str = name if name else func.__name__
         param_type_list: List[Type] = get_func_arg_type_list(func)
@@ -152,9 +154,9 @@ class Client:
             return await self.raw_call(name, *args, group=group, **kwargs)
 
         if enable_type_check:
-            return cast(Callable, type_check_wrapper)
+            return type_check_wrapper
         else:
-            return cast(Callable, wrapper)
+            return wrapper
 
     def _async_gen_register(
             self,
@@ -162,7 +164,7 @@ class Client:
             group: Optional[str],
             name: Optional[str] = None,
             enable_type_check: bool = True
-    ):
+    ) -> FunctionType:
         """Decoration generator function"""
         name: str = name if name else func.__name__
         param_type_list: List[Type] = get_func_arg_type_list(func)
@@ -186,20 +188,20 @@ class Client:
                     yield result
 
         if enable_type_check:
-            return cast(Callable, type_check_wrapper)
+            return type_check_wrapper
         else:
-            return cast(Callable, wrapper)
+            return wrapper
 
-    def _async_channel_register(self, func: Callable, group: Optional[str], name: Optional[str] = None):
+    def _async_channel_register(self, func: CHANNEL_F, group: Optional[str], name: Optional[str] = None) -> CHANNEL_F:
         """Decoration channel function"""
         name: str = name if name else func.__name__
 
         @wraps(func)
         async def wrapper(*args, **kwargs) -> Any:
             async with self.transport.channel(name, group) as channel:
-                await func(channel)
+                return await func(channel)
 
-        return cast(Callable, wrapper)
+        return wrapper
 
     ###################
     # client base api #
@@ -261,7 +263,9 @@ class Client:
             async for result in async_iterator:
                 yield result
 
-    def register(self, name: Optional[str] = None, group: Optional[str] = None, enable_type_check: bool = True) -> Any:
+    def register(
+            self, name: Optional[str] = None, group: Optional[str] = None, enable_type_check: bool = True
+    ) -> F:
         """Using this method to decorate a fake function can help you use it better.
         (such as ide completion, ide reconstruction and type hints)
         and will be automatically registered according to the function type
@@ -269,7 +273,7 @@ class Client:
         group: func group, default group value is `default`
         """
 
-        def wrapper(func: FunctionType):
+        def wrapper(func: F) -> F:
             func_sig: inspect.Signature = inspect.signature(func)
             func_arg_parameter: List[inspect.Parameter] = [
                 i for i in func_sig.parameters.values() if i.default == i.empty
