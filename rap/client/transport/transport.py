@@ -90,11 +90,7 @@ class Transport(object):
             elif self._conn_dict[host].is_closed():
                 logging.warning(f"{host} already close")
             else:
-                conn: Connection = self._conn_dict[host].conn
-                future: asyncio.Future = self._conn_dict[host].future
-                if not future.cancelled():
-                    future.cancel()
-                await conn.await_close()
+                await self._conn_dict[host].await_close()
                 del self._conn_dict[host]
         self._is_close = True
 
@@ -388,6 +384,7 @@ class Session(object):
         if asyncio.iscoroutine(obj):
             assert obj.cr_frame.f_locals["self"].transport is self._transport
             obj.cr_frame.f_locals["kwargs"]["session"] = self
+            return await obj
         elif isfunction(obj) and arg_list:
             kwarg_dict = kwarg_dict if kwarg_dict else {}
             response: Response = await self.request(obj.__name__, *arg_list, **kwarg_dict)

@@ -10,6 +10,7 @@ from rap.client.utils import get_func_arg_type_list, is_type
 from rap.common.utlis import MISS_OBJECT
 from rap.common.types import FunctionType
 
+
 __all__ = ["Client"]
 F = TypeVar('F', bound=FunctionType)
 CHANNEL_F = Callable[[Channel], Any]
@@ -274,6 +275,8 @@ class Client:
         """
 
         def wrapper(func: F) -> F:
+            if not inspect.iscoroutinefunction(func):
+                raise TypeError(f"func:{func.__name__} must coroutine function")
             func_sig: inspect.Signature = inspect.signature(func)
             func_arg_parameter: List[inspect.Parameter] = [
                 i for i in func_sig.parameters.values() if i.default == i.empty
