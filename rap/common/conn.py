@@ -36,24 +36,28 @@ class BaseConnection:
 
     async def read(self, timeout: Optional[int] = None) -> Optional[tuple]:
         try:
-            return next(self._unpacker)
-        except StopIteration:
-            pass
-
-        timeout = timeout if timeout else self._timeout
-        while True:
-            data = await asyncio.wait_for(self._reader.read(Constant.SOCKET_RECV_SIZE), timeout)
-            logging.debug(f"recv data %s from %s", data, self.peer_tuple)
-            if not data:
-                e: Exception = ConnectionError(f"Connection to {self.peer_tuple} closed")
-                # self.set_reader_exc(e)
-                raise e
-            self._unpacker.feed(data)
             try:
                 return next(self._unpacker)
             except StopIteration:
-                continue
-        return None
+                pass
+
+            timeout = timeout if timeout else self._timeout
+            while True:
+                data = await asyncio.wait_for(self._reader.read(Constant.SOCKET_RECV_SIZE), timeout)
+                logging.debug(f"recv data %s from %s", data, self.peer_tuple)
+                if not data:
+                    e: Exception = ConnectionError(f"Connection to {self.peer_tuple} closed")
+                    # self.set_reader_exc(e)
+                    raise e
+                self._unpacker.feed(data)
+                try:
+                    return next(self._unpacker)
+                except StopIteration:
+                    continue
+            return None
+        except Exception as e:
+            self.set_reader_exc(e)
+            raise e
 
     def set_reader_exc(self, exc: Exception):
         if not isinstance(exc, Exception):
@@ -71,7 +75,7 @@ class BaseConnection:
 
         self._is_closed = True
 
-        if self.result_future and self.result_future.cancelled():
+        if self.result_future and not self.result_future.cancelled():
             self.result_future.cancel()
 
     def is_closed(self) -> bool:

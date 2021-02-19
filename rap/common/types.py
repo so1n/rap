@@ -5,7 +5,8 @@ from typing import Any, List, Optional, Set, Tuple, Type, Union, _GenericAlias
 import msgpack
 
 
-def _f(*args, **kwargs): pass
+def _f(*args, **kwargs):
+    pass
 
 
 # request num, msg id, group, func name, header, body

@@ -7,12 +7,11 @@ from rap.client.processor.base import BaseProcessor
 from rap.client.transport.channel import Channel
 from rap.client.transport.transport import Session, Transport
 from rap.client.utils import get_func_arg_type_list, is_type
-from rap.common.utlis import MISS_OBJECT
 from rap.common.types import FunctionType
-
+from rap.common.utlis import MISS_OBJECT
 
 __all__ = ["Client"]
-F = TypeVar('F', bound=FunctionType)
+F = TypeVar("F", bound=FunctionType)
 CHANNEL_F = Callable[[Channel], Any]
 
 
@@ -129,11 +128,7 @@ class Client:
     # register func api #
     #####################
     def _async_register(
-            self,
-            func: FunctionType,
-            group: Optional[str],
-            name: Optional[str] = None,
-            enable_type_check: bool = True
+        self, func: FunctionType, group: Optional[str], name: Optional[str] = None, enable_type_check: bool = True
     ) -> FunctionType:
         """Decorate normal function"""
         name: str = name if name else func.__name__
@@ -160,11 +155,7 @@ class Client:
             return wrapper
 
     def _async_gen_register(
-            self,
-            func: FunctionType,
-            group: Optional[str],
-            name: Optional[str] = None,
-            enable_type_check: bool = True
+        self, func: FunctionType, group: Optional[str], name: Optional[str] = None, enable_type_check: bool = True
     ) -> FunctionType:
         """Decoration generator function"""
         name: str = name if name else func.__name__
@@ -259,14 +250,12 @@ class Client:
         session: conn session
         """
         async with AsyncIteratorCall(
-                func.__name__, self, *args, header=header, group=group, session=session
+            func.__name__, self, *args, header=header, group=group, session=session
         ) as async_iterator:
             async for result in async_iterator:
                 yield result
 
-    def register(
-            self, name: Optional[str] = None, group: Optional[str] = None, enable_type_check: bool = True
-    ) -> F:
+    def register(self, name: Optional[str] = None, group: Optional[str] = None, enable_type_check: bool = True) -> F:
         """Using this method to decorate a fake function can help you use it better.
         (such as ide completion, ide reconstruction and type hints)
         and will be automatically registered according to the function type

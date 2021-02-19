@@ -16,7 +16,15 @@ from rap.common.exceptions import (
     ServerError,
 )
 from rap.common.types import is_type
-from rap.common.utlis import MISS_OBJECT, Constant, Event, get_event_loop, parse_error, response_num_dict
+from rap.common.utlis import (
+    MISS_OBJECT,
+    Constant,
+    Event,
+    as_first_completed,
+    get_event_loop,
+    parse_error,
+    response_num_dict,
+)
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
 from rap.server.registry import FuncModel
@@ -149,15 +157,13 @@ class Request(object):
                 break
             else:
                 await self._response(ResponseModel.from_event(Event(Constant.PING_EVENT, "")))
-
                 try:
-                    # check conn exc
-                    await asyncio.wait_for(self._conn.result_future, self._ping_sleep_time)
-                except asyncio.TimeoutError:
-                    # ignore timeout error
-                    pass
-                except Exception:
-                    break
+                    await as_first_completed(
+                        [self._conn.result_future, asyncio.sleep(self._ping_sleep_time)],
+                        not_cancel_future_list=[self._conn.result_future],
+                    )
+                except Exception as e:
+                    logging.debug(f"{self._conn} ping event exit.. error:{e}")
 
     async def channel_handle(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
         try:
@@ -308,7 +314,7 @@ class Request(object):
                 response.set_exception(
                     ParseError(
                         extra_msg=f"{func_model.name} takes {len(func_model.arg_type_list)}"
-                                  f" positional arguments but {len(param)} were given"
+                        f" positional arguments but {len(param)} were given"
                     )
                 )
                 return response

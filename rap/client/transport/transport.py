@@ -103,10 +103,9 @@ class Transport(object):
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            conn.set_reader_exc(e)
             logging.exception(f"listen status:{self._is_close} error: {e}, close conn:{conn}")
             if not conn.is_closed():
-                conn.close()
+                await conn.await_close()
 
     async def _read_from_conn(self, conn: Connection):
         """recv server msg handle"""
@@ -251,7 +250,8 @@ class Transport(object):
         """write response msg(except channel response)"""
         try:
             return await as_first_completed(
-                [asyncio.wait_for(self._resp_future_dict[resp_future_id], self._timeout), conn.result_future]
+                [asyncio.wait_for(self._resp_future_dict[resp_future_id], self._timeout), conn.result_future],
+                not_cancel_future_list=[conn.result_future],
             )
         except asyncio.TimeoutError:
             raise asyncio.TimeoutError(f"msg_id:{resp_future_id} request timeout")
@@ -313,13 +313,7 @@ class Transport(object):
         async def close(_call_id: str):
             del self._channel_queue_dict[_call_id]
 
-        def listen_conn_exc(_channel_id: str, conn: Connection):
-            async def _add_exc_queue(exc: Exception):
-                await self._channel_queue_dict[_channel_id].put(exc)
-
-            conn.add_listen_exc_func(_add_exc_queue)
-
-        return Channel(func_name, self.session, create, read, write, close, listen_conn_exc, group=group)
+        return Channel(func_name, self.session, create, read, write, close, group=group)
 
     #############
     # processor #
