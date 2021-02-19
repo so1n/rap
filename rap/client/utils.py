@@ -1,6 +1,6 @@
 import inspect
-from typing import Any, Callable, Dict, List, Tuple, Type
 from types import FunctionType
+from typing import Any, Callable, Dict, List, Tuple, Type
 
 from rap.common import exceptions as rap_exc
 from rap.common.exceptions import RPCError

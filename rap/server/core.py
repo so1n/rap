@@ -212,7 +212,6 @@ class Server(object):
                 break
             except Exception as e:
                 logging.error(f"recv data from {conn.peer_tuple} error:{e}, conn has been closed")
-                conn.set_reader_exc(e)
                 raise e
 
         if not conn.is_closed():

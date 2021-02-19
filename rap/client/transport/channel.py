@@ -1,13 +1,12 @@
 import asyncio
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Optional, Tuple
 
 from rap.client.model import Request, Response
 from rap.common.channel import BaseChannel
-from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError
-from rap.common.utlis import Constant
+from rap.common.utlis import Constant, as_first_completed
 
 if TYPE_CHECKING:
     from rap.client.transport.transport import Session
@@ -27,7 +26,6 @@ class Channel(BaseChannel):
         read: Callable[[str], Coroutine[Any, Any, Response]],
         write: Callable[[Request, "Session"], Coroutine[Any, Any, None]],
         close: Callable[[str], Coroutine[Any, Any, Any]],
-        add_listen_conn_exc: Callable[[str, Connection], None],
         group: Optional[str] = None,
     ):
         self.channel_id: str = str(uuid.uuid4())
@@ -38,7 +36,6 @@ class Channel(BaseChannel):
         self._read: Callable[[str], Coroutine[Any, Any, Response]] = read
         self._write: Callable[[Request, "Session"], Coroutine[Any, Any, None]] = write
         self._close: Callable[[str], Coroutine[Any, Any, Any]] = close
-        self._add_listen_conn_exc: Callable[[str, Connection], None] = add_listen_conn_exc
         self._is_close: bool = True
 
     async def create(self):
@@ -49,7 +46,6 @@ class Channel(BaseChannel):
         # init channel data structure
         self._session.create()
         await self._create(self.channel_id)
-        self._add_listen_conn_exc(self.channel_id, self._session.conn)
         self._is_close = False
 
         # init with server
@@ -65,10 +61,11 @@ class Channel(BaseChannel):
         """
         if self._is_close:
             raise ChannelError(f"channel is closed")
-        response: Union[Response, Exception] = await self._read(self.channel_id)
+        response: Response = await as_first_completed(
+            [self._read(self.channel_id), self._session.conn.result_future],
+            not_cancel_future_list=[self._session.conn.result_future],
+        )
 
-        if isinstance(response, Exception):
-            raise response
         if response.header.get("channel_life_cycle") == Constant.DROP:
             self._is_close = True
             await self._close(self.channel_id)
