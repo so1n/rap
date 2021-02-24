@@ -264,8 +264,8 @@ class Client:
         """
 
         def wrapper(func: F) -> F:
-            if not inspect.iscoroutinefunction(func):
-                raise TypeError(f"func:{func.__name__} must coroutine function")
+            if not (inspect.iscoroutinefunction(func) or inspect.isasyncgenfunction(func)):
+                raise TypeError(f"func:{func.__name__} must coroutine function or async gen function")
             func_sig: inspect.Signature = inspect.signature(func)
             func_arg_parameter: List[inspect.Parameter] = [
                 i for i in func_sig.parameters.values() if i.default == i.empty
