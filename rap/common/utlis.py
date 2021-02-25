@@ -5,7 +5,7 @@ import string
 import sys
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, Dict, List, Set, Union
+from typing import Any, Callable, Coroutine, Dict, List, Union
 
 __all__ = [
     "Constant",
@@ -66,7 +66,7 @@ class State(object):
         except KeyError:
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{key}'")
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._state)
 
     def __delattr__(self, key: Any) -> None:
@@ -82,7 +82,7 @@ class Event(object):
         return self.event_name, self.event_info
 
 
-def _get_event_loop():
+def _get_event_loop() -> Callable[[], asyncio.AbstractEventLoop]:
     if sys.version_info >= (3, 7):
         return asyncio.get_running_loop
 
@@ -100,11 +100,8 @@ def gen_random_time_id(length: int = 8, time_length: int = 10) -> str:
     return str(int(time.time()))[-time_length:] + "".join(random.choice(_STR_LD) for _ in range(length))
 
 
-def parse_error(exception: Optional[Exception]) -> Optional[Tuple[str, str]]:
-    error_response: Optional[Tuple[str, str]] = None
-    if exception:
-        error_response = (type(exception).__name__, str(exception))
-    return error_response
+def parse_error(exception: Exception) -> Tuple[str, str]:
+    return type(exception).__name__, str(exception)
 
 
 def gen_new_param_coro(coro: Coroutine, new_param_dict: Dict[str, Any]) -> Coroutine:

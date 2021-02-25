@@ -23,8 +23,8 @@ class Response(object):
         self._processor_list: Optional[List[BaseProcessor]] = processor_list
 
     @staticmethod
-    async def response_handle(resp: ResponseModel):
-        def set_header_value(header_key: str, header_Value: Any, is_cover: bool = False):
+    async def response_handle(resp: ResponseModel) -> None:
+        def set_header_value(header_key: str, header_Value: Any, is_cover: bool = False) -> None:
             """set header value"""
             if is_cover:
                 resp.header[header_key] = header_Value
@@ -36,8 +36,8 @@ class Response(object):
         set_header_value("request_id", str(uuid.uuid4()), is_cover=True)
         set_header_value("status_code", 200)
 
-    async def __call__(self, resp: ResponseModel) -> bool:
-        if not resp:
+    async def __call__(self, resp: Optional[ResponseModel]) -> bool:
+        if resp is None:
             return False
 
         await self.response_handle(resp)

@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Callable, Tuple, Union
+from typing import Any, Callable, Tuple
 
 from rap.common.exceptions import ServerError
 from rap.server.middleware.base import BaseMsgMiddleware
@@ -8,9 +8,7 @@ from rap.server.model import RequestModel
 
 
 class AccessMsgMiddleware(BaseMsgMiddleware):
-    async def dispatch(
-        self, request: RequestModel, call_id: int, func: Callable, param: str
-    ) -> Tuple[int, Union[dict, Exception]]:
+    async def dispatch(self, request: RequestModel, call_id: int, func: Callable, param: list) -> Tuple[int, Any]:
         start_time: float = time.time()
         status: bool = False
 

@@ -1,5 +1,5 @@
 import asyncio
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, NoReturn, Union
 
 from rap.common.exceptions import ChannelError
 
@@ -67,15 +67,15 @@ class BaseChannel(object):
         """read msg obj from channel"""
         raise NotImplementedError
 
-    async def read_body(self):
+    async def read_body(self) -> Any:
         """read body obj from channel's msg obj"""
         raise NotImplementedError
 
-    async def write(self, body: Any):
+    async def write(self, body: Any) -> Any:
         """write body to channel"""
         raise NotImplementedError
 
-    async def close(self):
+    async def close(self) -> Any:
         """close channel"""
         raise NotImplementedError
 

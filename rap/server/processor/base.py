@@ -1,9 +1,9 @@
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from rap.server.model import RequestModel, ResponseModel
 
 if TYPE_CHECKING:
-    from rap.server import Server
+    from rap.server.core import Server
 
 
 class BaseProcessor(object):
@@ -14,13 +14,13 @@ class BaseProcessor(object):
 
     app: "Server"
 
-    def start_event_handle(self):
+    async def start_event_handle(self) -> Any:
         pass
 
-    def stop_event_handle(self):
+    async def stop_event_handle(self) -> Any:
         pass
 
-    def register(self, func: Callable, name: Optional[str] = None, group: str = "processor"):
+    def register(self, func: Callable, name: Optional[str] = None, group: str = "processor") -> None:
         self.app.register(func, name, group=group, is_private=True)
 
     async def process_request(self, request: RequestModel) -> RequestModel:

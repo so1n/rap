@@ -7,11 +7,10 @@ from rap.client.processor.base import BaseProcessor
 from rap.client.transport.channel import Channel
 from rap.client.transport.transport import Session, Transport
 from rap.client.utils import get_func_arg_type_list, is_type
-from rap.common.types import FunctionType
-from rap.common.utlis import MISS_OBJECT
+from rap.common.types import MyFunctionType
 
 __all__ = ["Client"]
-F = TypeVar("F", bound=FunctionType)
+F = TypeVar("F", bound=MyFunctionType)
 CHANNEL_F = Callable[[Channel], Any]
 
 
@@ -35,10 +34,10 @@ class AsyncIteratorCall:
         self._header: Optional[dict] = header
 
         if session:
-            self._session: Session = session
+            self._session: Optional[Session] = session
         else:
             self._session = self._client.transport.get_now_session()
-            if self._session is MISS_OBJECT:
+            if self._session is None:
                 self._session = self._client.transport.session
         self.in_session: bool = self._session.in_session
 
@@ -46,12 +45,14 @@ class AsyncIteratorCall:
     # session support #
     ###################
     async def __aenter__(self) -> "AsyncIteratorCall":
+        if not self._session:
+            raise ConnectionError("Create session fail")
         if not self.in_session:
             self._session.create()
         return self
 
-    async def __aexit__(self, *args: Tuple):
-        if not self.in_session:
+    async def __aexit__(self, *args: Tuple) -> None:
+        if not self.in_session and self._session:
             self._session.close()
 
     #####################
@@ -109,15 +110,15 @@ class Client:
     ##################
     # connect& close #
     ##################
-    async def await_close(self):
+    async def await_close(self) -> None:
         """close client transport"""
         await self.transport.await_close()
 
-    async def connect(self):
+    async def connect(self) -> None:
         """Create client transport"""
         await self.transport.connect()
 
-    def load_processor(self, processor_list: List[BaseProcessor]):
+    def load_processor(self, processor_list: List[BaseProcessor]) -> None:
         self.transport.load_processor(processor_list)
 
     @property
@@ -128,10 +129,10 @@ class Client:
     # register func api #
     #####################
     def _async_register(
-        self, func: FunctionType, group: Optional[str], name: Optional[str] = None, enable_type_check: bool = True
-    ) -> FunctionType:
+        self, func: Callable, group: Optional[str], name: Optional[str] = None, enable_type_check: bool = True
+    ) -> Callable:
         """Decorate normal function"""
-        name: str = name if name else func.__name__
+        name = name if name else func.__name__
         param_type_list: List[Type] = get_func_arg_type_list(func)
         return_type: Type = func.__annotations__["return"]
 
@@ -155,15 +156,15 @@ class Client:
             return wrapper
 
     def _async_gen_register(
-        self, func: FunctionType, group: Optional[str], name: Optional[str] = None, enable_type_check: bool = True
-    ) -> FunctionType:
+        self, func: Callable, group: Optional[str], name: Optional[str] = None, enable_type_check: bool = True
+    ) -> Callable:
         """Decoration generator function"""
-        name: str = name if name else func.__name__
+        name = name if name else func.__name__
         param_type_list: List[Type] = get_func_arg_type_list(func)
         return_type: Type = func.__annotations__["return"]
 
         @wraps(func)
-        async def type_check_wrapper(*args, **kwargs) -> Any:
+        async def type_check_wrapper(*args: Any, **kwargs: Any) -> Any:
             for index, arg_type in enumerate(param_type_list):
                 if not is_type(type(args[index]), arg_type):
                     raise TypeError(f"{param_type_list[index]} type must: {arg_type}")
@@ -174,7 +175,7 @@ class Client:
                     yield result
 
         @wraps(func)
-        async def wrapper(*args, **kwargs) -> Any:
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             async with AsyncIteratorCall(name, self, *args, group=group) as async_iterator:
                 async for result in async_iterator:
                     yield result
@@ -186,10 +187,10 @@ class Client:
 
     def _async_channel_register(self, func: CHANNEL_F, group: Optional[str], name: Optional[str] = None) -> CHANNEL_F:
         """Decoration channel function"""
-        name: str = name if name else func.__name__
+        name = name if name else func.__name__
 
         @wraps(func)
-        async def wrapper(*args, **kwargs) -> Any:
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             async with self.transport.channel(name, group) as channel:
                 return await func(channel)
 
@@ -219,7 +220,7 @@ class Client:
 
     async def call(
         self,
-        func: FunctionType,
+        func: Callable,
         *args: Any,
         header: Optional[dict] = None,
         group: Optional[str] = None,
@@ -236,7 +237,7 @@ class Client:
 
     async def iterator_call(
         self,
-        func: FunctionType,
+        func: Callable,
         *args: Any,
         header: Optional[dict] = None,
         group: Optional[str] = None,
@@ -255,7 +256,9 @@ class Client:
             async for result in async_iterator:
                 yield result
 
-    def register(self, name: Optional[str] = None, group: Optional[str] = None, enable_type_check: bool = True) -> F:
+    def register(
+            self, name: Optional[str] = None, group: Optional[str] = None, enable_type_check: bool = True
+    ) -> Callable[[Callable], Callable]:
         """Using this method to decorate a fake function can help you use it better.
         (such as ide completion, ide reconstruction and type hints)
         and will be automatically registered according to the function type
@@ -263,7 +266,7 @@ class Client:
         group: func group, default group value is `default`
         """
 
-        def wrapper(func: F) -> F:
+        def wrapper(func: Callable) -> Callable:
             if not (inspect.iscoroutinefunction(func) or inspect.isasyncgenfunction(func)):
                 raise TypeError(f"func:{func.__name__} must coroutine function or async gen function")
             func_sig: inspect.Signature = inspect.signature(func)
@@ -276,5 +279,6 @@ class Client:
                 return self._async_register(func, group, name=name, enable_type_check=enable_type_check)
             elif inspect.isasyncgenfunction(func):
                 return self._async_gen_register(func, group, name=name, enable_type_check=enable_type_check)
+            raise TypeError(f"{func} does not support registration")
 
         return wrapper

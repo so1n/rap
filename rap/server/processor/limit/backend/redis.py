@@ -2,7 +2,7 @@ import time
 from abc import ABC
 from typing import Awaitable, Callable, List, Optional, Union
 
-from aredis import StrictRedis, StrictRedisCluster
+from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
 from rap.server.processor.limit.backend import BaseLimitBackend
 from rap.server.processor.limit.rule import Rule
@@ -12,9 +12,9 @@ class BaseRedisBackend(BaseLimitBackend, ABC):
     def __init__(self, redis: Union[StrictRedis, StrictRedisCluster]):
         self._redis: "Union[StrictRedis, StrictRedisCluster]" = redis
 
-    async def _block_time_handle(self, key: str, rule: Rule, func: Callable[..., Awaitable[bool]]):
+    async def _block_time_handle(self, key: str, rule: Rule, func: Callable[..., Awaitable[bool]]) -> bool:
         block_time_key: str = f"{key}:block_time"
-        bucket_block_time: int = rule.block_time
+        bucket_block_time: Optional[int] = rule.block_time
 
         if bucket_block_time is not None and await self._redis.exists(block_time_key):
             return False
@@ -52,11 +52,11 @@ class RedisFixedWindowBackend(BaseRedisBackend):
         if token_num is None:
             return 0
         else:
-            token_num: int = int(token_num)
+            token_num_int: int = int(token_num)
 
-        if token_num < rule.gen_token:
-            return 0
-        return await self._redis.ttl(key)
+            if token_num_int < rule.gen_token:
+                return 0
+            return await self._redis.ttl(key)
 
 
 class RedisCellBackend(BaseRedisBackend):

@@ -3,32 +3,33 @@ import inspect
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Type
+from typing import Callable, Dict, List, Optional, Tuple, Type, Union
 
 from rap.common.channel import BaseChannel
 from rap.common.exceptions import RegisteredError
-from rap.common.types import FunctionType, is_json_type
+from rap.common.types import is_json_type
+from types import FunctionType
 
 
 @dataclass()
 class FuncModel(object):
     group: str
     type_: str
-    func: FunctionType
+    func: Callable
 
     is_private: bool
     doc: Optional[str] = None
     name: Optional[str] = None
-    arg_type_list: Optional[List[Type]] = field(default_factory=list)
+    arg_type_list: List[Type] = field(default_factory=list)
     return_type: Optional[Type] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.doc:
             self.doc = self.func.__doc__
         if not self.name:
             self.name = self.func.__name__
 
-        var_name_list: List[str] = self.func.__code__.co_varnames
+        var_name_list: Tuple[str, ...] = self.func.__code__.co_varnames
         annotation_dict: Dict[str, Type] = self.func.__annotations__
         for var_name in var_name_list:
             if var_name in annotation_dict:
@@ -37,7 +38,7 @@ class FuncModel(object):
 
 
 class RegistryManager(object):
-    def __init__(self):
+    def __init__(self) -> None:
         self._cwd: str = os.getcwd()
         self.func_dict: Dict[str, FuncModel] = dict()
 
@@ -50,7 +51,7 @@ class RegistryManager(object):
         return f"{type_}:{group}:{name}"
 
     @staticmethod
-    def _get_func_type(func: FunctionType) -> str:
+    def _get_func_type(func: Callable) -> str:
         sig: "inspect.Signature" = inspect.signature(func)
         func_arg_parameter: List[inspect.Parameter] = [i for i in sig.parameters.values() if i.default == i.empty]
 
@@ -65,12 +66,12 @@ class RegistryManager(object):
 
     def register(
         self,
-        func: FunctionType,
+        func: Callable,
         name: Optional[str] = None,
         group: str = "default",
         is_private: bool = False,
         doc: Optional[str] = None,
-    ):
+    ) -> None:
         """
         func: Function that need to be registered
         name: If the function name is not specified, the system will obtain its own name according to the function,
@@ -102,7 +103,7 @@ class RegistryManager(object):
             raise RegisteredError(f"{name} is not a callable object")
         # func name handle
         if inspect.isfunction(func) or inspect.ismethod(func):
-            name: str = name if name else func.__name__
+            name = name if name else func.__name__
         else:
             raise RegisteredError("func must be func or method")
 
@@ -173,19 +174,21 @@ class RegistryManager(object):
         except Exception as e:
             raise RegisteredError(f"reload {func_str} from {path} fail, {str(e)}")
 
-    def _get_register_func(self) -> List[Dict[str, str]]:
+    def _get_register_func(self) -> List[Dict[str, Union[str, bool]]]:
         """get func info which in registry"""
-        register_list: List[Dict[str, str]] = []
+        register_list: List[Dict[str, Union[str, bool]]] = []
         for key, value in self.func_dict.items():
             module = inspect.getmodule(value.func)
+            if not module:
+                continue
             register_list.append(
                 {
                     "key": key,
-                    "name": value.name,
+                    "name": value.name if value.name else "",
                     "module_name": module.__name__,
                     "module_file": module.__file__,
-                    "doc": value.doc,
-                    "is_private": value.is_private,
+                    "doc": value.doc if value.doc else "",
+                    "is_private": value.is_private if value.is_private else False,
                     "group": value.group,
                     "type": value.type_,
                 }

@@ -1,11 +1,11 @@
 import time
 from typing import Callable, Dict, List, Optional, Union
 
-from aredis import StrictRedis, StrictRedisCluster
+from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError, ParseError
-from rap.common.utlis import MISS_OBJECT, Constant, gen_random_time_id
+from rap.common.utlis import Constant, gen_random_time_id
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
 
@@ -28,7 +28,7 @@ class CryptoProcessor(BaseProcessor):
 
         self.load_aes_key_dict(secret_dict)
 
-    def start_event_handle(self):
+    async def start_event_handle(self) -> None:
         self.register(self.modify_crypto_timeout)
         self.register(self.modify_crypto_nonce_timeout)
 
@@ -36,7 +36,7 @@ class CryptoProcessor(BaseProcessor):
         self.register(self.load_aes_key_dict)
         self.register(self.remove_aes)
 
-    def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None):
+    def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None) -> None:
         if not group:
             group = self.__class__.__name__
         super(CryptoProcessor, self).register(func, group=group)
@@ -52,12 +52,12 @@ class CryptoProcessor(BaseProcessor):
         """get crypto key in list"""
         return list(self._key_dict.keys())
 
-    def get_crypto_by_key_id(self, key_id: str) -> "Union[Crypto, MISS_OBJECT]":
+    def get_crypto_by_key_id(self, key_id: str) -> "Optional[Crypto]":
         key: str = self._key_dict.get(key_id, "")
-        return self._crypto_dict.get(key, MISS_OBJECT)
+        return self._crypto_dict.get(key, None)
 
-    def get_crypto_by_key(self, key: str) -> "Union[Crypto, MISS_OBJECT]":
-        return self._crypto_dict.get(key, MISS_OBJECT)
+    def get_crypto_by_key(self, key: str) -> "Optional[Crypto]":
+        return self._crypto_dict.get(key, None)
 
     def remove_aes(self, key: str) -> None:
         """delete aes value by key"""
@@ -77,9 +77,9 @@ class CryptoProcessor(BaseProcessor):
         if type(request.body) is not bytes:
             return request
         crypto_id: str = request.header.get("crypto_id", None)
-        crypto: Crypto = self.get_crypto_by_key_id(crypto_id)
+        crypto: Optional[Crypto] = self.get_crypto_by_key_id(crypto_id)
         # check crypto
-        if crypto == MISS_OBJECT:
+        if crypto is None:
             raise CryptoError("crypto id error")
         try:
             request.body = crypto.decrypt_object(request.body)
