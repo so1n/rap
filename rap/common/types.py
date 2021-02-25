@@ -1,27 +1,27 @@
 import asyncio
 from collections.abc import AsyncIterator, Iterator
-from typing import Any, List, Optional, Set, Tuple, Type, Union, _GenericAlias
+from typing import Any, List, Optional, Set, Tuple, Type, Union, _GenericAlias  # type: ignore
 
-import msgpack
+import msgpack  # type: ignore
 
 
-def _f(*args, **kwargs):
+def _f(*args: Any, **kwargs: Any) -> None:
     pass
 
 
 # request num, msg id, group, func name, header, body
 BASE_REQUEST_TYPE = Tuple[int, int, str, str, dict, Any]
-BASE_RESPONSE_TYPE = Optional[Tuple[int, int, str, str, dict, Any]]
+BASE_RESPONSE_TYPE = Tuple[int, int, str, str, dict, Any]
 LOOP_TYPE = asyncio.get_event_loop
 READER_TYPE = asyncio.streams.StreamReader
 WRITER_TYPE = asyncio.streams.StreamWriter
 UNPACKER_TYPE = msgpack.Unpacker
 
-_CAN_JSON_TYPE_SET: Set[type] = {bool, dict, float, int, list, str, tuple, type(None), None}
-FunctionType = type(_f)
+_CAN_JSON_TYPE_SET: Set[Optional[type]] = {bool, dict, float, int, list, str, tuple, type(None), None}
+MyFunctionType = type(_f)
 
 
-def parse_typing(_type: Type) -> Union[List[Type], Type]:
+def parse_typing(_type: Type) -> Union[List[Type[Any]], Type]:
     """
     parse typing.type to Python.type
     >>> from typing import Dict, Optional
@@ -39,7 +39,13 @@ def parse_typing(_type: Type) -> Union[List[Type], Type]:
     if isinstance(_type, _GenericAlias):
         origin: type = _type.__origin__
         if origin is Union:
-            return [parse_typing(i) for i in _type.__args__]
+            type_list: List[Type[Any]] = []
+            for i in _type.__args__:
+                if isinstance(i, list):
+                    type_list.extend(i)
+                else:
+                    type_list.append(i)
+            return type_list
         elif origin in (AsyncIterator, Iterator):
             return _type.__args__[0]
         return origin
@@ -65,13 +71,13 @@ def is_json_type(_type: Type) -> bool:
     >>> assert is_json_type(parse_typing(Union[Dict[str, Any]]))
     """
     origin_type: Union[List[Type], Type] = parse_typing(_type)
-    if type(origin_type) is list:
+    if isinstance(origin_type, list):
         return not bool(set(origin_type) - _CAN_JSON_TYPE_SET)
     return origin_type in _CAN_JSON_TYPE_SET
 
 
 def is_type(source_type: Type, target_type: Type) -> bool:
     origin_type: Union[List[Type], Type] = parse_typing(source_type)
-    if type(origin_type) is not list:
+    if not isinstance(origin_type, list):
         origin_type = [origin_type]
     return target_type in origin_type

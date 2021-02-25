@@ -14,14 +14,14 @@ class AutoExpireSet(object):
         self._dict: Dict[str, int] = {}
         self._interval: int = interval
 
-    def _add(self, key: str, expire: int):
+    def _add(self, key: str, expire: int) -> None:
         self._dict[key] = int(time.time()) + expire
 
-    def add(self, key: str, expire: int):
+    def add(self, key: str, expire: int) -> None:
         self._add(key, expire)
         if get_event_loop().is_running():
             self._auto_remove()
-            self.add = self._add
+            setattr(self, self.add.__name__, self._add)
 
     def __contains__(self, key: str) -> bool:
         if key not in self._dict:
@@ -32,7 +32,7 @@ class AutoExpireSet(object):
         else:
             return True
 
-    def _auto_remove(self):
+    def _auto_remove(self) -> None:
         now_timestamp: int = int(time.time())
         for key in list(self._dict.keys()):
             if key not in self._dict:
@@ -52,7 +52,7 @@ class CryptoProcessor(BaseProcessor):
         self._nonce_set: AutoExpireSet = AutoExpireSet(interval=interval)
         self._crypto: "Crypto" = Crypto(self._crypto_key)
 
-    def _body_handle(self, body: dict):
+    def _body_handle(self, body: dict) -> None:
         timestamp: int = body.get("timestamp", 0)
         if (int(time.time()) - timestamp) > 60:
             raise CryptoError("timeout error")

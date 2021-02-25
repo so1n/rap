@@ -4,8 +4,8 @@ import random
 import uuid
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from inspect import isfunction
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple, Type, Union
+from types import FunctionType
 
 from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
@@ -15,9 +15,9 @@ from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError, RPCError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
-from rap.common.utlis import MISS_OBJECT, Constant, Event, as_first_completed
+from rap.common.utlis import Constant, Event, as_first_completed
 
-_session_context: ContextVar["Optional[Session]"] = ContextVar("session_context", default=MISS_OBJECT)
+_session_context: ContextVar["Optional[Session]"] = ContextVar("session_context", default=None)
 __all__ = ["Session", "Transport"]
 
 
@@ -29,7 +29,7 @@ class ConnModel(object):
     def is_closed(self) -> bool:
         return self.conn.is_closed() or self.future.done()
 
-    async def await_close(self):
+    async def await_close(self) -> None:
         if not self.future.cancelled():
             self.future.cancel()
         if not self.conn.is_closed():
@@ -50,7 +50,7 @@ class Transport(object):
         self._conn_dict: Dict[str, ConnModel] = {}
         self._is_close: bool = True
         self._timeout: int = timeout
-        self._ssl_crt_path: str = ssl_crt_path
+        self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._keep_alive_time: int = keep_alive_time
         self._process_request_list: List = []
         self._process_response_list: List = []
@@ -60,7 +60,7 @@ class Transport(object):
         self._resp_future_dict: Dict[str, asyncio.Future[Response]] = {}
         self._channel_queue_dict: Dict[str, asyncio.Queue[Union[Response, Exception]]] = {}
 
-    async def _connect(self, host: str):
+    async def _connect(self, host: str) -> None:
         """create conn and listen future by host"""
         if host in self._conn_dict:
             await self._conn_dict[host].await_close()
@@ -72,7 +72,7 @@ class Transport(object):
         self._conn_dict[host] = ConnModel(conn, future)
         logging.debug(f"Connection to %s...", conn.connection_info)
 
-    async def connect(self):
+    async def connect(self) -> None:
         """create conn and listen future"""
         if not self._is_close:
             raise ConnectionError(f"{self.__class__.__name__} already connect")
@@ -80,7 +80,7 @@ class Transport(object):
             await self._connect(host)
         self._is_close = False
 
-    async def await_close(self):
+    async def await_close(self) -> None:
         """close all conn and cancel future"""
         if self._is_close:
             raise RuntimeError(f"{self.__class__.__name__} already closed")
@@ -94,7 +94,7 @@ class Transport(object):
                 del self._conn_dict[host]
         self._is_close = True
 
-    async def _listen(self, conn: Connection):
+    async def _listen(self, conn: Connection) -> None:
         """listen server msg"""
         logging.debug(f"listen:%s start", conn.peer_tuple)
         try:
@@ -107,8 +107,11 @@ class Transport(object):
             if not conn.is_closed():
                 await conn.await_close()
 
-    async def _read_from_conn(self, conn: Connection):
+    async def _read_from_conn(self, conn: Connection) -> None:
         """recv server msg handle"""
+        if conn is None:
+            raise ConnectionError("Connection not connect")
+
         try:
             response_msg: Optional[BASE_RESPONSE_TYPE] = await conn.read(self._keep_alive_time)
             logging.debug(f"recv raw data: %s", response_msg)
@@ -139,7 +142,7 @@ class Transport(object):
         channel_id: Optional[str] = response.header.get("channel_id")
         status_code: int = response.header.get("status_code", 500)
 
-        def put_exc_to_receiver(put_exc: Exception):
+        def put_exc_to_receiver(put_exc: Exception) -> None:
             if channel_id in self._channel_queue_dict:
                 self._channel_queue_dict[channel_id].put_nowait(put_exc)
             elif response.msg_id != -1 and resp_future_id in self._resp_future_dict:
@@ -152,8 +155,8 @@ class Transport(object):
             return
         elif response.num == Constant.SERVER_ERROR_RESPONSE or status_code in self._exc_status_code_dict:
             # server error response handle
-            exc: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(status_code, rap_exc.BaseRapError)
-            put_exc_to_receiver(exc(response.body))
+            exc_class: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(status_code, rap_exc.BaseRapError)
+            put_exc_to_receiver(exc_class(response.body))
             return
         elif response.num == Constant.SERVER_EVENT:
             # server event msg handle
@@ -186,7 +189,7 @@ class Transport(object):
         # Avoid too big numbers
         self._msg_id = msg_id & 65535
 
-        conn, resp_future_id = await self.write(request, msg_id, session)
+        conn, resp_future_id = await self.write(request, msg_id, session=session)
         try:
             return await self.read(resp_future_id, conn)
         finally:
@@ -194,10 +197,10 @@ class Transport(object):
                 del self._resp_future_dict[resp_future_id]
 
     @staticmethod
-    def before_write_handle(request: Request):
+    def before_write_handle(request: Request) -> None:
         """check and header"""
 
-        def set_header_value(header_key: str, header_Value: Any, is_cover: bool = False):
+        def set_header_value(header_key: str, header_Value: Any, is_cover: bool = False) -> None:
             """if key not in header, set header value"""
             if is_cover or header_key not in request.header:
                 request.header[header_key] = header_Value
@@ -218,10 +221,10 @@ class Transport(object):
         if session:
             conn = session.conn
             request.header["session_id"] = session.id
-        elif not conn:
+        elif conn is None:
             conn = self.get_random_conn()
 
-        async def _write(_request: Request):
+        async def _write(_request: Request) -> None:
             self.before_write_handle(_request)
 
             for process_request in self._process_request_list:
@@ -262,8 +265,8 @@ class Transport(object):
     async def request(
         self,
         func_name: str,
-        *args,
-        call_id=-1,
+        *args: Any,
+        call_id: Optional[int] = None,
         group: Optional[str] = None,
         header: Optional[dict] = None,
         session: Optional["Session"] = None,
@@ -271,6 +274,8 @@ class Transport(object):
         """msg request handle"""
         if not group:
             group = "default"
+        if not call_id:
+            call_id = -1
         request: Request = Request(Constant.MSG_REQUEST, func_name, {"call_id": call_id, "param": args}, group=group)
         if header:
             request.header.update(header)
@@ -297,20 +302,23 @@ class Transport(object):
         return Session(self)
 
     @staticmethod
-    def get_now_session() -> "Session":
-        return _session_context.get(MISS_OBJECT)
+    def get_now_session() -> "Optional[Session]":
+        return _session_context.get(None)
 
     def channel(self, func_name: str, group: Optional[str] = None) -> "Channel":
-        async def create(_channel_id: str):
+        async def create(_channel_id: str) -> None:
             self._channel_queue_dict[_channel_id] = asyncio.Queue()
 
         async def read(_channel_id: str) -> Response:
-            return await self._channel_queue_dict[_channel_id].get()
+            result: Union[Response, Exception] = await self._channel_queue_dict[_channel_id].get()
+            if isinstance(result, Exception):
+                raise result
+            return result
 
-        async def write(request: Request, session: "Session"):
+        async def write(request: Request, session: "Session") -> None:
             await self.write(request, -1, session=session)
 
-        async def close(_call_id: str):
+        async def close(_call_id: str) -> None:
             del self._channel_queue_dict[_call_id]
 
         return Channel(func_name, self.session, create, read, write, close, group=group)
@@ -318,7 +326,7 @@ class Transport(object):
     #############
     # processor #
     #############
-    def load_processor(self, processor_list: List[BaseProcessor]):
+    def load_processor(self, processor_list: List[BaseProcessor]) -> None:
         for middleware in processor_list:
             self._process_request_list.append(middleware.process_request)
             self._process_response_list.append(middleware.process_response)
@@ -331,7 +339,7 @@ class Session(object):
 
     def __init__(self, transport: "Transport"):
         self._transport: "Transport" = transport
-        self._token: Optional[Token] = None
+        self._token: Token[Optional["Session"]] = Token()
         self.id: Optional[str] = None
         self._conn: Optional[Connection] = None
 
@@ -339,31 +347,33 @@ class Session(object):
         self.create()
         return self
 
-    async def __aexit__(self, *args: Tuple):
+    async def __aexit__(self, *args: Tuple) -> None:
         self.close()
 
-    def create(self):
+    def create(self) -> None:
         self.id = str(uuid.uuid4())
         self._conn = self._transport.get_random_conn()
-        self._token: Token = _session_context.set(self)
+        self._token = _session_context.set(self)
 
-    def close(self):
+    def close(self) -> None:
         self.id = None
         self._conn = None
         _session_context.reset(self._token)
 
     @property
     def in_session(self) -> bool:
-        return _session_context.get(MISS_OBJECT) is not MISS_OBJECT
+        return _session_context.get(None) is not None
 
     @property
     def conn(self) -> Connection:
+        if not self._conn:
+            raise ConnectionError("Session has not been created")
         return self._conn
 
-    async def request(self, name: str, *args, call_id=-1, header: Optional[dict] = None) -> Any:
+    async def request(self, name: str, *args: Any, call_id: int = -1, header: Optional[dict] = None) -> Any:
         return await self._transport.request(name, *args, call_id=call_id, header=header, session=self)
 
-    async def write(self, request: Request, msg_id: int):
+    async def write(self, request: Request, msg_id: int) -> None:
         await self._transport.write(request, msg_id, session=self)
 
     async def read(self, resp_future_id: str) -> Response:
@@ -374,18 +384,18 @@ class Session(object):
         obj: Union[Callable, Coroutine, str],
         arg_list: Optional[List] = None,
         kwarg_dict: Optional[Dict[str, Any]] = None,
-    ):
+    ) -> Any:
         if asyncio.iscoroutine(obj):
             assert obj.cr_frame.f_locals["self"].transport is self._transport
             obj.cr_frame.f_locals["kwargs"]["session"] = self
             return await obj
-        elif isfunction(obj) and arg_list:
+        elif isinstance(obj, FunctionType) and arg_list:
             kwarg_dict = kwarg_dict if kwarg_dict else {}
             response: Response = await self.request(obj.__name__, *arg_list, **kwarg_dict)
             return response.body["result"]
-        elif type(obj) is str and arg_list:
+        elif isinstance(obj, str) and arg_list:
             kwarg_dict = kwarg_dict if kwarg_dict else {}
-            response: Response = await self.request(obj, *arg_list, **kwarg_dict)
+            response = await self.request(obj, *arg_list, **kwarg_dict)
             return response.body["result"]
         else:
             raise TypeError(f"Not support {type(obj)}, obj type must: {Callable}, {Coroutine}, {str}")

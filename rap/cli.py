@@ -7,7 +7,7 @@ from rap.client import Client
 from rap.client.processor import CryptoProcessor
 
 
-def print_table(table_list: List[List[str]]):
+def print_table(table_list: List[List[str]]) -> None:
     row_cnt: int = len(table_list)
     column_cnt = len(table_list[0])  # 列表中元素的个数
 
@@ -45,18 +45,19 @@ if __name__ == "__main__":
     secret_key: str = args.secret_key
     mode: str = args.mode
     func_name: str = args.name
-    arg: Union[str, tuple] = args.arg
+    arg: Union[str, list] = args.arg
     group: str = args.group
 
-    if type(args) is str:
-        arg_list = arg.split(",")
+    if isinstance(arg, str):
+        arg_list: List[str] = arg.split(",")
     else:
         arg_list = arg
 
     loop = asyncio.get_event_loop()
     client = Client()
     if secret_key:
-        client.load_processor([CryptoProcessor(*secret_key.split(","))])
+        crypto_key_id, crypto_key = secret_key.split(",")
+        client.load_processor([CryptoProcessor(crypto_key_id, crypto_key)])
     loop.run_until_complete(client.connect())
 
     if mode == "d":

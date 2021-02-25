@@ -38,7 +38,7 @@ class Channel(BaseChannel):
         self._close: Callable[[str], Coroutine[Any, Any, Any]] = close
         self._is_close: bool = True
 
-    async def create(self):
+    async def create(self) -> None:
         """create and init channel, create session and listen conn exc"""
         if not self._is_close:
             raise ChannelError("channel already create")
@@ -61,6 +61,8 @@ class Channel(BaseChannel):
         """
         if self._is_close:
             raise ChannelError(f"channel is closed")
+        if not self._session.conn:
+            raise ConnectionError("connection already close")
         response: Response = await as_first_completed(
             [self._read(self.channel_id), self._session.conn.result_future],
             not_cancel_future_list=[self._session.conn.result_future],
@@ -72,7 +74,7 @@ class Channel(BaseChannel):
             raise ChannelError("recv drop event, close channel")
         return response
 
-    async def _base_write(self, body: Any, life_cycle: str):
+    async def _base_write(self, body: Any, life_cycle: str) -> None:
         """base send body to channel"""
         if self._is_close:
             raise ChannelError(f"channel is closed")
@@ -91,21 +93,21 @@ class Channel(BaseChannel):
             raise ChannelError("channel life cycle error")
         return response
 
-    async def read_body(self):
+    async def read_body(self) -> None:
         response: Response = await self.read()
         return response.body
 
-    async def write(self, body: Any):
+    async def write(self, body: Any) -> None:
         await self._base_write(body, Constant.MSG)
 
-    async def close(self):
+    async def close(self) -> None:
         """Actively send a close message and close the channel"""
         if self._is_close:
             return
         life_cycle: str = Constant.DROP
         await self._base_write(None, life_cycle)
 
-        async def wait_drop_response():
+        async def wait_drop_response() -> None:
             try:
                 while True:
                     response: Response = await self._base_read()
@@ -126,5 +128,5 @@ class Channel(BaseChannel):
         await self.create()
         return self
 
-    async def __aexit__(self, *args: Tuple):
+    async def __aexit__(self, *args: Tuple) -> None:
         await self.close()

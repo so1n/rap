@@ -15,7 +15,7 @@ class RequestModel(object):
     func_name: str
     header: dict
     body: Any
-    stats: "object()" = State()
+    stats: "State" = State()
 
     @classmethod
     def from_msg(cls, msg: BASE_REQUEST_TYPE) -> "RequestModel":
@@ -26,27 +26,27 @@ class RequestModel(object):
 class ResponseModel(object):
     num: int = Constant.MSG_RESPONSE
     msg_id: int = -1
-    group: str = None
-    func_name: Optional[str] = None
+    group: str = "default"
+    func_name: str = ""
     header: dict = field(default_factory=lambda: {"status_code": 200})
     body: Any = None
-    stats: "object()" = State()
+    stats: "State" = State()
 
-    def set_exception(self, exc: Exception):
+    def set_exception(self, exc: Exception) -> None:
         if isinstance(exc, Exception) and not isinstance(exc, BaseRapError):
             logging.error(exc)
             exc = ServerError(str(exc))
         self.body = str(exc)
         self.header["status_code"] = exc.status_code
 
-    def set_event(self, event: Event):
+    def set_event(self, event: Event) -> None:
         if not isinstance(event, Event):
             raise TypeError(f"{event} type must {Event.__name__}")
         self.num = Constant.SERVER_EVENT
         self.func_name = event.event_name
         self.body = event.event_info
 
-    def set_body(self, body: Any):
+    def set_body(self, body: Any) -> None:
         self.body = body
 
     @classmethod
@@ -69,7 +69,7 @@ class ResponseModel(object):
     def to_msg(self) -> BASE_RESPONSE_TYPE:
         return self.num, self.msg_id, self.group, self.func_name, self.header, self.body
 
-    def __call__(self, content: Any):
+    def __call__(self, content: Any) -> None:
         if isinstance(content, Exception):
             self.set_exception(content)
         elif isinstance(content, Event):

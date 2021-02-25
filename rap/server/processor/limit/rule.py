@@ -23,8 +23,8 @@ class Rule(object):
     total_second: float = 0
     rate: float = 0
 
-    def __post_init__(self):
-        if not self.init_token or self.init_token > self.max_token:
+    def __post_init__(self) -> None:
+        if not self.init_token:
             self.init_token = self.max_token
 
         # How long does it take to generate token

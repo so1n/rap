@@ -2,7 +2,7 @@ import asyncio
 import inspect
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, Generator, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Awaitable, Callable, Coroutine, Dict, Generator, List, Optional, Tuple, Union
 
 from rap.common.channel import BaseChannel
 from rap.common.conn import ServerConnection
@@ -17,7 +17,6 @@ from rap.common.exceptions import (
 )
 from rap.common.types import is_type
 from rap.common.utlis import (
-    MISS_OBJECT,
     Constant,
     Event,
     as_first_completed,
@@ -31,7 +30,7 @@ from rap.server.registry import FuncModel
 from rap.server.response import Response
 
 if TYPE_CHECKING:
-    from rap.server import Server
+    from rap.server.core import Server
 
 __all__ = ["Channel", "Request"]
 
@@ -54,7 +53,7 @@ class Channel(BaseChannel):
         self._is_close: bool = False
         self.future: Optional[asyncio.Future] = None
 
-    async def write(self, body: Any):
+    async def write(self, body: Any) -> None:
         if self.is_close:
             raise ChannelError(f"channel{self.channel_id} is close")
         await self._write(body, {"channel_life_cycle": Constant.MSG})
@@ -68,14 +67,14 @@ class Channel(BaseChannel):
         response: ResponseModel = await self.read()
         return response.body
 
-    async def close(self):
+    async def close(self) -> None:
         if self._is_close:
             logging.debug("already close channel %s", self.channel_id)
             return
         self._is_close = True
         if not self._conn.is_closed():
             await self._write(None, {"channel_life_cycle": Constant.DROP})
-        if not self.future.cancelled():
+        if self.future and not self.future.cancelled():
             self.future.cancel()
         self._close()
 
@@ -107,7 +106,7 @@ class Request(object):
         # now one conn one Request object
         self._ping_pong_future: asyncio.Future = asyncio.ensure_future(self.ping_event())
         self._keepalive_timestamp: int = int(time.time())
-        self._generator_dict: Dict[int, Generator] = {}
+        self._generator_dict: Dict[int, Union[Generator, AsyncGenerator]] = {}
         self._channel_dict: Dict[str, Channel] = {}
 
     async def dispatch(self, request: RequestModel) -> Optional[ResponseModel]:
@@ -123,16 +122,17 @@ class Request(object):
         )
         response.header.update(request.header)
 
-        try:
-            for processor in self._processor_list:
-                request = await processor.process_request(request)
-        except BaseRapError as e:
-            response.set_exception(e)
-            return response
-        except Exception as e:
-            logging.exception(e)
-            response.set_exception(e)
-            return response
+        if self._processor_list:
+            try:
+                for processor in self._processor_list:
+                    request = await processor.process_request(request)
+            except BaseRapError as e:
+                response.set_exception(e)
+                return response
+            except Exception as e:
+                logging.exception(e)
+                response.set_exception(e)
+                return response
 
         # check type_id
         if response.num is Constant.SERVER_ERROR_RESPONSE:
@@ -147,7 +147,7 @@ class Request(object):
             response.set_exception(RpcRunTimeError(str(e)))
             return response
 
-    async def ping_event(self):
+    async def ping_event(self) -> None:
         while not self._conn.is_closed():
             diff_time: int = int(time.time()) - self._keepalive_timestamp
             if diff_time > (self._ping_sleep_time * self._ping_fail_cnt) + 10:
@@ -158,10 +158,11 @@ class Request(object):
             else:
                 await self._response(ResponseModel.from_event(Event(Constant.PING_EVENT, "")))
                 try:
-                    await as_first_completed(
-                        [self._conn.result_future, asyncio.sleep(self._ping_sleep_time)],
-                        not_cancel_future_list=[self._conn.result_future],
-                    )
+                    if self._conn.result_future:
+                        await as_first_completed(
+                            [self._conn.result_future, asyncio.sleep(self._ping_sleep_time)],
+                            not_cancel_future_list=[self._conn.result_future],
+                        )
                 except Exception as e:
                     logging.debug(f"{self._conn} ping event exit.. error:{e}")
 
@@ -172,22 +173,27 @@ class Request(object):
             response.set_exception(e)
             return response
         # declare var
-        channel_id: str = request.header.get("channel_id")
+        if "channel_id" not in request.header:
+            response.set_exception(ProtocolError("channel request must channel id"))
+            return response
+
+        channel_id: str = request.header["channel_id"]
         life_cycle: str = request.header.get("channel_life_cycle", "error")
         func_name: str = func.__name__
 
-        channel: Channel = self._channel_dict.get(channel_id, MISS_OBJECT)
+        channel: Optional[Channel] = self._channel_dict.get(channel_id, None)
         if life_cycle == Constant.MSG:
-            if channel is MISS_OBJECT:
+            if channel is None:
                 response.set_exception(ChannelError("channel not create"))
                 return response
             await channel.queue.put(request)
+            return None
         elif life_cycle == Constant.DECLARE:
-            if channel is not MISS_OBJECT:
+            if channel is None:
                 response.set_exception(ChannelError("channel already create"))
                 return response
 
-            async def write(body: Any, header: Dict[str, Any]):
+            async def write(body: Any, header: Dict[str, Any]) -> None:
                 header["channel_id"] = channel_id
                 _response: "ResponseModel" = ResponseModel(
                     num=Constant.CHANNEL_RESPONSE,
@@ -199,23 +205,24 @@ class Request(object):
                 )
                 await self._response(_response)
 
-            def close():
+            def close() -> None:
                 del self._channel_dict[channel_id]
 
             channel = Channel(channel_id, func_name, write, close, self._conn)
 
-            async def channel_func():
+            async def channel_func() -> None:
                 try:
                     await func(channel)
                 finally:
-                    if not channel.is_close:
+                    if channel and not channel.is_close:
                         asyncio.ensure_future(channel.close())
 
-            def future_done_callback(future: asyncio.Future):
+            def future_done_callback(future: asyncio.Future) -> None:
                 logging.debug("channel:%s future status:%s" % (channel_id, future.done()))
 
-            async def add_exc_to_queue(exc):
-                await channel.queue.put(exc)
+            async def add_exc_to_queue(exc: Exception) -> None:
+                if channel:
+                    await channel.queue.put(exc)
 
             self._conn.add_listen_exc_func(add_exc_to_queue)
             channel.future = asyncio.ensure_future(channel_func())
@@ -225,12 +232,12 @@ class Request(object):
             response.header = {"channel_id": channel_id, "channel_life_cycle": Constant.DECLARE}
             return response
         elif life_cycle == Constant.DROP:
-            if channel is MISS_OBJECT:
+            if channel is None:
                 response.set_exception(ChannelError("channel not create"))
                 return response
             else:
                 await channel.close()
-                return
+                return None
         else:
             response.set_exception(ChannelError("channel life cycle error"))
             return response
@@ -241,7 +248,7 @@ class Request(object):
             raise FuncNotFoundError(extra_msg=f"name: {request.func_name}")
 
         func_model: FuncModel = self._app.registry[func_key]
-        if func_model.is_private and self._conn.peer_tuple[0] != "127.0.0.1":
+        if func_model.is_private and self._conn.peer_tuple and self._conn.peer_tuple[0] != "127.0.0.1":
             raise FuncNotFoundError(f"No permission to call:`{request.func_name}`")
         return func_model.func
 
@@ -252,11 +259,11 @@ class Request(object):
         return self._app.registry[func_key]
 
     async def _msg_handle(self, request: RequestModel, call_id: int, func: Callable, param: list) -> Tuple[int, Any]:
-        user_agent: str = request.header.get("user_agent")
+        user_agent: str = request.header.get("user_agent", "None")
         try:
             if call_id in self._generator_dict:
                 try:
-                    result = self._generator_dict[call_id]
+                    result: Any = self._generator_dict[call_id]
                     if inspect.isgenerator(result):
                         result = next(result)
                     elif inspect.isasyncgen(result):
@@ -266,12 +273,12 @@ class Request(object):
                     result = e
             else:
                 if asyncio.iscoroutinefunction(func):
-                    coroutine: Coroutine = func(*param)
+                    coroutine: Union[Awaitable, Coroutine] = func(*param)
                 else:
-                    coroutine: Coroutine = get_event_loop().run_in_executor(None, func, *param)
+                    coroutine = get_event_loop().run_in_executor(None, func, *param)
 
                 try:
-                    result: Any = await asyncio.wait_for(coroutine, self._run_timeout)
+                    result = await asyncio.wait_for(coroutine, self._run_timeout)
                 except asyncio.TimeoutError:
                     return call_id, RpcRunTimeError(f"Call {func.__name__} timeout")
                 except Exception as e:
@@ -334,16 +341,16 @@ class Request(object):
                 response.body["exc"] = exc
         else:
             response.body["result"] = result
-            if not is_type(func_model.return_type, type(result)):
+            if func_model.return_type and not is_type(func_model.return_type, type(result)):
                 logging.warning(f"{func} return type is {func_model.return_type}, but result type is {type(result)}")
                 response.header["status_code"] = 302
         return response
 
-    async def event(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
+    async def event(self, request: RequestModel, response: ResponseModel) -> None:
         if request.func_name == Constant.PONG_EVENT:
             self._keepalive_timestamp = int(time.time())
-            return None
+        return None
 
-    def __del__(self):
+    def __del__(self) -> None:
         if self._ping_pong_future and self._ping_pong_future.cancelled():
             self._ping_pong_future.cancel()

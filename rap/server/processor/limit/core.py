@@ -16,7 +16,7 @@ class LimitProcessor(BaseProcessor):
         self._rule_list: List[Tuple[RULE_FUNC_TYPE, Rule]] = rule_list
         self._ignore_request_num_set: Set = {Constant.CHANNEL_REQUEST, Constant.CLIENT_EVENT, Constant.CHANNEL_RESPONSE}
 
-    def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None):
+    def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None) -> None:
         if not group:
             group = self.__class__.__name__
         super(LimitProcessor, self).register(func, group=group)
@@ -24,6 +24,9 @@ class LimitProcessor(BaseProcessor):
     async def process_request(self, request: RequestModel) -> RequestModel:
         if request.num in self._ignore_request_num_set:
             return request
+
+        key: Optional[str] = None
+
         for func, rule in self._rule_list:
             if inspect.iscoroutinefunction(func):
                 key = await func(request)
@@ -36,11 +39,11 @@ class LimitProcessor(BaseProcessor):
 
         key = f"rap:processor:{self.__class__.__name__}:{key}"
         can_requests: Union[bool, Awaitable[bool]] = self._backend.can_requests(key, rule)
-        if inspect.iscoroutine(can_requests):
+        if inspect.isawaitable(can_requests):
             can_requests = await can_requests
         if not can_requests:
             expected_time: Union[float, Awaitable[float]] = self._backend.expected_time(key, rule)
-            if inspect.iscoroutine(expected_time):
+            if inspect.isawaitable(expected_time):
                 expected_time = await expected_time
             raise TooManyRequest(extra_msg=f"expected time: {expected_time}")
         return request

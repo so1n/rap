@@ -30,13 +30,13 @@ class Server(object):
         backlog: int = 1024,
         ssl_crt_path: Optional[str] = None,
         ssl_key_path: Optional[str] = None,
-        start_event_list: List[Union[Callable, Coroutine]] = None,
-        stop_event_list: List[Union[Callable, Coroutine]] = None,
+        start_event_list: List[Coroutine] = None,
+        stop_event_list: List[Coroutine] = None,
         middleware_list: List[BaseMiddleware] = None,
         processor_list: List[BaseProcessor] = None,
     ):
-        if type(host) is str:
-            self._host = [host]
+        if isinstance(host, str):
+            self._host: List[str] = [host]
         else:
             self._host = host
         self._timeout: int = timeout
@@ -53,8 +53,8 @@ class Server(object):
             self._ssl_context.check_hostname = False
             self._ssl_context.load_cert_chain(ssl_crt_path, ssl_key_path)
 
-        self._start_event_list: List[Union[Callable, Coroutine]] = []
-        self._stop_event_list: List[Union[Callable, Coroutine]] = []
+        self._start_event_list: List[Coroutine] = []
+        self._stop_event_list: List[Coroutine] = []
         self._middleware_list: List[BaseMiddleware] = []
         self._processor_list: List[BaseProcessor] = []
         self._depend_set: Set[Any] = set()  # Check whether any components have been re-introduced
@@ -70,7 +70,7 @@ class Server(object):
 
         self.registry: RegistryManager = RegistryManager()
 
-    def _load_event(self, event_list: List[Union[Callable, Coroutine]], event: Union[Callable, Coroutine]):
+    def _load_event(self, event_list: List[Coroutine], event: Coroutine) -> None:
         if not (inspect.isfunction(event) or asyncio.iscoroutine(event) or inspect.ismethod(event)):
             raise ImportError(f"{event} must be fun or coroutine, not {type(event)}")
 
@@ -81,15 +81,15 @@ class Server(object):
 
         event_list.append(event)
 
-    def load_start_event(self, event_list: List[Union[Callable, Coroutine]]):
+    def load_start_event(self, event_list: List[Coroutine]) -> None:
         for event in event_list:
             self._load_event(self._start_event_list, event)
 
-    def load_stop_event(self, event_list: List[Union[Callable, Coroutine]]):
+    def load_stop_event(self, event_list: List[Coroutine]) -> None:
         for event in event_list:
             self._load_event(self._stop_event_list, event)
 
-    def load_middleware(self, middleware_list: List[BaseMiddleware]):
+    def load_middleware(self, middleware_list: List[BaseMiddleware]) -> None:
         for middleware in middleware_list:
             if middleware not in self._depend_set:
                 self._depend_set.add(middleware)
@@ -99,16 +99,16 @@ class Server(object):
             middleware.app = self
             if isinstance(middleware, BaseConnMiddleware):
                 middleware.load_sub_middleware(self._conn_handle)
-                self._conn_handle = middleware
+                self._conn_handle = middleware.call_next
             elif isinstance(middleware, BaseMiddleware):
                 self._middleware_list.append(middleware)
             else:
                 raise RuntimeError(f"{middleware} must instance of {BaseMiddleware}")
 
-            self.load_start_event([middleware.start_event_handle])
-            self.load_stop_event([middleware.stop_event_handle])
+            self.load_start_event([middleware.start_event_handle()])
+            self.load_stop_event([middleware.stop_event_handle()])
 
-    def load_processor(self, processor_list: List[BaseProcessor]):
+    def load_processor(self, processor_list: List[BaseProcessor]) -> None:
         for processor in processor_list:
             if processor not in self._depend_set:
                 self._depend_set.add(processor)
@@ -120,28 +120,28 @@ class Server(object):
             else:
                 raise RuntimeError(f"{processor} must instance of {BaseProcessor}")
 
-            self.load_start_event([processor.start_event_handle])
-            self.load_stop_event([processor.stop_event_handle])
+            self.load_start_event([processor.start_event_handle()])
+            self.load_stop_event([processor.stop_event_handle()])
 
     def register(
         self,
-        func: Optional[Callable],
+        func: Callable,
         name: Optional[str] = None,
         group: str = "default",
         is_private: bool = False,
         doc: Optional[str] = None,
-    ):
+    ) -> None:
         self.registry.register(func, name, group=group, is_private=is_private, doc=doc)
 
     @staticmethod
-    async def run_callback_list(callback_list: List[Union[Callable, Coroutine]]):
+    async def run_callback_list(callback_list: List[Coroutine]) -> None:
         if not callback_list:
             return
         for callback in callback_list:
-            if asyncio.iscoroutine(callback):
+            if asyncio.iscoroutine(callback) or asyncio.isfuture(callback):
                 await callback
             else:
-                await asyncio.get_event_loop().run_in_executor(None, callback)
+                raise TypeError(f"Not support {callback}")
 
     async def create_server(self) -> "Server":
         await self.run_callback_list(self._start_event_list)
@@ -153,17 +153,17 @@ class Server(object):
         logging.info(f"server running on {self._host}. use ssl:{bool(self._ssl_context)}")
         return self
 
-    async def await_closed(self):
+    async def await_closed(self) -> None:
         for server in self._server_list:
             server.close()
             await server.wait_closed()
         await self.run_callback_list(self._stop_event_list)
 
-    async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE):
+    async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE) -> None:
         conn: ServerConnection = ServerConnection(reader, writer, self._timeout)
         await self._conn_handle(conn)
 
-    async def _conn_handle(self, conn: ServerConnection):
+    async def _conn_handle(self, conn: ServerConnection) -> None:
         response_handle: Response = Response(conn, self._timeout, processor_list=self._processor_list)
         request_handle: Request = Request(
             self,
@@ -177,9 +177,9 @@ class Server(object):
         for middleware in self._middleware_list:
             if isinstance(middleware, BaseMsgMiddleware):
                 middleware.load_sub_middleware(request_handle.msg_handle)
-                request_handle.msg_handle = middleware
+                request_handle._msg_handle = middleware.call_next
 
-        async def recv_msg_handle(_request_msg: Optional[BASE_REQUEST_TYPE]):
+        async def recv_msg_handle(_request_msg: Optional[BASE_REQUEST_TYPE]) -> None:
             if _request_msg is None:
                 await response_handle(ResponseModel.from_event(Event(Constant.EVENT_CLOSE_CONN, "request is empty")))
                 return

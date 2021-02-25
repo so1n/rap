@@ -2,7 +2,7 @@ import logging
 import time
 from typing import Callable, Dict, Optional, Union
 
-from aredis import StrictRedis, StrictRedisCluster
+from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
 from rap.common.conn import ServerConnection
 from rap.common.utlis import Constant, Event
@@ -22,12 +22,12 @@ class ConnLimitMiddleware(BaseConnMiddleware):
         self._block_time: int = block_time
         self._release_timestamp: int = int(time.time())
 
-    def start_event_handle(self):
+    async def start_event_handle(self) -> None:
         self.register(self._get_conn_limit_info)
         self.register(self._modify_max_conn)
         self.register(self._modify_release_timestamp)
 
-    def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None):
+    def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None) -> None:
         if not group:
             group = self.__class__.__name__
         if not name:
@@ -47,7 +47,7 @@ class ConnLimitMiddleware(BaseConnMiddleware):
     def _modify_max_conn(self, max_conn: int) -> None:
         self._max_conn = max_conn
 
-    async def dispatch(self, conn: ServerConnection):
+    async def dispatch(self, conn: ServerConnection) -> None:
         now_timestamp: int = int(time.time())
         if self._release_timestamp > now_timestamp or self._conn_count > self._max_conn:
             self._release_timestamp = now_timestamp + self._block_time
@@ -76,7 +76,7 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
         self._ip_max_conn: int = ip_max_conn
         self._timeout: int = timeout
 
-    def start_event_handle(self):
+    async def start_event_handle(self) -> None:
         self.register(self.modify_max_ip_max_conn, group="ip_max_conn")
         self.register(self.modify_ip_max_timeout, group="ip_max_conn")
 
@@ -86,7 +86,7 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
     def modify_ip_max_timeout(self, timeout: int) -> None:
         self._timeout = timeout
 
-    async def dispatch(self, conn: ServerConnection):
+    async def dispatch(self, conn: ServerConnection) -> None:
         key: str = f"{self.__class__.__name__}:conn.peer_tuple[0]"
         now_cnt: Optional[int] = await self._redis.get(key)
         now_cnt = int(now_cnt) if now_cnt else 0

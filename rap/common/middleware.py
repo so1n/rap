@@ -2,17 +2,17 @@ from typing import Any, Callable, Union
 
 
 class BaseMiddleware(object):
-    async def __call__(self, *args, **kwargs):
+    async def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return await self.dispatch(*args)
 
-    async def dispatch(self, *args: Any):
+    def load_sub_middleware(self, call_next: "Union[Callable, BaseMiddleware]") -> None:
+        if isinstance(call_next, BaseMiddleware):
+            setattr(self, self.call_next.__name__, call_next.call_next)
+        else:
+            setattr(self, self.call_next.__name__, call_next)
+
+    async def call_next(self, *args: Any) -> Any:
         raise NotImplementedError
 
-    def load_sub_middleware(self, call_next: "Union[Callable, BaseMiddleware]"):
-        if isinstance(call_next, BaseMiddleware):
-            self.call_next = call_next.call_next
-        else:
-            self.call_next = call_next
-
-    async def call_next(self, value: Any):
-        pass
+    async def dispatch(self, *args: Any) -> Any:
+        raise NotImplementedError

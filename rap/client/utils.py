@@ -1,6 +1,6 @@
 import inspect
 from types import FunctionType
-from typing import Any, Callable, Dict, List, Tuple, Type
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 from rap.common import exceptions as rap_exc
 from rap.common.exceptions import RPCError
@@ -20,20 +20,20 @@ def get_exc_status_code_dict() -> Dict[int, Type[rap_exc.BaseRapError]]:
     return exc_dict
 
 
-def raise_rap_error(exc_name: str, exc_info: str = ""):
+def raise_rap_error(exc_name: str, exc_info: str = "") -> None:
     """raise python exception"""
-    exc = getattr(rap_exc, exc_name, None)
-    if not exc:
+    exc: Optional[Type[Exception]] = getattr(rap_exc, exc_name, None)
+    if exc is None:
         exc = globals()["__builtins__"][exc_name]
-    if not exc:
+    if exc is None:
         raise RPCError(exc_info)
     else:
         raise exc(exc_info)
 
 
-def get_func_arg_type_list(func: FunctionType) -> List[Type]:
+def get_func_arg_type_list(func: Callable) -> List[Type]:
     param_type_list: List[Type] = []
-    var_name_list: Tuple[str] = func.__code__.co_varnames
+    var_name_list: Tuple[str, ...] = func.__code__.co_varnames
     annotation_dict: Dict[str, Type] = func.__annotations__
     for var_name in var_name_list:
         if var_name in annotation_dict:
@@ -41,7 +41,7 @@ def get_func_arg_type_list(func: FunctionType) -> List[Type]:
     return param_type_list
 
 
-def check_func_type(func: FunctionType, param_list: Tuple[Any]):
+def check_func_type(func: FunctionType, param_list: Tuple[Any]) -> None:
     param_type_list: List[Type] = get_func_arg_type_list(func)
     for index, arg_type in enumerate(param_type_list):
         if not is_type(type(param_list[index]), arg_type):
