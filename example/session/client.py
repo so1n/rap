@@ -8,7 +8,7 @@ from rap.common.utlis import Constant
 
 
 class CheckSessionProcessor(BaseProcessor):
-    def __init__(self):
+    def __init__(self) -> None:
         self.session_id: str = ""
 
     async def process_request(self, request: Request) -> Request:
