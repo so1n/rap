@@ -189,7 +189,7 @@ class Request(object):
             await channel.queue.put(request)
             return None
         elif life_cycle == Constant.DECLARE:
-            if channel is None:
+            if channel is not None:
                 response.set_exception(ChannelError("channel already create"))
                 return response
 
@@ -221,8 +221,7 @@ class Request(object):
                 logging.debug("channel:%s future status:%s" % (channel_id, future.done()))
 
             async def add_exc_to_queue(exc: Exception) -> None:
-                if channel:
-                    await channel.queue.put(exc)
+                await channel.queue.put(exc)
 
             self._conn.add_listen_exc_func(add_exc_to_queue)
             channel.future = asyncio.ensure_future(channel_func())

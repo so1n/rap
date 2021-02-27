@@ -29,7 +29,7 @@ class BaseConnection:
         self.exc_listen_set.add(func)
 
     async def write(self, data: tuple, timeout: Optional[int] = None) -> None:
-        if self.is_closed:
+        if not self._writer or self._is_closed:
             raise ConnectionError("connection has not been created")
         logging.debug("sending %s to %s", data, self.peer_tuple)
         self._writer.write(msgpack.packb(data, **self._pack_param))
@@ -37,7 +37,7 @@ class BaseConnection:
         await asyncio.wait_for(self._writer.drain(), timeout)
 
     async def read(self, timeout: Optional[int] = None) -> Optional[BASE_RESPONSE_TYPE]:
-        if self.is_closed:
+        if not self._reader or self._is_closed:
             raise ConnectionError("connection has not been created")
         try:
             try:
