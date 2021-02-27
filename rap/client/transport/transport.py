@@ -339,7 +339,7 @@ class Session(object):
 
     def __init__(self, transport: "Transport"):
         self._transport: "Transport" = transport
-        self._token: Token[Optional["Session"]] = Token()
+        self._token: Optional[Token[Optional[Session]]] = None
         self.id: Optional[str] = None
         self._conn: Optional[Connection] = None
 
@@ -358,7 +358,8 @@ class Session(object):
     def close(self) -> None:
         self.id = None
         self._conn = None
-        _session_context.reset(self._token)
+        if self._token:
+            _session_context.reset(self._token)
 
     @property
     def in_session(self) -> bool:

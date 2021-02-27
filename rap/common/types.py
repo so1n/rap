@@ -77,7 +77,11 @@ def is_json_type(_type: Type) -> bool:
 
 
 def is_type(source_type: Type, target_type: Type) -> bool:
-    origin_type: Union[List[Type], Type] = parse_typing(source_type)
-    if not isinstance(origin_type, list):
-        origin_type = [origin_type]
-    return target_type in origin_type
+    parse_source_type: Union[List[Type], Type] = parse_typing(source_type)
+    if not isinstance(parse_source_type, list):
+        parse_source_type = [parse_source_type]
+
+    parse_target_type: Union[List[Type], Type] = parse_typing(target_type)
+    if not isinstance(parse_target_type, list):
+        parse_target_type = [parse_target_type]
+    return bool(set(parse_target_type) & set(parse_source_type))
