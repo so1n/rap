@@ -38,7 +38,7 @@ if __name__ == "__main__":
         loop.run_until_complete(rpc_server.await_closed())
 
     # fail register example
-    def fail_register(a, b):
+    def fail_register(a: int, b: int) -> int:
         return a + b
 
     rpc_server.register(fail_register)
