@@ -1,9 +1,12 @@
+from abc import ABCMeta, abstractmethod
 from rap.client.model import Request, Response
 
 
-class BaseProcessor(object):
+class BaseProcessor(metaclass=ABCMeta):
+    @abstractmethod
     async def process_request(self, request: Request) -> Request:
-        return request
+        raise NotImplementedError
 
+    @abstractmethod
     async def process_response(self, response: Response) -> Response:
-        return response
+        raise NotImplementedError
