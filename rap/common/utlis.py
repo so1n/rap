@@ -128,10 +128,14 @@ async def as_first_completed(
     future_list: List[Union[Coroutine, asyncio.Future]],
     not_cancel_future_list: Optional[List[Union[Coroutine, asyncio.Future]]] = None,
 ) -> Any:
+    not_cancel_future_list = not_cancel_future_list if not_cancel_future_list else []
+    future_list.extend(not_cancel_future_list)
+
     (done, pending) = await asyncio.wait(future_list, return_when=asyncio.FIRST_COMPLETED)
     for task in pending:
-        if not_cancel_future_list and task not in not_cancel_future_list:
+        if task not in not_cancel_future_list:
             task.cancel()
+
     result_list: List[Any] = [task.result() for task in done]
     if len(result_list) != 1:
         raise RuntimeError(f"{future_list} have {len(result_list)} result:{result_list}")

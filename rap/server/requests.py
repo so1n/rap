@@ -61,7 +61,10 @@ class Channel(BaseChannel):
     async def read(self) -> ResponseModel:
         if self.is_close:
             raise ChannelError(f"channel{self.channel_id} is close")
-        return await self.queue.get()
+
+        return await as_first_completed(
+            [self.queue.get()], not_cancel_future_list=[self._conn.result_future],
+        )
 
     async def read_body(self) -> Any:
         response: ResponseModel = await self.read()
@@ -154,15 +157,13 @@ class Request(object):
                 await self._response(ResponseModel.from_event(Event(Constant.EVENT_CLOSE_CONN, "recv pong timeout")))
                 if not self._conn.is_closed():
                     self._conn.close()
-                break
+                return
             else:
                 await self._response(ResponseModel.from_event(Event(Constant.PING_EVENT, "")))
                 try:
-                    if self._conn.result_future:
-                        await as_first_completed(
-                            [self._conn.result_future, asyncio.sleep(self._ping_sleep_time)],
-                            not_cancel_future_list=[self._conn.result_future],
-                        )
+                    await as_first_completed(
+                        [asyncio.sleep(self._ping_sleep_time)], not_cancel_future_list=[self._conn.result_future],
+                    )
                 except Exception as e:
                     logging.debug(f"{self._conn} ping event exit.. error:{e}")
 
@@ -220,10 +221,6 @@ class Request(object):
             def future_done_callback(future: asyncio.Future) -> None:
                 logging.debug("channel:%s future status:%s" % (channel_id, future.done()))
 
-            async def add_exc_to_queue(exc: Exception) -> None:
-                await channel.queue.put(exc)
-
-            self._conn.add_listen_exc_func(add_exc_to_queue)
             channel.future = asyncio.ensure_future(channel_func())
             channel.future.add_done_callback(future_done_callback)
 
@@ -351,5 +348,5 @@ class Request(object):
         return None
 
     def __del__(self) -> None:
-        if self._ping_pong_future and self._ping_pong_future.cancelled():
+        if self._ping_pong_future and not self._ping_pong_future.done() and self._ping_pong_future.cancelled():
             self._ping_pong_future.cancel()
