@@ -159,6 +159,8 @@ class Server(object):
             server.close()
             await server.wait_closed()
         await self.run_callback_list(self._stop_event_list)
+        # NOTE: await bg future cancel or done
+        await asyncio.sleep(0.1)
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE) -> None:
         conn: ServerConnection = ServerConnection(reader, writer, self._timeout)

@@ -255,7 +255,7 @@ class Transport(object):
         """write response msg(except channel response)"""
         try:
             return await as_first_completed(
-                [asyncio.wait_for(self._resp_future_dict[resp_future_id], self._timeout), conn.result_future],
+                [asyncio.wait_for(self._resp_future_dict[resp_future_id], self._timeout)],
                 not_cancel_future_list=[conn.result_future],
             )
         except asyncio.TimeoutError:
