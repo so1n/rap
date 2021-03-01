@@ -42,9 +42,10 @@ def parse_typing(_type: Type) -> Union[List[Type[Any]], Type]:
             type_list: List[Type[Any]] = []
             for i in _type.__args__:
                 if isinstance(i, list):
-                    type_list.extend(i)
+                    for j in i:
+                        type_list.append(parse_typing(j))
                 else:
-                    type_list.append(i)
+                    type_list.append(parse_typing(i))
             return type_list
         elif origin in (AsyncIterator, Iterator):
             return _type.__args__[0]

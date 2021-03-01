@@ -15,10 +15,10 @@ class BaseMiddleware(_BaseMiddleware, ABC):
     def register(self, func: Callable, name: Optional[str] = None, group: str = "middleware") -> None:
         self.app.register(func, name=name, group=group, is_private=True)
 
-    async def start_event_handle(self) -> Any:
+    def start_event_handle(self) -> Any:
         pass
 
-    async def stop_event_handle(self) -> Any:
+    def stop_event_handle(self) -> Any:
         pass
 
 

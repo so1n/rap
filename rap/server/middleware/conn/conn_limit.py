@@ -49,21 +49,21 @@ class ConnLimitMiddleware(BaseConnMiddleware):
 
     async def dispatch(self, conn: ServerConnection) -> None:
         now_timestamp: int = int(time.time())
-        if self._release_timestamp > now_timestamp or self._conn_count > self._max_conn:
-            self._release_timestamp = now_timestamp + self._block_time
-            await Response(conn)(
-                ResponseModel.from_event(
-                    Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of connections limit")
+        self._conn_count += 1
+        try:
+            if self._release_timestamp > now_timestamp or self._conn_count > self._max_conn:
+                self._release_timestamp = now_timestamp + self._block_time
+                await Response(conn)(
+                    ResponseModel.from_event(
+                        Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of connections limit")
+                    )
                 )
-            )
-            await conn.await_close()
-            return
-        else:
-            try:
-                self._conn_count += 1
+                await conn.await_close()
+                return
+            else:
                 await self.call_next(conn)
-            finally:
-                self._conn_count -= 1
+        finally:
+            self._conn_count -= 1
 
 
 class IpMaxConnMiddleware(BaseConnMiddleware):
@@ -76,7 +76,7 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
         self._ip_max_conn: int = ip_max_conn
         self._timeout: int = timeout
 
-    async def start_event_handle(self) -> None:
+    def start_event_handle(self) -> None:
         self.register(self.modify_max_ip_max_conn, group="ip_max_conn")
         self.register(self.modify_ip_max_timeout, group="ip_max_conn")
 
@@ -88,21 +88,18 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
 
     async def dispatch(self, conn: ServerConnection) -> None:
         key: str = f"{self.__class__.__name__}:conn.peer_tuple[0]"
-        now_cnt: Optional[int] = await self._redis.get(key)
-        now_cnt = int(now_cnt) if now_cnt else 0
-        if now_cnt > self._ip_max_conn:
-            logging.error(f"Currently exceeding the maximum number of ip conn limit, close {conn.peer_tuple}")
-            await Response(conn)(
-                ResponseModel.from_event(
-                    Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of ip conn limit")
+        now_cnt: int = await self._redis.incr(key)
+        try:
+            if now_cnt > self._ip_max_conn:
+                logging.error(f"Currently exceeding the maximum number of ip conn limit, close {conn.peer_tuple}")
+                await Response(conn)(
+                    ResponseModel.from_event(
+                        Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of ip conn limit")
+                    )
                 )
-            )
-            await conn.await_close()
-            return
-        else:
-            await self._redis.incr(key)
-            try:
+                await conn.await_close()
+            else:
                 await self.call_next(conn)
-            finally:
-                await self._redis.decr(key)
-                await self._redis.expire(key, self._timeout)
+        finally:
+            await self._redis.decr(key)
+            await self._redis.expire(key, self._timeout)

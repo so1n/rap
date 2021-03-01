@@ -28,7 +28,7 @@ class CryptoProcessor(BaseProcessor):
 
         self.load_aes_key_dict(secret_dict)
 
-    async def start_event_handle(self) -> None:
+    def start_event_handle(self) -> None:
         self.register(self.modify_crypto_timeout)
         self.register(self.modify_crypto_nonce_timeout)
 

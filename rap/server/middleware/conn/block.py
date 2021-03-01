@@ -4,7 +4,10 @@ from typing import Callable, List, Optional, Union
 from aredis import StrictRedis, StrictRedisCluster  # ignore
 
 from rap.common.conn import ServerConnection
+from rap.common.utlis import Constant, Event
 from rap.server.middleware.base import BaseConnMiddleware
+from rap.server.model import ResponseModel
+from rap.server.response import Response
 
 
 class IpBlockMiddleware(BaseConnMiddleware):
@@ -35,7 +38,6 @@ class IpBlockMiddleware(BaseConnMiddleware):
         self.register(self._remove_block_ip)
         self.register(self._get_allow_ip)
         self.register(self._get_block_ip)
-
         await self._add_allow_ip(self._allow_ip_list)
         await self._add_block_ip(self._block_ip_list)
 
@@ -60,18 +62,23 @@ class IpBlockMiddleware(BaseConnMiddleware):
 
     def ip_handle(self, ip: Union[str, List]) -> List[str]:
         ip_list: List[str] = []
-        if type(ip) is str:
+        if isinstance(ip, str):
             ip = [ip]
-            for _ip in ip:
-                ip_list.extend(self.ip_network_handle(_ip))
+        for _ip in ip:
+            ip_list.extend(self.ip_network_handle(_ip))
         return ip_list
 
     async def _add_allow_ip(self, ip: Union[str, List]) -> None:
+        if not ip:
+            return
+
         ip_list = self.ip_handle(ip)
         await self._redis.sadd(self.allow_key, ip_list[0], ip_list[1:])
         await self._redis.srem(self.block_key, ip_list[0], ip_list[1:])
 
     async def _add_block_ip(self, ip: Union[str, List]) -> None:
+        if not ip:
+            return
         ip_list = self.ip_handle(ip)
         await self._redis.sadd(self.block_key, ip_list[0], ip_list[1:])
         await self._redis.srem(self.allow_key, ip_list[0], ip_list[1:])
@@ -97,11 +104,17 @@ class IpBlockMiddleware(BaseConnMiddleware):
             if enable_allow:
                 is_allow: int = await self._redis.sismember(self.allow_key, ip)
                 if not is_allow:
+                    await Response(conn)(
+                        ResponseModel.from_event(Event(Constant.EVENT_CLOSE_CONN, "not allowed to access"))
+                    )
                     await conn.await_close()
                     return
             else:
                 is_block: int = await self._redis.sismember(self.block_key, ip)
                 if is_block:
+                    await Response(conn)(
+                        ResponseModel.from_event(Event(Constant.EVENT_CLOSE_CONN, "not allowed to access"))
+                    )
                     await conn.await_close()
                     return
         await self.call_next(conn)
