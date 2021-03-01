@@ -161,7 +161,9 @@ class Transport(object):
         elif response.num == Constant.SERVER_EVENT:
             # server event msg handle
             if response.func_name == Constant.EVENT_CLOSE_CONN:
-                raise RuntimeError(f"recv close conn event, event info:{response.body}")
+                event_exc: Exception = ConnectionError(f"recv close conn event, event info:{response.body}")
+                conn.set_reader_exc(event_exc)
+                raise event_exc
             elif response.func_name == Constant.PING_EVENT:
                 request: Request = Request.from_event(Event(Constant.PONG_EVENT, ""))
                 await self.write(request, -1, conn)

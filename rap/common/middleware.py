@@ -7,7 +7,7 @@ class BaseMiddleware(object):
 
     def load_sub_middleware(self, call_next: "Union[Callable, BaseMiddleware]") -> None:
         if isinstance(call_next, BaseMiddleware):
-            setattr(self, self.call_next.__name__, call_next.call_next)
+            setattr(self, self.call_next.__name__, call_next.dispatch)
         else:
             setattr(self, self.call_next.__name__, call_next)
 
