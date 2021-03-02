@@ -38,8 +38,10 @@ class IpBlockMiddleware(BaseConnMiddleware):
         self.register(self._remove_block_ip)
         self.register(self._get_allow_ip)
         self.register(self._get_block_ip)
-        await self._add_allow_ip(self._allow_ip_list)
-        await self._add_block_ip(self._block_ip_list)
+        if self._allow_ip_list:
+            await self._add_allow_ip(self._allow_ip_list)
+        if self._block_ip_list:
+            await self._add_block_ip(self._block_ip_list)
 
     def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None) -> None:
         if not group:
@@ -69,16 +71,11 @@ class IpBlockMiddleware(BaseConnMiddleware):
         return ip_list
 
     async def _add_allow_ip(self, ip: Union[str, List]) -> None:
-        if not ip:
-            return
-
         ip_list = self.ip_handle(ip)
         await self._redis.sadd(self.allow_key, ip_list[0], ip_list[1:])
         await self._redis.srem(self.block_key, ip_list[0], ip_list[1:])
 
     async def _add_block_ip(self, ip: Union[str, List]) -> None:
-        if not ip:
-            return
         ip_list = self.ip_handle(ip)
         await self._redis.sadd(self.block_key, ip_list[0], ip_list[1:])
         await self._redis.srem(self.allow_key, ip_list[0], ip_list[1:])
@@ -92,10 +89,20 @@ class IpBlockMiddleware(BaseConnMiddleware):
         await self._redis.srem(self.block_key, ip_list[0], ip_list[1:])
 
     async def _get_allow_ip(self) -> List[str]:
-        return [ip async for ip in self._redis.isscan(self.allow_key)]
+        ip_list: List[str] = []
+        async for ip in self._redis.sscan_iter(self.allow_key):
+            ip = ip.decode()
+            if ip:
+                ip_list.append(ip)
+        return ip_list
 
     async def _get_block_ip(self) -> List[str]:
-        return [ip async for ip in self._redis.isscan(self.block_key)]
+        ip_list: List[str] = []
+        async for ip in self._redis.sscan_iter(self.block_key):
+            ip = ip.decode()
+            if ip:
+                ip_list.append(ip)
+        return ip_list
 
     async def dispatch(self, conn: ServerConnection) -> None:
         if conn.peer_tuple:
