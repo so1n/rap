@@ -43,13 +43,6 @@ class IpBlockMiddleware(BaseConnMiddleware):
         if self._block_ip_list:
             await self._add_block_ip(self._block_ip_list)
 
-    def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None) -> None:
-        if not group:
-            group = self.__class__.__name__
-        if not name:
-            name = func.__name__.strip("_")
-        super(BaseConnMiddleware, self).register(func, name, group)
-
     @staticmethod
     def ip_network_handle(ip: str) -> List[str]:
         """
@@ -91,17 +84,13 @@ class IpBlockMiddleware(BaseConnMiddleware):
     async def _get_allow_ip(self) -> List[str]:
         ip_list: List[str] = []
         async for ip in self._redis.sscan_iter(self.allow_key):
-            ip = ip.decode()
-            if ip:
-                ip_list.append(ip)
+            ip_list.append(ip.decode())
         return ip_list
 
     async def _get_block_ip(self) -> List[str]:
         ip_list: List[str] = []
         async for ip in self._redis.sscan_iter(self.block_key):
-            ip = ip.decode()
-            if ip:
-                ip_list.append(ip)
+            ip_list.append(ip.decode())
         return ip_list
 
     async def dispatch(self, conn: ServerConnection) -> None:

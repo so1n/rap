@@ -36,14 +36,8 @@ class CryptoProcessor(BaseProcessor):
         self.register(self.load_aes_key_dict)
         self.register(self.remove_aes)
 
-    def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None) -> None:
-        if not group:
-            group = self.__class__.__name__
-        super(CryptoProcessor, self).register(func, group=group)
-
     def load_aes_key_dict(self, aes_key_dict: Dict[str, str]) -> None:
         """load aes key dict. eg{'key_id': 'xxxxxxxxxxxxxxxx'}"""
-        self._key_dict = aes_key_dict
         for key, value in aes_key_dict.items():
             self._key_dict[key] = value
             self._crypto_dict[value] = Crypto(value)
@@ -61,8 +55,10 @@ class CryptoProcessor(BaseProcessor):
 
     def remove_aes(self, key: str) -> None:
         """delete aes value by key"""
-        if key in self._crypto_dict:
-            del self._crypto_dict[key]
+        if key in self._key_dict:
+            value: str = self._key_dict[key]
+            del self._crypto_dict[value]
+            del self._key_dict[key]
 
     def modify_crypto_timeout(self, timeout: int) -> None:
         """modify crypto timeout param"""

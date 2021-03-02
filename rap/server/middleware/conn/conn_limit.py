@@ -22,17 +22,10 @@ class ConnLimitMiddleware(BaseConnMiddleware):
         self._block_time: int = block_time
         self._release_timestamp: int = int(time.time())
 
-    async def start_event_handle(self) -> None:
+    def start_event_handle(self) -> None:
         self.register(self._get_conn_limit_info)
         self.register(self._modify_max_conn)
         self.register(self._modify_release_timestamp)
-
-    def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None) -> None:
-        if not group:
-            group = self.__class__.__name__
-        if not name:
-            name = func.__name__.strip("_")
-        super(BaseConnMiddleware, self).register(func, name, group)
 
     def _get_conn_limit_info(self) -> Dict[str, int]:
         return {
@@ -77,8 +70,15 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
         self._timeout: int = timeout
 
     def start_event_handle(self) -> None:
-        self.register(self.modify_max_ip_max_conn, group="ip_max_conn")
-        self.register(self.modify_ip_max_timeout, group="ip_max_conn")
+        self.register(self.modify_max_ip_max_conn)
+        self.register(self.modify_ip_max_timeout)
+        self.register(self.get_info)
+
+    def get_info(self) -> Dict[str, int]:
+        return {
+            "ip_max_conn": self._ip_max_conn,
+            "timeout": self._timeout
+        }
 
     def modify_max_ip_max_conn(self, ip_max: int) -> None:
         self._ip_max_conn = ip_max
