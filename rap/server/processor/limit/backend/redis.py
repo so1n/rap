@@ -33,9 +33,9 @@ class RedisFixedWindowBackend(BaseRedisBackend):
             In the current time(rule.get_second()) window,
              whether the existing value(access_num) exceeds the maximum value(rule.gen_token_num)
             """
-            access_num: int = await self._redis.client.incr(key)
+            access_num: int = await self._redis.incr(key)
             if access_num == 1:
-                await self._redis.expire(key, rule.total_second)
+                await self._redis.expire(key, int(rule.total_second))
 
             can_requests: bool = not (access_num > rule.gen_token)
             return can_requests
@@ -82,7 +82,7 @@ class RedisCellBackend(BaseRedisBackend):
 
     async def _call_cell(self, key: str, rule: Rule, token_num: int = 1) -> List[int]:
         result: List[int] = await self._redis.execute_command(
-            "CL.THROTTLE", key, rule.max_token, rule.gen_token, rule.total_second, token_num
+            "CL.THROTTLE", key, rule.max_token, rule.gen_token, int(rule.total_second), token_num
         )
         return result
 
@@ -90,7 +90,7 @@ class RedisCellBackend(BaseRedisBackend):
         async def _can_requests() -> bool:
             result: List[int] = await self._call_cell(key, rule, token_num)
             can_requests: bool = bool(result[0])
-            await self._redis.expire(key, rule.total_second)
+            await self._redis.expire(key, int(rule.total_second))
             return can_requests
 
         return await self._block_time_handle(key, rule, _can_requests)
@@ -138,7 +138,6 @@ else
     return tokens
 end
     """
-
     async def can_requests(self, key: str, rule: Rule, token_num: int = 1) -> bool:
         async def _can_requests() -> bool:
             now_token: int = await self._redis.eval(
