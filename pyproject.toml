@@ -43,6 +43,25 @@ testpaths = "tests"
 branch = true
 source = ["rap"]
 
+[tool.coverage.report]
+exclude_lines = [
+    # Have to re-enable the standard pragma
+    "pragma: no cover",
+
+    # Don't complain about missing debug-only code:
+    "def __repr__",
+
+    # Don't complain if tests don't hit defensive assertion code:
+    "raise AssertionError",
+    "raise NotImplementedError",
+
+    # Don't complain if non-runnable code isn't run:
+    "if 0:",
+    "if __name__ == .__main__.:",
+
+    # type hints
+    "if TYPE_CHECKING:"
+]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
