@@ -12,7 +12,11 @@ if TYPE_CHECKING:
 class BaseMiddleware(_BaseMiddleware, ABC):
     app: "Server"
 
-    def register(self, func: Callable, name: Optional[str] = None, group: str = "middleware") -> None:
+    def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None) -> None:
+        if not group:
+            group = self.__class__.__name__
+        if not name:
+            name = func.__name__.strip("_")
         self.app.register(func, name=name, group=group, is_private=True)
 
     def start_event_handle(self) -> Any:
@@ -29,9 +33,6 @@ class BaseConnMiddleware(BaseMiddleware):
 
     async def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return await self.dispatch(*args)
-
-    def register(self, func: Callable, name: Optional[str] = None, group: str = "conn_middleware") -> None:
-        super().register(func, name, group)
 
     async def call_next(self, conn: ServerConnection) -> None:
         pass

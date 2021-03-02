@@ -16,20 +16,13 @@ class LimitProcessor(BaseProcessor):
         self._rule_list: List[Tuple[RULE_FUNC_TYPE, Rule]] = rule_list
         self._ignore_request_num_set: Set = {Constant.CHANNEL_REQUEST, Constant.CLIENT_EVENT, Constant.CHANNEL_RESPONSE}
 
-    def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None) -> None:
-        if not group:
-            group = self.__class__.__name__
-        super(LimitProcessor, self).register(func, group=group)
-
     async def process_request(self, request: RequestModel) -> RequestModel:
         if request.num in self._ignore_request_num_set:
             return request
 
-        key: Optional[str] = None
-
         for func, rule in self._rule_list:
             if inspect.iscoroutinefunction(func):
-                key = await func(request)
+                key: Optional[str] = await func(request)
             else:
                 key = func(request)
             if key:
