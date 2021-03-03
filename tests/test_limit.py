@@ -74,7 +74,7 @@ class TestLimit:
         limit_processor = limit.LimitProcessor(
             limit.backend.RedisCellBackend(redis),
             [
-                (match_ip_request, limit.Rule(second=5, gen_token=1, init_token=1, max_token=10, block_time=1)),
+                (match_ip_request, limit.Rule(second=5, max_token=1, block_time=1)),
             ],
         )
         rap_server.load_processor([limit_processor])

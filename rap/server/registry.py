@@ -81,6 +81,11 @@ class RegistryManager(object):
                The root group is generally used for system components, and there are restrictions when calling.
         is_private: if True, it can only be accessed through the local cli
         """
+        if inspect.isfunction(func) or inspect.ismethod(func):
+            name = name if name else func.__name__
+        else:
+            raise RegisteredError("func must be func or method")
+
         sig: "inspect.Signature" = inspect.signature(func)
 
         type_: str = self._get_func_type(func)
@@ -98,14 +103,6 @@ class RegistryManager(object):
                     raise RegisteredError(
                         f"{func.__name__} param:{param.name} type:{param.annotation} is not json type"
                     )
-
-        if not hasattr(func, "__call__"):
-            raise RegisteredError(f"{name} is not a callable object")
-        # func name handle
-        if inspect.isfunction(func) or inspect.ismethod(func):
-            name = name if name else func.__name__
-        else:
-            raise RegisteredError("func must be func or method")
 
         func_key: str = self.gen_key(group, name, type_)
         if func_key in self.func_dict:

@@ -14,11 +14,11 @@ class BaseProcessor(object):
 
     app: "Server"
 
-    def start_event_handle(self) -> Any:
-        pass
+    def start_event_handle(self) -> None:
+        return
 
-    def stop_event_handle(self) -> Any:
-        pass
+    def stop_event_handle(self) -> None:
+        return
 
     def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None) -> None:
         if not group:
@@ -28,7 +28,7 @@ class BaseProcessor(object):
         self.app.register(func, name=name, group=group, is_private=True)
 
     async def process_request(self, request: RequestModel) -> RequestModel:
-        return request
+        raise NotImplementedError
 
     async def process_response(self, response: ResponseModel) -> ResponseModel:
-        return response
+        raise NotImplementedError

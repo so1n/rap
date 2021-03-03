@@ -33,7 +33,9 @@ class ResponseModel(object):
     stats: "State" = State()
 
     def set_exception(self, exc: Exception) -> None:
-        if isinstance(exc, Exception) and not isinstance(exc, BaseRapError):
+        if not isinstance(exc, Exception):
+            raise TypeError(f"{exc} type must Exception")
+        if not isinstance(exc, BaseRapError):
             logging.error(exc)
             exc = ServerError(str(exc))
         self.body = str(exc)
@@ -51,11 +53,11 @@ class ResponseModel(object):
 
     @classmethod
     def from_exc(cls, exc: Exception) -> "ResponseModel":
-        if isinstance(exc, Exception) and not isinstance(exc, BaseRapError):
+        if not isinstance(exc, Exception):
+            raise TypeError(f"{exc} type must Exception")
+        if not isinstance(exc, BaseRapError):
             logging.error(exc)
             exc = ServerError(str(exc))
-        else:
-            raise TypeError(f"{exc} type must {Exception.__name__}")
         response: "ResponseModel" = cls(body=str(exc))
         response.header["status_code"] = exc.status_code
         return response
