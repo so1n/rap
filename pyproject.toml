@@ -60,7 +60,8 @@ exclude_lines = [
     "if __name__ == .__main__.:",
 
     # type hints
-    "if TYPE_CHECKING:"
+    "if TYPE_CHECKING:",
+    "pass"
 ]
 
 [build-system]

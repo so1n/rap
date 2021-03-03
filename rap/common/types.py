@@ -21,6 +21,10 @@ _CAN_JSON_TYPE_SET: Set[Optional[type]] = {bool, dict, float, int, list, str, tu
 MyFunctionType = type(_f)
 
 
+class ParseTypeError(Exception):
+    pass
+
+
 def parse_typing(_type: Type) -> Union[List[Type[Any]], Type]:
     """
     parse typing.type to Python.type
@@ -53,7 +57,7 @@ def parse_typing(_type: Type) -> Union[List[Type[Any]], Type]:
     elif _type in _CAN_JSON_TYPE_SET:
         return _type
     else:
-        raise RuntimeError(f"Can not parse {_type} origin type")
+        raise ParseTypeError(f"Can not parse {_type} origin type")
 
 
 def is_json_type(_type: Type) -> bool:
@@ -71,10 +75,14 @@ def is_json_type(_type: Type) -> bool:
     >>> assert is_json_type(parse_typing(Union[Dict]))
     >>> assert is_json_type(parse_typing(Union[Dict[str, Any]]))
     """
-    origin_type: Union[List[Type], Type] = parse_typing(_type)
-    if isinstance(origin_type, list):
-        return not bool(set(origin_type) - _CAN_JSON_TYPE_SET)
-    return origin_type in _CAN_JSON_TYPE_SET
+    try:
+        origin_type: Union[List[Type], Type] = parse_typing(_type)
+
+        if isinstance(origin_type, list):
+            return not bool(set(origin_type) - _CAN_JSON_TYPE_SET)
+        return origin_type in _CAN_JSON_TYPE_SET
+    except ParseTypeError:
+        return False
 
 
 def is_type(source_type: Type, target_type: Type) -> bool:

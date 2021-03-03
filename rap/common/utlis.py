@@ -121,7 +121,7 @@ def gen_new_param_coro(coro: Coroutine, new_param_dict: Dict[str, Any]) -> Corou
         if key not in old_param_dict:
             raise KeyError(f"Not found {key} in {old_param_dict.keys()}")
         old_param_dict[key] = value
-    return func(old_param_dict)
+    return func(**old_param_dict)
 
 
 async def as_first_completed(

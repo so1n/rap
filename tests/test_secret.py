@@ -3,6 +3,7 @@ import pytest
 from aredis import StrictRedis
 from rap.client import Client
 from rap.client.processor import CryptoProcessor
+from rap.common.crypto import Crypto
 from rap.server import Server
 from rap.server.processor import CryptoProcessor as ServerCryptoProcessor
 
@@ -12,6 +13,13 @@ pytestmark = pytest.mark.asyncio
 
 
 class TestSecret:
+    def test_error_key_length(self) -> None:
+        with pytest.raises(ValueError) as e:
+            Crypto('demo')
+
+        exec_msg: str = e.value.args[0]
+        assert exec_msg.endswith("The length of the key must be 16, key content:demo")
+
     async def test_secret(self, rap_server: Server, rap_client: Client) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
         rap_client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
