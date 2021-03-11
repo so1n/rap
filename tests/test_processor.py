@@ -2,9 +2,10 @@ import pytest
 
 from aredis import StrictRedis
 from rap.client import Client
-from rap.common.exceptions import TooManyRequest
-from rap.server import Server, RequestModel
+from rap.common.exceptions import ServerError, TooManyRequest
+from rap.server import Server, RequestModel, ResponseModel
 from rap.server.processor import limit
+from rap.server.processor.base import BaseProcessor
 
 from .conftest import async_sum
 
@@ -13,6 +14,38 @@ pytestmark = pytest.mark.asyncio
 
 
 class TestLimit:
+    async def test_processor_raise_rap_error(self, rap_server: Server, rap_client: Client) -> None:
+
+        class TestProcessor(BaseProcessor):
+            async def process_request(self, request: RequestModel) -> RequestModel:
+                raise TooManyRequest('test')
+
+            async def process_response(self, response: ResponseModel) -> ResponseModel:
+                return response
+
+        rap_server.load_processor([TestProcessor()])
+        with pytest.raises(TooManyRequest) as e:
+            await async_sum(1, 2)
+
+        exec_msg: str = e.value.args[0]
+        assert exec_msg == "test"
+
+    async def test_processor_raise_exc(self, rap_server: Server, rap_client: Client) -> None:
+
+        class TestProcessor(BaseProcessor):
+            async def process_request(self, request: RequestModel) -> RequestModel:
+                raise ValueError('test')
+
+            async def process_response(self, response: ResponseModel) -> ResponseModel:
+                return response
+
+        rap_server.load_processor([TestProcessor()])
+        with pytest.raises(ServerError) as e:
+            await async_sum(1, 2)
+
+        exec_msg: str = e.value.args[0]
+        assert exec_msg == "test"
+
     async def test_limit(self, rap_server: Server, rap_client: Client) -> None:
         def match_demo_request(request: RequestModel) -> limit.RULE_FUNC_RETURN_TYPE:
             if request.func_name == "async_sum":
