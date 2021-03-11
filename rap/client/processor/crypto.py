@@ -10,14 +10,14 @@ from .base import BaseProcessor
 
 
 class AutoExpireSet(object):
-    def __init__(self, interval: int = 10):
-        self._dict: Dict[str, int] = {}
-        self._interval: int = interval
+    def __init__(self, interval: float = 10.0):
+        self._dict: Dict[str, float] = {}
+        self._interval: float = interval
 
-    def _add(self, key: str, expire: int) -> None:
-        self._dict[key] = int(time.time()) + expire
+    def _add(self, key: str, expire: float) -> None:
+        self._dict[key] = time.time() + expire
 
-    def add(self, key: str, expire: int) -> None:
+    def add(self, key: str, expire: float) -> None:
         self._add(key, expire)
         if get_event_loop().is_running():
             self._auto_remove()
@@ -26,14 +26,14 @@ class AutoExpireSet(object):
     def __contains__(self, key: str) -> bool:
         if key not in self._dict:
             return False
-        elif self._dict[key] < int(time.time()):
+        elif self._dict[key] < time.time():
             del self._dict[key]
             return False
         else:
             return True
 
     def _auto_remove(self) -> None:
-        now_timestamp: int = int(time.time())
+        now_timestamp: float = time.time()
         for key in list(self._dict.keys()):
             if key not in self._dict:
                 continue

@@ -87,7 +87,7 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
         self._timeout = timeout
 
     async def dispatch(self, conn: ServerConnection) -> None:
-        key: str = f"{self.__class__.__name__}:conn.peer_tuple[0]"
+        key: str = f"{self.__class__.__name__}:{conn.peer_tuple[0]}"
         now_cnt: int = await self._redis.incr(key)
         try:
             if now_cnt > self._ip_max_conn:
