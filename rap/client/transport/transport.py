@@ -4,7 +4,7 @@ import random
 import uuid
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Sequence, Tuple, Type, Union
 from types import FunctionType
 
 from rap.client.model import Request, Response
@@ -267,7 +267,8 @@ class Transport(object):
     async def request(
         self,
         func_name: str,
-        *args: Any,
+        arg_param: Sequence[Any],
+        kwarg_param: Optional[Dict[str, Any]] = None,
         call_id: Optional[int] = None,
         group: Optional[str] = None,
         header: Optional[dict] = None,
@@ -278,7 +279,14 @@ class Transport(object):
             group = "default"
         if not call_id:
             call_id = -1
-        request: Request = Request(Constant.MSG_REQUEST, func_name, {"call_id": call_id, "param": args}, group=group)
+        if not kwarg_param:
+            kwarg_param = {}
+        request: Request = Request(
+            Constant.MSG_REQUEST,
+            func_name,
+            {"call_id": call_id, "param": arg_param, "default_param": kwarg_param},
+            group=group
+        )
         if header:
             request.header.update(header)
         response: Response = await self._base_request(request, session=session)
@@ -307,7 +315,7 @@ class Transport(object):
     def get_now_session() -> "Optional[Session]":
         return _session_context.get(None)
 
-    def channel(self, func_name: str, group: Optional[str] = None) -> "Channel":
+    def channel(self, func_name: str, group: Optional[str] = None, session: Optional["Session"] = None) -> "Channel":
         async def create(_channel_id: str) -> None:
             self._channel_queue_dict[_channel_id] = asyncio.Queue()
 
@@ -323,7 +331,8 @@ class Transport(object):
         async def close(_call_id: str) -> None:
             del self._channel_queue_dict[_call_id]
 
-        return Channel(func_name, self.session, create, read, write, close, group=group)
+        session = session if session else self.session
+        return Channel(func_name, session, create, read, write, close, group=group)
 
     #############
     # processor #
@@ -373,8 +382,21 @@ class Session(object):
             raise ConnectionError("Session has not been created")
         return self._conn
 
-    async def request(self, name: str, *args: Any, call_id: int = -1, header: Optional[dict] = None) -> Any:
-        return await self._transport.request(name, *args, call_id=call_id, header=header, session=self)
+    async def request(
+            self, name: str,
+            arg_param: Sequence[Any],
+            kwarg_param: Optional[Dict[str, Any]] = None,
+            call_id: int = -1,
+            header: Optional[dict] = None
+    ) -> Any:
+        return await self._transport.request(
+            name,
+            arg_param,
+            kwarg_param=kwarg_param,
+            call_id=call_id,
+            header=header,
+            session=self
+        )
 
     async def write(self, request: Request, msg_id: int) -> None:
         await self._transport.write(request, msg_id, session=self)

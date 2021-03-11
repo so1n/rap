@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple
 
 from rap.common.conn import ServerConnection
 from rap.common.middleware import BaseMiddleware as _BaseMiddleware
@@ -43,10 +43,22 @@ class BaseConnMiddleware(BaseMiddleware):
 
 class BaseMsgMiddleware(BaseMiddleware):
 
-    async def dispatch(self, request: RequestModel, call_id: int, func: Callable, param: list) -> Tuple[int, Any]:
+    async def dispatch(
+            self,
+            request: RequestModel,
+            call_id: int,
+            func: Callable,
+            param: list,
+            default_param: Dict[str, Any]
+    ) -> Tuple[int, Any]:
         raise NotImplementedError
 
     async def call_next(
-            self, request: RequestModel, call_id: int, func: Callable, param: list
+            self,
+            request: RequestModel,
+            call_id: int,
+            func: Callable,
+            param: list,
+            default_param: Dict[str, Any]
     ) -> Tuple[int, Any]:
         pass

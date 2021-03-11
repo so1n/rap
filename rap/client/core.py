@@ -1,16 +1,15 @@
 import inspect
 from functools import wraps
-from typing import Any, Callable, List, Optional, Tuple, Type, TypeVar
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Sequence
 
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.transport.channel import Channel
 from rap.client.transport.transport import Session, Transport
-from rap.client.utils import get_func_arg_type_list, is_type
-from rap.common.types import MyFunctionType
+from rap.common.types import is_type
+from rap.common.utlis import check_func_type
 
 __all__ = ["Client"]
-F = TypeVar("F", bound=MyFunctionType)
 CHANNEL_F = Callable[[Channel], Any]
 
 
@@ -21,7 +20,8 @@ class AsyncIteratorCall:
         self,
         name: str,
         client: "Client",
-        *args: Tuple,
+        arg_param: Sequence[Any],
+        kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
         session: Optional[Session] = None,
@@ -29,12 +29,13 @@ class AsyncIteratorCall:
         self.group: Optional[str] = group
         self._name: str = name
         self._call_id: Optional[int] = None
-        self._args: Tuple = args
+        self._arg_param: Sequence[Any] = arg_param
+        self._kwarg_param: Optional[Dict[str, Any]] = kwarg_param
         self._client: "Client" = client
         self._header: Optional[dict] = header
 
         if not session:
-            session == self._client.transport.get_now_session()
+            session = self._client.transport.get_now_session()
             if not session:
                 session = self._client.transport.session
 
@@ -67,7 +68,8 @@ class AsyncIteratorCall:
         """
         response: Response = await self._client.transport.request(
             self._name,
-            *self._args,
+            self._arg_param,
+            kwarg_param=self._kwarg_param,
             call_id=self._call_id,
             header=self._header,
             session=self._session,
@@ -127,26 +129,25 @@ class Client:
     # register func api #
     #####################
     def _async_register(
-        self, func: Callable, group: Optional[str], name: Optional[str] = None, enable_type_check: bool = True
+        self, func: Callable, group: Optional[str], name: str = "", enable_type_check: bool = True
     ) -> Callable:
         """Decorate normal function"""
         name = name if name else func.__name__
-        param_type_list: List[Type] = get_func_arg_type_list(func)
-        return_type: Type = func.__annotations__["return"]
+        return_type: Type = inspect.signature(func).return_annotation
 
         @wraps(func)
         async def type_check_wrapper(*args: Any, **kwargs: Any) -> Any:
-            for index, arg_type in enumerate(param_type_list):
-                if not is_type(type(args[index]), arg_type):
-                    raise TypeError(f"{param_type_list[index]} type must: {arg_type}")
-            result: Any = await self.raw_call(name, *args, group=group, **kwargs)
+            session: Optional[Session] = kwargs.pop("session") if "session" in kwargs else None
+            check_func_type(func, args, kwargs)
+            result: Any = await self.raw_call(name, args, kwarg_param=kwargs, group=group, session=session)
             if not is_type(return_type, type(result)):
                 raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
             return result
 
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            return await self.raw_call(name, *args, group=group, **kwargs)
+            session: Optional[Session] = kwargs.pop("session") if "session" in kwargs else None
+            return await self.raw_call(name, args, kwarg_param=kwargs, group=group, session=session)
 
         if enable_type_check:
             return type_check_wrapper
@@ -154,19 +155,19 @@ class Client:
             return wrapper
 
     def _async_gen_register(
-        self, func: Callable, group: Optional[str], name: Optional[str] = None, enable_type_check: bool = True
+        self, func: Callable, group: Optional[str], name: str = "", enable_type_check: bool = True
     ) -> Callable:
         """Decoration generator function"""
         name = name if name else func.__name__
-        param_type_list: List[Type] = get_func_arg_type_list(func)
-        return_type: Type = func.__annotations__["return"]
+        return_type: Type = inspect.signature(func).return_annotation
 
         @wraps(func)
         async def type_check_wrapper(*args: Any, **kwargs: Any) -> Any:
-            for index, arg_type in enumerate(param_type_list):
-                if not is_type(type(args[index]), arg_type):
-                    raise TypeError(f"{param_type_list[index]} type must: {arg_type}")
-            async with AsyncIteratorCall(name, self, *args, group=group) as async_iterator:
+            session: Optional[Session] = kwargs.pop("session") if "session" in kwargs else None
+            check_func_type(func, args, kwargs)
+            async with AsyncIteratorCall(
+                    name, self, args, kwarg_param=kwargs, group=group, session=session
+            ) as async_iterator:
                 async for result in async_iterator:
                     if not is_type(return_type, type(result)):
                         raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
@@ -174,7 +175,10 @@ class Client:
 
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            async with AsyncIteratorCall(name, self, *args, group=group) as async_iterator:
+            session: Optional[Session] = kwargs.pop("session") if "session" in kwargs else None
+            async with AsyncIteratorCall(
+                    name, self, args, kwarg_param=kwargs, group=group, session=session
+            ) as async_iterator:
                 async for result in async_iterator:
                     yield result
 
@@ -183,7 +187,7 @@ class Client:
         else:
             return wrapper
 
-    def _async_channel_register(self, func: CHANNEL_F, group: Optional[str], name: Optional[str] = None) -> CHANNEL_F:
+    def _async_channel_register(self, func: CHANNEL_F, group: Optional[str], name: str = "") -> CHANNEL_F:
         """Decoration channel function"""
         name = name if name else func.__name__
 
@@ -200,7 +204,8 @@ class Client:
     async def raw_call(
         self,
         name: str,
-        *args: Any,
+        arg_param: Sequence[Any],
+        kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
         session: Optional["Session"] = None,
@@ -213,13 +218,16 @@ class Client:
         group: func group, default group value is `default`
         session: conn session
         """
-        response = await self.transport.request(name, *args, group=group, header=header, session=session)
+        response = await self.transport.request(
+            name, arg_param, kwarg_param, group=group, header=header, session=session
+        )
         return response.body["result"]
 
     async def call(
         self,
         func: Callable,
-        *args: Any,
+        arg_param: Sequence[Any],
+        kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
         session: Optional["Session"] = None,
@@ -231,12 +239,20 @@ class Client:
         group: func's group, default group value is `default`
         session: conn session
         """
-        return await self.raw_call(func.__name__, *args, group=group, header=header, session=session)
+        return await self.raw_call(
+            func.__name__,
+            arg_param,
+            kwarg_param=kwarg_param,
+            group=group,
+            header=header,
+            session=session
+        )
 
     async def iterator_call(
         self,
         func: Callable,
-        *args: Any,
+        arg_param: Sequence[Any],
+        kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
         session: Optional["Session"] = None,
@@ -249,13 +265,13 @@ class Client:
         session: conn session
         """
         async with AsyncIteratorCall(
-            func.__name__, self, *args, header=header, group=group, session=session
+            func.__name__, self, arg_param, kwarg_param=kwarg_param, header=header, group=group, session=session
         ) as async_iterator:
             async for result in async_iterator:
                 yield result
 
     def register(
-            self, name: Optional[str] = None, group: Optional[str] = None, enable_type_check: bool = True
+            self, name: str = "", group: Optional[str] = None, enable_type_check: bool = True
     ) -> Callable[[Callable], Callable]:
         """Using this method to decorate a fake function can help you use it better.
         (such as ide completion, ide reconstruction and type hints)

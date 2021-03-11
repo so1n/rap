@@ -2,8 +2,9 @@ import importlib
 import inspect
 import logging
 import os
+from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 from rap.common.channel import BaseChannel
 from rap.common.exceptions import RegisteredError
@@ -20,7 +21,8 @@ class FuncModel(object):
     is_private: bool
     doc: Optional[str] = None
     name: Optional[str] = None
-    arg_type_list: List[Type] = field(default_factory=list)
+    arg_list: List[str] = field(default_factory=list)
+    kwarg_dict: OrderedDict[str, Any] = field(default_factory=OrderedDict)
     return_type: Optional[Type] = None
 
     def __post_init__(self) -> None:
@@ -29,12 +31,13 @@ class FuncModel(object):
         if not self.name:
             self.name = self.func.__name__
 
-        var_name_list: Tuple[str, ...] = self.func.__code__.co_varnames
-        annotation_dict: Dict[str, Type] = self.func.__annotations__
-        for var_name in var_name_list:
-            if var_name in annotation_dict:
-                self.arg_type_list.append(annotation_dict[var_name])
-        self.return_type = annotation_dict["return"]
+        func_sig = inspect.signature(self.func)
+        self.return_type = func_sig.return_annotation
+        for name, parameter in func_sig.parameters.items():
+            if parameter.default is parameter.empty:
+                self.arg_list.append(name)
+            else:
+                self.kwarg_dict[name] = parameter.default
 
 
 class RegistryManager(object):

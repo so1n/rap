@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import logging
 import time
+from functools import partial
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Awaitable, Callable, Coroutine, Dict, Generator, List, Optional, Tuple, Union
 
 from rap.common.channel import BaseChannel
@@ -20,6 +21,7 @@ from rap.common.utlis import (
     Constant,
     Event,
     as_first_completed,
+    check_func_type,
     get_event_loop,
     parse_error,
     response_num_dict,
@@ -147,6 +149,7 @@ class Request(object):
             dispatch_func: Callable = self.dispatch_func_dict[request.num]
             return await dispatch_func(request, response)
         except Exception as e:
+            logging.debug(e)
             response.set_exception(RpcRunTimeError(str(e)))
             return response
 
@@ -254,7 +257,14 @@ class Request(object):
             raise FuncNotFoundError(extra_msg=f"name: {request.func_name}")
         return self._app.registry[func_key]
 
-    async def _msg_handle(self, request: RequestModel, call_id: int, func: Callable, param: list) -> Tuple[int, Any]:
+    async def _msg_handle(
+            self,
+            request: RequestModel,
+            call_id: int,
+            func: Callable,
+            param: list,
+            default_param: Dict[str, Any]
+    ) -> Tuple[int, Any]:
         user_agent: str = request.header.get("user_agent", "None")
         try:
             if call_id in self._generator_dict:
@@ -269,9 +279,11 @@ class Request(object):
                     result = e
             else:
                 if asyncio.iscoroutinefunction(func):
-                    coroutine: Union[Awaitable, Coroutine] = func(*param)
+                    coroutine: Union[Awaitable, Coroutine] = func(*param, **default_param)
                 else:
-                    coroutine = get_event_loop().run_in_executor(None, func, *param)
+                    coroutine = get_event_loop().run_in_executor(
+                        None, partial(func, *param, **default_param)
+                    )
 
                 try:
                     result = await asyncio.wait_for(coroutine, self._run_timeout)
@@ -312,21 +324,35 @@ class Request(object):
             response.set_exception(ParseError(extra_msg="body miss params"))
             return response
         param: list = request.body.get("param")
-        if func_model.arg_type_list:
-            if len(func_model.arg_type_list) != len(param):
-                response.set_exception(
-                    ParseError(
-                        extra_msg=f"{func_model.name} takes {len(func_model.arg_type_list)}"
-                        f" positional arguments but {len(param)} were given"
-                    )
-                )
-                return response
-            for index, arg_type in enumerate(func_model.arg_type_list):
-                if not is_type(type(param[index]), arg_type):
-                    response.set_exception(ParseError(extra_msg=f"{param[index]} type must: {arg_type}"))
-                    return response
+        kwarg_param: Dict[str, Any] = request.body.get("default_param", {})
 
-        new_call_id, result = await self._msg_handle(request, call_id, func, param)
+        # param check
+        if len(func_model.arg_list) != len(param):
+            response.set_exception(
+                ParseError(
+                    extra_msg=f"{func_model.name} takes {len(func_model.arg_list)}"
+                              f" positional arguments but {len(param)} were given"
+                )
+            )
+            return response
+        kwarg_param_set: set = set(kwarg_param.keys())
+        fun_kwarg_set: set = set(func_model.kwarg_dict.keys())
+        if not kwarg_param_set.issubset(fun_kwarg_set):
+            response.set_exception(
+                ParseError(
+                    extra_msg=f"{func_model.name} can not find default "
+                              f"param name:{kwarg_param_set.difference(fun_kwarg_set)}"
+                )
+            )
+            return response
+
+        try:
+            check_func_type(func, param, kwarg_param)
+        except TypeError as e:
+            response.set_exception(e)
+            return response
+
+        new_call_id, result = await self._msg_handle(request, call_id, func, param, kwarg_param)
         response.body = {"call_id": new_call_id}
         if isinstance(result, StopAsyncIteration) or isinstance(result, StopIteration):
             response.header["status_code"] = 301

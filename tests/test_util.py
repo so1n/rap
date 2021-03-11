@@ -2,10 +2,9 @@ import asyncio
 import pytest
 
 from rap.client.processor.crypto import AutoExpireSet
-from rap.client.utils import raise_rap_error, check_func_type
+from rap.client.utils import raise_rap_error
 from rap.common.exceptions import RPCError
-from rap.common.utlis import Event, State, gen_new_param_coro
-
+from rap.common.utlis import Event, State, gen_new_param_coro, check_func_type
 
 pytestmark = pytest.mark.asyncio
 

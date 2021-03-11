@@ -5,7 +5,7 @@ import string
 import sys
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, Dict, List, Union
+from typing import Any, Callable, Coroutine, Dict, List, Union, Sequence
 
 __all__ = [
     "Constant",
@@ -13,6 +13,7 @@ __all__ = [
     "MISS_OBJECT",
     "State",
     "as_first_completed",
+    "check_func_type",
     "gen_new_param_coro",
     "gen_random_time_id",
     "gen_random_str_id",
@@ -22,6 +23,8 @@ __all__ = [
 ]
 
 from typing import Optional, Tuple
+
+from rap.common.types import is_type
 
 MISS_OBJECT = object()
 _STR_LD = string.ascii_letters + string.digits
@@ -147,3 +150,15 @@ response_num_dict: Dict[int, int] = {
     Constant.CHANNEL_REQUEST: Constant.CHANNEL_RESPONSE,
     Constant.CLIENT_EVENT: -1,
 }
+
+
+def check_func_type(func: Callable, param_list: Sequence[Any], default_param_dict: Dict[str, Any]) -> None:
+    func_sig: inspect.Signature = inspect.signature(func)
+    for index, parameter_tuple in enumerate(func_sig.parameters.items()):
+        name, parameter = parameter_tuple
+        if parameter.default is parameter.empty:
+            if not is_type(type(param_list[index]), parameter.annotation):
+                raise TypeError(f"{param_list[index]} type must: {parameter.annotation}")
+        else:
+            if not is_type(type(default_param_dict.get(name, parameter.default)), parameter.annotation):
+                raise TypeError(f"{default_param_dict[name]} type must: {parameter.annotation}")
