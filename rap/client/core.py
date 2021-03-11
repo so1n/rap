@@ -33,26 +33,24 @@ class AsyncIteratorCall:
         self._client: "Client" = client
         self._header: Optional[dict] = header
 
-        if session:
-            self._session: Optional[Session] = session
-        else:
-            self._session = self._client.transport.get_now_session()
-            if self._session is None:
-                self._session = self._client.transport.session
+        if not session:
+            session == self._client.transport.get_now_session()
+            if not session:
+                session = self._client.transport.session
+
+        self._session: Session = session
         self.in_session: bool = self._session.in_session
 
     ###################
     # session support #
     ###################
     async def __aenter__(self) -> "AsyncIteratorCall":
-        if not self._session:
-            raise ConnectionError("Create session fail")
         if not self.in_session:
             self._session.create()
         return self
 
     async def __aexit__(self, *args: Tuple) -> None:
-        if not self.in_session and self._session:
+        if not self.in_session:
             self._session.close()
 
     #####################
@@ -279,6 +277,5 @@ class Client:
                 return self._async_register(func, group, name=name, enable_type_check=enable_type_check)
             elif inspect.isasyncgenfunction(func):
                 return self._async_gen_register(func, group, name=name, enable_type_check=enable_type_check)
-            raise TypeError(f"{func} does not support registration")
 
         return wrapper

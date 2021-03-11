@@ -24,7 +24,7 @@ def raise_rap_error(exc_name: str, exc_info: str = "") -> None:
     """raise python exception"""
     exc: Optional[Type[Exception]] = getattr(rap_exc, exc_name, None)
     if exc is None:
-        exc = globals()["__builtins__"][exc_name]
+        exc = globals()["__builtins__"].get(exc_name, None)
     if exc is None:
         raise RPCError(exc_info)
     else:
@@ -41,7 +41,7 @@ def get_func_arg_type_list(func: Callable) -> List[Type]:
     return param_type_list
 
 
-def check_func_type(func: FunctionType, param_list: Tuple[Any]) -> None:
+def check_func_type(func: Callable, param_list: Tuple[Any]) -> None:
     param_type_list: List[Type] = get_func_arg_type_list(func)
     for index, arg_type in enumerate(param_type_list):
         if not is_type(type(param_list[index]), arg_type):

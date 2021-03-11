@@ -42,8 +42,6 @@ class BaseConnMiddleware(BaseMiddleware):
 
 
 class BaseMsgMiddleware(BaseMiddleware):
-    def register(self, func: Callable, name: Optional[str] = None, group: str = "msg_middleware") -> None:
-        super().register(func, name, group)
 
     async def dispatch(self, request: RequestModel, call_id: int, func: Callable, param: list) -> Tuple[int, Any]:
         raise NotImplementedError

@@ -7,31 +7,6 @@ from rap.client import Client
 from rap.client.processor import CryptoProcessor
 
 
-def print_table(table_list: List[List[str]]) -> None:
-    row_cnt: int = len(table_list)
-    column_cnt = len(table_list[0])  # 列表中元素的个数
-
-    max_len_list = [0] * column_cnt
-    for i in range(row_cnt):
-        for j in range(column_cnt):
-            _len: int = len(table_list[i][j])
-            if _len > max_len_list[j]:
-                max_len_list[j] = _len
-
-    content: str = "┏" + "┳".join(["━" * (max_len_list[i] + 2) for i in range(column_cnt)]) + "┓\n"
-
-    for i in range(row_cnt):
-        if i == 1:
-            content += f"┣{'╋'.join(['━' * (max_len_list[i] + 2) for i in range(column_cnt)])}┫\n"
-        content += "┃"
-
-        for j in range(column_cnt):
-            content += f" {table_list[i][j].ljust(max_len_list[j])} ┃"
-        content += "\n"
-    content += "┗" + "┻".join(["━" * (max_len_list[i] + 2) for i in range(column_cnt)]) + "┛"
-    print(content)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--secret_key", default=None, help="conn server secret key")

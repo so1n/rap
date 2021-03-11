@@ -82,15 +82,15 @@ class RedisCellBackend(BaseRedisBackend):
 
     async def _call_cell(self, key: str, rule: Rule, token_num: int = 1) -> List[int]:
         result: List[int] = await self._redis.execute_command(
-            "CL.THROTTLE", key, rule.max_token, rule.gen_token, int(rule.total_second), token_num
+            "CL.THROTTLE", key, rule.max_token - 1, rule.gen_token, int(rule.total_second), token_num
         )
         return result
 
     async def can_requests(self, key: str, rule: Rule, token_num: int = 1) -> bool:
         async def _can_requests() -> bool:
             result: List[int] = await self._call_cell(key, rule, token_num)
-            can_requests: bool = bool(result[0])
-            await self._redis.expire(key, int(rule.total_second))
+            can_requests: bool = result[0] == 0
+            # await self._redis.expire(key, int(rule.total_second))
             return can_requests
 
         return await self._block_time_handle(key, rule, _can_requests)
