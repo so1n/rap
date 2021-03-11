@@ -8,6 +8,10 @@ def sync_sum(a: int, b: int) -> int:
     return a + b
 
 
+async def default_param(a: int, b: int = 2) -> int:
+    return a + b
+
+
 async def async_sum(a: int, b: int) -> int:
     await asyncio.sleep(1)  # mock io time
     return a + b
@@ -28,6 +32,7 @@ if __name__ == "__main__":
     loop = asyncio.new_event_loop()
     rpc_server = Server()
     rpc_server.register(sync_sum)
+    rpc_server.register(default_param)
     rpc_server.register(async_sum)
     rpc_server.register(async_gen)
     loop.run_until_complete(rpc_server.create_server())
