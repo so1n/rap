@@ -1,9 +1,11 @@
+import time
 import pytest
 
 from aredis import StrictRedis
 from rap.client import Client
 from rap.client.processor import CryptoProcessor
 from rap.common.crypto import Crypto
+from rap.common.exceptions import CryptoError
 from rap.server import Server
 from rap.server.processor import CryptoProcessor as ServerCryptoProcessor
 
@@ -19,6 +21,22 @@ class TestSecret:
 
         exec_msg: str = e.value.args[0]
         assert exec_msg.endswith("The length of the key must be 16, key content:demo")
+
+    async def test_crypto_body_handle(self) -> None:
+        crypto: CryptoProcessor = CryptoProcessor("test", "keyskeyskeyskeys")
+        demo_body_dict: dict = {"nonce": "aaa", "timestamp": int(time.time()) - 70}
+        with pytest.raises(CryptoError) as e:
+            crypto._body_handle(demo_body_dict)
+
+        exec_msg: str = e.value.args[0]
+        assert exec_msg == "timeout error"
+
+        demo_body_dict = {"nonce": "aaa", "timestamp": int(time.time())}
+        crypto._body_handle(demo_body_dict)
+        with pytest.raises(CryptoError) as e:
+            crypto._body_handle(demo_body_dict)
+        exec_msg = e.value.args[0]
+        assert exec_msg == "nonce error"
 
     async def test_secret(self, rap_server: Server, rap_client: Client) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")

@@ -1,4 +1,9 @@
+import asyncio
 import pytest
+
+from rap.client.processor.crypto import AutoExpireSet
+from rap.client.utils import raise_rap_error, check_func_type
+from rap.common.exceptions import RPCError
 from rap.common.utlis import Event, State, gen_new_param_coro
 
 
@@ -34,3 +39,27 @@ class TestUtil:
         value2: int = await gen_new_param_coro(new_coro, {"b": 3})
         assert 6 == await new_coro
         assert value1 == value2
+
+    def test_raise_customer_exc(self) -> None:
+        with pytest.raises(RPCError) as e:
+            raise_rap_error("customer_exc", "customer_info")
+        exec_msg: str = e.value.args[0]
+        assert exec_msg == "customer_info"
+
+    def test_check_func_type(self) -> None:
+
+        def demo(a: int, b: str) -> int: pass
+
+        with pytest.raises(TypeError):
+            check_func_type(demo, (1, 2))
+
+    async def test_auto_expire_set(self) -> None:
+        auto_expire_set: AutoExpireSet = AutoExpireSet(1.5)
+        auto_expire_set.add('test1', 0.1)
+        auto_expire_set.add('test2', 1)
+        assert 'test1' in auto_expire_set
+        await asyncio.sleep(0.5)
+        assert 'test1' not in auto_expire_set
+        assert 'test2' in auto_expire_set
+        await asyncio.sleep(1)
+        assert 'test2' not in auto_expire_set

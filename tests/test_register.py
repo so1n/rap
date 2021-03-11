@@ -1,9 +1,9 @@
-from typing import Dict, List, Union
+from typing import AsyncIterator
 
 import pytest
 
 from rap.client import Client
-from rap.common.exceptions import RegisteredError
+from rap.common.exceptions import ParseError, RegisteredError
 from rap.server import Server
 from rap.server.registry import RegistryManager
 
@@ -116,4 +116,71 @@ class TestRegister:
         exec_msg: str = e.value.args[0]
         assert "already exists in group " in exec_msg
 
+    async def test_register_func_error(self, rap_server: Server, rap_client: Client) -> None:
+        def test_func() -> None: pass
 
+        with pytest.raises(TypeError):
+            rap_client.register()(test_func)
+
+    async def test_register_func_check_type_error_in_runtime(self, rap_server: Server, rap_client: Client) -> None:
+
+        @rap_client.register()
+        async def demo1(a: int, b: int) -> str:
+            pass
+
+        async def _demo1(a: int, b: int) -> int:
+            return a + b
+
+        rap_server.register(_demo1, name="demo1")
+        with pytest.raises(TypeError):
+            await demo1(1, '1')
+
+        with pytest.raises(RuntimeError):
+            await demo1(1, 1)
+
+    async def test_register_func_no_enable_check_type(self, rap_server: Server, rap_client: Client) -> None:
+        @rap_client.register(enable_type_check=False)
+        async def demo1(a: int, b: int) -> str:
+            pass
+
+        async def _demo1(a: int, b: int) -> int:
+            return a + b
+
+        rap_server.register(_demo1, name="demo1")
+        with pytest.raises(ParseError) as e:
+            await demo1(1, '1')
+        exec_msg = e.value.args[0]
+        assert exec_msg == "Parse error. 1 type must: <class 'int'>"
+
+    async def test_register_gen_func_check_type_error_in_runtime(self, rap_server: Server, rap_client: Client) -> None:
+        @rap_client.register()
+        async def demo1(a: int) -> AsyncIterator[str]:
+            pass
+
+        async def _demo1(a: int) -> AsyncIterator[int]:
+            for i in range(a):
+                yield i
+
+        rap_server.register(_demo1, name="demo1")
+        with pytest.raises(TypeError):
+            await demo1('1')
+
+        with pytest.raises(RuntimeError):
+            await demo1(10)
+
+    async def test_register_gen_func_no_enable_check_type(self, rap_server: Server, rap_client: Client) -> None:
+
+        @rap_client.register(enable_type_check=False)
+        async def demo1(a: int) -> AsyncIterator[str]:
+            pass
+
+        async def _demo1(a: int) -> AsyncIterator[int]:
+            for i in range(a):
+                yield i
+
+        rap_server.register(_demo1, name="demo1")
+        with pytest.raises(ParseError) as e:
+            await demo1('1')
+
+        exec_msg = e.value.args[0]
+        assert exec_msg == "Parse error. 1 type must: <class 'int'>"

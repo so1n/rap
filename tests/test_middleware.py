@@ -27,6 +27,7 @@ async def clean_cache_ip_before_test(middleware: IpBlockMiddleware) -> None:
 class TestConnLimitMiddleware:
     async def test_conn_limit(self, rap_server: Server) -> None:
         rap_server.load_middleware([ConnLimitMiddleware(max_conn=0)])
+
         client: Client = Client()
         client.transport._listen = mock_func
         await client.connect()
@@ -34,6 +35,12 @@ class TestConnLimitMiddleware:
         for conn_model in client.transport._conn_dict.values():
             with pytest.raises(ConnectionError):
                 await client.transport._read_from_conn(conn_model.conn)
+
+    async def test_conn_limit_allow(self, rap_server: Server) -> None:
+        rap_server.load_middleware([ConnLimitMiddleware(max_conn=1)])
+        client: Client = Client()
+        await client.connect()
+        assert 3 == await client.raw_call("async_sum", 1, 2)
 
     async def test_conn_limit_method(self, rap_server: Server, rap_client: Client) -> None:
         middleware: ConnLimitMiddleware = ConnLimitMiddleware(max_conn=0)
@@ -84,6 +91,14 @@ class TestIpMaxConnMiddleware:
         for conn_model in client.transport._conn_dict.values():
             with pytest.raises(ConnectionError):
                 await client.transport._read_from_conn(conn_model.conn)
+
+    async def test_ip_max_conn_allow(self, rap_server: Server) -> None:
+        redis: StrictRedis = StrictRedis.from_url("redis://localhost")
+        middleware: IpMaxConnMiddleware = IpMaxConnMiddleware(redis, ip_max_conn=1)
+        rap_server.load_middleware([middleware])
+        client: Client = Client()
+        await client.connect()
+        assert 3 == await client.raw_call("async_sum", 1, 2)
 
 
 class TestIpBlockMiddleware:
