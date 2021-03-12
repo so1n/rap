@@ -1,6 +1,6 @@
 import asyncio
 
-from aredis import StrictRedis, StrictRedisCluster
+from aredis import StrictRedis  # type: ignore
 
 from rap.server import Server
 from rap.server.model import RequestModel

@@ -19,7 +19,7 @@ async def raise_server_not_found_func_exc(a: int) -> None:
     pass
 
 
-async def main():
+async def main() -> None:
     s_t = time.time()
     await client.connect()
     try:

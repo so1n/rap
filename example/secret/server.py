@@ -1,6 +1,6 @@
 import asyncio
 
-from aredis import StrictRedis
+from aredis import StrictRedis  # type: ignore
 
 from rap.server import Server
 from rap.server.processor import CryptoProcessor

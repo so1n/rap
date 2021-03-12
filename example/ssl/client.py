@@ -11,7 +11,7 @@ async def async_sum(a: int, b: int) -> int:
     pass
 
 
-async def main():
+async def main() -> None:
     """
     # gen ssl key sh
     > openssl req -newkey rsa:2048 -nodes -keyout rap_ssl.key -x509 -days 365 -out rap_ssl.crt

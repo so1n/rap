@@ -13,7 +13,7 @@ async def async_sum(a: int, b: int) -> int:
     pass
 
 
-async def main():
+async def main() -> None:
     await client.connect()
     print(f"async result: {await async_sum(1, 3)}")
     await client.await_close()

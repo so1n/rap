@@ -20,20 +20,20 @@ async def async_sum(a: int, b: int) -> int:
 # in register, must use async def...
 @client.register()
 async def async_gen(a: int) -> AsyncIterator[int]:
-    yield
+    yield 0
 
 
-async def _run_once():
-    print(f"sync result: {await client.call(sync_sum, 1, 2)}")
+async def _run_once() -> None:
+    print(f"sync result: {await client.call(sync_sum, [1, 2])}")
     # print(f"reload :{ await client.raw_call('_root_reload', 'test_module', 'sync_sum')}")
-    print(f"sync result: {await client.raw_call('sync_sum', 1, 2)}")
+    print(f"sync result: {await client.raw_call('sync_sum', [1, 2])}")
 
     print(f"async result: {await async_sum(1, 3)}")
     async for i in async_gen(10):
         print(f"async gen result:{i}")
 
 
-async def run_once():
+async def run_once() -> None:
     s_t = time.time()
     await client.connect()
     await _run_once()
@@ -41,7 +41,7 @@ async def run_once():
     await client.await_close()
 
 
-async def run_mutli():
+async def run_mutli() -> None:
     s_t = time.time()
     await client.connect()
     await asyncio.wait([_run_once() for _ in range(100)])
