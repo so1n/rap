@@ -41,7 +41,7 @@ async def echo_response(channel: Channel) -> None:
         await channel.write(response.body)
 
 
-async def run_once():
+async def run_once() -> None:
     await client.connect()
     await echo_body()
     await echo_response()

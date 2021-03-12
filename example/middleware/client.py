@@ -19,13 +19,13 @@ async def async_sum(a: int, b: int) -> int:
 # in register, must use async def...
 @client.register()
 async def async_gen(a: int) -> AsyncIterator[int]:
-    yield
+    yield 0
 
 
-async def main():
+async def main() -> None:
     await client.connect()
-    print(f"sync result: {await client.call(sync_sum, 1, 2)}")
-    print(f"sync result: {await client.raw_call('sync_sum', 1, 2)}")
+    print(f"sync result: {await client.call(sync_sum, [1, 2])}")
+    print(f"sync result: {await client.raw_call('sync_sum', [1, 2])}")
 
     print(f"async result: {await async_sum(1, 3)}")
     async for i in async_gen(10):

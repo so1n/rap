@@ -18,22 +18,22 @@ async def sync_sum(a: int, b: int) -> int:
 
 @client.register()
 async def async_gen(a: int) -> AsyncIterator[int]:
-    yield
+    yield 0
 
 
-async def start_client():
+async def start_client() -> None:
     await client.connect()
 
 
-async def stop_client():
+async def stop_client() -> None:
     await client.await_close()
 
 
 async def demo1(request: Request) -> JSONResponse:
     return JSONResponse(
         {
-            sync_sum.__name__: await client.call(sync_sum, 1, 2),
-            async_gen.__name__: [i async for i in client.iterator_call(async_gen, 10)],
+            sync_sum.__name__: await client.call(sync_sum, [1, 2]),
+            async_gen.__name__: [i async for i in client.iterator_call(async_gen, [10])],
         }
     )
 

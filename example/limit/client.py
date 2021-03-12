@@ -19,7 +19,7 @@ async def demo1(a: int, b: int) -> int:
     pass
 
 
-async def retry_handle(func: Callable):
+async def retry_handle(func: Callable) -> None:
     for i in range(3):
         while True:
             try:
@@ -31,7 +31,7 @@ async def retry_handle(func: Callable):
                 await asyncio.sleep(10)
 
 
-async def main():
+async def main() -> None:
     s_t = time.time()
     await client.connect()
     await retry_handle(demo)

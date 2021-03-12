@@ -25,10 +25,10 @@ async def default_param(a: int, b: int = 2) -> int:
 # in register, must use async def...
 @client.register()
 async def async_gen(a: int) -> AsyncIterator[int]:
-    yield
+    yield 0
 
 
-async def main():
+async def main() -> None:
     await client.connect()
     # client auto use func name
     print(f"call result: {await client.call(sync_sum, [1, 2])}")
