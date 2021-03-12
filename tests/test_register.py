@@ -79,20 +79,30 @@ class TestRegister:
         rap_server.register(_reload_sum_num, "reload_sum_num")
 
         assert 3 == await reload_sum_num(1, 2)
-        await rap_client.raw_call('reload', 'tests.test_register', 'new_reload_sum', "reload_sum_num", "default",
-                                  None, group='registry')
+        await rap_client.raw_call(
+            'reload',
+            ['tests.test_register', 'new_reload_sum'],
+            kwarg_param={"name": "reload_sum_num"},
+            group='registry'
+        )
         assert 4 == await reload_sum_num(1, 2)
 
         with pytest.raises(RegisteredError) as e:
             await rap_client.raw_call(
-                'reload', 'tests.test_register', 'new_reload_sum', "load", "registry", None, group='registry'
+                'reload',
+                ['tests.test_register', 'new_reload_sum'],
+                kwarg_param={"name": "load", "group": "registry"},
+                group='registry'
             )
         exec_msg: str = e.value.args[0]
         assert exec_msg.endswith("private func can not reload")
 
         with pytest.raises(RegisteredError) as e:
             await rap_client.raw_call(
-                'reload', 'tests.test_register', 'new_reload_sum', "load", "default", None, group='registry'
+                'reload',
+                ['tests.test_register', 'new_reload_sum'],
+                kwarg_param={"name": "load"},
+                group='registry'
             )
         exec_msg = e.value.args[0]
         assert "not in group" in exec_msg
@@ -100,16 +110,20 @@ class TestRegister:
     async def test_load_error_fun(self, rap_server: Server, rap_client: Client) -> None:
         with pytest.raises(RegisteredError) as e:
             await rap_client.raw_call(
-                "load", "tests.test_register", "fail_reload_demo", None, "default", False, None, group='registry'
+                "load",
+                ["tests.test_register", "fail_reload_demo"],
+                group='registry'
             )
         exec_msg: str = e.value.args[0]
         assert exec_msg.endswith("is not a callable object")
 
     async def test_load_fun(self, rap_server: Server, rap_client: Client) -> None:
         await rap_client.raw_call(
-            "load", "tests.test_register", "new_reload_sum", None, "default", False, None, group='registry'
+            "load",
+            ["tests.test_register", "new_reload_sum"],
+            group='registry'
         )
-        assert 4 == await rap_client.raw_call("new_reload_sum", 1, 2)
+        assert 4 == await rap_client.raw_call("new_reload_sum", [1, 2])
 
         with pytest.raises(RegisteredError) as e:
             rap_server.registry._load("tests.test_register", "new_reload_sum")

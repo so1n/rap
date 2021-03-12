@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import logging
+import traceback
 import time
 from functools import partial
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Awaitable, Callable, Coroutine, Dict, Generator, List, Optional, Tuple, Union
@@ -150,7 +151,8 @@ class Request(object):
             return await dispatch_func(request, response)
         except Exception as e:
             logging.debug(e)
-            response.set_exception(RpcRunTimeError(str(e)))
+            logging.debug(traceback.print_exc())
+            response.set_exception(RpcRunTimeError())
             return response
 
     async def ping_event(self) -> None:
@@ -172,7 +174,7 @@ class Request(object):
 
     async def channel_handle(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
         try:
-            func: Callable = self.check_func(request, "channel")
+            func: Callable = self.get_func_model(request, "channel").func
         except FuncNotFoundError as e:
             response.set_exception(e)
             return response
@@ -241,7 +243,7 @@ class Request(object):
             response.set_exception(ChannelError("channel life cycle error"))
             return response
 
-    def check_func(self, request: RequestModel, type_: str) -> Callable:
+    def get_func_model(self, request: RequestModel, type_: str) -> FuncModel:
         func_key: str = self._app.registry.gen_key(request.group, request.func_name, type_)
         if func_key not in self._app.registry:
             raise FuncNotFoundError(extra_msg=f"name: {request.func_name}")
@@ -249,13 +251,7 @@ class Request(object):
         func_model: FuncModel = self._app.registry[func_key]
         if func_model.is_private and self._conn.peer_tuple and self._conn.peer_tuple[0] != "127.0.0.1":
             raise FuncNotFoundError(f"No permission to call:`{request.func_name}`")
-        return func_model.func
-
-    def get_func_model(self, request: RequestModel) -> FuncModel:
-        func_key: str = self._app.registry.gen_key(request.group, request.func_name, "normal")
-        if func_key not in self._app.registry:
-            raise FuncNotFoundError(extra_msg=f"name: {request.func_name}")
-        return self._app.registry[func_key]
+        return func_model
 
     async def _msg_handle(
             self,
@@ -312,12 +308,11 @@ class Request(object):
 
     async def msg_handle(self, request: RequestModel, response: ResponseModel) -> Optional[ResponseModel]:
         try:
-            func: Callable = self.check_func(request, "normal")
+            func_model: FuncModel = self.get_func_model(request, "normal")
         except FuncNotFoundError as e:
             response.set_exception(e)
             return response
 
-        func_model: FuncModel = self.get_func_model(request)
         try:
             call_id: int = request.body["call_id"]
         except KeyError:
@@ -347,12 +342,12 @@ class Request(object):
             return response
 
         try:
-            check_func_type(func, param, kwarg_param)
+            check_func_type(func_model.func, param, kwarg_param)
         except TypeError as e:
-            response.set_exception(e)
+            response.set_exception(ParseError(extra_msg=str(e)))
             return response
 
-        new_call_id, result = await self._msg_handle(request, call_id, func, param, kwarg_param)
+        new_call_id, result = await self._msg_handle(request, call_id, func_model.func, param, kwarg_param)
         response.body = {"call_id": new_call_id}
         if isinstance(result, StopAsyncIteration) or isinstance(result, StopIteration):
             response.header["status_code"] = 301
@@ -364,7 +359,9 @@ class Request(object):
         else:
             response.body["result"] = result
             if func_model.return_type and not is_type(func_model.return_type, type(result)):
-                logging.warning(f"{func} return type is {func_model.return_type}, but result type is {type(result)}")
+                logging.warning(
+                    f"{func_model.func} return type is {func_model.return_type}, but result type is {type(result)}"
+                )
                 response.header["status_code"] = 302
         return response
 

@@ -267,7 +267,7 @@ class Transport(object):
     async def request(
         self,
         func_name: str,
-        arg_param: Sequence[Any],
+        arg_param: Optional[Sequence[Any]] = None,
         kwarg_param: Optional[Dict[str, Any]] = None,
         call_id: Optional[int] = None,
         group: Optional[str] = None,
@@ -279,6 +279,8 @@ class Transport(object):
             group = "default"
         if not call_id:
             call_id = -1
+        if not arg_param:
+            arg_param = []
         if not kwarg_param:
             kwarg_param = {}
         request: Request = Request(
@@ -416,11 +418,11 @@ class Session(object):
             return await obj
         elif isinstance(obj, FunctionType) and arg_list:
             kwarg_dict = kwarg_dict if kwarg_dict else {}
-            response: Response = await self.request(obj.__name__, *arg_list, **kwarg_dict)
+            response: Response = await self.request(obj.__name__, arg_list, kwarg_param=kwarg_dict)
             return response.body["result"]
         elif isinstance(obj, str) and arg_list:
             kwarg_dict = kwarg_dict if kwarg_dict else {}
-            response = await self.request(obj, *arg_list, **kwarg_dict)
+            response = await self.request(obj, arg_list, kwarg_param=kwarg_dict)
             return response.body["result"]
         else:
             raise TypeError(f"Not support {type(obj)}, obj type must: {Callable}, {Coroutine}, {str}")
