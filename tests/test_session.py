@@ -4,7 +4,7 @@ from rap.client import Client, Request, Response
 from rap.client.processor import BaseProcessor
 from rap.server import Server
 from rap.common.utlis import Constant
-from .conftest import async_sum, async_gen
+from .conftest import async_sum, async_gen, sync_gen
 
 
 pytestmark = pytest.mark.asyncio
@@ -33,7 +33,7 @@ class TestSession:
         rap_client.load_processor([check_session_processor])
         async with rap_client.session as s:
             check_session_processor.session_id = s.id
-            assert 3 == await rap_client.call(async_sum, 1, 2)
+            assert 3 == await rap_client.call(async_sum, [1, 2])
             assert 3 == await async_sum(1, 2)
 
             # async iterator will create session or reuse session
@@ -44,11 +44,11 @@ class TestSession:
         rap_client.load_processor([check_session_processor])
         async with rap_client.session as s:
             check_session_processor.session_id = s.id
-            assert 3 == await rap_client.call(async_sum, 1, 2, session=s)
+            assert 3 == await rap_client.call(async_sum, [1, 2], session=s)
             assert 3 == await async_sum(1, 2)
 
             # async iterator will create session or reuse session
-            async for i in async_gen(10):
+            async for i in sync_gen(10):
                 print(f"async gen result:{i}")
 
     async def test_execute(self, rap_server: Server, rap_client: Client) -> None:
@@ -58,6 +58,8 @@ class TestSession:
             assert 3 == await s.execute(async_sum, arg_list=[1, 2])
             assert 3 == await s.execute("sync_sum", arg_list=[1, 2])
             assert 3 == await s.execute(async_sum(1, 2))
+            with pytest.raises(TypeError):
+                await s.execute(123, arg_list=[1, 2])
 
     async def test_async_iterator_call(self, rap_server: Server, rap_client: Client) -> None:
         class SessionProcessor(BaseProcessor):
@@ -80,7 +82,7 @@ class TestSession:
 
         async def async_gen(a: int) -> AsyncIterator[int]:
             yield 0
-        async for i in rap_client.iterator_call(async_gen, 10):
+        async for i in rap_client.iterator_call(async_gen, [10]):
             print(f"async gen result:{i}")
 
         assert len(session_processor._request_id_set) == 1

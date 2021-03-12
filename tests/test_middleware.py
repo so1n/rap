@@ -40,15 +40,15 @@ class TestConnLimitMiddleware:
         rap_server.load_middleware([ConnLimitMiddleware(max_conn=1)])
         client: Client = Client()
         await client.connect()
-        assert 3 == await client.raw_call("async_sum", 1, 2)
+        assert 3 == await client.raw_call("async_sum", [1, 2])
 
     async def test_conn_limit_method(self, rap_server: Server, rap_client: Client) -> None:
         middleware: ConnLimitMiddleware = ConnLimitMiddleware(max_conn=0)
         rap_server.load_middleware([middleware])
         middleware.start_event_handle()
-        await rap_client.raw_call("modify_max_conn", 10, group=middleware.__class__.__name__)
+        await rap_client.raw_call("modify_max_conn", [10], group=middleware.__class__.__name__)
         assert middleware._max_conn == 10
-        await rap_client.raw_call("modify_release_timestamp", 1_600_000_000, group=middleware.__class__.__name__)
+        await rap_client.raw_call("modify_release_timestamp", [1_600_000_000], group=middleware.__class__.__name__)
         assert middleware._release_timestamp == 1_600_000_000
         assert {
             "conn_count": middleware._conn_count,
@@ -62,7 +62,7 @@ class TestAccessMsgMiddleware:
         rap_server.load_middleware([AccessMsgMiddleware()])
         client: Client = Client()
         await client.connect()
-        assert 3 == await client.raw_call("async_sum", 1, 2)
+        assert 3 == await client.raw_call("async_sum", [1, 2])
 
 
 class TestIpMaxConnMiddleware:
@@ -71,9 +71,9 @@ class TestIpMaxConnMiddleware:
         middleware: IpMaxConnMiddleware = IpMaxConnMiddleware(redis, ip_max_conn=0)
         rap_server.load_middleware([middleware])
         middleware.start_event_handle()
-        await rap_client.raw_call("modify_max_ip_max_conn", 10, group=middleware.__class__.__name__)
+        await rap_client.raw_call("modify_max_ip_max_conn", [10], group=middleware.__class__.__name__)
         assert middleware._ip_max_conn == 10
-        await rap_client.raw_call("modify_ip_max_timeout", 10, group=middleware.__class__.__name__)
+        await rap_client.raw_call("modify_ip_max_timeout", [10], group=middleware.__class__.__name__)
         assert middleware._timeout == 10
         assert {
             "ip_max_conn": 10,
@@ -98,7 +98,7 @@ class TestIpMaxConnMiddleware:
         rap_server.load_middleware([middleware])
         client: Client = Client()
         await client.connect()
-        assert 3 == await client.raw_call("async_sum", 1, 2)
+        assert 3 == await client.raw_call("async_sum", [1, 2])
 
 
 class TestIpBlockMiddleware:
@@ -107,10 +107,10 @@ class TestIpBlockMiddleware:
         middleware: IpBlockMiddleware = IpBlockMiddleware(redis)
         rap_server.load_middleware([middleware])
         await middleware.start_event_handle()
-        await rap_client.raw_call("add_block_ip", "127.0.0.1", group=middleware.__class__.__name__)
-        await rap_client.raw_call("add_allow_ip", "127.0.0.1", group=middleware.__class__.__name__)
-        await rap_client.raw_call("remove_block_ip", "127.0.0.1", group=middleware.__class__.__name__)
-        await rap_client.raw_call("remove_allow_ip", "127.0.0.1", group=middleware.__class__.__name__)
+        await rap_client.raw_call("add_block_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
+        await rap_client.raw_call("add_allow_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
+        await rap_client.raw_call("remove_block_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
+        await rap_client.raw_call("remove_allow_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
 
     async def test_ip_block_ip_in_access_list(self, rap_server: Server) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
@@ -121,7 +121,7 @@ class TestIpBlockMiddleware:
         await middleware.start_event_handle()
         client: Client = Client()
         await client.connect()
-        assert 3 == await client.raw_call("async_sum", 1, 2)
+        assert 3 == await client.raw_call("async_sum", [1, 2])
         await client.await_close()
 
     async def test_ip_block_by_allow_ip_access(self, rap_server: Server) -> None:
@@ -148,7 +148,7 @@ class TestIpBlockMiddleware:
         await middleware.start_event_handle()
         client: Client = Client()
         await client.connect()
-        assert 3 == await client.raw_call("async_sum", 1, 2)
+        assert 3 == await client.raw_call("async_sum", [1, 2])
         await client.await_close()
 
     async def test_ip_block_by_black_ip_access(self, rap_server: Server) -> None:

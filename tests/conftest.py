@@ -1,5 +1,5 @@
 import asyncio
-from typing import AsyncGenerator, AsyncIterator
+from typing import AsyncGenerator, AsyncIterator, Iterator
 
 import pytest
 
@@ -15,6 +15,11 @@ client: Client = Client(host_list=[
 
 def sync_sum(a: int, b: int) -> int:
     pass
+
+
+@client.register()
+async def sync_gen(a: int) -> AsyncIterator[int]:
+    yield 0
 
 
 @client.register()
@@ -42,6 +47,10 @@ async def rap_server() -> AsyncGenerator[Server, None]:
     def _sync_sum(a: int, b: int) -> int:
         return a + b
 
+    def _sync_gen(a: int) -> Iterator[int]:
+        for i in range(a):
+            yield i
+
     async def _async_sum(a: int, b: int) -> int:
         await asyncio.sleep(1)  # mock io time
         return a + b
@@ -54,6 +63,7 @@ async def rap_server() -> AsyncGenerator[Server, None]:
     rpc_server.register(_sync_sum, "sync_sum")
     rpc_server.register(_async_sum, "async_sum")
     rpc_server.register(_async_gen, "async_gen")
+    rpc_server.register(_sync_gen, "sync_gen")
     server: Server = await rpc_server.create_server()
     yield server
     await rpc_server.await_closed()

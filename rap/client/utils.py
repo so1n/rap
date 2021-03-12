@@ -27,14 +27,3 @@ def raise_rap_error(exc_name: str, exc_info: str = "") -> None:
         raise RPCError(exc_info)
     else:
         raise exc(exc_info)
-
-
-def get_func_arg_type_list(func: Callable) -> List[Type]:
-    param_type_list: List[Type] = []
-
-    var_name_list: Tuple[str, ...] = func.__code__.co_varnames
-    annotation_dict: Dict[str, Type] = func.__annotations__
-    for var_name in var_name_list:
-        if var_name in annotation_dict:
-            param_type_list.append(annotation_dict[var_name])
-    return param_type_list

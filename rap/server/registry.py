@@ -22,7 +22,7 @@ class FuncModel(object):
     doc: Optional[str] = None
     name: Optional[str] = None
     arg_list: List[str] = field(default_factory=list)
-    kwarg_dict: OrderedDict[str, Any] = field(default_factory=OrderedDict)
+    kwarg_dict: OrderedDict = field(default_factory=OrderedDict)
     return_type: Optional[Type] = None
 
     def __post_init__(self) -> None:

@@ -204,7 +204,7 @@ class Client:
     async def raw_call(
         self,
         name: str,
-        arg_param: Sequence[Any],
+        arg_param: Optional[Sequence[Any]] = None,
         kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
