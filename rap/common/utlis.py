@@ -11,6 +11,7 @@ __all__ = [
     "Constant",
     "Event",
     "MISS_OBJECT",
+    "RapFunc",
     "State",
     "as_first_completed",
     "check_func_type",
@@ -50,6 +51,40 @@ class Constant(object):
     DECLARE: str = "declare"
     MSG: str = "MSG"
     DROP: str = "drop"
+
+
+class RapFunc(object):
+    """
+    Normally, a coroutine is created after calling the async function.
+     In rap, hope that when the async function is called, it will still return the normal function,
+     and the coroutine will not be generated until the await is called.
+    """
+    def __init__(self, func: Callable, raw_func: Callable):
+        self.func: Callable = func
+        self.raw_func: Callable = raw_func
+
+        self._arg_param: Sequence[Any] = []
+        self._kwargs_param: Dict[str, Any] = {}
+        self._is_rap: bool = True
+
+        self.__name__ = self.func.__name__
+
+    def __call__(self, *args: Any, **kwargs: Any) -> "RapFunc":
+        self._arg_param = args
+        self._kwargs_param = kwargs
+        return self
+
+    def __await__(self) -> Any:
+        """support await coro(x, x)"""
+        return self.func(*self._arg_param, **self._kwargs_param).__await__()
+
+    def __aiter__(self) -> Any:
+        """support async for i in coro(x, x)"""
+        return self.func(*self._arg_param, **self._kwargs_param).__aiter__()
+
+    async def __anext__(self) -> Any:
+        """support async for i in coro(x, x)"""
+        return await self.func(*self._arg_param, **self._kwargs_param).__anext__()
 
 
 class State(object):

@@ -15,7 +15,7 @@ from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError, RPCError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
-from rap.common.utlis import Constant, Event, as_first_completed
+from rap.common.utlis import Constant, Event, RapFunc, as_first_completed
 
 _session_context: ContextVar["Optional[Session]"] = ContextVar("session_context", default=None)
 __all__ = ["Session", "Transport"]
@@ -408,11 +408,14 @@ class Session(object):
 
     async def execute(
         self,
-        obj: Union[Callable, Coroutine, str],
+        obj: Union[RapFunc, Callable, Coroutine, str],
         arg_list: Optional[List] = None,
         kwarg_dict: Optional[Dict[str, Any]] = None,
     ) -> Any:
-        if asyncio.iscoroutine(obj):
+        if isinstance(obj, RapFunc):
+            obj._kwargs_param["session"] = self
+            return await obj
+        elif asyncio.iscoroutine(obj):
             assert obj.cr_frame.f_locals["self"].transport is self._transport
             obj.cr_frame.f_locals["kwargs"]["session"] = self
             return await obj

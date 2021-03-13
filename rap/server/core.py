@@ -7,7 +7,7 @@ from typing import Any, Callable, Coroutine, List, Optional, Set, Union
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import ServerError
 from rap.common.types import BASE_REQUEST_TYPE, READER_TYPE, WRITER_TYPE
-from rap.common.utlis import Constant, Event
+from rap.common.utlis import Constant, Event, RapFunc
 from rap.server.middleware.base import BaseConnMiddleware, BaseMiddleware, BaseMsgMiddleware
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
@@ -132,6 +132,9 @@ class Server(object):
         is_private: bool = False,
         doc: Optional[str] = None,
     ) -> None:
+        if isinstance(func, RapFunc):
+            func = func.raw_func
+
         self.registry.register(func, name, group=group, is_private=is_private, doc=doc)
 
     @staticmethod

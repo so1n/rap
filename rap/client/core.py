@@ -7,7 +7,7 @@ from rap.client.processor.base import BaseProcessor
 from rap.client.transport.channel import Channel
 from rap.client.transport.transport import Session, Transport
 from rap.common.types import is_type
-from rap.common.utlis import check_func_type
+from rap.common.utlis import RapFunc, check_func_type
 
 __all__ = ["Client"]
 CHANNEL_F = Callable[[Channel], Any]
@@ -149,10 +149,8 @@ class Client:
             session: Optional[Session] = kwargs.pop("session") if "session" in kwargs else None
             return await self.raw_call(name, args, kwarg_param=kwargs, group=group, session=session)
 
-        if enable_type_check:
-            return type_check_wrapper
-        else:
-            return wrapper
+        new_func: Callable = type_check_wrapper if enable_type_check else wrapper
+        return RapFunc(new_func, func)
 
     def _async_gen_register(
         self, func: Callable, group: Optional[str], name: str = "", enable_type_check: bool = True
@@ -182,10 +180,8 @@ class Client:
                 async for result in async_iterator:
                     yield result
 
-        if enable_type_check:
-            return type_check_wrapper
-        else:
-            return wrapper
+        new_func: Callable = type_check_wrapper if enable_type_check else wrapper
+        return RapFunc(new_func, func)
 
     def _async_channel_register(self, func: CHANNEL_F, group: Optional[str], name: str = "") -> CHANNEL_F:
         """Decoration channel function"""
@@ -196,7 +192,7 @@ class Client:
             async with self.transport.channel(name, group) as channel:
                 return await func(channel)
 
-        return wrapper
+        return RapFunc(wrapper, func)
 
     ###################
     # client base api #
