@@ -140,12 +140,9 @@ class TestRegister:
 
         @rap_client.register()
         async def demo1(a: int, b: int) -> str:
-            pass
-
-        async def _demo1(a: int, b: int) -> int:
             return a + b
 
-        rap_server.register(_demo1, name="demo1")
+        rap_server.register(demo1)
         with pytest.raises(TypeError):
             await demo1(1, '1')
 

@@ -1,5 +1,5 @@
 import inspect
-from typing import Callable, Dict, List, Optional, Tuple, Type
+from typing import Dict, Optional, Type
 
 from rap.common import exceptions as rap_exc
 from rap.common.exceptions import RPCError
