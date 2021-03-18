@@ -1,8 +1,8 @@
 import pytest
 
 from rap.client import Client
-from rap.server import Server
 from rap.common.exceptions import FuncNotFoundError
+from rap.server import Server
 
 pytestmark = pytest.mark.asyncio
 

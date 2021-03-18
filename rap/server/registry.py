@@ -4,12 +4,12 @@ import logging
 import os
 from collections import OrderedDict
 from dataclasses import dataclass, field
+from types import FunctionType
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 from rap.common.channel import BaseChannel
 from rap.common.exceptions import RegisteredError
 from rap.common.types import is_json_type
-from types import FunctionType
 
 
 @dataclass()

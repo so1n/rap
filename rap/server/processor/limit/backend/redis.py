@@ -138,6 +138,7 @@ else
     return tokens
 end
     """
+
     async def can_requests(self, key: str, rule: Rule, token_num: int = 1) -> bool:
         async def _can_requests() -> bool:
             now_token: int = await self._redis.eval(

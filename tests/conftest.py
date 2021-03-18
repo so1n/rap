@@ -6,11 +6,13 @@ import pytest
 from rap.client import Client
 from rap.server import Server
 
-client: Client = Client(host_list=[
-    "localhost:9000",
-    "localhost:9001",
-    "localhost:9002",
-])
+client: Client = Client(
+    host_list=[
+        "localhost:9000",
+        "localhost:9001",
+        "localhost:9002",
+    ]
+)
 
 
 def sync_sum(a: int, b: int) -> int:

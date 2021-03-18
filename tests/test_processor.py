@@ -1,24 +1,22 @@
 import pytest
-
 from aredis import StrictRedis
+
 from rap.client import Client
 from rap.common.exceptions import ServerError, TooManyRequest
-from rap.server import Server, RequestModel, ResponseModel
+from rap.server import RequestModel, ResponseModel, Server
 from rap.server.processor import limit
 from rap.server.processor.base import BaseProcessor
 
 from .conftest import async_sum
-
 
 pytestmark = pytest.mark.asyncio
 
 
 class TestLimit:
     async def test_processor_raise_rap_error(self, rap_server: Server, rap_client: Client) -> None:
-
         class TestProcessor(BaseProcessor):
             async def process_request(self, request: RequestModel) -> RequestModel:
-                raise TooManyRequest('test')
+                raise TooManyRequest("test")
 
             async def process_response(self, response: ResponseModel) -> ResponseModel:
                 return response
@@ -31,10 +29,9 @@ class TestLimit:
         assert exec_msg == "test"
 
     async def test_processor_raise_exc(self, rap_server: Server, rap_client: Client) -> None:
-
         class TestProcessor(BaseProcessor):
             async def process_request(self, request: RequestModel) -> RequestModel:
-                raise ValueError('test')
+                raise ValueError("test")
 
             async def process_response(self, response: ResponseModel) -> ResponseModel:
                 return response
@@ -71,7 +68,7 @@ class TestLimit:
         rap_server.load_processor([limit_processor])
 
         assert 0 == await limit.backend.RedisTokenBucketBackend(redis).expected_time(
-            'test', limit.Rule(second=5, max_token=1, block_time=5)
+            "test", limit.Rule(second=5, max_token=1, block_time=5)
         )
 
         assert 3 == await async_sum(1, 2)
@@ -98,13 +95,13 @@ class TestLimit:
         rap_server.load_processor([limit_processor])
 
         assert 0 == await limit.backend.RedisFixedWindowBackend(redis).expected_time(
-            'test', limit.Rule(second=5, max_token=1, block_time=5)
+            "test", limit.Rule(second=5, max_token=1, block_time=5)
         )
-        assert 3 == await rap_client.raw_call('sync_sum', [1, 2])
+        assert 3 == await rap_client.raw_call("sync_sum", [1, 2])
         with pytest.raises(TooManyRequest):
-            assert 3 == await rap_client.raw_call('sync_sum', [1, 2])
+            assert 3 == await rap_client.raw_call("sync_sum", [1, 2])
         with pytest.raises(TooManyRequest):
-            assert 3 == await rap_client.raw_call('sync_sum', [1, 2])
+            assert 3 == await rap_client.raw_call("sync_sum", [1, 2])
 
     async def test_limit_by_redis_cell_backend(self, rap_server: Server, rap_client: Client) -> None:
         def match_ip_request(request: RequestModel) -> limit.RULE_FUNC_RETURN_TYPE:
@@ -124,10 +121,10 @@ class TestLimit:
         rap_server.load_processor([limit_processor])
 
         assert 0 == await limit.backend.RedisCellBackend(redis).expected_time(
-            'test', limit.Rule(second=5, max_token=1, block_time=5)
+            "test", limit.Rule(second=5, max_token=1, block_time=5)
         )
-        assert 3 == await rap_client.raw_call('sync_sum', [1, 2])
+        assert 3 == await rap_client.raw_call("sync_sum", [1, 2])
         with pytest.raises(TooManyRequest):
-            assert 3 == await rap_client.raw_call('sync_sum', [1, 2])
+            assert 3 == await rap_client.raw_call("sync_sum", [1, 2])
         with pytest.raises(TooManyRequest):
-            assert 3 == await rap_client.raw_call('sync_sum', [1, 2])
+            assert 3 == await rap_client.raw_call("sync_sum", [1, 2])

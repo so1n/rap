@@ -1,17 +1,16 @@
 from typing import Any
+
 import pytest
 
-from rap.client import Client, Channel, Response
+from rap.client import Channel, Client, Response
 from rap.common.exceptions import FuncNotFoundError
-from rap.server import Server, ResponseModel
+from rap.server import ResponseModel, Server
 from rap.server.requests import ChannelError
-
 
 pytestmark = pytest.mark.asyncio
 
 
 class TestChannel:
-
     async def test_while_channel(self, rap_server: Server, rap_client: Client) -> None:
         @rap_client.register()
         async def async_channel(channel: Channel) -> None:
@@ -52,6 +51,7 @@ class TestChannel:
                 if cnt > 10:
                     break
                 await channel.write(body)
+
         rap_server.register(_echo_body, "echo_body")
         await echo_body()
 
@@ -72,6 +72,7 @@ class TestChannel:
                 if cnt > 10:
                     break
                 await channel.write(response.body)
+
         rap_server.register(_echo_response, "echo_response")
         await echo_response()
 

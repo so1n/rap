@@ -42,23 +42,12 @@ class BaseConnMiddleware(BaseMiddleware):
 
 
 class BaseMsgMiddleware(BaseMiddleware):
-
     async def dispatch(
-            self,
-            request: RequestModel,
-            call_id: int,
-            func: Callable,
-            param: list,
-            default_param: Dict[str, Any]
+        self, request: RequestModel, call_id: int, func: Callable, param: list, default_param: Dict[str, Any]
     ) -> Tuple[int, Any]:
         raise NotImplementedError
 
     async def call_next(
-            self,
-            request: RequestModel,
-            call_id: int,
-            func: Callable,
-            param: list,
-            default_param: Dict[str, Any]
+        self, request: RequestModel, call_id: int, func: Callable, param: list, default_param: Dict[str, Any]
     ) -> Tuple[int, Any]:
         pass

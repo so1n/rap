@@ -1,10 +1,10 @@
 import asyncio
 from typing import Any
+
 import pytest
 
 from rap.client import Client
 from rap.server import Server
-
 
 pytestmark = pytest.mark.asyncio
 
@@ -15,7 +15,7 @@ class TestPingPong:
         rap_client_write = rap_client.transport.write
 
         async def mock_write(*args: Any, **kwargs: Any) -> Any:
-            if args[0].func_name == 'pong':
+            if args[0].func_name == "pong":
                 future.set_result(True)
             return await rap_client_write(*args, **kwargs)
 
@@ -27,7 +27,7 @@ class TestPingPong:
         rap_client_write = rap_client.transport.write
 
         async def mock_write(*args: Any, **kwargs: Any) -> Any:
-            if args[0].func_name != 'pong':
+            if args[0].func_name != "pong":
                 return await rap_client_write(*args, **kwargs)
 
         rap_client.transport.write = mock_write

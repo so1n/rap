@@ -1,10 +1,23 @@
 import asyncio
 import inspect
 import logging
-import traceback
 import time
+import traceback
 from functools import partial
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Awaitable, Callable, Coroutine, Dict, Generator, List, Optional, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    AsyncGenerator,
+    Awaitable,
+    Callable,
+    Coroutine,
+    Dict,
+    Generator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 
 from rap.common.channel import BaseChannel
 from rap.common.conn import ServerConnection
@@ -66,7 +79,8 @@ class Channel(BaseChannel):
             raise ChannelError(f"channel{self.channel_id} is close")
 
         return await as_first_completed(
-            [self.queue.get()], not_cancel_future_list=[self._conn.result_future],
+            [self.queue.get()],
+            not_cancel_future_list=[self._conn.result_future],
         )
 
     async def read_body(self) -> Any:
@@ -167,7 +181,8 @@ class Request(object):
                 await self._response(ResponseModel.from_event(Event(Constant.PING_EVENT, "")))
                 try:
                     await as_first_completed(
-                        [asyncio.sleep(self._ping_sleep_time)], not_cancel_future_list=[self._conn.result_future],
+                        [asyncio.sleep(self._ping_sleep_time)],
+                        not_cancel_future_list=[self._conn.result_future],
                     )
                 except Exception as e:
                     logging.debug(f"{self._conn} ping event exit.. error:{e}")
@@ -254,12 +269,7 @@ class Request(object):
         return func_model
 
     async def _msg_handle(
-            self,
-            request: RequestModel,
-            call_id: int,
-            func: Callable,
-            param: list,
-            default_param: Dict[str, Any]
+        self, request: RequestModel, call_id: int, func: Callable, param: list, default_param: Dict[str, Any]
     ) -> Tuple[int, Any]:
         user_agent: str = request.header.get("user_agent", "None")
         try:
@@ -277,9 +287,7 @@ class Request(object):
                 if asyncio.iscoroutinefunction(func):
                     coroutine: Union[Awaitable, Coroutine] = func(*param, **default_param)
                 else:
-                    coroutine = get_event_loop().run_in_executor(
-                        None, partial(func, *param, **default_param)
-                    )
+                    coroutine = get_event_loop().run_in_executor(None, partial(func, *param, **default_param))
 
                 try:
                     result = await asyncio.wait_for(coroutine, self._run_timeout)
@@ -326,7 +334,7 @@ class Request(object):
             response.set_exception(
                 ParseError(
                     extra_msg=f"{func_model.name} takes {len(func_model.arg_list)}"
-                              f" positional arguments but {len(param)} were given"
+                    f" positional arguments but {len(param)} were given"
                 )
             )
             return response
@@ -336,7 +344,7 @@ class Request(object):
             response.set_exception(
                 ParseError(
                     extra_msg=f"{func_model.name} can not find default "
-                              f"param name:{kwarg_param_set.difference(fun_kwarg_set)}"
+                    f"param name:{kwarg_param_set.difference(fun_kwarg_set)}"
                 )
             )
             return response

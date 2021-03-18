@@ -6,8 +6,22 @@
  - Feature: client support HA strategy
  - Feature: client support load balance
  - Feature: server HA middleware
- 
-### 0.5.3.6[Now]
+
+### 0.5.3.7[Now] 
+ - description: 
+ - Feature: add limit processor
+ - Feature: Channel support group
+ - Feature: func type check
+ - Feature: support kwargs param
+ - Fix: Client session.execute not execute coroutine bug
+ - Fix: can not register asyncgen func
+ - Refactor: server response api
+ - Refactor: improvements 'as_first_complete' func and conn result_future
+ - Remove: remove redis depend by server
+ - Test: add test and support coverage 90%+
+ - Style: add mypy
+
+### 0.5.3.6
  - Fix: client crypto memory bug
  - Feature: server support register private func   
  - Feature: client register support alias & group

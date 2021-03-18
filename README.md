@@ -66,7 +66,7 @@ async def demo(): pass
 example: 
 ```Python
 import asyncio
-from typing import AsyncIterator 
+from typing import AsyncIterator
 
 from rap.client import Client
 
@@ -186,6 +186,7 @@ async def demo2(a: int, b: int) -> int: pass
 
 ```Python
 from typing import AsyncIterator
+
 from rap.client import Client
 
 client = Client()

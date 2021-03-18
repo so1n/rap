@@ -75,10 +75,7 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
         self.register(self.get_info)
 
     def get_info(self) -> Dict[str, int]:
-        return {
-            "ip_max_conn": self._ip_max_conn,
-            "timeout": self._timeout
-        }
+        return {"ip_max_conn": self._ip_max_conn, "timeout": self._timeout}
 
     def modify_max_ip_max_conn(self, ip_max: int) -> None:
         self._ip_max_conn = ip_max

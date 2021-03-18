@@ -1,6 +1,6 @@
 import inspect
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type
 
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
@@ -164,7 +164,7 @@ class Client:
             session: Optional[Session] = kwargs.pop("session") if "session" in kwargs else None
             check_func_type(func, args, kwargs)
             async with AsyncIteratorCall(
-                    name, self, args, kwarg_param=kwargs, group=group, session=session
+                name, self, args, kwarg_param=kwargs, group=group, session=session
             ) as async_iterator:
                 async for result in async_iterator:
                     if not is_type(return_type, type(result)):
@@ -175,7 +175,7 @@ class Client:
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             session: Optional[Session] = kwargs.pop("session") if "session" in kwargs else None
             async with AsyncIteratorCall(
-                    name, self, args, kwarg_param=kwargs, group=group, session=session
+                name, self, args, kwarg_param=kwargs, group=group, session=session
             ) as async_iterator:
                 async for result in async_iterator:
                     yield result
@@ -236,12 +236,7 @@ class Client:
         session: conn session
         """
         return await self.raw_call(
-            func.__name__,
-            arg_param,
-            kwarg_param=kwarg_param,
-            group=group,
-            header=header,
-            session=session
+            func.__name__, arg_param, kwarg_param=kwarg_param, group=group, header=header, session=session
         )
 
     async def iterator_call(
@@ -267,7 +262,7 @@ class Client:
                 yield result
 
     def register(
-            self, name: str = "", group: Optional[str] = None, enable_type_check: bool = True
+        self, name: str = "", group: Optional[str] = None, enable_type_check: bool = True
     ) -> Callable[[Callable], Callable]:
         """Using this method to decorate a fake function can help you use it better.
         (such as ide completion, ide reconstruction and type hints)

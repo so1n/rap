@@ -9,12 +9,7 @@ from rap.server.model import RequestModel
 
 class AccessMsgMiddleware(BaseMsgMiddleware):
     async def dispatch(
-            self,
-            request: RequestModel,
-            call_id: int,
-            func: Callable,
-            param: list,
-            default_param: Dict[str, Any]
+        self, request: RequestModel, call_id: int, func: Callable, param: list, default_param: Dict[str, Any]
     ) -> Tuple[int, Any]:
         start_time: float = time.time()
         status: bool = False

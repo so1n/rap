@@ -1,4 +1,5 @@
 from abc import ABCMeta, abstractmethod
+
 from rap.client.model import Request, Response
 
 

@@ -4,8 +4,8 @@ import random
 import uuid
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Sequence, Tuple, Type, Union
 from types import FunctionType
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
@@ -287,7 +287,7 @@ class Transport(object):
             Constant.MSG_REQUEST,
             func_name,
             {"call_id": call_id, "param": arg_param, "default_param": kwarg_param},
-            group=group
+            group=group,
         )
         if header:
             request.header.update(header)
@@ -385,19 +385,15 @@ class Session(object):
         return self._conn
 
     async def request(
-            self, name: str,
-            arg_param: Sequence[Any],
-            kwarg_param: Optional[Dict[str, Any]] = None,
-            call_id: int = -1,
-            header: Optional[dict] = None
+        self,
+        name: str,
+        arg_param: Sequence[Any],
+        kwarg_param: Optional[Dict[str, Any]] = None,
+        call_id: int = -1,
+        header: Optional[dict] = None,
     ) -> Any:
         return await self._transport.request(
-            name,
-            arg_param,
-            kwarg_param=kwarg_param,
-            call_id=call_id,
-            header=header,
-            session=self
+            name, arg_param, kwarg_param=kwarg_param, call_id=call_id, header=header, session=self
         )
 
     async def write(self, request: Request, msg_id: int) -> None:
