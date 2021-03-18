@@ -64,7 +64,8 @@ class Channel(BaseChannel):
         if not self._session.conn:
             raise ConnectionError("connection already close")
         response: Response = await as_first_completed(
-            [self._read(self.channel_id)], not_cancel_future_list=[self._session.conn.result_future],
+            [self._read(self.channel_id)],
+            not_cancel_future_list=[self._session.conn.result_future],
         )
 
         if response.header.get("channel_life_cycle") == Constant.DROP:

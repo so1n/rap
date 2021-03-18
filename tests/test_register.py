@@ -21,10 +21,11 @@ class TestRegister:
         with pytest.raises(RegisteredError) as e:
             registry.register(pytest)
         exec_msg = e.value.args[0]
-        assert exec_msg == 'func must be func or method'
+        assert exec_msg == "func must be func or method"
 
     async def test_not_return_annotation(self) -> None:
-        def demo(): pass
+        def demo():
+            pass
 
         with pytest.raises(RegisteredError) as e:
             registry.register(demo)
@@ -32,7 +33,8 @@ class TestRegister:
         exec_msg = e.value.args[0]
         assert exec_msg == f"{demo.__name__} must use TypeHints"
 
-        def demo1() -> RegistryManager: pass
+        def demo1() -> RegistryManager:
+            pass
 
         with pytest.raises(RegisteredError) as e:
             registry.register(demo1)
@@ -41,7 +43,8 @@ class TestRegister:
         assert exec_msg == f"{demo1.__name__} return type:{RegistryManager} is not json type"
 
     async def test_param_type(self) -> None:
-        def demo(a) -> None: pass
+        def demo(a) -> None:
+            pass
 
         with pytest.raises(RegisteredError) as e:
             registry.register(demo)
@@ -49,7 +52,8 @@ class TestRegister:
         exec_msg = e.value.args[0]
         assert exec_msg == f"{demo.__name__} param:a must use TypeHints"
 
-        def demo1(a: RegistryManager) -> None: pass
+        def demo1(a: RegistryManager) -> None:
+            pass
 
         with pytest.raises(RegisteredError) as e:
             registry.register(demo1)
@@ -58,7 +62,8 @@ class TestRegister:
         assert exec_msg == f"{demo1.__name__} param:a type:{RegistryManager} is not json type"
 
     async def test_repeat_register(self) -> None:
-        def demo() -> None: pass
+        def demo() -> None:
+            pass
 
         registry.register(demo)
 
@@ -68,7 +73,6 @@ class TestRegister:
         assert exec_msg == "Name: demo has already been used"
 
     async def test_reload_module(self, rap_server: Server, rap_client: Client) -> None:
-
         @rap_client.register()
         async def reload_sum_num(a: int, b: int) -> int:
             pass
@@ -80,49 +84,38 @@ class TestRegister:
 
         assert 3 == await reload_sum_num(1, 2)
         await rap_client.raw_call(
-            'reload',
-            ['tests.test_register', 'new_reload_sum'],
+            "reload",
+            ["tests.test_register", "new_reload_sum"],
             kwarg_param={"name": "reload_sum_num"},
-            group='registry'
+            group="registry",
         )
         assert 4 == await reload_sum_num(1, 2)
 
         with pytest.raises(RegisteredError) as e:
             await rap_client.raw_call(
-                'reload',
-                ['tests.test_register', 'new_reload_sum'],
+                "reload",
+                ["tests.test_register", "new_reload_sum"],
                 kwarg_param={"name": "load", "group": "registry"},
-                group='registry'
+                group="registry",
             )
         exec_msg: str = e.value.args[0]
         assert exec_msg.endswith("private func can not reload")
 
         with pytest.raises(RegisteredError) as e:
             await rap_client.raw_call(
-                'reload',
-                ['tests.test_register', 'new_reload_sum'],
-                kwarg_param={"name": "load"},
-                group='registry'
+                "reload", ["tests.test_register", "new_reload_sum"], kwarg_param={"name": "load"}, group="registry"
             )
         exec_msg = e.value.args[0]
         assert "not in group" in exec_msg
 
     async def test_load_error_fun(self, rap_server: Server, rap_client: Client) -> None:
         with pytest.raises(RegisteredError) as e:
-            await rap_client.raw_call(
-                "load",
-                ["tests.test_register", "fail_reload_demo"],
-                group='registry'
-            )
+            await rap_client.raw_call("load", ["tests.test_register", "fail_reload_demo"], group="registry")
         exec_msg: str = e.value.args[0]
         assert exec_msg.endswith("is not a callable object")
 
     async def test_load_fun(self, rap_server: Server, rap_client: Client) -> None:
-        await rap_client.raw_call(
-            "load",
-            ["tests.test_register", "new_reload_sum"],
-            group='registry'
-        )
+        await rap_client.raw_call("load", ["tests.test_register", "new_reload_sum"], group="registry")
         assert 4 == await rap_client.raw_call("new_reload_sum", [1, 2])
 
         with pytest.raises(RegisteredError) as e:
@@ -131,20 +124,20 @@ class TestRegister:
         assert "already exists in group " in exec_msg
 
     async def test_register_func_error(self, rap_server: Server, rap_client: Client) -> None:
-        def test_func() -> None: pass
+        def test_func() -> None:
+            pass
 
         with pytest.raises(TypeError):
             rap_client.register()(test_func)
 
     async def test_register_func_check_type_error_in_runtime(self, rap_server: Server, rap_client: Client) -> None:
-
         @rap_client.register()
         async def demo1(a: int, b: int) -> str:
             return a + b
 
         rap_server.register(demo1)
         with pytest.raises(TypeError):
-            await demo1(1, '1')
+            await demo1(1, "1")
 
         with pytest.raises(RuntimeError):
             await demo1(1, 1)
@@ -159,7 +152,7 @@ class TestRegister:
 
         rap_server.register(_demo1, name="demo1")
         with pytest.raises(ParseError) as e:
-            await demo1(1, '1')
+            await demo1(1, "1")
         exec_msg = e.value.args[0]
         assert exec_msg == "Parse error. 1 type must: <class 'int'>"
 
@@ -174,13 +167,12 @@ class TestRegister:
 
         rap_server.register(_demo1, name="demo1")
         with pytest.raises(TypeError):
-            await demo1('1')
+            await demo1("1")
 
         with pytest.raises(RuntimeError):
             await demo1(10)
 
     async def test_register_gen_func_no_enable_check_type(self, rap_server: Server, rap_client: Client) -> None:
-
         @rap_client.register(enable_type_check=False)
         async def demo1(a: int) -> AsyncIterator[str]:
             pass
@@ -191,7 +183,7 @@ class TestRegister:
 
         rap_server.register(_demo1, name="demo1")
         with pytest.raises(ParseError) as e:
-            await demo1('1')
+            await demo1("1")
 
         exec_msg = e.value.args[0]
         assert exec_msg == "Parse error. 1 type must: <class 'int'>"

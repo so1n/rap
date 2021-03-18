@@ -1,14 +1,14 @@
 import asyncio
-import pytest
 from typing import Any
 
+import pytest
 from aredis import StrictRedis
+
 from rap.client import Client
 from rap.server import Server
 from rap.server.middleware.conn.block import IpBlockMiddleware
 from rap.server.middleware.conn.conn_limit import ConnLimitMiddleware, IpMaxConnMiddleware
-from rap.server.middleware.msg.access import AccessMsgMiddleware 
-
+from rap.server.middleware.msg.access import AccessMsgMiddleware
 
 pytestmark = pytest.mark.asyncio
 
@@ -53,8 +53,8 @@ class TestConnLimitMiddleware:
         assert {
             "conn_count": middleware._conn_count,
             "max_conn": 10,
-            "release_timestamp": 1_600_000_000
-               } == await rap_client.raw_call("get_conn_limit_info", group=middleware.__class__.__name__)
+            "release_timestamp": 1_600_000_000,
+        } == await rap_client.raw_call("get_conn_limit_info", group=middleware.__class__.__name__)
 
 
 class TestAccessMsgMiddleware:
@@ -75,10 +75,9 @@ class TestIpMaxConnMiddleware:
         assert middleware._ip_max_conn == 10
         await rap_client.raw_call("modify_ip_max_timeout", [10], group=middleware.__class__.__name__)
         assert middleware._timeout == 10
-        assert {
-            "ip_max_conn": 10,
-            "timeout": 10
-        } == await rap_client.raw_call("get_info", group=middleware.__class__.__name__)
+        assert {"ip_max_conn": 10, "timeout": 10} == await rap_client.raw_call(
+            "get_info", group=middleware.__class__.__name__
+        )
 
     async def test_ip_max_conn(self, rap_server: Server) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")

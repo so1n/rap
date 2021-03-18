@@ -1,7 +1,8 @@
 import time
-import pytest
 
+import pytest
 from aredis import StrictRedis
+
 from rap.client import Client
 from rap.client.processor import CryptoProcessor
 from rap.common.crypto import Crypto
@@ -17,7 +18,7 @@ pytestmark = pytest.mark.asyncio
 class TestSecret:
     def test_error_key_length(self) -> None:
         with pytest.raises(ValueError) as e:
-            Crypto('demo')
+            Crypto("demo")
 
         exec_msg: str = e.value.args[0]
         assert exec_msg.endswith("The length of the key must be 16, key content:demo")
@@ -60,6 +61,3 @@ class TestSecret:
             "load_aes_key_dict", [{"test1": "1234567890123456"}], group=middleware.__class__.__name__
         )
         await rap_client.raw_call("remove_aes", ["test1"], group=middleware.__class__.__name__)
-
-
-

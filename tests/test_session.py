@@ -1,11 +1,13 @@
-import pytest
 from typing import AsyncIterator
+
+import pytest
+
 from rap.client import Client, Request, Response
 from rap.client.processor import BaseProcessor
-from rap.server import Server
 from rap.common.utlis import Constant
-from .conftest import async_sum, async_gen, sync_gen
+from rap.server import Server
 
+from .conftest import async_gen, async_sum, sync_gen
 
 pytestmark = pytest.mark.asyncio
 
@@ -82,9 +84,9 @@ class TestSession:
 
         async def async_gen(a: int) -> AsyncIterator[int]:
             yield 0
+
         async for i in rap_client.iterator_call(async_gen, [10]):
             print(f"async gen result:{i}")
 
         assert len(session_processor._request_id_set) == 1
         assert len(session_processor._response_id_set) == 1
-

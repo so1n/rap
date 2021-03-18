@@ -6,7 +6,6 @@ from typing import Dict, List, Tuple, Union
 from rap.client import Client
 from rap.client.processor import CryptoProcessor
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--secret_key", default=None, help="conn server secret key")

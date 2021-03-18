@@ -5,7 +5,7 @@ import string
 import sys
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Coroutine, Dict, List, Union, Sequence
+from typing import Any, Callable, Coroutine, Dict, List, Sequence, Union
 
 __all__ = [
     "Constant",
@@ -59,6 +59,7 @@ class RapFunc(object):
      In rap, hope that when the async function is called, it will still return the normal function,
      and the coroutine will not be generated until the await is called.
     """
+
     def __init__(self, func: Callable, raw_func: Callable):
         self.func: Callable = func
         self.raw_func: Callable = raw_func
@@ -81,10 +82,6 @@ class RapFunc(object):
     def __aiter__(self) -> Any:
         """support async for i in coro(x, x)"""
         return self.func(*self._arg_param, **self._kwargs_param).__aiter__()
-
-    async def __anext__(self) -> Any:
-        """support async for i in coro(x, x)"""
-        return await self.func(*self._arg_param, **self._kwargs_param).__anext__()
 
 
 class State(object):

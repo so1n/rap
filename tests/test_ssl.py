@@ -1,5 +1,7 @@
 from typing import AsyncGenerator
+
 import pytest
+
 from rap.client import Client
 from rap.server import Server
 
@@ -26,10 +28,10 @@ async def ssl_server() -> AsyncGenerator[Server, None]:
         return a + b
 
     rpc_server = Server(
-            # enable ssl
-            ssl_crt_path="./tests/rap_ssl.crt",
-            ssl_key_path="./tests/rap_ssl.key",
-        )
+        # enable ssl
+        ssl_crt_path="./tests/rap_ssl.crt",
+        ssl_key_path="./tests/rap_ssl.key",
+    )
     rpc_server.register(_sync_sum, "sync_sum")
     await rpc_server.create_server()
     yield rpc_server

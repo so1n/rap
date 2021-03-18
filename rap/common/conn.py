@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 
 import msgpack  # type: ignore
 
-from rap.common.types import READER_TYPE, UNPACKER_TYPE, WRITER_TYPE, BASE_RESPONSE_TYPE
+from rap.common.types import BASE_RESPONSE_TYPE, READER_TYPE, UNPACKER_TYPE, WRITER_TYPE
 from rap.common.utlis import Constant
 
 __all__ = ["Connection", "ServerConnection"]

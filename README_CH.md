@@ -15,7 +15,7 @@ pip install rap
 ## 服务端 
 ```Python
 import asyncio
-from typing import AsyncIterator 
+from typing import AsyncIterator
 
 from rap.server import Server
 
@@ -61,7 +61,7 @@ async def demo(): pass
 快速上手例子:
 ```Python
 import asyncio
-from typing import AsyncIterator 
+from typing import AsyncIterator
 
 from rap.client import Client
 
@@ -113,7 +113,7 @@ asyncio.run(main())
 此外,注册时可以设置`is_private`为True,设置后的函数只能被本机的rap.client调用.
 ```Python
 import asyncio
-from typing import AsyncIterator 
+from typing import AsyncIterator
 
 from rap.server import Server
 
@@ -145,7 +145,7 @@ server.register(demo2, group='root', is_private=True)  # 注册并设定要注�
 可以让调用者像调用普通函数一样去调用,同时因为TypeHint的特性,可以利用现有的工具对函数进行检查.
 注意: 使用`client.register`时, 一定要使用`async def ...`.
 ```Python
-from typing import AsyncIterator 
+from typing import AsyncIterator
 
 from rap.client import Client
 
@@ -343,7 +343,6 @@ server.load_stop_event([mock_stop()])
 from rap.server import Server
 from rap.server.middleware import AccessMsgMiddleware, ConnLimitMiddleware
 
-
 rpc_server = Server()
 rpc_server.load_middleware([ConnLimitMiddleware(), AccessMsgMiddleware()])
 ```
@@ -367,9 +366,9 @@ client.load_processor([CryptoProcessor('key_id', 'xxxxxxxxxxxxxxxx')])
 `rap.server`引入processor方法
 ```Python
 from aredis import StrictRedis
+
 from rap.server import Server
 from rap.server.processor import CryptoProcessor
-
 
 redis: StrictRedis = StrictRedis("redis://localhost")
 server = Server()
@@ -397,9 +396,9 @@ client.load_processor([CryptoProcessor('demo_id', 'xxxxxxxxxxxxxxxx', timeout=60
 服务端示例:
 ```Python
 from aredis import StrictRedis
+
 from rap.server import Server
 from rap.server.processor import CryptoProcessor
-
 
 redis: StrictRedis = StrictRedis("redis://localhost")
 server = Server()
@@ -412,9 +411,9 @@ server.load_processor([CryptoProcessor({"demo_id": "xxxxxxxxxxxxxxxx"}, redis, t
 仅限服务端使用,可以限制服务端的最大链接数,超过设定值则不会处理新的请求
 ```Python
 from aredis import StrictRedis
+
 from rap.server import Server
 from rap.server.middleware import ConnLimitMiddleware, IpMaxConnMiddleware
-
 
 redis: StrictRedis = StrictRedis("redis://localhost")
 server = Server()
@@ -433,9 +432,9 @@ server.load_middleware(
 支持限制单个ip或者整个网段的ip, 同时支持白名单和黑名单模式,如果启用白名单,则默认禁用黑名单模式
 ```Python
 from aredis import StrictRedis
+
 from rap.server import Server
 from rap.server.middleware import IpBlockMiddleware
-
 
 redis: StrictRedis = StrictRedis("redis://localhost")
 server = Server()

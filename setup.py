@@ -10,7 +10,7 @@ with open("requirements.txt") as f:
 
 setuptools.setup(
     name="rap",
-    version="0.5.3.6",
+    version="0.5.3.7",
     author="so1n",
     author_email="so1n897046026@gmail.com",
     description="rap(par[::-1]) is advanced and fast python async rpc",
