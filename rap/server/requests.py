@@ -66,8 +66,8 @@ class Channel(BaseChannel):
         self._conn: ServerConnection = conn
         self.queue: asyncio.Queue = asyncio.Queue()
         self.channel_id: str = channel_id
-        self._is_close: bool = False
-        self.future: Optional[asyncio.Future] = None
+        self.func_future: Optional[asyncio.Future] = None
+        self._channel_future: asyncio.Future = asyncio.Future()
 
     async def write(self, body: Any) -> None:
         if self.is_close:
@@ -77,10 +77,9 @@ class Channel(BaseChannel):
     async def read(self) -> ResponseModel:
         if self.is_close:
             raise ChannelError(f"channel{self.channel_id} is close")
-
         return await as_first_completed(
             [self.queue.get()],
-            not_cancel_future_list=[self._conn.result_future],
+            not_cancel_future_list=[self._conn.result_future, self._channel_future],
         )
 
     async def read_body(self) -> Any:
@@ -88,14 +87,14 @@ class Channel(BaseChannel):
         return response.body
 
     async def close(self) -> None:
-        if self._is_close:
+        if self.is_close:
             logging.debug("already close channel %s", self.channel_id)
             return
-        self._is_close = True
+        self.set_finish(f"channel {self.channel_id} is close")
         if not self._conn.is_closed():
             await self._write(None, {"channel_life_cycle": Constant.DROP})
-        if self.future and not self.future.cancelled():
-            self.future.cancel()
+        if self.func_future and not self.func_future.cancelled():
+            self.func_future.cancel()
         self._close()
 
 
@@ -241,8 +240,8 @@ class Request(object):
             def future_done_callback(future: asyncio.Future) -> None:
                 logging.debug("channel:%s future status:%s" % (channel_id, future.done()))
 
-            channel.future = asyncio.ensure_future(channel_func())
-            channel.future.add_done_callback(future_done_callback)
+            channel.func_future = asyncio.ensure_future(channel_func())
+            channel.func_future.add_done_callback(future_done_callback)
 
             self._channel_dict[channel_id] = channel
             response.header = {"channel_id": channel_id, "channel_life_cycle": Constant.DECLARE}

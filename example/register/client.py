@@ -11,8 +11,8 @@ def sync_sum(a: int, b: int) -> int:
 
 
 # in register, must use async def...
-@client.register()
-async def sync_sum(a: int, b: int) -> int:
+@client.register(name="sync_sum")
+async def alias_sync_sum(a: int, b: int) -> int:
     pass
 
 
@@ -37,7 +37,7 @@ async def main() -> None:
     # use decorator, client will auto register `sync_sum` func,
     # when you call the decorated function,
     # the action(await sync_sum(1, 3)) is like await client.raw_call('sync_sum', 1, 3)
-    print(f"decorator result: {await sync_sum(1, 3)}")
+    print(f"decorator result: {await alias_sync_sum(1, 3)}")
     print(f"decorator result: {await default_param(1)}")
     async_gen_result: list = []
     async for i in async_gen(10):
