@@ -36,17 +36,19 @@ class Channel(BaseChannel):
         self._read: Callable[[str], Coroutine[Any, Any, Response]] = read
         self._write: Callable[[Request, "Session"], Coroutine[Any, Any, None]] = write
         self._close: Callable[[str], Coroutine[Any, Any, Any]] = close
-        self._is_close: bool = True
+        self._channel_future: asyncio.Future = asyncio.Future()
+        self._channel_future.set_result(True)
 
     async def create(self) -> None:
         """create and init channel, create session and listen conn exc"""
-        if not self._is_close:
+        if not self.is_close:
             raise ChannelError("channel already create")
 
         # init channel data structure
         self._session.create()
         await self._create(self.channel_id)
-        self._is_close = False
+        self._channel_future = asyncio.Future()
+        self._session.conn.result_future.add_done_callback(lambda f: self.set_finish("channel is close"))
 
         # init with server
         life_cycle: str = Constant.DECLARE
@@ -59,24 +61,28 @@ class Channel(BaseChannel):
         """base read response msg from channel conn
         When a drop message is received or the channel is closed, will raise `ChannelError`
         """
-        if self._is_close:
+        if self.is_close:
             raise ChannelError(f"channel is closed")
-        if not self._session.conn:
-            raise ConnectionError("connection already close")
-        response: Response = await as_first_completed(
-            [self._read(self.channel_id)],
-            not_cancel_future_list=[self._session.conn.result_future],
-        )
+
+        try:
+            response: Response = await as_first_completed(
+                [self._read(self.channel_id)],
+                not_cancel_future_list=[self._channel_future],
+            )
+        except Exception as e:
+            self.set_finish(str(e))
+            raise e
 
         if response.header.get("channel_life_cycle") == Constant.DROP:
-            self._is_close = True
             await self._close(self.channel_id)
-            raise ChannelError("recv drop event, close channel")
+            msg: str = "recv drop event, close channel"
+            self.set_finish(msg)
+            raise ChannelError(msg)
         return response
 
     async def _base_write(self, body: Any, life_cycle: str) -> None:
         """base send body to channel"""
-        if self._is_close:
+        if self.is_close:
             raise ChannelError(f"channel is closed")
         request: Request = Request(
             Constant.CHANNEL_REQUEST,
@@ -102,7 +108,8 @@ class Channel(BaseChannel):
 
     async def close(self) -> None:
         """Actively send a close message and close the channel"""
-        if self._is_close:
+        if self.is_close:
+            await self._channel_future
             return
         life_cycle: str = Constant.DROP
         await self._base_write(None, life_cycle)

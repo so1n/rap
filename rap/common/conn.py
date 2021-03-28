@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import ssl
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 import msgpack  # type: ignore
 
@@ -27,7 +27,7 @@ class BaseConnection:
     async def write(self, data: tuple, timeout: Optional[int] = None) -> None:
         if not self._writer or self._is_closed:
             raise ConnectionError("connection has not been created")
-        logging.debug("sending %s to %s", data, self.peer_tuple)
+        logging.debug("write %s to %s", data, self.peer_tuple)
         self._writer.write(msgpack.packb(data, **self._pack_param))
         timeout = timeout if timeout else self._timeout
         await asyncio.wait_for(self._writer.drain(), timeout)
@@ -37,19 +37,22 @@ class BaseConnection:
             raise ConnectionError("connection has not been created")
         try:
             try:
-                return next(self._unpacker)
+                data: Any = next(self._unpacker)
+                logging.debug(f"read %s from %s", data, self.peer_tuple)
+                return data
             except StopIteration:
                 pass
 
             timeout = timeout if timeout else self._timeout
             while True:
                 data = await asyncio.wait_for(self._reader.read(Constant.SOCKET_RECV_SIZE), timeout)
-                logging.debug(f"recv data %s from %s", data, self.peer_tuple)
                 if not data:
                     raise ConnectionError(f"Connection to {self.peer_tuple} closed")
                 self._unpacker.feed(data)
                 try:
-                    return next(self._unpacker)
+                    data = next(self._unpacker)
+                    logging.debug(f"read %s from %s", data, self.peer_tuple)
+                    return data
                 except StopIteration:
                     continue
             return None
