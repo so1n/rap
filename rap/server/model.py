@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 from rap.common.exceptions import BaseRapError, ServerError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
-from rap.common.utlis import Constant, Event, State
+from rap.common.utils import Constant, Event, State
 
 
 @dataclass()

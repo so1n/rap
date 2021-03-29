@@ -5,7 +5,7 @@ from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError, ParseError
-from rap.common.utlis import Constant, gen_random_time_id
+from rap.common.utils import Constant, gen_random_time_id
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
 
@@ -105,7 +105,8 @@ class CryptoProcessor(BaseProcessor):
 
     async def process_response(self, response: ResponseModel) -> ResponseModel:
         """encrypt response body"""
-        if response.body and response.num != Constant.SERVER_ERROR_RESPONSE:
+        if response.header.get("status_code") == 200 and response.body\
+                and response.num != Constant.SERVER_ERROR_RESPONSE:
             try:
                 crypto: Crypto = response.stats.crypto
             except AttributeError:

@@ -1,8 +1,14 @@
+import asyncio
 import pytest
+from typing import Any
 
+from rap.client import Client
+from rap.common.conn import BaseConnection
 from rap.common.exceptions import RPCError, ServerError
-from rap.common.utlis import Constant, Event
+from rap.common.utils import Constant, Event
+from rap.server import Server
 from rap.server.model import ResponseModel
+from rap.server.response import Response
 
 pytestmark = pytest.mark.asyncio
 test_exc: Exception = Exception("this is test exc")
@@ -77,3 +83,15 @@ class TestServerResponse:
         response(test_rpc_exc)
         assert response.body == str(test_rpc_exc)
         assert response.header["status_code"] == RPCError.status_code
+
+    async def test_response_timeout(self, rap_server: Server, rap_client: Client, mocker: Any) -> None:
+        mock_future: asyncio.Future = asyncio.Future()
+        mocker.patch("rap.common.conn.BaseConnection.write").return_value = mock_future
+        mock_future.set_exception(asyncio.TimeoutError())
+        response: Response = Response(BaseConnection(1), 1, processor_list=[])
+
+        response_model: ResponseModel = ResponseModel()
+        response_model.set_body({"a": 1, "b": 2})
+
+        with pytest.raises(asyncio.TimeoutError):
+            await response(response_model)

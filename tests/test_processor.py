@@ -1,5 +1,5 @@
 import pytest
-from aredis import StrictRedis
+from aredis import StrictRedis  # type: ignore
 
 from rap.client import Client
 from rap.common.exceptions import ServerError, TooManyRequest
@@ -7,7 +7,7 @@ from rap.server import RequestModel, ResponseModel, Server
 from rap.server.processor import limit
 from rap.server.processor.base import BaseProcessor
 
-from .conftest import async_sum
+from .conftest import async_sum  # type: ignore
 
 pytestmark = pytest.mark.asyncio
 

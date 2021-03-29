@@ -2,7 +2,7 @@ import asyncio
 from typing import Any
 
 import pytest
-from aredis import StrictRedis
+from aredis import StrictRedis  # type: ignore
 
 from rap.client import Client
 from rap.server import Server
@@ -13,7 +13,7 @@ from rap.server.middleware.msg.access import AccessMsgMiddleware
 pytestmark = pytest.mark.asyncio
 
 
-async def mock_func(*args: Any) -> None:
+async def mock_func(self: Any) -> None:
     await asyncio.sleep(0)
 
 
@@ -29,7 +29,7 @@ class TestConnLimitMiddleware:
         rap_server.load_middleware([ConnLimitMiddleware(max_conn=0)])
 
         client: Client = Client()
-        client.transport._listen = mock_func
+        setattr(client.transport, "_listen", mock_func)
         await client.connect()
 
         for conn_model in client.transport._conn_dict.values():
@@ -84,7 +84,7 @@ class TestIpMaxConnMiddleware:
         middleware: IpMaxConnMiddleware = IpMaxConnMiddleware(redis, ip_max_conn=0)
         rap_server.load_middleware([middleware])
         client: Client = Client()
-        client.transport._listen = mock_func
+        setattr(client.transport, "_listen", mock_func)
         await client.connect()
 
         for conn_model in client.transport._conn_dict.values():
@@ -131,7 +131,7 @@ class TestIpBlockMiddleware:
         rap_server.load_middleware([middleware])
         await middleware.start_event_handle()
         client: Client = Client()
-        client.transport._listen = mock_func
+        setattr(client.transport, "_listen", mock_func)
         await client.connect()
 
         for conn_model in client.transport._conn_dict.values():
@@ -159,7 +159,7 @@ class TestIpBlockMiddleware:
         await middleware.start_event_handle()
 
         client: Client = Client()
-        client.transport._listen = mock_func
+        setattr(client.transport, "_listen", mock_func)
         await client.connect()
 
         for conn_model in client.transport._conn_dict.values():

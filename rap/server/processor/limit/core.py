@@ -2,7 +2,7 @@ import inspect
 from typing import Awaitable, Callable, List, Optional, Set, Tuple, Union
 
 from rap.common.exceptions import TooManyRequest
-from rap.common.utlis import Constant
+from rap.common.utils import Constant
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
 from rap.server.processor.limit.backend import BaseLimitBackend

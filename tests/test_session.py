@@ -4,7 +4,7 @@ import pytest
 
 from rap.client import Client, Request, Response
 from rap.client.processor import BaseProcessor
-from rap.common.utlis import Constant
+from rap.common.utils import Constant
 from rap.server import Server
 
 from .conftest import async_gen, async_sum, sync_gen

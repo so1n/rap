@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Callable, Coroutine, Optional, Tuple
 from rap.client.model import Request, Response
 from rap.common.channel import BaseChannel
 from rap.common.exceptions import ChannelError
-from rap.common.utlis import Constant, as_first_completed
+from rap.common.utils import Constant, as_first_completed
 
 if TYPE_CHECKING:
     from rap.client.transport.transport import Session
@@ -38,6 +38,7 @@ class Channel(BaseChannel):
         self._close: Callable[[str], Coroutine[Any, Any, Any]] = close
         self._channel_future: asyncio.Future = asyncio.Future()
         self._channel_future.set_result(True)
+        self._drop_msg: str = "recv drop event, close channel"
 
     async def create(self) -> None:
         """create and init channel, create session and listen conn exc"""
@@ -70,14 +71,12 @@ class Channel(BaseChannel):
                 not_cancel_future_list=[self._channel_future],
             )
         except Exception as e:
-            self.set_finish(str(e))
             raise e
 
         if response.header.get("channel_life_cycle") == Constant.DROP:
             await self._close(self.channel_id)
-            msg: str = "recv drop event, close channel"
-            self.set_finish(msg)
-            raise ChannelError(msg)
+            self.set_finish(self._drop_msg)
+            raise ChannelError(self._drop_msg)
         return response
 
     async def _base_write(self, body: Any, life_cycle: str) -> None:
@@ -111,6 +110,7 @@ class Channel(BaseChannel):
         if self.is_close:
             await self._channel_future
             return
+
         life_cycle: str = Constant.DROP
         await self._base_write(None, life_cycle)
 
@@ -119,8 +119,9 @@ class Channel(BaseChannel):
                 while True:
                     response: Response = await self._base_read()
                     logging.debug("drop msg:%s" % response)
-            except ChannelError:
-                pass
+            except ChannelError as e:
+                if str(e) != self._drop_msg:
+                    raise e
 
         try:
             await asyncio.wait_for(wait_drop_response(), 3)

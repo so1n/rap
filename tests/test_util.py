@@ -5,13 +5,13 @@ import pytest
 from rap.client.processor.crypto import AutoExpireSet
 from rap.client.utils import raise_rap_error
 from rap.common.exceptions import RPCError
-from rap.common.utlis import Event, State, check_func_type, gen_new_param_coro
+from rap.common.utils import Event, State, check_func_type, gen_new_param_coro
 
 pytestmark = pytest.mark.asyncio
 
 
-async def demo(a: int, b: int) -> int:
-    return a + b
+async def demo(a: int, b: int, c: int = 0) -> int:
+    return a + b + c
 
 
 class TestUtil:
@@ -36,6 +36,13 @@ class TestUtil:
 
         value1: int = await demo(1, 3)
         new_coro = demo(1, 5)
+
+        with pytest.raises(TypeError):
+            gen_new_param_coro(1, {"d": 3})
+
+        with pytest.raises(KeyError):
+            await gen_new_param_coro(new_coro, {"d": 3})
+
         value2: int = await gen_new_param_coro(new_coro, {"b": 3})
         assert 6 == await new_coro
         assert value1 == value2
@@ -47,11 +54,14 @@ class TestUtil:
         assert exec_msg == "customer_info"
 
     def test_check_func_type(self) -> None:
-        def demo(a: int, b: str) -> int:
+        def _demo(a: int, b: str, c: str = "") -> int:
             pass
 
         with pytest.raises(TypeError):
-            check_func_type(demo, (1, 2))
+            check_func_type(_demo, (1, 2), {})
+
+        with pytest.raises(TypeError):
+            check_func_type(_demo, (1, "2"), {"c": 3})
 
     async def test_auto_expire_set(self) -> None:
         auto_expire_set: AutoExpireSet = AutoExpireSet(1.5)

@@ -15,7 +15,7 @@ from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError, RPCError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
-from rap.common.utlis import Constant, Event, RapFunc, as_first_completed
+from rap.common.utils import Constant, Event, RapFunc, as_first_completed
 
 _session_context: ContextVar["Optional[Session]"] = ContextVar("session_context", default=None)
 __all__ = ["Session", "Transport"]
@@ -130,7 +130,6 @@ class Transport(object):
         except ValueError:
             logging.error(f"recv wrong response:{response_msg}, ignore")
             return
-
         exc: Optional[Exception] = None
         try:
             for process_response in self._process_response_list:
@@ -147,6 +146,9 @@ class Transport(object):
                 self._channel_queue_dict[channel_id].put_nowait(put_exc)
             elif response.msg_id != -1 and resp_future_id in self._resp_future_dict:
                 self._resp_future_dict[resp_future_id].set_exception(put_exc)
+            elif isinstance(put_exc, rap_exc.ServerError):
+                conn.set_reader_exc(put_exc)
+                raise put_exc
             else:
                 logging.error(f"recv error msg:{response}, ignore")
 

@@ -31,7 +31,7 @@ from rap.common.exceptions import (
     ServerError,
 )
 from rap.common.types import is_type
-from rap.common.utlis import (
+from rap.common.utils import (
     Constant,
     Event,
     as_first_completed,
@@ -71,9 +71,13 @@ class Channel(BaseChannel):
         self._channel_future: asyncio.Future = asyncio.Future()
         self._conn.result_future.add_done_callback(lambda f: self.set_finish("connection already close"))
 
-        # if func future done, channel will close
-        self._func_future: asyncio.Future = asyncio.ensure_future(func(self))
-        self._func_future.add_done_callback(lambda x: self.close)
+        self._func_future: asyncio.Future = asyncio.ensure_future(self._run_func(func))
+
+    async def _run_func(self, func: Callable) -> None:
+        try:
+            await func(self)
+        finally:
+            await self.close()
 
     async def receive_request(self, request: RequestModel) -> None:
         if isinstance(request, RequestModel):
@@ -100,7 +104,6 @@ class Channel(BaseChannel):
 
     async def close(self) -> None:
         if self.is_close:
-            await self._channel_future
             logging.debug("already close channel %s", self.channel_id)
             return
         self.set_finish(f"channel {self.channel_id} is close")
@@ -168,7 +171,6 @@ class Request(object):
                 logging.exception(e)
                 response.set_exception(e)
                 return response
-
         # check type_id
         if response.num is Constant.SERVER_ERROR_RESPONSE:
             logging.error(f"parse request data: {request} from {self._conn.peer_tuple} error")
