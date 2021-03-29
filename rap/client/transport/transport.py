@@ -327,8 +327,8 @@ class Transport(object):
                 raise result
             return result
 
-        async def write(request: Request, session: "Session") -> None:
-            await self.write(request, -1, session=session)
+        async def write(request: Request, _session: "Session") -> None:
+            await self.write(request, -1, session=_session)
 
         async def close(_call_id: str) -> None:
             del self._channel_queue_dict[_call_id]
