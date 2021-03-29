@@ -4,7 +4,7 @@ import uuid
 from typing import Any, List, Optional
 
 from rap.common.conn import ServerConnection
-from rap.common.utlis import Constant
+from rap.common.utils import Constant
 from rap.server.model import ResponseModel
 from rap.server.processor.base import BaseProcessor
 

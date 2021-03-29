@@ -7,7 +7,7 @@ from rap.client.processor.base import BaseProcessor
 from rap.client.transport.channel import Channel
 from rap.client.transport.transport import Session, Transport
 from rap.common.types import is_type
-from rap.common.utlis import RapFunc, check_func_type
+from rap.common.utils import RapFunc, check_func_type
 
 __all__ = ["Client"]
 CHANNEL_F = Callable[[Channel], Any]

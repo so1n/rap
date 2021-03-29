@@ -4,7 +4,7 @@ from typing import AsyncIterator
 
 from rap.client import Client, Request, Response, Session
 from rap.client.processor import BaseProcessor
-from rap.common.utlis import Constant
+from rap.common.utils import Constant
 
 
 class CheckSessionProcessor(BaseProcessor):

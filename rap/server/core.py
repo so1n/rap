@@ -7,7 +7,7 @@ from typing import Any, Callable, Coroutine, List, Optional, Set, Union
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import ServerError
 from rap.common.types import BASE_REQUEST_TYPE, READER_TYPE, WRITER_TYPE
-from rap.common.utlis import Constant, Event, RapFunc
+from rap.common.utils import Constant, Event, RapFunc
 from rap.server.middleware.base import BaseConnMiddleware, BaseMiddleware, BaseMsgMiddleware
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
@@ -16,7 +16,6 @@ from rap.server.requests import Request
 from rap.server.response import Response
 
 __all__ = ["Server"]
-_event_type = Union[Callable, Coroutine]
 
 
 class Server(object):
@@ -31,8 +30,8 @@ class Server(object):
         backlog: int = 1024,
         ssl_crt_path: Optional[str] = None,
         ssl_key_path: Optional[str] = None,
-        start_event_list: List[_event_type] = None,
-        stop_event_list: List[_event_type] = None,
+        start_event_list: List[Callable] = None,
+        stop_event_list: List[Callable] = None,
         middleware_list: List[BaseMiddleware] = None,
         processor_list: List[BaseProcessor] = None,
     ):
@@ -54,8 +53,8 @@ class Server(object):
             self._ssl_context.check_hostname = False
             self._ssl_context.load_cert_chain(ssl_crt_path, ssl_key_path)
 
-        self._start_event_list: List[_event_type] = []
-        self._stop_event_list: List[_event_type] = []
+        self._start_event_list: List[Callable] = []
+        self._stop_event_list: List[Callable] = []
         self._middleware_list: List[BaseMiddleware] = []
         self._processor_list: List[BaseProcessor] = []
         self._depend_set: Set[Any] = set()  # Check whether any components have been re-introduced
@@ -71,7 +70,7 @@ class Server(object):
 
         self.registry: RegistryManager = RegistryManager()
 
-    def _load_event(self, event_list: List[_event_type], event: _event_type) -> None:
+    def _load_event(self, event_list: List[Callable], event: Callable) -> None:
         if not (inspect.isfunction(event) or asyncio.iscoroutine(event) or inspect.ismethod(event)):
             raise ImportError(f"{event} must be fun or coroutine, not {type(event)}")
 
@@ -79,14 +78,13 @@ class Server(object):
             self._depend_set.add(event)
         else:
             raise ImportError(f"{event} event already load")
-
         event_list.append(event)
 
-    def load_start_event(self, event_list: List[_event_type]) -> None:
+    def load_start_event(self, event_list: List[Callable]) -> None:
         for event in event_list:
             self._load_event(self._start_event_list, event)
 
-    def load_stop_event(self, event_list: List[_event_type]) -> None:
+    def load_stop_event(self, event_list: List[Callable]) -> None:
         for event in event_list:
             self._load_event(self._stop_event_list, event)
 
@@ -138,13 +136,13 @@ class Server(object):
         self.registry.register(func, name, group=group, is_private=is_private, doc=doc)
 
     @staticmethod
-    async def run_callback_list(callback_list: List[_event_type]) -> None:
+    async def run_callback_list(callback_list: List[Callable]) -> None:
         if not callback_list:
             return
         for callback in callback_list:
             if asyncio.iscoroutine(callback) or asyncio.isfuture(callback) or asyncio.iscoroutinefunction(callback):
                 await callback()
-            elif inspect.isfunction(callback):
+            else:
                 callback()
 
     async def create_server(self) -> "Server":
@@ -218,7 +216,6 @@ class Server(object):
                 break
             except Exception as e:
                 logging.error(f"recv data from {conn.peer_tuple} error:{e}, conn has been closed")
-                raise e
 
         if not conn.is_closed():
             conn.close()

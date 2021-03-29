@@ -4,7 +4,7 @@ from typing import Callable, List, Optional, Union
 from aredis import StrictRedis, StrictRedisCluster  # ignore
 
 from rap.common.conn import ServerConnection
-from rap.common.utlis import Constant, Event
+from rap.common.utils import Constant, Event
 from rap.server.middleware.base import BaseConnMiddleware
 from rap.server.model import ResponseModel
 from rap.server.response import Response

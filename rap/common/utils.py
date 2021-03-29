@@ -127,10 +127,6 @@ def _get_event_loop() -> Callable[[], asyncio.AbstractEventLoop]:
 get_event_loop = _get_event_loop()
 
 
-def gen_random_str_id(length: int = 8) -> str:
-    return "".join(random.choice(_STR_LD) for _ in range(length))
-
-
 def gen_random_time_id(length: int = 8, time_length: int = 10) -> str:
     return str(int(time.time()))[-time_length:] + "".join(random.choice(_STR_LD) for _ in range(length))
 

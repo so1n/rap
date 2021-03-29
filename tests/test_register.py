@@ -1,4 +1,4 @@
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 import pytest
 
@@ -49,7 +49,7 @@ class TestRegister:
         with pytest.raises(RegisteredError) as e:
             registry.register(demo)
 
-        exec_msg = e.value.args[0]
+        exec_msg: str = e.value.args[0]
         assert exec_msg == f"{demo.__name__} param:a must use TypeHints"
 
         def demo1(a: RegistryManager) -> None:
@@ -58,7 +58,7 @@ class TestRegister:
         with pytest.raises(RegisteredError) as e:
             registry.register(demo1)
 
-        exec_msg: str = e.value.args[0]
+        exec_msg = e.value.args[0]
         assert exec_msg == f"{demo1.__name__} param:a type:{RegistryManager} is not json type"
 
     async def test_repeat_register(self) -> None:
@@ -159,7 +159,7 @@ class TestRegister:
     async def test_register_gen_func_check_type_error_in_runtime(self, rap_server: Server, rap_client: Client) -> None:
         @rap_client.register()
         async def demo1(a: int) -> AsyncIterator[str]:
-            pass
+            yield a
 
         async def _demo1(a: int) -> AsyncIterator[int]:
             for i in range(a):
@@ -167,23 +167,28 @@ class TestRegister:
 
         rap_server.register(_demo1, name="demo1")
         with pytest.raises(TypeError):
-            await demo1("1")
+            async for i in demo1("1"):
+                print(i)
 
         with pytest.raises(RuntimeError):
-            await demo1(10)
+            async for i in demo1(10):
+                print(i)
 
     async def test_register_gen_func_no_enable_check_type(self, rap_server: Server, rap_client: Client) -> None:
         @rap_client.register(enable_type_check=False)
         async def demo1(a: int) -> AsyncIterator[str]:
-            pass
+            yield str(a)
 
         async def _demo1(a: int) -> AsyncIterator[int]:
             for i in range(a):
                 yield i
 
         rap_server.register(_demo1, name="demo1")
+        assert [0] == [i async for i in demo1(1)]
+
         with pytest.raises(ParseError) as e:
-            await demo1("1")
+            async for i in demo1("1"):
+                print(i)
 
         exec_msg = e.value.args[0]
         assert exec_msg == "Parse error. 1 type must: <class 'int'>"

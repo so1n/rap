@@ -85,7 +85,8 @@ class BaseChannel(object):
         return self._channel_future.done()
 
     def set_finish(self, msg: str = "") -> None:
-        self._channel_future.set_exception(ChannelError(msg))
+        if self._channel_future and not self._channel_future.done():
+            self._channel_future.set_exception(ChannelError(msg))
 
     #####################
     # async for support #

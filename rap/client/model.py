@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
-from rap.common.utlis import Constant, Event
+from rap.common.utils import Constant, Event
 
 
 @dataclass()

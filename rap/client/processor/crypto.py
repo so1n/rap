@@ -4,7 +4,7 @@ from typing import Dict
 from rap.client.model import Request, Response
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError
-from rap.common.utlis import gen_random_time_id, get_event_loop
+from rap.common.utils import gen_random_time_id, get_event_loop
 
 from .base import BaseProcessor
 
