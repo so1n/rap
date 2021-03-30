@@ -103,6 +103,7 @@ class Transport(object):
         except asyncio.CancelledError:
             pass
         except Exception as e:
+            conn.set_reader_exc(e)
             logging.exception(f"listen status:{self._is_close} error: {e}, close conn:{conn}")
             if not conn.is_closed():
                 await conn.await_close()
@@ -127,9 +128,10 @@ class Transport(object):
         # parse response
         try:
             response: Response = Response.from_msg(response_msg)
-        except ValueError:
-            logging.error(f"recv wrong response:{response_msg}, ignore")
+        except Exception as e:
+            logging.error(f"recv wrong response:{response_msg}, ignore error:{e}")
             return
+
         exc: Optional[Exception] = None
         try:
             for process_response in self._process_response_list:
@@ -147,7 +149,6 @@ class Transport(object):
             elif response.msg_id != -1 and resp_future_id in self._resp_future_dict:
                 self._resp_future_dict[resp_future_id].set_exception(put_exc)
             elif isinstance(put_exc, rap_exc.ServerError):
-                conn.set_reader_exc(put_exc)
                 raise put_exc
             else:
                 logging.error(f"recv error msg:{response}, ignore")
@@ -164,12 +165,13 @@ class Transport(object):
             # server event msg handle
             if response.func_name == Constant.EVENT_CLOSE_CONN:
                 event_exc: Exception = ConnectionError(f"recv close conn event, event info:{response.body}")
-                conn.set_reader_exc(event_exc)
                 raise event_exc
             elif response.func_name == Constant.PING_EVENT:
                 request: Request = Request.from_event(Event(Constant.PONG_EVENT, ""))
                 await self.write(request, -1, conn)
                 return
+            else:
+                logging.error(f"recv error event {response}")
         elif channel_id:
             # put msg to channel
             if channel_id not in self._channel_queue_dict:
