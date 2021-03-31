@@ -110,9 +110,6 @@ class Transport(object):
 
     async def _read_from_conn(self, conn: Connection) -> None:
         """recv server msg handle"""
-        if conn is None:
-            raise ConnectionError("Connection not connect")
-
         try:
             response_msg: Optional[BASE_RESPONSE_TYPE] = await conn.read(self._keep_alive_time)
             logging.debug(f"recv raw data: %s", response_msg)
@@ -415,10 +412,11 @@ class Session(object):
         if isinstance(obj, RapFunc):
             obj._kwargs_param["session"] = self
             return await obj
-        elif asyncio.iscoroutine(obj):
-            assert obj.cr_frame.f_locals["self"].transport is self._transport
-            obj.cr_frame.f_locals["kwargs"]["session"] = self
-            return await obj
+        # Has been replaced by rap func
+        # elif asyncio.iscoroutine(obj):
+        #     assert obj.cr_frame.f_locals["self"].transport is self._transport
+        #     obj.cr_frame.f_locals["kwargs"]["session"] = self
+        #     return await obj
         elif isinstance(obj, FunctionType) and arg_list:
             kwarg_dict = kwarg_dict if kwarg_dict else {}
             response: Response = await self.request(obj.__name__, arg_list, kwarg_param=kwarg_dict)
