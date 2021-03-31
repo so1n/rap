@@ -55,7 +55,6 @@ class BaseConnection:
                     return data
                 except StopIteration:
                     continue
-            return None
         except Exception as e:
             self.set_reader_exc(e)
             raise e

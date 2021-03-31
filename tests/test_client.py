@@ -3,8 +3,8 @@ import pytest
 from typing import Any
 
 from pytest_mock import MockerFixture
-from rap.client import Client, Response
-from rap.common.exceptions import RPCError, RpcRunTimeError
+from rap.client import Client, Request, Response
+from rap.common.exceptions import ChannelError, RPCError
 from rap.common.utils import Constant
 from rap.server import Server
 
@@ -137,7 +137,14 @@ class TestTransport:
                 -1,
                 'default',
                 'faker',
-                {'channel_life_cycle': 'MSG', 'channel_id': channel_id, 'version': '0.1', 'user_agent': 'Python3-0.5.3', 'request_id': '57233e1f-b153-4142-b278-29c755394394', 'status_code': 200},
+                {
+                    'channel_life_cycle': 'MSG',
+                    'channel_id': channel_id,
+                    'version': '0.1',
+                    'user_agent': 'Python3-0.5.3',
+                    'request_id': '57233e1f-b153-4142-b278-29c755394394',
+                    'status_code': 200
+                },
                 'hi!'
             )
         )
@@ -219,3 +226,15 @@ class TestTransport:
 
         exec_msg: str = e.value.args[0]
         assert exec_msg == "division by zero"
+
+    async def test_write_channel_msg_not_channel_id(self, rap_server: Server, rap_client: Client) -> None:
+        with pytest.raises(ChannelError) as e:
+            async with rap_client.session as s:
+                await rap_client.transport.write(
+                    Request(Constant.CHANNEL_REQUEST, "test", None, "default"),
+                    -1,
+                    session=s
+                )
+
+        exec_msg: str = e.value.args[0]
+        assert exec_msg == "not found channel id in header"

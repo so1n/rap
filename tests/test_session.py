@@ -42,6 +42,14 @@ class TestSession:
             async for i in async_gen(10):
                 print(f"async gen result:{i}")
 
+    async def test_no_create(self, rap_server: Server, rap_client: Client) -> None:
+
+        with pytest.raises(ConnectionError) as e:
+            print(rap_client.session.conn)
+
+        exec_msg: str = e.value.args[0]
+        assert exec_msg == "Session has not been created"
+
     async def test_param(self, rap_server: Server, rap_client: Client) -> None:
         rap_client.load_processor([check_session_processor])
         async with rap_client.session as s:
@@ -55,11 +63,25 @@ class TestSession:
 
     async def test_execute(self, rap_server: Server, rap_client: Client) -> None:
         rap_client.load_processor([check_session_processor])
+
+        def sync_sum(a: int, b: int) -> int:
+            return a+ b
+
         async with rap_client.session as s:
             check_session_processor.session_id = s.id
-            assert 3 == await s.execute(async_sum, arg_list=[1, 2])
+            # not param rap func
+            with pytest.raises(RuntimeError) as e:
+                assert 3 == await s.execute(async_sum, arg_list=[1, 2])
+
+            exec_msg: str = e.value.args[0]
+            assert exec_msg == "RapFunc has not been called"
+            # str
             assert 3 == await s.execute("sync_sum", arg_list=[1, 2])
+            # func
+            assert 3 == await s.execute(sync_sum, arg_list=[1, 2])
+            # rap func
             assert 3 == await s.execute(async_sum(1, 2))
+            # Illegal type
             with pytest.raises(TypeError):
                 await s.execute(123, arg_list=[1, 2])
 

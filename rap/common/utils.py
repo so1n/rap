@@ -66,21 +66,29 @@ class RapFunc(object):
 
         self._arg_param: Sequence[Any] = []
         self._kwargs_param: Dict[str, Any] = {}
-        self._is_rap: bool = True
+        self._is_call: bool = False
 
         self.__name__ = self.func.__name__
+
+    def _check(self) -> None:
+        if not self._is_call:
+            raise RuntimeError(f"{self.__class__.__name__} has not been called")
+        self._is_call = False
 
     def __call__(self, *args: Any, **kwargs: Any) -> "RapFunc":
         self._arg_param = args
         self._kwargs_param = kwargs
+        self._is_call = True
         return self
 
     def __await__(self) -> Any:
         """support await coro(x, x)"""
+        self._check()
         return self.func(*self._arg_param, **self._kwargs_param).__await__()
 
     def __aiter__(self) -> Any:
         """support async for i in coro(x, x)"""
+        self._check()
         return self.func(*self._arg_param, **self._kwargs_param).__aiter__()
 
 
