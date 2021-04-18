@@ -55,7 +55,7 @@ class TestSession:
         async with rap_client.session as s:
             check_session_processor.session_id = s.id
             assert 3 == await rap_client.call(async_sum, [1, 2], session=s)
-            assert 3 == await async_sum(1, 2)
+            assert 3 == await async_sum(1, 2, session=s)
 
             # async iterator will create session or reuse session
             async for i in sync_gen(10):

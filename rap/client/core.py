@@ -1,4 +1,6 @@
 import inspect
+import importlib
+import sys
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type
 
@@ -130,7 +132,7 @@ class Client:
     #####################
     def _async_register(
         self, func: Callable, group: Optional[str], name: str = "", enable_type_check: bool = True
-    ) -> Callable:
+    ) -> RapFunc:
         """Decorate normal function"""
         name = name if name else func.__name__
         return_type: Type = inspect.signature(func).return_annotation
@@ -138,8 +140,11 @@ class Client:
         @wraps(func)
         async def type_check_wrapper(*args: Any, **kwargs: Any) -> Any:
             session: Optional[Session] = kwargs.pop("session") if "session" in kwargs else None
+            header: Optional[dict] = kwargs.pop("header") if "header" in kwargs else None
             check_func_type(func, args, kwargs)
-            result: Any = await self.raw_call(name, args, kwarg_param=kwargs, group=group, session=session)
+            result: Any = await self.raw_call(
+                name, args, kwarg_param=kwargs, group=group, session=session, header=header
+            )
             if not is_type(return_type, type(result)):
                 raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
             return result
@@ -147,14 +152,15 @@ class Client:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             session: Optional[Session] = kwargs.pop("session") if "session" in kwargs else None
-            return await self.raw_call(name, args, kwarg_param=kwargs, group=group, session=session)
+            header: Optional[dict] = kwargs.pop("header") if "header" in kwargs else None
+            return await self.raw_call(name, args, kwarg_param=kwargs, group=group, session=session, header=header)
 
         new_func: Callable = type_check_wrapper if enable_type_check else wrapper
         return RapFunc(new_func, func)
 
     def _async_gen_register(
         self, func: Callable, group: Optional[str], name: str = "", enable_type_check: bool = True
-    ) -> Callable:
+    ) -> RapFunc:
         """Decoration generator function"""
         name = name if name else func.__name__
         return_type: Type = inspect.signature(func).return_annotation
@@ -162,9 +168,10 @@ class Client:
         @wraps(func)
         async def type_check_wrapper(*args: Any, **kwargs: Any) -> Any:
             session: Optional[Session] = kwargs.pop("session") if "session" in kwargs else None
+            header: Optional[dict] = kwargs.pop("header") if "header" in kwargs else None
             check_func_type(func, args, kwargs)
             async with AsyncIteratorCall(
-                name, self, args, kwarg_param=kwargs, group=group, session=session
+                name, self, args, kwarg_param=kwargs, group=group, session=session, header=header
             ) as async_iterator:
                 async for result in async_iterator:
                     if not is_type(return_type, type(result)):
@@ -174,8 +181,9 @@ class Client:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             session: Optional[Session] = kwargs.pop("session") if "session" in kwargs else None
+            header: Optional[dict] = kwargs.pop("header") if "header" in kwargs else None
             async with AsyncIteratorCall(
-                name, self, args, kwarg_param=kwargs, group=group, session=session
+                name, self, args, kwarg_param=kwargs, group=group, session=session, header=header
             ) as async_iterator:
                 async for result in async_iterator:
                     yield result
@@ -183,7 +191,7 @@ class Client:
         new_func: Callable = type_check_wrapper if enable_type_check else wrapper
         return RapFunc(new_func, func)
 
-    def _async_channel_register(self, func: CHANNEL_F, group: Optional[str], name: str = "") -> CHANNEL_F:
+    def _async_channel_register(self, func: CHANNEL_F, group: Optional[str], name: str = "") -> RapFunc:
         """Decoration channel function"""
         name = name if name else func.__name__
 
@@ -260,6 +268,30 @@ class Client:
         ) as async_iterator:
             async for result in async_iterator:
                 yield result
+    
+    def inject(
+            self, func: Callable, name: str = "", group: Optional[str] = None, enable_type_check: bool = True
+    ) -> None:
+        if isinstance(func, RapFunc):
+            raise RuntimeError(f"{func} already inject or register")
+        new_func: Callable = self.register(
+            name=name,
+            group=group,
+            enable_type_check=enable_type_check
+        )(func)
+        sys.modules[func.__module__].__setattr__(func.__name__, new_func)
+
+    @staticmethod
+    def recovery(func: RapFunc) -> Any:
+        if not isinstance(func, RapFunc):
+            raise RuntimeError(f"{func} is not {RapFunc}, which can not recovery")
+        sys.modules[func.__module__].__setattr__(func.__name__, func.raw_func)
+
+    @staticmethod
+    def get_raw_func(func: RapFunc) -> Callable:
+        if not isinstance(func, RapFunc):
+            raise TypeError(f"{func} is not {RapFunc}")
+        return func.raw_func
 
     def register(
         self, name: str = "", group: Optional[str] = None, enable_type_check: bool = True
@@ -271,7 +303,7 @@ class Client:
         group: func group, default group value is `default`
         """
 
-        def wrapper(func: Callable) -> Callable:
+        def wrapper(func: Callable) -> RapFunc:
             if not (inspect.iscoroutinefunction(func) or inspect.isasyncgenfunction(func)):
                 raise TypeError(f"func:{func.__name__} must coroutine function or async gen function")
             func_sig: inspect.Signature = inspect.signature(func)
