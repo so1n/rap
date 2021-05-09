@@ -257,7 +257,7 @@ class Transport(object):
         try:
             return await as_first_completed(
                 [asyncio.wait_for(self._resp_future_dict[resp_future_id], self._timeout)],
-                not_cancel_future_list=[conn.result_future],
+                not_cancel_future_list=[conn.conn_future],
             )
         except asyncio.TimeoutError:
             raise asyncio.TimeoutError(f"msg_id:{resp_future_id} request timeout")
@@ -354,7 +354,7 @@ class Session(object):
     def __init__(self, transport: "Transport"):
         self._transport: "Transport" = transport
         self._token: Optional[Token[Optional[Session]]] = None
-        self.id: Optional[str] = None
+        self.id: str = ""
         self._conn: Optional[Connection] = None
 
     async def __aenter__(self) -> "Session":
@@ -370,7 +370,7 @@ class Session(object):
         self._token = _session_context.set(self)
 
     def close(self) -> None:
-        self.id = None
+        self.id = ""
         self._conn = None
         if self._token:
             _session_context.reset(self._token)

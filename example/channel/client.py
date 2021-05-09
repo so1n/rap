@@ -36,7 +36,7 @@ async def echo_body(channel: Channel) -> None:
 async def echo_response(channel: Channel) -> None:
     await channel.write("hi!")
     async for response in channel.iter_response():
-        response: Response = response  # IDE cannot check
+        response: Response = response  # type: ignore  # IDE cannot check
         print(f"response: {response}")
         await channel.write(response.body)
 

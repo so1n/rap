@@ -316,5 +316,6 @@ class Client:
                 return self._async_register(func, group, name=name, enable_type_check=enable_type_check)
             elif inspect.isasyncgenfunction(func):
                 return self._async_gen_register(func, group, name=name, enable_type_check=enable_type_check)
+            raise TypeError(f"func:{func.__name__} must coroutine function or async gen function")
 
         return wrapper

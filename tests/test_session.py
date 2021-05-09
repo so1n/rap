@@ -83,7 +83,7 @@ class TestSession:
             assert 3 == await s.execute(async_sum(1, 2))
             # Illegal type
             with pytest.raises(TypeError):
-                await s.execute(123, arg_list=[1, 2])
+                await s.execute(123, arg_list=[1, 2])  # type: ignore
 
     async def test_async_iterator_call(self, rap_server: Server, rap_client: Client) -> None:
         class SessionProcessor(BaseProcessor):

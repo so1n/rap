@@ -47,9 +47,17 @@ def parse_typing(_type: Type) -> Union[List[Type[Any]], Type]:
             for i in _type.__args__:
                 if isinstance(i, list):
                     for j in i:
-                        type_list.append(parse_typing(j))
+                        value: Union[List[Type[Any]], Type] = parse_typing(j)
+                        if isinstance(value, list):
+                            type_list.extend(value)
+                        else:
+                            type_list.append(value)
                 else:
-                    type_list.append(parse_typing(i))
+                    value = parse_typing(i)
+                    if isinstance(value, list):
+                        type_list.extend(value)
+                    else:
+                        type_list.append(value)
             return type_list
         elif origin in (AsyncIterator, Iterator):
             return _type.__args__[0]

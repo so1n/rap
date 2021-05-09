@@ -36,8 +36,8 @@ class Channel(BaseChannel):
         self._read: Callable[[str], Coroutine[Any, Any, Response]] = read
         self._write: Callable[[Request, "Session"], Coroutine[Any, Any, None]] = write
         self._close: Callable[[str], Coroutine[Any, Any, Any]] = close
-        self._channel_future: asyncio.Future = asyncio.Future()
-        self._channel_future.set_result(True)
+        self._channel_conn_future: asyncio.Future = asyncio.Future()
+        self._channel_conn_future.set_result(True)
         self._drop_msg: str = "recv drop event, close channel"
 
     async def create(self) -> None:
@@ -48,8 +48,8 @@ class Channel(BaseChannel):
         # init channel data structure
         self._session.create()
         await self._create(self.channel_id)
-        self._channel_future = asyncio.Future()
-        self._session.conn.result_future.add_done_callback(lambda f: self.set_finish("channel is close"))
+        self._channel_conn_future = asyncio.Future()
+        self._session.conn.conn_future.add_done_callback(lambda f: self.set_finish("channel is close"))
 
         # init with server
         life_cycle: str = Constant.DECLARE
@@ -68,7 +68,7 @@ class Channel(BaseChannel):
         try:
             response: Response = await as_first_completed(
                 [self._read(self.channel_id)],
-                not_cancel_future_list=[self._channel_future],
+                not_cancel_future_list=[self._channel_conn_future],
             )
         except Exception as e:
             raise e
@@ -108,7 +108,7 @@ class Channel(BaseChannel):
     async def close(self) -> None:
         """Actively send a close message and close the channel"""
         if self.is_close:
-            await self._channel_future
+            await self._channel_conn_future
             return
 
         life_cycle: str = Constant.DROP

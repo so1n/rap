@@ -68,8 +68,8 @@ class Channel(BaseChannel):
         self.channel_id: str = channel_id
 
         # if conn close, channel future will done and channel not read & write
-        self._channel_future: asyncio.Future = asyncio.Future()
-        self._conn.result_future.add_done_callback(lambda f: self.set_finish("connection already close"))
+        self._channel_conn_future: asyncio.Future = asyncio.Future()
+        self._conn.conn_future.add_done_callback(lambda f: self.set_finish("connection already close"))
 
         self._func_future: asyncio.Future = asyncio.ensure_future(self._run_func(func))
 
@@ -95,7 +95,7 @@ class Channel(BaseChannel):
             raise ChannelError(f"channel{self.channel_id} is close")
         return await as_first_completed(
             [self._queue.get()],
-            not_cancel_future_list=[self._channel_future],
+            not_cancel_future_list=[self._channel_conn_future],
         )
 
     async def read_body(self) -> Any:
@@ -199,7 +199,7 @@ class Request(object):
                 try:
                     await as_first_completed(
                         [asyncio.sleep(self._ping_sleep_time)],
-                        not_cancel_future_list=[self._conn.result_future],
+                        not_cancel_future_list=[self._conn.conn_future],
                     )
                 except Exception as e:
                     logging.debug(f"{self._conn} ping event exit.. error:{e}")
@@ -267,8 +267,8 @@ class Request(object):
             raise FuncNotFoundError(extra_msg=f"name: {request.func_name}")
 
         func_model: FuncModel = self._app.registry[func_key]
-        if func_model.is_private and self._conn.peer_tuple and self._conn.peer_tuple[0] != "127.0.0.1":
-            raise FuncNotFoundError(f"No permission to call:`{request.func_name}`")
+        if func_model.is_private and and self._conn.peer_tuple[0] not in ("::1", "127.0.0.1", "localhost"):
+            raise FuncNotFoundError(f"No permission to call:`{request.func_name}`, {self._conn.peer_tuple}")
         return func_model
 
     async def _msg_handle(

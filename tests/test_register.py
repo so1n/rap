@@ -19,12 +19,12 @@ def new_reload_sum(a: int, b: int) -> int:
 class TestRegister:
     async def test_register_error_value(self) -> None:
         with pytest.raises(RegisteredError) as e:
-            registry.register(pytest)
+            registry.register(pytest)  # type: ignore
         exec_msg = e.value.args[0]
         assert exec_msg == "func must be func or method"
 
     async def test_not_return_annotation(self) -> None:
-        def demo():
+        def demo():  # type: ignore
             pass
 
         with pytest.raises(RegisteredError) as e:
@@ -43,7 +43,7 @@ class TestRegister:
         assert exec_msg == f"{demo1.__name__} return type:{RegistryManager} is not json type"
 
     async def test_param_type(self) -> None:
-        def demo(a) -> None:
+        def demo(a) -> None:  # type: ignore
             pass
 
         with pytest.raises(RegisteredError) as e:
@@ -133,11 +133,11 @@ class TestRegister:
     async def test_register_func_check_type_error_in_runtime(self, rap_server: Server, rap_client: Client) -> None:
         @rap_client.register()
         async def demo1(a: int, b: int) -> str:
-            return a + b
+            return a + b  # type: ignore
 
         rap_server.register(demo1)
         with pytest.raises(TypeError):
-            await demo1(1, "1")
+            await demo1(1, "1")  # type: ignore
 
         with pytest.raises(RuntimeError):
             await demo1(1, 1)
@@ -152,14 +152,14 @@ class TestRegister:
 
         rap_server.register(_demo1, name="demo1")
         with pytest.raises(ParseError) as e:
-            await demo1(1, "1")
+            await demo1(1, "1")  # type: ignore
         exec_msg = e.value.args[0]
         assert exec_msg == "Parse error. 1 type must: <class 'int'>"
 
     async def test_register_gen_func_check_type_error_in_runtime(self, rap_server: Server, rap_client: Client) -> None:
         @rap_client.register()
         async def demo1(a: int) -> AsyncIterator[str]:
-            yield a
+            yield a  # type: ignore
 
         async def _demo1(a: int) -> AsyncIterator[int]:
             for i in range(a):

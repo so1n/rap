@@ -23,7 +23,7 @@ class TestUtil:
         del state.demo
 
         with pytest.raises(AttributeError) as e:
-            state.demo
+            state.demo  # type: ignore
 
         exec_msg: str = e.value.args[0]
         assert exec_msg.endswith("object has no attribute 'demo'")
@@ -38,7 +38,7 @@ class TestUtil:
         new_coro = demo(1, 5)
 
         with pytest.raises(TypeError):
-            gen_new_param_coro(1, {"d": 3})
+            gen_new_param_coro(1, {"d": 3})  # type: ignore
 
         with pytest.raises(KeyError):
             await gen_new_param_coro(new_coro, {"d": 3})

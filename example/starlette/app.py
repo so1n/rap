@@ -1,4 +1,4 @@
-import uvicorn
+import uvicorn  # type: ignore
 from starlette.applications import Starlette
 from starlette.routing import Route
 
