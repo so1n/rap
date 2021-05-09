@@ -17,7 +17,6 @@ __all__ = [
     "check_func_type",
     "gen_new_param_coro",
     "gen_random_time_id",
-    "gen_random_str_id",
     "get_event_loop",
     "parse_error",
     "response_num_dict",
