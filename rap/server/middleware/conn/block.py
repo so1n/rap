@@ -1,7 +1,7 @@
 import ipaddress
-from typing import Callable, List, Optional, Union
+from typing import List, Optional, Union
 
-from aredis import StrictRedis, StrictRedisCluster  # ignore
+from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
 from rap.common.conn import ServerConnection
 from rap.common.utils import Constant, Event

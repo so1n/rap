@@ -20,7 +20,7 @@ class TestServerResponse:
     async def test_set_exc(self) -> None:
         response: ResponseModel = ResponseModel()
         with pytest.raises(TypeError):
-            response.set_exception(test_event)
+            response.set_exception(test_event)  # type: ignore
 
         response.set_exception(test_exc)
         assert response.body == str(test_exc)
@@ -40,12 +40,12 @@ class TestServerResponse:
         assert response.header["status_code"] == RPCError.status_code
 
         with pytest.raises(TypeError):
-            ResponseModel.from_exc(test_event)
+            ResponseModel.from_exc(test_event)  # type: ignore
 
     async def test_set_event(self) -> None:
         response: ResponseModel = ResponseModel()
         with pytest.raises(TypeError):
-            response.set_event(test_exc)
+            response.set_event(test_exc)  # type: ignore
 
         response.set_event(test_event)
         assert response.num == Constant.SERVER_EVENT
@@ -59,7 +59,7 @@ class TestServerResponse:
         assert response.body == test_event.event_info
 
         with pytest.raises(TypeError):
-            ResponseModel.from_event(test_exc)
+            ResponseModel.from_event(test_exc)  # type: ignore
 
     async def test_set_body(self) -> None:
         response: ResponseModel = ResponseModel()
@@ -88,7 +88,7 @@ class TestServerResponse:
         mock_future: asyncio.Future = asyncio.Future()
         mocker.patch("rap.common.conn.BaseConnection.write").return_value = mock_future
         mock_future.set_exception(asyncio.TimeoutError())
-        response: Response = Response(BaseConnection(1), 1, processor_list=[])
+        response: Response = Response(BaseConnection(1), 1, processor_list=[])  # type: ignore
 
         response_model: ResponseModel = ResponseModel()
         response_model.set_body({"a": 1, "b": 2})

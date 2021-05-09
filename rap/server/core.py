@@ -98,7 +98,7 @@ class Server(object):
             middleware.app = self
             if isinstance(middleware, BaseConnMiddleware):
                 middleware.load_sub_middleware(self._conn_handle)
-                self._conn_handle = middleware
+                self._conn_handle = middleware  # type: ignore
             elif isinstance(middleware, BaseMiddleware):
                 self._middleware_list.append(middleware)
             else:
@@ -181,7 +181,7 @@ class Server(object):
         for middleware in self._middleware_list:
             if isinstance(middleware, BaseMsgMiddleware):
                 middleware.load_sub_middleware(request_handle._msg_handle)
-                request_handle._msg_handle = middleware
+                request_handle._msg_handle = middleware  # type: ignore
 
         async def recv_msg_handle(_request_msg: Optional[BASE_REQUEST_TYPE]) -> None:
             if _request_msg is None:

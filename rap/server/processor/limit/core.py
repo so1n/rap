@@ -22,7 +22,7 @@ class LimitProcessor(BaseProcessor):
 
         for func, rule in self._rule_list:
             if inspect.iscoroutinefunction(func):
-                key: Optional[str] = await func(request)
+                key: Optional[str] = await func(request)  # type: ignore
             else:
                 key = func(request)
             if key:
@@ -33,11 +33,11 @@ class LimitProcessor(BaseProcessor):
         key = f"rap:processor:{self.__class__.__name__}:{key}"
         can_requests: Union[bool, Awaitable[bool]] = self._backend.can_requests(key, rule)
         if inspect.isawaitable(can_requests):
-            can_requests = await can_requests
+            can_requests = await can_requests  # type: ignore
         if not can_requests:
             expected_time: Union[float, Awaitable[float]] = self._backend.expected_time(key, rule)
             if inspect.isawaitable(expected_time):
-                expected_time = await expected_time
+                expected_time = await expected_time  # type: ignore
             raise TooManyRequest(extra_msg=f"expected time: {expected_time}")
         return request
 

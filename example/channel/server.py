@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any
 
 from aredis import StrictRedis  # type: ignore
 
@@ -9,7 +10,7 @@ from rap.server.processor import CryptoProcessor
 
 async def async_channel(channel: Channel) -> None:
     while await channel.loop():
-        body: any = await channel.read_body()
+        body: Any = await channel.read_body()
         if body == "hello":
             cnt: int = 0
             await channel.write(f"hello {cnt}")
@@ -33,7 +34,7 @@ async def echo_body(channel: Channel) -> None:
 async def echo_response(channel: Channel) -> None:
     cnt: int = 0
     async for response in channel.iter_response():
-        response: ResponseModel = response  # IDE cannot check
+        response: ResponseModel = response  # type: ignore  # IDE cannot check
         await asyncio.sleep(1)
         cnt += 1
         if cnt > 10:

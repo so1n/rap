@@ -21,8 +21,8 @@ class BaseConnection:
         self._writer: Optional[WRITER_TYPE] = None
 
         self.conn_future: asyncio.Future = asyncio.Future()
-        self.peer_tuple: Optional[Tuple[str, int]] = None
-        self.sock_tuple: Optional[Tuple[str, int]] = None
+        self.peer_tuple: Tuple[str, int] = ("", -1)
+        self.sock_tuple: Tuple[str, int] = ("", -1)
 
     async def write(self, data: tuple, timeout: Optional[int] = None) -> None:
         if not self._writer or self._is_closed:

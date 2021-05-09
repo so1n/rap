@@ -31,7 +31,7 @@ class TestServerEvent:
     def test_load_error_event(self) -> None:
 
         with pytest.raises(ImportError):
-            Server(start_event_list=["111"])
+            Server(start_event_list=["111"])  # type: ignore
 
     def test_repeat_error_event(self) -> None:
         async def demo_start_event() -> None:
@@ -46,7 +46,7 @@ class TestServerMiddleware:
 
     def test_load_error_middleware(self) -> None:
         with pytest.raises(RuntimeError):
-            Server(middleware_list=[ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])
+            Server(middleware_list=[ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])  # type: ignore
 
     def test_repeat_load_middleware(self) -> None:
         access_msg_middleware: AccessMsgMiddleware = AccessMsgMiddleware()
@@ -59,7 +59,7 @@ class TestServerProcessor:
 
     def test_load_error_processor(self) -> None:
         with pytest.raises(RuntimeError):
-            Server(processor_list=[AccessMsgMiddleware()])
+            Server(processor_list=[AccessMsgMiddleware()])  # type: ignore
 
     def test_repeat_load_processor(self) -> None:
         crypto_process: ServerCryptoProcessor = ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis)
