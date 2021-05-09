@@ -14,13 +14,13 @@ __all__ = ["Connection", "ServerConnection"]
 class BaseConnection:
     def __init__(self, timeout: int, pack_param: Optional[dict] = None):
         self._is_closed: bool = True
-        self._pack_param: dict = pack_param if pack_param else dict()
-        self._reader: Optional[READER_TYPE] = None
         self._timeout: int = timeout
+        self._pack_param: dict = pack_param if pack_param else dict()
         self._unpacker: UNPACKER_TYPE = msgpack.Unpacker(raw=False, use_list=False)
+        self._reader: Optional[READER_TYPE] = None
         self._writer: Optional[WRITER_TYPE] = None
 
-        self.result_future: asyncio.Future = asyncio.Future()
+        self.conn_future: asyncio.Future = asyncio.Future()
         self.peer_tuple: Optional[Tuple[str, int]] = None
         self.sock_tuple: Optional[Tuple[str, int]] = None
 
@@ -63,8 +63,8 @@ class BaseConnection:
         if not isinstance(exc, Exception):
             return
 
-        if self.result_future and not self.result_future.done():
-            self.result_future.set_exception(exc)
+        if self.conn_future and not self.conn_future.done():
+            self.conn_future.set_exception(exc)
         if self._reader:
             self._reader.set_exception(exc)
 
@@ -76,8 +76,8 @@ class BaseConnection:
 
         self._is_closed = True
 
-        if self.result_future and not self.result_future.cancelled():
-            self.result_future.cancel()
+        if self.conn_future and not self.conn_future.cancelled():
+            self.conn_future.cancel()
 
     def is_closed(self) -> bool:
         if self._writer:
@@ -118,7 +118,7 @@ class Connection(BaseConnection):
         self._reader, self._writer = await asyncio.open_connection(host, port, ssl=ssl_context)
         self.sock_tuple = self._writer.get_extra_info("sockname")
         self.peer_tuple = self._writer.get_extra_info("peername")
-        self.result_future: asyncio.Future = asyncio.Future()
+        self.conn_future: asyncio.Future = asyncio.Future()
         self._is_closed = False
 
 
@@ -135,5 +135,5 @@ class ServerConnection(BaseConnection):
         self._writer = writer
         self.peer_tuple = self._writer.get_extra_info("peername")
         self.sock_tuple: Tuple[str, int] = self._writer.get_extra_info("sockname")
-        self.result_future = asyncio.Future()
+        self.conn_future = asyncio.Future()
         self._is_closed = False

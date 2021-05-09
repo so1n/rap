@@ -31,7 +31,7 @@ class AsyncIterBody(AsyncIterResponse):
 
 
 class BaseChannel(object):
-    _channel_future: asyncio.Future
+    _channel_conn_future: asyncio.Future
 
     async def loop(self, flag: bool = True) -> bool:
         """In the channel function, elegantly replace `while True`
@@ -82,11 +82,11 @@ class BaseChannel(object):
     @property
     def is_close(self) -> bool:
         """whether the channel is closed"""
-        return self._channel_future.done()
+        return self._channel_conn_future.done()
 
     def set_finish(self, msg: str = "") -> None:
-        if self._channel_future and not self._channel_future.done():
-            self._channel_future.set_exception(ChannelError(msg))
+        if self._channel_conn_future and not self._channel_conn_future.done():
+            self._channel_conn_future.set_exception(ChannelError(msg))
 
     #####################
     # async for support #
