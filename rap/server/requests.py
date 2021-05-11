@@ -267,7 +267,7 @@ class Request(object):
             raise FuncNotFoundError(extra_msg=f"name: {request.func_name}")
 
         func_model: FuncModel = self._app.registry[func_key]
-        if func_model.is_private and and self._conn.peer_tuple[0] not in ("::1", "127.0.0.1", "localhost"):
+        if func_model.is_private and self._conn.peer_tuple[0] not in ("::1", "127.0.0.1", "localhost"):
             raise FuncNotFoundError(f"No permission to call:`{request.func_name}`, {self._conn.peer_tuple}")
         return func_model
 
