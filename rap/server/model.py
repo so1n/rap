@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from rap.common.exceptions import BaseRapError, ServerError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE

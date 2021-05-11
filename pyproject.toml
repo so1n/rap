@@ -13,6 +13,8 @@ python = "^3.7"
 msgpack = "^1.0.0"
 pycrypto = "2.6.1"
 aredis = "^1.1.8"
+opentracing = "^2.4.0"
+jaeger-client = "^4.4.0"
 
 [tool.poetry.dev-dependencies]
 black = "^20.8b1"
