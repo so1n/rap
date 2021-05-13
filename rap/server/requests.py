@@ -58,7 +58,7 @@ class Channel(BaseChannel):
         write: Callable[[Any, Dict[str, Any]], Coroutine[Any, Any, Any]],
         close: Callable[[], None],
         conn: ServerConnection,
-        func: Callable[["Channel"], Any]
+        func: Callable[["Channel"], Any],
     ):
         self._func_name: str = func.__name__
         self._close: Callable[[], None] = close

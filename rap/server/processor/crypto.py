@@ -105,8 +105,11 @@ class CryptoProcessor(BaseProcessor):
 
     async def process_response(self, response: ResponseModel) -> ResponseModel:
         """encrypt response body"""
-        if response.header.get("status_code") == 200 and response.body\
-                and response.num != Constant.SERVER_ERROR_RESPONSE:
+        if (
+            response.header.get("status_code") == 200
+            and response.body
+            and response.num != Constant.SERVER_ERROR_RESPONSE
+        ):
             try:
                 crypto: Crypto = response.stats.crypto
             except AttributeError:

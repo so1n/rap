@@ -1,8 +1,8 @@
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from example.starlette.client import client, new_sync_sum, new_async_gen
-from example.starlette.model import sync_sum, async_gen
+from example.starlette.client import client, new_async_gen, new_sync_sum
+from example.starlette.model import async_gen, sync_sum
 
 
 async def demo1(request: Request) -> JSONResponse:

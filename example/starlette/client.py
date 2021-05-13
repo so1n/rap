@@ -1,7 +1,7 @@
 from typing import AsyncIterator
-from rap.client import Client
-from example.starlette.model import sync_sum, async_gen
 
+from example.starlette.model import async_gen, sync_sum
+from rap.client import Client
 
 client: Client = Client()
 client.inject(sync_sum)
@@ -16,5 +16,3 @@ async def new_sync_sum(a: int, b: int) -> int:
 @client.register(name="async_gen")
 async def new_async_gen(a: int) -> AsyncIterator[int]:
     yield 0
-
-

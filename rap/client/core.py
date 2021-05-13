@@ -1,5 +1,5 @@
-import inspect
 import importlib
+import inspect
 import sys
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type
@@ -268,17 +268,13 @@ class Client:
         ) as async_iterator:
             async for result in async_iterator:
                 yield result
-    
+
     def inject(
-            self, func: Callable, name: str = "", group: Optional[str] = None, enable_type_check: bool = True
+        self, func: Callable, name: str = "", group: Optional[str] = None, enable_type_check: bool = True
     ) -> None:
         if isinstance(func, RapFunc):
             raise RuntimeError(f"{func} already inject or register")
-        new_func: Callable = self.register(
-            name=name,
-            group=group,
-            enable_type_check=enable_type_check
-        )(func)
+        new_func: Callable = self.register(name=name, group=group, enable_type_check=enable_type_check)(func)
         sys.modules[func.__module__].__setattr__(func.__name__, new_func)
 
     @staticmethod
