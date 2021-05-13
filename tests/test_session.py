@@ -65,7 +65,7 @@ class TestSession:
         rap_client.load_processor([check_session_processor])
 
         def sync_sum(a: int, b: int) -> int:
-            return a+ b
+            return a + b
 
         async with rap_client.session as s:
             check_session_processor.session_id = s.id

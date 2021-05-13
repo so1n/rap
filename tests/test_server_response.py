@@ -1,6 +1,7 @@
 import asyncio
-import pytest
 from typing import Any
+
+import pytest
 
 from rap.client import Client
 from rap.common.conn import BaseConnection

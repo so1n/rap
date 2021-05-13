@@ -1,8 +1,9 @@
 import asyncio
-import pytest
 from typing import Any
 
+import pytest
 from pytest_mock import MockerFixture
+
 from rap.client import Client, Request, Response
 from rap.common.exceptions import ChannelError, RPCError
 from rap.common.utils import Constant
@@ -21,7 +22,6 @@ async def mock_func(self: Any) -> None:
 
 
 class TestClient:
-
     async def test_client_repeat_conn(self, rap_server: Server, rap_client: Client) -> None:
         with pytest.raises(ConnectionError) as e:
             await rap_client.connect()
@@ -40,7 +40,6 @@ class TestClient:
 
 
 class TestTransport:
-
     @staticmethod
     async def _read_helper(mocker: MockerFixture, once_target: Any) -> None:
         mocker_obj: Any = mocker.patch("rap.client.transport.transport.logging.error")
@@ -72,7 +71,7 @@ class TestTransport:
     async def test_write_raise_exc(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
         mock_future: asyncio.Future = asyncio.Future()
         mocker.patch("rap.common.conn.Connection.write").return_value = mock_future
-        mock_future.set_exception(Exception('demo'))
+        mock_future.set_exception(Exception("demo"))
 
         with pytest.raises(Exception) as e:
             await rap_client.raw_call("sync_sum", [1, 2])
@@ -117,11 +116,15 @@ class TestTransport:
             (
                 203,
                 -1,
-                'default',
-                'facker',
-                {'status_code': 200, 'version': '0.1', 'user_agent': 'Python3-0.5.3',
-                 'request_id': 'cf172603-5783-4b0c-92b1-62667626e9d0'},
-                ''
+                "default",
+                "facker",
+                {
+                    "status_code": 200,
+                    "version": "0.1",
+                    "user_agent": "Python3-0.5.3",
+                    "request_id": "cf172603-5783-4b0c-92b1-62667626e9d0",
+                },
+                "",
             )
         )
 
@@ -135,17 +138,17 @@ class TestTransport:
             (
                 202,
                 -1,
-                'default',
-                'faker',
+                "default",
+                "faker",
                 {
-                    'channel_life_cycle': 'MSG',
-                    'channel_id': channel_id,
-                    'version': '0.1',
-                    'user_agent': 'Python3-0.5.3',
-                    'request_id': '57233e1f-b153-4142-b278-29c755394394',
-                    'status_code': 200
+                    "channel_life_cycle": "MSG",
+                    "channel_id": channel_id,
+                    "version": "0.1",
+                    "user_agent": "Python3-0.5.3",
+                    "request_id": "57233e1f-b153-4142-b278-29c755394394",
+                    "status_code": 200,
                 },
-                'hi!'
+                "hi!",
             )
         )
 
@@ -158,18 +161,23 @@ class TestTransport:
             (
                 202,
                 -1,
-                'default',
-                'faker',
-                {'channel_life_cycle': 'MSG', 'version': '0.1', 'user_agent': 'Python3-0.5.3',
-                 'request_id': '57233e1f-b153-4142-b278-29c755394394', 'status_code': 200},
-                'hi!'
+                "default",
+                "faker",
+                {
+                    "channel_life_cycle": "MSG",
+                    "version": "0.1",
+                    "user_agent": "Python3-0.5.3",
+                    "request_id": "57233e1f-b153-4142-b278-29c755394394",
+                    "status_code": 200,
+                },
+                "hi!",
             )
         )
 
         await self._read_helper(mocker, AnyStringWith("Can' parse response:"))
 
     async def test_request_receive_error_response_num(
-            self, rap_server: Server, rap_client: Client, mocker: MockerFixture
+        self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
         mock_future: asyncio.Future = asyncio.Future()
         mocker.patch("rap.client.transport.transport.Transport._base_request").return_value = mock_future
@@ -178,12 +186,15 @@ class TestTransport:
                 (
                     202,
                     -1,
-                    'default',
-                    'faker',
-                    {'version': '0.1',
-                     'user_agent': 'Python3-0.5.3', 'request_id': '57233e1f-b153-4142-b278-29c755394394',
-                     'status_code': 200},
-                    'hi!'
+                    "default",
+                    "faker",
+                    {
+                        "version": "0.1",
+                        "user_agent": "Python3-0.5.3",
+                        "request_id": "57233e1f-b153-4142-b278-29c755394394",
+                        "status_code": 200,
+                    },
+                    "hi!",
                 )
             )
         )
@@ -195,10 +206,11 @@ class TestTransport:
         assert exec_msg == f"request num must:{Constant.MSG_RESPONSE} not 202"
 
     async def test_request_receive_not_python_server_exc_response(
-            self, rap_server: Server, rap_client: Client, mocker: MockerFixture
+        self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
         def raise_msg_exc(a: int, b: int) -> int:
             return int(1 / 0)
+
         rap_server.register(raise_msg_exc)
 
         mock_future: asyncio.Future = asyncio.Future()
@@ -208,16 +220,16 @@ class TestTransport:
                 (
                     201,
                     29759,
-                    'default',
-                    'raise_msg_exc',
-                    {'status_code': 200,
-                     'version': '0.1',
-                     'request_id': 'fe41e811-3cd0-45e7-b83a-738759cb0ad8',
-                     'host': ('127.0.0.1', 59022)
-                     },
-                    {'call_id': -1, 'exc_info': 'division by zero', 'exc': 'ZeroDivisionError'}
+                    "default",
+                    "raise_msg_exc",
+                    {
+                        "status_code": 200,
+                        "version": "0.1",
+                        "request_id": "fe41e811-3cd0-45e7-b83a-738759cb0ad8",
+                        "host": ("127.0.0.1", 59022),
+                    },
+                    {"call_id": -1, "exc_info": "division by zero", "exc": "ZeroDivisionError"},
                 )
-
             )
         )
 
@@ -231,9 +243,7 @@ class TestTransport:
         with pytest.raises(ChannelError) as e:
             async with rap_client.session as s:
                 await rap_client.transport.write(
-                    Request(Constant.CHANNEL_REQUEST, "test", None, "default"),
-                    -1,
-                    session=s
+                    Request(Constant.CHANNEL_REQUEST, "test", None, "default"), -1, session=s
                 )
 
         exec_msg: str = e.value.args[0]

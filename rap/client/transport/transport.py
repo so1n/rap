@@ -226,6 +226,7 @@ class Transport(object):
             request.header["session_id"] = session.id
         elif conn is None:
             conn = self.get_random_conn()
+        request.header["host"] = conn.peer_tuple
 
         async def _write(_request: Request) -> None:
             self.before_write_handle(_request)

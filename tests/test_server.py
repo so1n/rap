@@ -43,7 +43,6 @@ class TestServerEvent:
 
 
 class TestServerMiddleware:
-
     def test_load_error_middleware(self) -> None:
         with pytest.raises(RuntimeError):
             Server(middleware_list=[ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])  # type: ignore
@@ -56,7 +55,6 @@ class TestServerMiddleware:
 
 
 class TestServerProcessor:
-
     def test_load_error_processor(self) -> None:
         with pytest.raises(RuntimeError):
             Server(processor_list=[AccessMsgMiddleware()])  # type: ignore
@@ -88,7 +86,7 @@ class TestServerConnHandle:
         mocker.patch("rap.server.model.RequestModel.from_msg").side_effect = Exception()
         with pytest.raises(ConnectionError) as e:
             await rap_client.raw_call("sync_sum", [1, 2])
-            
+
         exec_msg = e.value.args[0]
         assert exec_msg == "recv close conn event, event info:protocol error"
 
@@ -106,7 +104,7 @@ class TestServerConnHandle:
 
 class TestRequestHandle:
     async def test_request_dispatch_not_found(
-            self, rap_server: Server, rap_client: Client, mocker: MockerFixture
+        self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
         mocker.patch("rap.client.model.Request.gen_request_msg").return_value = (-1, -1, "default", "", {}, None)
         # self.num, msg_id, self.group, self.func_name, self.header, self.body
@@ -118,7 +116,7 @@ class TestRequestHandle:
         assert exec_msg == "Illegal request"
 
     async def test_request_dispatch_func_error(
-            self, rap_server: Server, rap_client: Client, mocker: MockerFixture
+        self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
         mocker.patch("rap.server.requests.check_func_type").side_effect = Exception()
 

@@ -127,11 +127,11 @@ class TestChannel:
         assert exec_msg == "Not found func. name: async_channel"
 
     async def test_channel_life_cycle_error(
-            self, rap_server: Server, rap_client: Client, mocker: MockerFixture
+        self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
         async def test_server_channel(channel: ServerChannel) -> None:
             while await channel.loop():
-                if await channel.read_body() == 'close':
+                if await channel.read_body() == "close":
                     return
                 await asyncio.sleep(0.1)
 
@@ -144,8 +144,12 @@ class TestChannel:
         # test channel already create
         mocker.patch("rap.client.transport.channel.uuid.uuid4").return_value = 123
         mocker.patch("rap.client.model.Request.gen_request_msg").return_value = (
-            Constant.CHANNEL_REQUEST, -1, "default", "test_channel",
-            {"channel_life_cycle": Constant.DECLARE, "channel_id": "123"}, None
+            Constant.CHANNEL_REQUEST,
+            -1,
+            "default",
+            "test_channel",
+            {"channel_life_cycle": Constant.DECLARE, "channel_id": "123"},
+            None,
         )
         with pytest.raises(ChannelError) as e:
             await test_client_channel()
@@ -154,8 +158,12 @@ class TestChannel:
 
         mocker.patch("rap.client.transport.channel.uuid.uuid4").return_value = 234
         mocker.patch("rap.client.model.Request.gen_request_msg").return_value = (
-            Constant.CHANNEL_REQUEST, -1, "default", "test_channel",
-            {"channel_life_cycle": Constant.MSG, "channel_id": "234"}, None
+            Constant.CHANNEL_REQUEST,
+            -1,
+            "default",
+            "test_channel",
+            {"channel_life_cycle": Constant.MSG, "channel_id": "234"},
+            None,
         )
         with pytest.raises(ChannelError) as e:
             await test_client_channel()
@@ -164,8 +172,12 @@ class TestChannel:
 
         mocker.patch("rap.client.transport.channel.uuid.uuid4").return_value = 345
         mocker.patch("rap.client.model.Request.gen_request_msg").return_value = (
-            Constant.CHANNEL_REQUEST, -1, "default", "test_channel",
-            {"channel_life_cycle": Constant.DROP, "channel_id": "345"}, None
+            Constant.CHANNEL_REQUEST,
+            -1,
+            "default",
+            "test_channel",
+            {"channel_life_cycle": Constant.DROP, "channel_id": "345"},
+            None,
         )
         with pytest.raises(ChannelError) as e:
             await test_client_channel()
@@ -174,8 +186,12 @@ class TestChannel:
 
         mocker.patch("rap.client.transport.channel.uuid.uuid4").return_value = 456
         mocker.patch("rap.client.model.Request.gen_request_msg").return_value = (
-            Constant.CHANNEL_REQUEST, -1, "default", "test_channel",
-            {"channel_life_cycle": -1, "channel_id": "456"}, None
+            Constant.CHANNEL_REQUEST,
+            -1,
+            "default",
+            "test_channel",
+            {"channel_life_cycle": -1, "channel_id": "456"},
+            None,
         )
         with pytest.raises(ChannelError) as e:
             await test_client_channel()

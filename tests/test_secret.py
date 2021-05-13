@@ -44,7 +44,6 @@ class TestCrypto:
 
 
 class TestServerCryptoProcess:
-
     async def test_process_response_error(self, rap_server: Server, rap_client: Client, mocker: Any) -> None:
         mocker.patch("rap.client.processor.CryptoProcessor._body_handle").side_effect = Exception()
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
@@ -66,7 +65,7 @@ class TestServerCryptoProcess:
         assert exec_msg == "decrypt body error"
 
     async def test_process_request_timestamp_param_error(
-            self, rap_server: Server, rap_client: Client, mocker: Any
+        self, rap_server: Server, rap_client: Client, mocker: Any
     ) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
         rap_client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
@@ -79,7 +78,7 @@ class TestServerCryptoProcess:
         assert exec_msg == "Parse error. timeout param error"
 
     async def test_process_request_nonce_param_error(
-            self, rap_server: Server, rap_client: Client, mocker: MockerFixture
+        self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
         mocker.patch("rap.client.processor.crypto.gen_random_time_id").return_value = ""
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
@@ -93,7 +92,7 @@ class TestServerCryptoProcess:
         assert exec_msg == "Parse error. nonce param error"
 
     async def test_process_request_nonce_repeat_param_error(
-            self, rap_server: Server, rap_client: Client, mocker: MockerFixture
+        self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
         mocker.patch("rap.client.processor.crypto.gen_random_time_id").return_value = "mocker"
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
@@ -108,7 +107,7 @@ class TestServerCryptoProcess:
         assert exec_msg == "Parse error. nonce param error"
 
     async def test_process_request_redis_error(
-            self, rap_server: Server, rap_client: Client, mocker: MockerFixture
+        self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
         future: asyncio.Future = asyncio.Future()
         mocker.patch("rap.server.processor.crypto.StrictRedis.exists").return_value = future
