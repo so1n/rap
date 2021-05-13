@@ -3,6 +3,7 @@ import inspect
 import logging
 import time
 import traceback
+from contextvars import Token
 from functools import partial
 from typing import (
     TYPE_CHECKING,
@@ -40,6 +41,7 @@ from rap.common.utils import (
     parse_error,
     response_num_dict,
 )
+from rap.server.context import rap_context
 from rap.server.model import RequestModel, ResponseModel
 from rap.server.processor.base import BaseProcessor
 from rap.server.registry import FuncModel
@@ -177,6 +179,7 @@ class Request(object):
             response.set_exception(ServerError("Illegal request"))
             return response
 
+        token: Token = rap_context.set({"request": request})
         try:
             dispatch_func: Callable = self.dispatch_func_dict[request.num]
             return await dispatch_func(request, response)
@@ -185,6 +188,8 @@ class Request(object):
             logging.debug(traceback.format_exc())
             response.set_exception(RpcRunTimeError())
             return response
+        finally:
+            rap_context.reset(token)
 
     async def ping_event(self) -> None:
         while not self._conn.is_closed():
