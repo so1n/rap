@@ -20,7 +20,7 @@ class FuncModel(object):
 
     is_private: bool
     doc: Optional[str] = None
-    name: Optional[str] = None
+    name: str = ""
     arg_list: List[str] = field(default_factory=list)
     kwarg_dict: OrderedDict = field(default_factory=OrderedDict)
     return_type: Optional[Type] = None
@@ -47,7 +47,7 @@ class RegistryManager(object):
 
         self.register(self._load, "load", group="registry", is_private=True)
         self.register(self._reload, "reload", group="registry", is_private=True)
-        self.register(self._get_register_func, "list", group="registry", is_private=True)
+        self.register(self.get_register_func_list, "list", group="registry", is_private=True)
 
     @classmethod
     def gen_key(cls, group: str, name: str, type_: str) -> str:
@@ -174,7 +174,7 @@ class RegistryManager(object):
         except Exception as e:
             raise RegisteredError(f"reload {func_str} from {path} fail, {str(e)}")
 
-    def _get_register_func(self) -> List[Dict[str, Union[str, bool]]]:
+    def get_register_func_list(self) -> List[Dict[str, Union[str, bool]]]:
         """get func info which in registry"""
         register_list: List[Dict[str, Union[str, bool]]] = []
         for key, value in self.func_dict.items():
