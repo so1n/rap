@@ -80,6 +80,10 @@ class Transport(object):
             await self._connect(host)
         self._is_close = False
 
+    @property
+    def is_close(self) -> bool:
+        return self._is_close
+
     async def await_close(self) -> None:
         """close all conn and cancel future"""
         if self._is_close:
