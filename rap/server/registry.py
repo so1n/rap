@@ -5,7 +5,7 @@ import os
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from types import FunctionType
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Callable, Dict, List, Optional, Type, Union
 
 from rap.common.channel import BaseChannel
 from rap.common.exceptions import RegisteredError
