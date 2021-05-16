@@ -7,8 +7,8 @@ from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 from rap.common.conn import ServerConnection
 from rap.common.utils import Constant, Event
 from rap.server.middleware.base import BaseConnMiddleware
-from rap.server.model import ResponseModel
-from rap.server.response import Response
+from rap.server.model import Response
+from rap.server.sender import Sender
 
 
 class ConnLimitMiddleware(BaseConnMiddleware):
@@ -46,8 +46,8 @@ class ConnLimitMiddleware(BaseConnMiddleware):
         try:
             if self._release_timestamp > now_timestamp or self._conn_count > self._max_conn:
                 self._release_timestamp = now_timestamp + self._block_time
-                await Response(conn)(
-                    ResponseModel.from_event(
+                await Sender(conn)(
+                    Response.from_event(
                         Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of connections limit")
                     )
                 )
@@ -89,8 +89,8 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
         try:
             if now_cnt > self._ip_max_conn:
                 logging.error(f"Currently exceeding the maximum number of ip conn limit, close {conn.peer_tuple}")
-                await Response(conn)(
-                    ResponseModel.from_event(
+                await Sender(conn)(
+                    Response.from_event(
                         Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of ip conn limit")
                     )
                 )

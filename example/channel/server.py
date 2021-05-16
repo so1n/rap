@@ -4,7 +4,7 @@ from typing import Any
 from aredis import StrictRedis  # type: ignore
 
 from rap.server import Channel, Server
-from rap.server.model import ResponseModel
+from rap.server.model import Response
 from rap.server.processor import CryptoProcessor
 
 
@@ -34,7 +34,7 @@ async def echo_body(channel: Channel) -> None:
 async def echo_response(channel: Channel) -> None:
     cnt: int = 0
     async for response in channel.iter_response():
-        response: ResponseModel = response  # type: ignore  # IDE cannot check
+        response: Response = response  # type: ignore  # IDE cannot check
         await asyncio.sleep(1)
         cnt += 1
         if cnt > 10:

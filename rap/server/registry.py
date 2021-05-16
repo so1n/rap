@@ -87,7 +87,7 @@ class RegistryManager(object):
         self,
         func: Callable,
         name: Optional[str] = None,
-        group: str = Constant.DEFAULT_GROUP,
+        group: Optional[str] = None,
         is_private: bool = False,
         doc: Optional[str] = None,
     ) -> None:
@@ -123,6 +123,9 @@ class RegistryManager(object):
                         f"{func.__name__} param:{param.name} type:{param.annotation} is not json type"
                     )
 
+        if group is None:
+            group = Constant.DEFAULT_GROUP
+
         func_key: str = self.gen_key(group, name, func_type)
         if func_key in self.func_dict:
             raise RegisteredError("Already been register")
@@ -144,7 +147,7 @@ class RegistryManager(object):
         path: str,
         func_str: str,
         name: Optional[str] = None,
-        group: str = Constant.DEFAULT_GROUP,
+        group: Optional[str] = None,
         is_private: bool = False,
         doc: Optional[str] = None,
     ) -> str:
@@ -153,6 +156,8 @@ class RegistryManager(object):
             func = self._load_func(path, func_str)
             if not name:
                 name = func.__name__
+            if group is None:
+                group = Constant.DEFAULT_GROUP
 
             func_type: str = self._get_func_type(func)
             func_key: str = self.gen_key(group, name, func_type)
@@ -169,7 +174,7 @@ class RegistryManager(object):
         path: str,
         func_str: str,
         name: Optional[str] = None,
-        group: str = Constant.DEFAULT_GROUP,
+        group: Optional[str] = None,
         doc: Optional[str] = None,
     ) -> str:
         """reload func by registry"""
@@ -177,6 +182,8 @@ class RegistryManager(object):
             func = self._load_func(path, func_str)
             if not name:
                 name = func.__name__
+            if group is None:
+                group = Constant.DEFAULT_GROUP
             func_type: str = self._get_func_type(func)
             func_key: str = self.gen_key(group, name, func_type)
             if func_key not in self.func_dict:

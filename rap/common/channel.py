@@ -5,7 +5,7 @@ from rap.common.exceptions import ChannelError
 
 if TYPE_CHECKING:
     from rap.client.model import Response
-    from rap.server.model import ResponseModel
+    from rap.server.model import Response
 
 
 class AsyncIterResponse(object):
@@ -15,7 +15,7 @@ class AsyncIterResponse(object):
     def __aiter__(self) -> "AsyncIterResponse":
         return self
 
-    async def __anext__(self) -> "Union[Response, ResponseModel]":
+    async def __anext__(self) -> "Union[Response, Response]":
         try:
             return await self.channel.read()
         except ChannelError:
@@ -23,7 +23,7 @@ class AsyncIterResponse(object):
 
 
 class AsyncIterBody(AsyncIterResponse):
-    async def __anext__(self) -> "Union[Response, ResponseModel]":
+    async def __anext__(self) -> "Union[Response, Response]":
         try:
             return await self.channel.read_body()
         except ChannelError:
@@ -87,6 +87,11 @@ class BaseChannel(object):
     def set_finish(self, msg: str = "") -> None:
         if self._channel_conn_future and not self._channel_conn_future.done():
             self._channel_conn_future.set_exception(ChannelError(msg))
+            # NOTE: ignore `Future exception was never retrieved` tip
+            try:
+                self._channel_conn_future.result()
+            except ChannelError:
+                pass
 
     #####################
     # async for support #

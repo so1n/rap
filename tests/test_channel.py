@@ -8,7 +8,7 @@ from rap.client import Channel, Client, Response
 from rap.common.exceptions import ChannelError, FuncNotFoundError
 from rap.common.utils import Constant
 from rap.server import Channel as ServerChannel
-from rap.server import ResponseModel, Server
+from rap.server import Response, Server
 
 pytestmark = pytest.mark.asyncio
 
@@ -73,7 +73,7 @@ class TestChannel:
         async def _echo_response(channel: Channel) -> None:
             async for response in channel.iter_response():
                 # IDE cannot check
-                response: ResponseModel = response  # type: ignore
+                response: Response = response  # type: ignore
                 await channel.write(response.body)
 
         rap_server.register(_echo_response, "echo_response")

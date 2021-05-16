@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple
 
 from rap.common.conn import ServerConnection
 from rap.common.middleware import BaseMiddleware as _BaseMiddleware
-from rap.server.model import RequestModel
+from rap.server.model import Request
 
 if TYPE_CHECKING:
     from rap.server.core import Server
@@ -43,11 +43,11 @@ class BaseConnMiddleware(BaseMiddleware):
 
 class BaseMsgMiddleware(BaseMiddleware):
     async def dispatch(
-        self, request: RequestModel, call_id: int, func: Callable, param: list, default_param: Dict[str, Any]
+        self, request: Request, call_id: int, func: Callable, param: list, default_param: Dict[str, Any]
     ) -> Tuple[int, Any]:
         raise NotImplementedError
 
     async def call_next(
-        self, request: RequestModel, call_id: int, func: Callable, param: list, default_param: Dict[str, Any]
+        self, request: Request, call_id: int, func: Callable, param: list, default_param: Dict[str, Any]
     ) -> Tuple[int, Any]:
         pass

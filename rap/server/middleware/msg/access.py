@@ -4,12 +4,12 @@ from typing import Any, Callable, Dict, Tuple
 
 from rap.common.exceptions import ServerError
 from rap.server.middleware.base import BaseMsgMiddleware
-from rap.server.model import RequestModel
+from rap.server.model import Request
 
 
 class AccessMsgMiddleware(BaseMsgMiddleware):
     async def dispatch(
-        self, request: RequestModel, call_id: int, func: Callable, param: list, default_param: Dict[str, Any]
+        self, request: Request, call_id: int, func: Callable, param: list, default_param: Dict[str, Any]
     ) -> Tuple[int, Any]:
         start_time: float = time.time()
         status: bool = False

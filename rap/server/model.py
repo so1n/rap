@@ -8,7 +8,7 @@ from rap.common.utils import Constant, Event, State
 
 
 @dataclass()
-class RequestModel(object):
+class Request(object):
     num: int
     msg_id: int
     group: str
@@ -18,15 +18,15 @@ class RequestModel(object):
     stats: "State" = State()
 
     @classmethod
-    def from_msg(cls, msg: BASE_REQUEST_TYPE) -> "RequestModel":
+    def from_msg(cls, msg: BASE_REQUEST_TYPE) -> "Request":
         return cls(*msg)
 
 
 @dataclass()
-class ResponseModel(object):
+class Response(object):
     num: int = Constant.MSG_RESPONSE
     msg_id: int = -1
-    group: str = "default"
+    group: str = Constant.DEFAULT_GROUP
     func_name: str = ""
     header: dict = field(default_factory=lambda: {"status_code": 200})
     body: Any = None
@@ -52,21 +52,16 @@ class ResponseModel(object):
         self.body = body
 
     @classmethod
-    def from_exc(cls, exc: Exception) -> "ResponseModel":
-        if not isinstance(exc, Exception):
-            raise TypeError(f"{exc} type must Exception")
-        if not isinstance(exc, BaseRapError):
-            logging.error(exc)
-            exc = ServerError(str(exc))
-        response: "ResponseModel" = cls(body=str(exc))
-        response.header["status_code"] = exc.status_code
+    def from_exc(cls, exc: Exception) -> "Response":
+        response: Response = cls()
+        response.set_exception(exc)
         return response
 
     @classmethod
-    def from_event(cls, event: Event) -> "ResponseModel":
-        if not isinstance(event, Event):
-            raise TypeError(f"{event} type must {Event.__name__}")
-        return cls(num=Constant.SERVER_EVENT, func_name=event.event_name, body=event.event_info)
+    def from_event(cls, event: Event) -> "Response":
+        response: Response = cls()
+        response.set_event(event)
+        return response
 
     def to_msg(self) -> BASE_RESPONSE_TYPE:
         return self.num, self.msg_id, self.group, self.func_name, self.header, self.body

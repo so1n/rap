@@ -3,7 +3,7 @@ from typing import Awaitable, Callable, List, Optional, Set, Tuple, Union
 
 from rap.common.exceptions import TooManyRequest
 from rap.common.utils import Constant
-from rap.server.model import RequestModel, ResponseModel
+from rap.server.model import Request, Response
 from rap.server.processor.base import BaseProcessor
 from rap.server.processor.limit.backend import BaseLimitBackend
 from rap.server.processor.limit.rule import Rule
@@ -16,7 +16,7 @@ class LimitProcessor(BaseProcessor):
         self._rule_list: List[Tuple[RULE_FUNC_TYPE, Rule]] = rule_list
         self._ignore_request_num_set: Set = {Constant.CHANNEL_REQUEST, Constant.CLIENT_EVENT, Constant.CHANNEL_RESPONSE}
 
-    async def process_request(self, request: RequestModel) -> RequestModel:
+    async def process_request(self, request: Request) -> Request:
         if request.num in self._ignore_request_num_set:
             return request
 
@@ -41,5 +41,5 @@ class LimitProcessor(BaseProcessor):
             raise TooManyRequest(extra_msg=f"expected time: {expected_time}")
         return request
 
-    async def process_response(self, response: ResponseModel) -> ResponseModel:
+    async def process_response(self, response: Response) -> Response:
         return response

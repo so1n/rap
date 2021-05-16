@@ -3,7 +3,7 @@ import asyncio
 from aredis import StrictRedis  # type: ignore
 
 from rap.server import Server
-from rap.server.model import RequestModel
+from rap.server.model import Request
 from rap.server.processor import limit
 
 
@@ -15,14 +15,14 @@ async def demo1(a: int, b: int) -> int:
     return a + b
 
 
-def match_demo_request(request: RequestModel) -> limit.RULE_FUNC_RETURN_TYPE:
+def match_demo_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
     if request.func_name == "demo":
         return request.func_name
     else:
         return None
 
 
-def match_ip_request(request: RequestModel) -> limit.RULE_FUNC_RETURN_TYPE:
+def match_ip_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
     key: str = "127.0.0.1"
     if request.header["host"][0] == key:
         return key

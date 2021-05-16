@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
-from rap.server.model import RequestModel, ResponseModel
+from rap.server.model import Request, Response
 
 if TYPE_CHECKING:
     from rap.server.core import Server
@@ -27,8 +27,8 @@ class BaseProcessor(object):
             name = func.__name__.strip("_")
         self.app.register(func, name=name, group=group, is_private=True)
 
-    async def process_request(self, request: RequestModel) -> RequestModel:
+    async def process_request(self, request: Request) -> Request:
         raise NotImplementedError
 
-    async def process_response(self, response: ResponseModel) -> ResponseModel:
+    async def process_response(self, response: Response) -> Response:
         raise NotImplementedError

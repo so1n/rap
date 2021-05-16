@@ -8,7 +8,7 @@ from opentracing.propagation import Format  # type: ignore
 from opentracing.scope import Scope  # type: ignore
 
 from rap.common.utils import Constant
-from rap.server.model import RequestModel, ResponseModel
+from rap.server.model import Request, Response
 from rap.server.processor.base import BaseProcessor  # type: ignore
 
 
@@ -17,7 +17,7 @@ class TracingProcessor(BaseProcessor):
         self._tracer: Tracer = tracer
         self._scope: Optional[Scope] = None
 
-    async def process_request(self, request: RequestModel) -> RequestModel:
+    async def process_request(self, request: Request) -> Request:
         span_ctx: Optional[SpanContext] = None
         header_dict: dict = {}
         for k, v in request.header.items():
@@ -37,7 +37,7 @@ class TracingProcessor(BaseProcessor):
             self._scope = None
         return request
 
-    async def process_response(self, response: ResponseModel) -> ResponseModel:
+    async def process_response(self, response: Response) -> Response:
         if self._scope:
             status_code: int = response.header["status_code"]
             self._scope.span.set_tag("status_code", status_code)
