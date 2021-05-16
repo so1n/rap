@@ -6,6 +6,7 @@ from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
+from starlette.websockets import WebSocket, WebSocketDisconnect
 from starlette.types import ASGIApp
 
 from rap.client import Client
@@ -33,6 +34,27 @@ async def api_exception(request: Request, exc: Exception) -> JSONResponse:
     if isinstance(exc, BaseRapError):
         return JSONResponse({"code": exc.status_code, "msg": exc.message})
     return JSONResponse({"code": 1, "msg": str(exc)})
+
+
+async def websocket_route_func(websocket: WebSocket) -> None:
+    await websocket.accept()
+    rap_client: Client = websocket.state.rap_client
+    url: str = websocket.url.path
+    try:
+        func_type, group, func_name = url.split("/")[-3:]
+    except Exception:
+        await websocket.send_json({"code": 1, "msg": "url error"})
+        await websocket.close()
+        return
+
+    try:
+        async with rap_client.transport.channel(func_name, group) as channel:
+            while True:
+                request_dict = await websocket.receive_json()
+                await channel.write(request_dict)
+                await websocket.send_json({"code": 0, "data": await channel.read_body()})
+    except WebSocketDisconnect:
+        await websocket.close()
 
 
 async def route_func(request: Request) -> JSONResponse:
@@ -97,6 +119,9 @@ def create_app(
             if group_filter and group != group_filter:
                 continue
             url: str = f"{prefix}/{func_type}/{group}/{func_name}"
-            app.add_route(url, route_func, ["POST"])
+            if func_type == "channel":
+                app.add_websocket_route(url, websocket_route_func)
+            else:
+                app.add_route(url, route_func, ["POST"])
             logging.debug(f"add {url} to api server")
     return app
