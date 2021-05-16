@@ -120,8 +120,7 @@ class TestIpBlockMiddleware:
     async def test_ip_block_ip_in_access_list(self, rap_server: Server) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
         middleware: IpBlockMiddleware = IpBlockMiddleware(
-            redis,
-            allow_ip_list=["localhost", "::1", "127.0.0.1", "192.168.0.0/31"]
+            redis, allow_ip_list=["localhost", "::1", "127.0.0.1", "192.168.0.0/31"]
         )
         await clean_cache_ip_before_test(middleware)
 
