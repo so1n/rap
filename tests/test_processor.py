@@ -110,6 +110,7 @@ class TestLimit:
                 return host + "3"
             else:
                 return None
+
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
         limit_processor = limit.LimitProcessor(
             limit.backend.RedisCellBackend(redis),
