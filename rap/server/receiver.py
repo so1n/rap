@@ -113,6 +113,8 @@ class Channel(BaseChannel):
         # Actively cancel the future may not be successful, such as cancel asyncio.sleep
         if not self._func_future.cancelled():
             self._func_future.cancel()
+        if self._func_future.done():
+            self._func_future.result()
         self._close()
 
 

@@ -1,16 +1,20 @@
-from abc import ABC
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple, Union
 
 from rap.common.conn import ServerConnection
-from rap.common.middleware import BaseMiddleware as _BaseMiddleware
 from rap.server.model import Request
 
 if TYPE_CHECKING:
     from rap.server.core import Server
 
 
-class BaseMiddleware(_BaseMiddleware, ABC):
+class BaseMiddleware(object):
     app: "Server"
+
+    async def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        raise NotImplementedError
+
+    async def _call_next(self, *args: Any) -> Any:
+        pass
 
     def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None) -> None:
         if not group:
@@ -25,6 +29,12 @@ class BaseMiddleware(_BaseMiddleware, ABC):
     def stop_event_handle(self) -> Any:
         pass
 
+    def load_sub_middleware(self, call_next: "Union[Callable, BaseMiddleware]") -> None:
+        if isinstance(call_next, BaseMiddleware):
+            setattr(self, self._call_next.__name__, call_next.__call__)
+        else:
+            setattr(self, self._call_next.__name__, call_next)
+
 
 class BaseConnMiddleware(BaseMiddleware):
     """
@@ -35,13 +45,16 @@ class BaseConnMiddleware(BaseMiddleware):
         return await self.dispatch(*args)
 
     async def call_next(self, conn: ServerConnection) -> None:
-        pass
+        return await self._call_next(conn)
 
     async def dispatch(self, conn: ServerConnection) -> None:
         raise NotImplementedError
 
 
 class BaseMsgMiddleware(BaseMiddleware):
+    async def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return await self.dispatch(*args)
+
     async def dispatch(
         self, request: Request, call_id: int, func: Callable, param: list, default_param: Dict[str, Any]
     ) -> Tuple[int, Any]:
@@ -50,4 +63,4 @@ class BaseMsgMiddleware(BaseMiddleware):
     async def call_next(
         self, request: Request, call_id: int, func: Callable, param: list, default_param: Dict[str, Any]
     ) -> Tuple[int, Any]:
-        pass
+        return await self._call_next(request, call_id, func, param, default_param)

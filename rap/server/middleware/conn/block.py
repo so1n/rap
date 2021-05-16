@@ -65,21 +65,21 @@ class IpBlockMiddleware(BaseConnMiddleware):
 
     async def _add_allow_ip(self, ip: Union[str, List]) -> None:
         ip_list = self.ip_handle(ip)
-        await self._redis.sadd(self.allow_key, ip_list[0], ip_list[1:])
-        await self._redis.srem(self.block_key, ip_list[0], ip_list[1:])
+        await self._redis.sadd(self.allow_key, ip_list[0], *ip_list[1:])
+        await self._redis.srem(self.block_key, ip_list[0], *ip_list[1:])
 
     async def _add_block_ip(self, ip: Union[str, List]) -> None:
         ip_list = self.ip_handle(ip)
-        await self._redis.sadd(self.block_key, ip_list[0], ip_list[1:])
-        await self._redis.srem(self.allow_key, ip_list[0], ip_list[1:])
+        await self._redis.sadd(self.block_key, ip_list[0], *ip_list[1:])
+        await self._redis.srem(self.allow_key, ip_list[0], *ip_list[1:])
 
     async def _remove_allow_ip(self, ip: Union[str, List]) -> None:
         ip_list = self.ip_handle(ip)
-        await self._redis.srem(self.allow_key, ip_list[0], ip_list[1:])
+        await self._redis.srem(self.allow_key, ip_list[0], *ip_list[1:])
 
     async def _remove_block_ip(self, ip: Union[str, List]) -> None:
         ip_list = self.ip_handle(ip)
-        await self._redis.srem(self.block_key, ip_list[0], ip_list[1:])
+        await self._redis.srem(self.block_key, ip_list[0], *ip_list[1:])
 
     async def _get_allow_ip(self) -> List[str]:
         ip_list: List[str] = []
