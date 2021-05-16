@@ -6,26 +6,19 @@ from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
-from starlette.websockets import WebSocket, WebSocketDisconnect
 from starlette.types import ASGIApp
+from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from rap.client import Client
 from rap.common.exceptions import BaseRapError
 
 
 class Middleware(BaseHTTPMiddleware):
-    def __init__(
-        self,
-        app: ASGIApp,
-        *,
-        rap_client: Client
-    ) -> None:
+    def __init__(self, app: ASGIApp, *, rap_client: Client) -> None:
         super().__init__(app)
         self._rap_client: Client = rap_client
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         request.state.rap_client = self._rap_client
         return await call_next(request)
 
@@ -76,14 +69,9 @@ async def route_func(request: Request) -> JSONResponse:
         arg_param=arg_list,
         kwarg_param=kwarg_list,
         header={key: value for key, value in request.headers.items()},
-        group=group
+        group=group,
     )
-    return JSONResponse(
-        {
-            "code": 0,
-            "data": result
-        }
-    )
+    return JSONResponse({"code": 0, "data": result})
 
 
 def create_app(
@@ -97,6 +85,7 @@ def create_app(
     app.add_exception_handler(Exception, api_exception)
 
     if rap_client.transport.is_close:
+
         @app.on_event("startup")
         async def connect() -> None:
             await rap_client.connect()  # type: ignore
@@ -124,4 +113,5 @@ def create_app(
             else:
                 app.add_route(url, route_func, ["POST"])
             logging.debug(f"add {url} to api server")
+
     return app

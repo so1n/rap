@@ -3,41 +3,57 @@ import inspect
 import logging
 import os
 from collections import OrderedDict
-from dataclasses import dataclass, field
 from types import FunctionType
-from typing import Callable, Dict, List, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 from rap.common.channel import BaseChannel
 from rap.common.exceptions import RegisteredError
 from rap.common.types import is_json_type
+from rap.common.utils import Constant
 
 
-@dataclass()
 class FuncModel(object):
-    group: str
-    type_: str
-    func: Callable
+    def __init__(
+        self,
+        group: str,
+        func_type: str,
+        func: Callable,
+        is_private: bool,
+        doc: Optional[str] = None,
+        func_name: Optional[str] = None,
+    ) -> None:
+        func_sig = inspect.signature(func)
 
-    is_private: bool
-    doc: Optional[str] = None
-    name: str = ""
-    arg_list: List[str] = field(default_factory=list)
-    kwarg_dict: OrderedDict = field(default_factory=OrderedDict)
-    return_type: Optional[Type] = None
+        self.group: str = group
+        self.func_type: str = func_type
+        self.func: Callable = func
+        self.is_gen_func: bool = inspect.isgenerator(func) or inspect.isasyncgenfunction(func)
+        self.is_private: bool = is_private
+        self.doc: str = doc if doc is not None else func.__doc__
+        self.func_name: str = func_name if func_name is not None else func.__name__
+        self.return_type: Type = func_sig.return_annotation
+        self.arg_list: List[str] = []
+        self.kwarg_dict: OrderedDict = OrderedDict()
 
-    def __post_init__(self) -> None:
-        if not self.doc:
-            self.doc = self.func.__doc__
-        if not self.name:
-            self.name = self.func.__name__
+        if self.func_type == Constant.CHANNEL_TYPE and self.is_gen_func:
+            raise RegisteredError("Is not a legal function. is channel or gen func?")
 
-        func_sig = inspect.signature(self.func)
-        self.return_type = func_sig.return_annotation
         for name, parameter in func_sig.parameters.items():
             if parameter.default is parameter.empty:
                 self.arg_list.append(name)
             else:
                 self.kwarg_dict[name] = parameter.default
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "group": self.group,
+            "func_type": self.func_type,
+            "is_gen_func": self.is_gen_func,
+            "is_private": self.is_private,
+            "doc": self.doc,
+            "func_name": self.func_name,
+            "return_type": self.return_type,
+        }
 
 
 class RegistryManager(object):
@@ -49,8 +65,8 @@ class RegistryManager(object):
         self.register(self._reload, "reload", group="registry", is_private=True)
         self.register(self.get_register_func_list, "list", group="registry", is_private=True)
 
-    @classmethod
-    def gen_key(cls, group: str, name: str, type_: str) -> str:
+    @staticmethod
+    def gen_key(group: str, name: str, type_: str) -> str:
         return f"{type_}:{group}:{name}"
 
     @staticmethod
@@ -58,10 +74,10 @@ class RegistryManager(object):
         sig: "inspect.Signature" = inspect.signature(func)
         func_arg_parameter: List[inspect.Parameter] = [i for i in sig.parameters.values() if i.default == i.empty]
 
-        func_type: str = "normal"
+        func_type: str = Constant.NORMAL_TYPE
         try:
             if len(func_arg_parameter) == 1 and issubclass(func_arg_parameter[0].annotation, BaseChannel):
-                func_type = "channel"
+                func_type = Constant.CHANNEL_TYPE
         except TypeError:
             # ignore error TypeError: issubclass() arg 1 must be a class
             pass
@@ -71,7 +87,7 @@ class RegistryManager(object):
         self,
         func: Callable,
         name: Optional[str] = None,
-        group: str = "default",
+        group: str = Constant.DEFAULT_GROUP,
         is_private: bool = False,
         doc: Optional[str] = None,
     ) -> None:
@@ -91,9 +107,9 @@ class RegistryManager(object):
 
         sig: "inspect.Signature" = inspect.signature(func)
 
-        type_: str = self._get_func_type(func)
+        func_type: str = self._get_func_type(func)
 
-        if type_ == "normal":
+        if func_type == Constant.NORMAL_TYPE:
             # check func param&return value type hint
             if sig.return_annotation is sig.empty:
                 raise RegisteredError(f"{func.__name__} must use TypeHints")
@@ -107,16 +123,13 @@ class RegistryManager(object):
                         f"{func.__name__} param:{param.name} type:{param.annotation} is not json type"
                     )
 
-        func_key: str = self.gen_key(group, name, type_)
+        func_key: str = self.gen_key(group, name, func_type)
         if func_key in self.func_dict:
-            raise RegisteredError(f"Name: {name} has already been used")
+            raise RegisteredError("Already been register")
         self.func_dict[func_key] = FuncModel(
-            group=group, type_=type_, name=name, func=func, is_private=is_private, doc=doc
+            group=group, func_type=func_type, func_name=name, func=func, is_private=is_private, doc=doc
         )
-
-        # not display log before called logging.basicConfig
-        if not is_private:
-            logging.info(f"register func:{func_key}")
+        logging.debug(f"register func:{func_key}")
 
     @staticmethod
     def _load_func(path: str, func_str: str) -> FunctionType:
@@ -131,7 +144,7 @@ class RegistryManager(object):
         path: str,
         func_str: str,
         name: Optional[str] = None,
-        group: str = "default",
+        group: str = Constant.DEFAULT_GROUP,
         is_private: bool = False,
         doc: Optional[str] = None,
     ) -> str:
@@ -141,10 +154,10 @@ class RegistryManager(object):
             if not name:
                 name = func.__name__
 
-            type_: str = self._get_func_type(func)
-            func_key: str = self.gen_key(group, name, type_)
+            func_type: str = self._get_func_type(func)
+            func_key: str = self.gen_key(group, name, func_type)
             if func_key in self.func_dict:
-                raise RegisteredError(f"{name} already exists in group {group}")
+                raise RegisteredError(f"Already exists in group {group}")
 
             self.register(func, name, group, is_private, doc)
             return f"load {func_str} from {path} success"
@@ -152,15 +165,20 @@ class RegistryManager(object):
             raise RegisteredError(f"load {func_str} from {path} fail, {str(e)}")
 
     def _reload(
-        self, path: str, func_str: str, name: Optional[str] = None, group: str = "default", doc: Optional[str] = None
+        self,
+        path: str,
+        func_str: str,
+        name: Optional[str] = None,
+        group: str = Constant.DEFAULT_GROUP,
+        doc: Optional[str] = None,
     ) -> str:
         """reload func by registry"""
         try:
             func = self._load_func(path, func_str)
             if not name:
                 name = func.__name__
-            type_: str = self._get_func_type(func)
-            func_key: str = self.gen_key(group, name, type_)
+            func_type: str = self._get_func_type(func)
+            func_key: str = self.gen_key(group, name, func_type)
             if func_key not in self.func_dict:
                 raise RegisteredError(f"{name} not in group {group}")
 
@@ -168,7 +186,7 @@ class RegistryManager(object):
             if func_model.is_private:
                 raise RegisteredError(f"{func_key} reload fail, private func can not reload")
             self.func_dict[func_key] = FuncModel(
-                group=group, type_=type_, name=name, func=func, is_private=func_model.is_private, doc=doc
+                group=group, func_type=func_type, func_name=name, func=func, is_private=func_model.is_private, doc=doc
             )
             return f"reload {func_str} from {path} success"
         except Exception as e:
@@ -181,18 +199,9 @@ class RegistryManager(object):
             module = inspect.getmodule(value.func)
             if not module:
                 continue
-            register_list.append(
-                {
-                    "key": key,
-                    "name": value.name if value.name else "",
-                    "module_name": module.__name__,
-                    "module_file": module.__file__,
-                    "doc": value.doc if value.doc else "",
-                    "is_private": value.is_private if value.is_private else False,
-                    "group": value.group,
-                    "type": value.type_,
-                }
-            )
+            func_info_dict: Dict[str, Any] = value.to_dict()
+            func_info_dict.update({"module_name": module.__name__, "module_file": module.__file__})
+            register_list.append(func_info_dict)
         return register_list
 
     def __contains__(self, key: str) -> bool:

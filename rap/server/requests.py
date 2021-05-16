@@ -341,7 +341,7 @@ class Request(object):
         if len(func_model.arg_list) != len(param):
             response.set_exception(
                 ParseError(
-                    extra_msg=f"{func_model.name} takes {len(func_model.arg_list)}"
+                    extra_msg=f"{func_model.func_name} takes {len(func_model.arg_list)}"
                     f" positional arguments but {len(param)} were given"
                 )
             )
@@ -351,7 +351,7 @@ class Request(object):
         if not kwarg_param_set.issubset(fun_kwarg_set):
             response.set_exception(
                 ParseError(
-                    extra_msg=f"{func_model.name} can not find default "
+                    extra_msg=f"{func_model.func_name} can not find default "
                     f"param name:{kwarg_param_set.difference(fun_kwarg_set)}"
                 )
             )
