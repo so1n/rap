@@ -1,13 +1,13 @@
 from contextvars import ContextVar
-from typing import Any, Dict, Type, get_type_hints
+from typing import Any, Dict
 
-from rap.server.model import RequestModel
+from rap.server.model import Request
 
 rap_context: ContextVar[Dict[str, Any]] = ContextVar("rap_context", default={})
 
 
 class Context:
-    request: RequestModel
+    request: Request
 
     def __getattr__(self, key: str) -> Any:
         value: Any = rap_context.get().get(key)

@@ -6,8 +6,8 @@ from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 from rap.common.conn import ServerConnection
 from rap.common.utils import Constant, Event
 from rap.server.middleware.base import BaseConnMiddleware
-from rap.server.model import ResponseModel
-from rap.server.response import Response
+from rap.server.model import Response
+from rap.server.sender import Sender
 
 
 class IpBlockMiddleware(BaseConnMiddleware):
@@ -100,17 +100,13 @@ class IpBlockMiddleware(BaseConnMiddleware):
             if enable_allow:
                 is_allow: int = await self._redis.sismember(self.allow_key, ip)
                 if not is_allow:
-                    await Response(conn)(
-                        ResponseModel.from_event(Event(Constant.EVENT_CLOSE_CONN, "not allowed to access"))
-                    )
+                    await Sender(conn)(Response.from_event(Event(Constant.EVENT_CLOSE_CONN, "not allowed to access")))
                     await conn.await_close()
                     return
             else:
                 is_block: int = await self._redis.sismember(self.block_key, ip)
                 if is_block:
-                    await Response(conn)(
-                        ResponseModel.from_event(Event(Constant.EVENT_CLOSE_CONN, "not allowed to access"))
-                    )
+                    await Sender(conn)(Response.from_event(Event(Constant.EVENT_CLOSE_CONN, "not allowed to access")))
                     await conn.await_close()
                     return
         await self.call_next(conn)

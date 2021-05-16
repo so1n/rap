@@ -6,7 +6,7 @@ from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError, ParseError
 from rap.common.utils import Constant, gen_random_time_id
-from rap.server.model import RequestModel, ResponseModel
+from rap.server.model import Request, Response
 from rap.server.processor.base import BaseProcessor
 
 
@@ -68,7 +68,7 @@ class CryptoProcessor(BaseProcessor):
         """modify crypto nonce timeout param"""
         self._nonce_timeout = timeout
 
-    async def process_request(self, request: RequestModel) -> RequestModel:
+    async def process_request(self, request: Request) -> Request:
         """decrypt request body"""
         if type(request.body) is not bytes:
             return request
@@ -103,7 +103,7 @@ class CryptoProcessor(BaseProcessor):
         except Exception as e:
             raise CryptoError(str(e)) from e
 
-    async def process_response(self, response: ResponseModel) -> ResponseModel:
+    async def process_response(self, response: Response) -> Response:
         """encrypt response body"""
         if (
             response.header.get("status_code") == 200

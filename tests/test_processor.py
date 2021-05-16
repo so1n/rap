@@ -3,7 +3,7 @@ from aredis import StrictRedis  # type: ignore
 
 from rap.client import Client
 from rap.common.exceptions import ServerError, TooManyRequest
-from rap.server import RequestModel, ResponseModel, Server
+from rap.server import Request, Response, Server
 from rap.server.processor import limit
 from rap.server.processor.base import BaseProcessor
 
@@ -15,10 +15,10 @@ pytestmark = pytest.mark.asyncio
 class TestLimit:
     async def test_processor_raise_rap_error(self, rap_server: Server, rap_client: Client) -> None:
         class TestProcessor(BaseProcessor):
-            async def process_request(self, request: RequestModel) -> RequestModel:
+            async def process_request(self, request: Request) -> Request:
                 raise TooManyRequest("test")
 
-            async def process_response(self, response: ResponseModel) -> ResponseModel:
+            async def process_response(self, response: Response) -> Response:
                 return response
 
         rap_server.load_processor([TestProcessor()])
@@ -30,10 +30,10 @@ class TestLimit:
 
     async def test_processor_raise_exc(self, rap_server: Server, rap_client: Client) -> None:
         class TestProcessor(BaseProcessor):
-            async def process_request(self, request: RequestModel) -> RequestModel:
+            async def process_request(self, request: Request) -> Request:
                 raise ValueError("test")
 
-            async def process_response(self, response: ResponseModel) -> ResponseModel:
+            async def process_response(self, response: Response) -> Response:
                 return response
 
         rap_server.load_processor([TestProcessor()])
@@ -44,13 +44,13 @@ class TestLimit:
         assert exec_msg == "test"
 
     async def test_limit(self, rap_server: Server, rap_client: Client) -> None:
-        def match_demo_request(request: RequestModel) -> limit.RULE_FUNC_RETURN_TYPE:
+        def match_demo_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
             if request.func_name == "async_sum":
                 return request.func_name
             else:
                 return None
 
-        def match_ip_request(request: RequestModel) -> limit.RULE_FUNC_RETURN_TYPE:
+        def match_ip_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
             key: str = "127.0.0.1"
             if request.header["host"][0] == key:
                 return key + "1"
@@ -78,7 +78,7 @@ class TestLimit:
             assert 3 == await async_sum(1, 2)
 
     async def test_limit_by_redis_fixed_window_backend(self, rap_server: Server, rap_client: Client) -> None:
-        def match_ip_request(request: RequestModel) -> limit.RULE_FUNC_RETURN_TYPE:
+        def match_ip_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
             key: str = "127.0.0.1"
             if request.header["host"][0] == key:
                 return key + "2"
@@ -104,7 +104,7 @@ class TestLimit:
             assert 3 == await rap_client.raw_call("sync_sum", [1, 2])
 
     async def test_limit_by_redis_cell_backend(self, rap_server: Server, rap_client: Client) -> None:
-        def match_ip_request(request: RequestModel) -> limit.RULE_FUNC_RETURN_TYPE:
+        def match_ip_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
             key: str = "127.0.0.1"
             if request.header["host"][0] == key:
                 return key + "3"

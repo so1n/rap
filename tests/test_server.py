@@ -70,7 +70,7 @@ class TestServerConnHandle:
     async def test_request_handle_error(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
         future: asyncio.Future = asyncio.Future()
         future.set_exception(Exception())
-        mocker.patch("rap.server.requests.Request.dispatch").return_value = future
+        mocker.patch("rap.server.receiver.Receiver.dispatch").return_value = future
         with pytest.raises(ServerError):
             await rap_client.raw_call("sync_sum", [1, 2])
 
@@ -83,7 +83,7 @@ class TestServerConnHandle:
         assert exec_msg == "recv close conn event, event info:request is empty"
 
     async def test_receive_error_msg(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
-        mocker.patch("rap.server.model.RequestModel.from_msg").side_effect = Exception()
+        mocker.patch("rap.server.model.Request.from_msg").side_effect = Exception()
         with pytest.raises(ConnectionError) as e:
             await rap_client.raw_call("sync_sum", [1, 2])
 
@@ -118,7 +118,7 @@ class TestRequestHandle:
     async def test_request_dispatch_func_error(
         self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
-        mocker.patch("rap.server.requests.check_func_type").side_effect = Exception()
+        mocker.patch("rap.server.receiver.check_func_type").side_effect = Exception()
 
         with pytest.raises(RpcRunTimeError) as e:
             await rap_client.raw_call("sync_sum", [1, 2])
