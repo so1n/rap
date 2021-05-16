@@ -70,7 +70,7 @@ class TestRegister:
         with pytest.raises(RegisteredError) as e:
             registry.register(demo)
         exec_msg: str = e.value.args[0]
-        assert exec_msg == "Name: demo has already been used"
+        assert exec_msg == "Already been register"
 
     async def test_reload_module(self, rap_server: Server, rap_client: Client) -> None:
         @rap_client.register()
@@ -121,7 +121,7 @@ class TestRegister:
         with pytest.raises(RegisteredError) as e:
             rap_server.registry._load("tests.test_register", "new_reload_sum")
         exec_msg: str = e.value.args[0]
-        assert "already exists in group " in exec_msg
+        assert "Already exists in group " in exec_msg
 
     async def test_register_func_error(self, rap_server: Server, rap_client: Client) -> None:
         def test_func() -> None:

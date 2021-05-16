@@ -1,7 +1,7 @@
 from contextvars import ContextVar
-from typing import Any, Dict, get_type_hints, Type
-from rap.server.model import RequestModel
+from typing import Any, Dict, Type, get_type_hints
 
+from rap.server.model import RequestModel
 
 rap_context: ContextVar[Dict[str, Any]] = ContextVar("rap_context", default={})
 

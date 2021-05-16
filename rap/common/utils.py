@@ -51,6 +51,11 @@ class Constant(object):
     MSG: str = "MSG"
     DROP: str = "drop"
 
+    CHANNEL_TYPE: str = "channel"
+    NORMAL_TYPE: str = "normal"
+
+    DEFAULT_GROUP: str = "default"
+
 
 class RapFunc(object):
     """
