@@ -101,19 +101,28 @@ class TestIpMaxConnMiddleware:
 
 
 class TestIpBlockMiddleware:
-    async def test_ip_block_method(self, rap_server: Server, rap_client: Client) -> None:
+    async def test_ip_block_method(self, rap_server: Server) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
         middleware: IpBlockMiddleware = IpBlockMiddleware(redis)
+        await clean_cache_ip_before_test(middleware)
+
         rap_server.load_middleware([middleware])
         await middleware.start_event_handle()
-        await rap_client.raw_call("add_block_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
-        await rap_client.raw_call("add_allow_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
-        await rap_client.raw_call("remove_block_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
-        await rap_client.raw_call("remove_allow_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
+
+        client: Client = Client()
+        await client.connect()
+        await client.raw_call("add_block_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
+        await client.raw_call("add_allow_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
+        await client.raw_call("remove_block_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
+        await client.raw_call("remove_allow_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
+        await client.await_close()
 
     async def test_ip_block_ip_in_access_list(self, rap_server: Server) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
-        middleware: IpBlockMiddleware = IpBlockMiddleware(redis, allow_ip_list=["127.0.0.1", "192.168.0.0/31"])
+        middleware: IpBlockMiddleware = IpBlockMiddleware(
+            redis,
+            allow_ip_list=["localhost", "::1", "127.0.0.1", "192.168.0.0/31"]
+        )
         await clean_cache_ip_before_test(middleware)
 
         rap_server.load_middleware([middleware])
@@ -152,7 +161,7 @@ class TestIpBlockMiddleware:
 
     async def test_ip_block_by_black_ip_access(self, rap_server: Server) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
-        middleware: IpBlockMiddleware = IpBlockMiddleware(redis, block_ip_list=["127.0.0.1"])
+        middleware: IpBlockMiddleware = IpBlockMiddleware(redis, block_ip_list=["localhost", "::1", "127.0.0.1"])
         await clean_cache_ip_before_test(middleware)
 
         rap_server.load_middleware([middleware])
