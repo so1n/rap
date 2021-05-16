@@ -166,7 +166,9 @@ class Server(object):
         await asyncio.sleep(0.1)
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE) -> None:
-        await self._conn_handle(ServerConnection(reader, writer, self._timeout))
+        conn: ServerConnection = ServerConnection(reader, writer, self._timeout)
+        await self._conn_handle(conn)
+        conn.conn_future.result()
 
     async def _conn_handle(self, conn: ServerConnection) -> None:
         sender: Sender = Sender(conn, self._timeout, processor_list=self._processor_list)
@@ -224,4 +226,3 @@ class Server(object):
         if not conn.is_closed():
             conn.close()
             logging.debug(f"close connection: %s", conn.peer_tuple)
-        conn.conn_future.result()
