@@ -29,8 +29,8 @@ class FuncModel(object):
         self.func: Callable = func
         self.is_gen_func: bool = inspect.isgenerator(func) or inspect.isasyncgenfunction(func)
         self.is_private: bool = is_private
-        self.doc: str = doc if doc is not None else func.__doc__
-        self.func_name: str = func_name if func_name is not None else func.__name__
+        self.doc: str = doc or func.__doc__ or ""
+        self.func_name: str = func_name or func.__name__
         self.return_type: Type = func_sig.return_annotation
         self.arg_list: List[str] = []
         self.kwarg_dict: OrderedDict = OrderedDict()

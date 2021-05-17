@@ -1,6 +1,6 @@
 import time
 from abc import ABC
-from typing import Awaitable, Callable, List, Optional, Union
+from typing import Any, Awaitable, Callable, Coroutine, List, Optional, Union
 
 from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
@@ -27,7 +27,7 @@ class BaseRedisBackend(BaseLimitBackend, ABC):
 
 
 class RedisFixedWindowBackend(BaseRedisBackend):
-    async def can_requests(self, key: str, rule: Rule, token_num: int = 1) -> bool:
+    def can_requests(self, key: str, rule: Rule, token_num: int = 1) -> Union[bool, Coroutine[Any, Any, bool]]:
         async def _can_requests() -> bool:
             """
             In the current time(rule.get_second()) window,
@@ -40,23 +40,25 @@ class RedisFixedWindowBackend(BaseRedisBackend):
             can_requests: bool = not (access_num > rule.gen_token)
             return can_requests
 
-        return await self._block_time_handle(key, rule, _can_requests)
+        return self._block_time_handle(key, rule, _can_requests)
 
-    async def expected_time(self, key: str, rule: Rule) -> float:
-        block_time_key: str = key + ":block_time"
-        block_time = await self._redis.get(block_time_key)
-        if block_time:
-            return await self._redis.ttl(block_time_key)
+    def expected_time(self, key: str, rule: Rule) -> Union[float, Coroutine[Any, Any, float]]:
+        async def _expected_time() -> float:
+            block_time_key: str = key + ":block_time"
+            block_time = await self._redis.get(block_time_key)
+            if block_time:
+                return await self._redis.ttl(block_time_key)
 
-        token_num: Optional[str] = await self._redis.get(key)
-        if token_num is None:
-            return 0
-        else:
-            token_num_int: int = int(token_num)
-
-            if token_num_int < rule.gen_token:
+            token_num: Optional[str] = await self._redis.get(key)
+            if token_num is None:
                 return 0
-            return await self._redis.ttl(key)
+            else:
+                token_num_int: int = int(token_num)
+
+                if token_num_int < rule.gen_token:
+                    return 0
+                return await self._redis.ttl(key)
+        return _expected_time()
 
 
 class RedisCellBackend(BaseRedisBackend):
@@ -86,23 +88,25 @@ class RedisCellBackend(BaseRedisBackend):
         )
         return result
 
-    async def can_requests(self, key: str, rule: Rule, token_num: int = 1) -> bool:
+    def can_requests(self, key: str, rule: Rule, token_num: int = 1) -> Union[bool, Coroutine[Any, Any, bool]]:
         async def _can_requests() -> bool:
             result: List[int] = await self._call_cell(key, rule, token_num)
             can_requests: bool = result[0] == 0
             # await self._redis.expire(key, int(rule.total_second))
             return can_requests
 
-        return await self._block_time_handle(key, rule, _can_requests)
+        return self._block_time_handle(key, rule, _can_requests)
 
-    async def expected_time(self, key: str, rule: Rule) -> float:
-        block_time_key: str = key + ":block_time"
-        block_time = await self._redis.get(block_time_key)
-        if block_time:
-            return await self._redis.ttl(block_time_key)
+    def expected_time(self, key: str, rule: Rule) -> Union[float, Coroutine[Any, Any, float]]:
+        async def _expected_time() -> float:
+            block_time_key: str = key + ":block_time"
+            block_time = await self._redis.get(block_time_key)
+            if block_time:
+                return await self._redis.ttl(block_time_key)
 
-        result: List[int] = await self._call_cell(key, rule, 0)
-        return float(max(result[3], 0))
+            result: List[int] = await self._call_cell(key, rule, 0)
+            return float(max(result[3], 0))
+        return _expected_time()
 
 
 class RedisTokenBucketBackend(BaseRedisBackend):
@@ -139,7 +143,7 @@ else
 end
     """
 
-    async def can_requests(self, key: str, rule: Rule, token_num: int = 1) -> bool:
+    def can_requests(self, key: str, rule: Rule, token_num: int = 1) -> Union[bool, Coroutine[Any, Any, bool]]:
         async def _can_requests() -> bool:
             now_token: int = await self._redis.eval(
                 self._lua_script, 1, key, time.time(), rule.rate, rule.max_token, rule.init_token
@@ -147,17 +151,19 @@ end
             await self._redis.expire(key, int(rule.total_second) * 2)
             return now_token >= 0
 
-        return await self._block_time_handle(key, rule, _can_requests)
+        return self._block_time_handle(key, rule, _can_requests)
 
-    async def expected_time(self, key: str, rule: Rule) -> float:
-        block_time_key: str = key + ":block_time"
-        block_time = await self._redis.get(block_time_key)
-        if block_time:
-            return await self._redis.ttl(block_time_key)
-        last_time = await self._redis.hget(key, "last_time")
-        if last_time is None:
+    def expected_time(self, key: str, rule: Rule) -> Union[float, Coroutine[Any, Any, float]]:
+        async def _expected_time() -> float:
+            block_time_key: str = key + ":block_time"
+            block_time = await self._redis.get(block_time_key)
+            if block_time:
+                return await self._redis.ttl(block_time_key)
+            last_time = await self._redis.hget(key, "last_time")
+            if last_time is None:
+                return 0
+            diff_time = last_time - time.time() * 1000
+            if diff_time > 0:
+                return diff_time
             return 0
-        diff_time = last_time - time.time() * 1000
-        if diff_time > 0:
-            return diff_time
-        return 0
+        return _expected_time()

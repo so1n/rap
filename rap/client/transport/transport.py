@@ -240,9 +240,11 @@ class Transport(object):
 
             request_msg: BASE_REQUEST_TYPE = _request.gen_request_msg(msg_id)
             try:
-                await conn.write(request_msg)
+                await conn.write(request_msg)  # type: ignore
             except asyncio.TimeoutError:
-                raise asyncio.TimeoutError(f"send to %s timeout, drop data:%s", conn.connection_info, request_msg)
+                raise asyncio.TimeoutError(
+                    f"send to %s timeout, drop data:%s", conn.connection_info, request_msg  # type: ignore
+                )
             except Exception as e:
                 raise e
 
