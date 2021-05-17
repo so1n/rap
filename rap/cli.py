@@ -45,6 +45,6 @@ if __name__ == "__main__":
         #     display_table_list.append([func_name, func_group, func_type, path_str, module_str])
         # print_table(display_table_list)
     elif mode == "r" and func_name:
-        print(loop.run_until_complete(client.raw_call(func_name, *arg_list, group=group)))
+        print(loop.run_until_complete(client.raw_call(func_name, arg_param=arg_list, group=group)))
 
     loop.run_until_complete(client.await_close())

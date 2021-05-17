@@ -1,4 +1,7 @@
+import asyncio
+
 import pytest
+from typing import Any
 from aredis import StrictRedis  # type: ignore
 
 from rap.client import Client
@@ -66,10 +69,12 @@ class TestLimit:
             ],
         )
         rap_server.load_processor([limit_processor])
-
-        assert 0 == await limit.backend.RedisTokenBucketBackend(redis).expected_time(
+        result: Any = limit.backend.RedisTokenBucketBackend(redis).expected_time(
             "test", limit.Rule(second=5, max_token=1, block_time=5)
         )
+        if asyncio.iscoroutine(result):
+            result = await result
+        assert 0 == result
 
         assert 3 == await async_sum(1, 2)
         with pytest.raises(TooManyRequest):
@@ -94,9 +99,12 @@ class TestLimit:
         )
         rap_server.load_processor([limit_processor])
 
-        assert 0 == await limit.backend.RedisFixedWindowBackend(redis).expected_time(
+        result: Any = limit.backend.RedisFixedWindowBackend(redis).expected_time(
             "test", limit.Rule(second=5, max_token=1, block_time=5)
         )
+        if asyncio.iscoroutine(result):
+            result = await result
+        assert 0 == result
         assert 3 == await rap_client.raw_call("sync_sum", [1, 2])
         with pytest.raises(TooManyRequest):
             assert 3 == await rap_client.raw_call("sync_sum", [1, 2])
@@ -120,9 +128,12 @@ class TestLimit:
         )
         rap_server.load_processor([limit_processor])
 
-        assert 0 == await limit.backend.RedisCellBackend(redis).expected_time(
+        result: Any = limit.backend.RedisCellBackend(redis).expected_time(
             "test", limit.Rule(second=5, max_token=1, block_time=5)
         )
+        if asyncio.iscoroutine(result):
+            result = await result
+        assert 0 == result
         assert 3 == await rap_client.raw_call("sync_sum", [1, 2])
         with pytest.raises(TooManyRequest):
             assert 3 == await rap_client.raw_call("sync_sum", [1, 2])

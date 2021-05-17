@@ -5,7 +5,7 @@ from rap.common.exceptions import ChannelError
 
 if TYPE_CHECKING:
     from rap.client.model import Response
-    from rap.server.model import Response
+    from rap.server.model import Response as ServerResponse
 
 
 class AsyncIterResponse(object):
@@ -15,7 +15,7 @@ class AsyncIterResponse(object):
     def __aiter__(self) -> "AsyncIterResponse":
         return self
 
-    async def __anext__(self) -> "Union[Response, Response]":
+    async def __anext__(self) -> "Union[Response, ServerResponse]":
         try:
             return await self.channel.read()
         except ChannelError:
@@ -23,7 +23,7 @@ class AsyncIterResponse(object):
 
 
 class AsyncIterBody(AsyncIterResponse):
-    async def __anext__(self) -> "Union[Response, Response]":
+    async def __anext__(self) -> "Union[Response, ServerResponse]":
         try:
             return await self.channel.read_body()
         except ChannelError:

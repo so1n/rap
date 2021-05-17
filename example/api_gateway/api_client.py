@@ -3,7 +3,7 @@ import json
 from typing import Any
 
 from httpx import AsyncClient, Response
-from websockets import connect
+from websockets import connect  # type: ignore
 
 
 async def example_websockets_client() -> None:
