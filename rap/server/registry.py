@@ -52,7 +52,6 @@ class FuncModel(object):
             "is_private": self.is_private,
             "doc": self.doc,
             "func_name": self.func_name,
-            "return_type": self.return_type,
         }
 
 

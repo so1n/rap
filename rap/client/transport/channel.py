@@ -108,7 +108,10 @@ class Channel(BaseChannel):
     async def close(self) -> None:
         """Actively send a close message and close the channel"""
         if self.is_close:
-            await self._channel_conn_future
+            try:
+                await self._channel_conn_future
+            except ChannelError:
+                pass
             return
 
         life_cycle: str = Constant.DROP
