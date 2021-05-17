@@ -29,6 +29,7 @@ coverage = "^5.4"
 uvicorn = "^0.13.4"
 httpx = "^0.18.1"
 websockets = "^9.0.2"
+requests = "^2.25.1"
 
 [tool.poetry.extras]
 crypto = ["pycrypto"]

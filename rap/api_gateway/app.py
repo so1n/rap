@@ -17,8 +17,8 @@ def create_app(
     func_info_dict: Dict[str, Dict[str, Any]] = {}
     app.add_exception_handler(Exception, api_exception)
     app.state.rap_client = rap_client
-    app.state.private_filter = (private_filter,)
-    app.state.group_filter = (group_filter,)
+    app.state.private_filter = private_filter
+    app.state.group_filter = group_filter
     app.state.func_info_dict = func_info_dict
 
     if rap_client.transport.is_close:

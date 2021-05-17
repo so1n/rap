@@ -24,11 +24,13 @@ async def async_channel(channel: Channel) -> None:
         await channel.write(body)
 
 
-rpc_server: Server = Server()
-rpc_server.register(sync_sum)
-rpc_server.register(async_sum)
-rpc_server.register(async_gen)
-rpc_server.register(async_channel)
+def create_server() -> Server:
+    rpc_server: Server = Server()
+    rpc_server.register(sync_sum)
+    rpc_server.register(async_sum)
+    rpc_server.register(async_gen)
+    rpc_server.register(async_channel)
+    return rpc_server
 
 
 if __name__ == "__main__":
@@ -39,9 +41,10 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
-    loop.run_until_complete(rpc_server.create_server())
+    server: Server = create_server()
+    loop.run_until_complete(server.create_server())
 
     try:
         loop.run_forever()
     except KeyboardInterrupt:
-        loop.run_until_complete(rpc_server.await_closed())
+        loop.run_until_complete(server.await_closed())
