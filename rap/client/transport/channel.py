@@ -30,7 +30,7 @@ class Channel(BaseChannel):
     ):
         self.channel_id: str = str(uuid.uuid4())
         self._func_name: str = fun_name
-        self._group: str = group if group else "default"
+        self._group: str = group if group else Constant.DEFAULT_GROUP
         self._session: "Session" = session
         self._create: Callable[[str], Coroutine[Any, Any, Any]] = create
         self._read: Callable[[str], Coroutine[Any, Any, Response]] = read

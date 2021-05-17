@@ -66,7 +66,11 @@ class Transport(object):
             await self._conn_dict[host].await_close()
 
         conn: Connection = Connection(self._timeout, ssl_crt_path=self._ssl_crt_path)
-        ip, port = host.split(":")
+        index: int = host.rfind(":")
+        if index == -1:
+            raise ValueError("Not a legal host")
+        ip: str = host[:index]
+        port: str = host[index + 1:]
         await conn.connect(ip, int(port))
         future: asyncio.Future = asyncio.ensure_future(self._listen(conn))
         self._conn_dict[host] = ConnModel(conn, future)
@@ -93,6 +97,7 @@ class Transport(object):
                 logging.warning(f"{host} not init")
             elif self._conn_dict[host].is_closed():
                 logging.warning(f"{host} already close")
+                del self._conn_dict[host]
             else:
                 await self._conn_dict[host].await_close()
                 del self._conn_dict[host]
@@ -207,10 +212,10 @@ class Transport(object):
     def before_write_handle(request: Request) -> None:
         """check and header"""
 
-        def set_header_value(header_key: str, header_Value: Any, is_cover: bool = False) -> None:
+        def set_header_value(header_key: str, header_value: Any, is_cover: bool = False) -> None:
             """if key not in header, set header value"""
             if is_cover or header_key not in request.header:
-                request.header[header_key] = header_Value
+                request.header[header_key] = header_value
 
         set_header_value("version", Constant.VERSION, is_cover=True)
         set_header_value("user_agent", Constant.USER_AGENT, is_cover=True)
@@ -283,14 +288,10 @@ class Transport(object):
         session: Optional["Session"] = None,
     ) -> Response:
         """msg request handle"""
-        if not group:
-            group = "default"
-        if not call_id:
-            call_id = -1
-        if not arg_param:
-            arg_param = []
-        if not kwarg_param:
-            kwarg_param = {}
+        group = group or Constant.DEFAULT_GROUP
+        call_id = call_id or -1
+        arg_param = arg_param or []
+        kwarg_param = kwarg_param or {}
         request: Request = Request(
             Constant.MSG_REQUEST,
             func_name,
