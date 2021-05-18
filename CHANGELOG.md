@@ -7,7 +7,16 @@
  - Feature: client support load balance
  - Feature: server HA middleware
 
-### 0.5.3.7[Now] 
+### 0.5.3.8[Now]
+ - description: 
+ - Feature: add channel future
+ - Feature: client support inject func
+ - Feature: add opentracing processor
+ - Feature: add server api gateway
+ - Fix: fix client session run rap func bug
+ - Optimize: optimize common and server code
+
+### 0.5.3.7
  - description: 
  - Feature: add limit processor
  - Feature: Channel support group

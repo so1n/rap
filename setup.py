@@ -1,4 +1,4 @@
-import setuptools
+import setuptools  # type: ignore
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
@@ -10,7 +10,7 @@ with open("requirements.txt") as f:
 
 setuptools.setup(
     name="rap",
-    version="0.5.3.7",
+    version="0.5.3.8",
     author="so1n",
     author_email="so1n897046026@gmail.com",
     description="rap(par[::-1]) is advanced and fast python async rpc",
