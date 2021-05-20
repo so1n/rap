@@ -339,9 +339,10 @@ server.load_stop_event([mock_stop()])
   
 此外中间件还支持`start_event_handle`和`stop_event_handle`方法,分别在`Server`启动和关闭时调用.
 `rap.server`引入中间件方法:
+
 ```Python
 from rap.server import Server
-from rap.server.middleware import AccessMsgMiddleware, ConnLimitMiddleware
+from rap.server.plugin.middleware import AccessMsgMiddleware, ConnLimitMiddleware
 
 rpc_server = Server()
 rpc_server.load_middleware([ConnLimitMiddleware(), AccessMsgMiddleware()])
@@ -364,11 +365,12 @@ client = Client()
 client.load_processor([CryptoProcessor('key_id', 'xxxxxxxxxxxxxxxx')])
 ```
 `rap.server`引入processor方法
+
 ```Python
 from aredis import StrictRedis
 
 from rap.server import Server
-from rap.server.processor import CryptoProcessor
+from rap.server.plugin.processor import CryptoProcessor
 
 redis: StrictRedis = StrictRedis("redis://localhost")
 server = Server()
@@ -394,11 +396,12 @@ client = Client()
 client.load_processor([CryptoProcessor('demo_id', 'xxxxxxxxxxxxxxxx', timeout=60, interval=120)])
 ```
 服务端示例:
+
 ```Python
 from aredis import StrictRedis
 
 from rap.server import Server
-from rap.server.processor import CryptoProcessor
+from rap.server.plugin.processor import CryptoProcessor
 
 redis: StrictRedis = StrictRedis("redis://localhost")
 server = Server()
@@ -409,11 +412,12 @@ server.load_processor([CryptoProcessor({"demo_id": "xxxxxxxxxxxxxxxx"}, redis, t
 ```
 ## 4.2.限制最大链接数
 仅限服务端使用,可以限制服务端的最大链接数,超过设定值则不会处理新的请求
+
 ```Python
 from aredis import StrictRedis
 
 from rap.server import Server
-from rap.server.middleware import ConnLimitMiddleware, IpMaxConnMiddleware
+from rap.server.plugin.middleware import ConnLimitMiddleware, IpMaxConnMiddleware
 
 redis: StrictRedis = StrictRedis("redis://localhost")
 server = Server()
@@ -430,11 +434,12 @@ server.load_middleware(
 ```
 ## 4.3.限制ip访问
 支持限制单个ip或者整个网段的ip, 同时支持白名单和黑名单模式,如果启用白名单,则默认禁用黑名单模式
+
 ```Python
 from aredis import StrictRedis
 
 from rap.server import Server
-from rap.server.middleware import IpBlockMiddleware
+from rap.server.plugin.middleware import IpBlockMiddleware
 
 redis: StrictRedis = StrictRedis("redis://localhost")
 server = Server()

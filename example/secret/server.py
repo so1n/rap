@@ -3,7 +3,7 @@ import asyncio
 from aredis import StrictRedis  # type: ignore
 
 from rap.server import Server
-from rap.server.processor import CryptoProcessor
+from rap.server.plugin.processor import CryptoProcessor
 
 
 async def async_sum(a: int, b: int) -> int:

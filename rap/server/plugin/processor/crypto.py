@@ -1,5 +1,5 @@
 import time
-from typing import Callable, Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
@@ -7,7 +7,7 @@ from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError, ParseError
 from rap.common.utils import Constant, gen_random_time_id
 from rap.server.model import Request, Response
-from rap.server.processor.base import BaseProcessor
+from rap.server.plugin.processor.base import BaseProcessor
 
 
 class CryptoProcessor(BaseProcessor):

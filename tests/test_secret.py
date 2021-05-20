@@ -11,7 +11,7 @@ from rap.client.processor import CryptoProcessor
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError
 from rap.server import Server
-from rap.server.processor import CryptoProcessor as ServerCryptoProcessor
+from rap.server.plugin.processor import CryptoProcessor as ServerCryptoProcessor
 
 from .conftest import async_sum  # type: ignore
 
@@ -110,7 +110,7 @@ class TestServerCryptoProcess:
         self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
         future: asyncio.Future = asyncio.Future()
-        mocker.patch("rap.server.processor.crypto.StrictRedis.exists").return_value = future
+        mocker.patch("rap.server.plugin.processor.crypto.StrictRedis.exists").return_value = future
         future.set_exception(Exception("customer exc"))
 
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")

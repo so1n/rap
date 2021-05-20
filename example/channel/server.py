@@ -5,7 +5,7 @@ from aredis import StrictRedis  # type: ignore
 
 from rap.server import Channel, Server
 from rap.server.model import Response
-from rap.server.processor import CryptoProcessor
+from rap.server.plugin.processor import CryptoProcessor
 
 
 async def async_channel(channel: Channel) -> None:

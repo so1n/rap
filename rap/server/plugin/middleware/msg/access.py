@@ -3,7 +3,7 @@ import time
 from typing import Any, Callable, Dict, Tuple
 
 from rap.common.exceptions import ServerError
-from rap.server.middleware.base import BaseMsgMiddleware
+from rap.server.plugin.middleware.base import BaseMsgMiddleware
 from rap.server.model import Request
 
 

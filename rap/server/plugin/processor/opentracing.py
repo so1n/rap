@@ -9,7 +9,7 @@ from opentracing.scope import Scope  # type: ignore
 
 from rap.common.utils import Constant
 from rap.server.model import Request, Response
-from rap.server.processor.base import BaseProcessor  # type: ignore
+from rap.server.plugin.processor.base import BaseProcessor  # type: ignore
 
 
 class TracingProcessor(BaseProcessor):

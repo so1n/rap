@@ -1,6 +1,6 @@
 from typing import Any, Coroutine, Union
 
-from rap.server.processor.limit.rule import Rule
+from rap.server.plugin.processor.limit.rule import Rule
 
 
 class BaseLimitBackend(object):

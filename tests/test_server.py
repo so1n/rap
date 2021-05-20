@@ -1,5 +1,4 @@
 import asyncio
-from typing import Any
 
 import pytest
 from aredis import StrictRedis  # type: ignore
@@ -8,8 +7,8 @@ from pytest_mock import MockerFixture
 from rap.client import Client
 from rap.common.exceptions import RpcRunTimeError, ServerError
 from rap.server import Server
-from rap.server.middleware.msg.access import AccessMsgMiddleware
-from rap.server.processor import CryptoProcessor as ServerCryptoProcessor
+from rap.server.plugin.middleware.msg.access import AccessMsgMiddleware
+from rap.server.plugin.processor import CryptoProcessor as ServerCryptoProcessor
 
 pytestmark = pytest.mark.asyncio
 

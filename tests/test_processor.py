@@ -7,8 +7,8 @@ from aredis import StrictRedis  # type: ignore
 from rap.client import Client
 from rap.common.exceptions import ServerError, TooManyRequest
 from rap.server import Request, Response, Server
-from rap.server.processor import limit
-from rap.server.processor.base import BaseProcessor
+from rap.server.plugin.processor import limit
+from rap.server.plugin.processor.base import BaseProcessor
 
 from .conftest import async_sum  # type: ignore
 

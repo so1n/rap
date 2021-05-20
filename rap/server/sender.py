@@ -6,7 +6,7 @@ from typing import Any, List, Optional
 from rap.common.conn import ServerConnection
 from rap.common.utils import Constant
 from rap.server.model import Event, Response
-from rap.server.processor.base import BaseProcessor
+from rap.server.plugin.processor.base import BaseProcessor
 
 __all__ = ["Sender"]
 
