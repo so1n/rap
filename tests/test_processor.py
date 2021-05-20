@@ -1,7 +1,7 @@
 import asyncio
+from typing import Any
 
 import pytest
-from typing import Any
 from aredis import StrictRedis  # type: ignore
 
 from rap.client import Client

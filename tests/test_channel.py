@@ -8,8 +8,8 @@ from rap.client import Channel, Client, Response
 from rap.common.exceptions import ChannelError, FuncNotFoundError
 from rap.common.utils import Constant
 from rap.server import Channel as ServerChannel
-from rap.server import Server
 from rap.server import Response as ServerResponse
+from rap.server import Server
 
 pytestmark = pytest.mark.asyncio
 
