@@ -348,9 +348,10 @@ server.load_stop_event([mock_stop()])
 In addition, the middleware supports `start_event_handle` and `stop_event_handle` methods, which are called when the `Server` starts and shuts down respectively.
 
 example:
+
 ```Python
 from rap.server import Server
-from rap.server.middleware import AccessMsgMiddleware, ConnLimitMiddleware
+from rap.server.plugin.middleware import AccessMsgMiddleware, ConnLimitMiddleware
 
 rpc_server = Server()
 rpc_server.load_middleware([ConnLimitMiddleware(), AccessMsgMiddleware()])
@@ -374,9 +375,10 @@ client = Client()
 client.load_processor([CryptoProcessor('key_id', 'xxxxxxxxxxxxxxxx')])
 ```
 server load processor example
+
 ```Python
 from rap.server import Server
-from rap.server.processor import CryptoProcessor
+from rap.server.plugin.processor import CryptoProcessor
 
 server = Server()
 server.load_processor([CryptoProcessor({'key_id': 'xxxxxxxxxxxxxxxx'})])
@@ -401,10 +403,10 @@ client = Client()
 client.load_processor([CryptoProcessor("demo_id", "xxxxxxxxxxxxxxxx", timeout=60, interval=120)])
 ```
 server example:
+
 ```Python
 from rap.server import Server
-from rap.server.processor import CryptoProcessor
-
+from rap.server.plugin.processor import CryptoProcessor
 
 server = Server()
 # The first parameter is the secret key key-value pair, key is the secret key id, value is the secret key
@@ -414,10 +416,10 @@ server.load_processor([CryptoProcessor({"demo_id": "xxxxxxxxxxxxxxxx"}, timeout=
 ```
 ## 4.2. Limit the maximum number of conn
 Server-side use only, you can limit the maximum number of links on the server side, more than the set value will not handle new requests
+
 ```Python
 from rap.server import Server
-from rap.server.middleware import ConnLimitMiddleware, IpMaxConnMiddleware 
-
+from rap.server.plugin.middleware import ConnLimitMiddleware, IpMaxConnMiddleware
 
 server = Server()
 server.load_middleware(
@@ -433,10 +435,10 @@ server.load_middleware(
 ```
 ## 4.3.Limit ip access
 Support restrict single ip or whole segment ip, support both whitelist and blacklist mode, if whitelist is enabled, blacklist mode is disabled by default
+
 ```Python
 from rap.server import Server
-from rap.server.middleware import IpBlockMiddleware 
-
+from rap.server.plugin.middleware import IpBlockMiddleware
 
 server = Server()
 # allow_ip_list: whitelist, support network segment ip, if filled with allow_ip_list, black_ip_list will be invalid 

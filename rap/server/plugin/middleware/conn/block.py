@@ -5,7 +5,7 @@ from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
 from rap.common.conn import ServerConnection
 from rap.common.utils import Constant, Event
-from rap.server.middleware.base import BaseConnMiddleware
+from rap.server.plugin.middleware.base import BaseConnMiddleware
 from rap.server.model import Response
 from rap.server.sender import Sender
 
@@ -22,16 +22,19 @@ class IpBlockMiddleware(BaseConnMiddleware):
         redis: Union[StrictRedis, StrictRedisCluster],
         allow_ip_list: Optional[List[str]] = None,
         block_ip_list: Optional[List[str]] = None,
+        namespace: str = ""
     ):
         self._redis: Union[StrictRedis, StrictRedisCluster] = redis
         self.block_key: str = f"{self.__class__.__name__}:block_ip"
         self.allow_key: str = f"{self.__class__.__name__}:allow_ip"
+        if namespace:
+            self.block_key = f"{namespace}:{self.block_key}"
+            self.allow_key = f"{namespace}:{self.allow_key}"
 
         self._allow_ip_list: List[str] = allow_ip_list if allow_ip_list else []
         self._block_ip_list: List[str] = block_ip_list if block_ip_list else []
 
     async def start_event_handle(self) -> None:
-
         self.register(self._add_allow_ip)
         self.register(self._add_block_ip)
         self.register(self._remove_allow_ip)
@@ -64,21 +67,21 @@ class IpBlockMiddleware(BaseConnMiddleware):
         return ip_list
 
     async def _add_allow_ip(self, ip: Union[str, List]) -> None:
-        ip_list = self.ip_handle(ip)
+        ip_list: List[str] = self.ip_handle(ip)
         await self._redis.sadd(self.allow_key, ip_list[0], *ip_list[1:])
         await self._redis.srem(self.block_key, ip_list[0], *ip_list[1:])
 
     async def _add_block_ip(self, ip: Union[str, List]) -> None:
-        ip_list = self.ip_handle(ip)
+        ip_list: List[str] = self.ip_handle(ip)
         await self._redis.sadd(self.block_key, ip_list[0], *ip_list[1:])
         await self._redis.srem(self.allow_key, ip_list[0], *ip_list[1:])
 
     async def _remove_allow_ip(self, ip: Union[str, List]) -> None:
-        ip_list = self.ip_handle(ip)
+        ip_list: List[str] = self.ip_handle(ip)
         await self._redis.srem(self.allow_key, ip_list[0], *ip_list[1:])
 
     async def _remove_block_ip(self, ip: Union[str, List]) -> None:
-        ip_list = self.ip_handle(ip)
+        ip_list: List[str] = self.ip_handle(ip)
         await self._redis.srem(self.block_key, ip_list[0], *ip_list[1:])
 
     async def _get_allow_ip(self) -> List[str]:
@@ -100,13 +103,13 @@ class IpBlockMiddleware(BaseConnMiddleware):
             if enable_allow:
                 is_allow: int = await self._redis.sismember(self.allow_key, ip)
                 if not is_allow:
-                    await Sender(conn)(Response.from_event(Event(Constant.EVENT_CLOSE_CONN, "not allowed to access")))
+                    await Sender(conn).send_event(Event(Constant.EVENT_CLOSE_CONN, "not allowed to access"))
                     await conn.await_close()
                     return
             else:
                 is_block: int = await self._redis.sismember(self.block_key, ip)
                 if is_block:
-                    await Sender(conn)(Response.from_event(Event(Constant.EVENT_CLOSE_CONN, "not allowed to access")))
+                    await Sender(conn).send_event(Event(Constant.EVENT_CLOSE_CONN, "not allowed to access"))
                     await conn.await_close()
                     return
         await self.call_next(conn)

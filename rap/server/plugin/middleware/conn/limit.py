@@ -1,12 +1,12 @@
 import logging
 import time
-from typing import Callable, Dict, Optional, Union
+from typing import Dict, Union
 
 from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
 from rap.common.conn import ServerConnection
 from rap.common.utils import Constant, Event
-from rap.server.middleware.base import BaseConnMiddleware
+from rap.server.plugin.middleware.base import BaseConnMiddleware
 from rap.server.model import Response
 from rap.server.sender import Sender
 
@@ -45,11 +45,10 @@ class ConnLimitMiddleware(BaseConnMiddleware):
         self._conn_count += 1
         try:
             if self._release_timestamp > now_timestamp or self._conn_count > self._max_conn:
-                self._release_timestamp = now_timestamp + self._block_time
-                await Sender(conn)(
-                    Response.from_event(
-                        Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of connections limit")
-                    )
+                if now_timestamp > self._release_timestamp:
+                    self._release_timestamp = now_timestamp + self._block_time
+                await Sender(conn).send_event(
+                    Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of connections limit")
                 )
                 await conn.await_close()
                 return
@@ -64,10 +63,19 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
     feat: Limit the number of connections of a specified IP within a unit time
     """
 
-    def __init__(self, redis: Union[StrictRedis, StrictRedisCluster], ip_max_conn: int = 128, timeout: int = 180):
+    def __init__(
+        self,
+        redis: Union[StrictRedis, StrictRedisCluster],
+        ip_max_conn: int = 128,
+        timeout: int = 180,
+        namespace: str = ""
+    ):
         self._redis: Union[StrictRedis, StrictRedisCluster] = redis
         self._ip_max_conn: int = ip_max_conn
         self._timeout: int = timeout
+        self._key: str = self.__class__.__name__
+        if namespace:
+            self._key = f"{namespace}:{self._key}"
 
     def start_event_handle(self) -> None:
         self.register(self.modify_max_ip_max_conn)
@@ -84,15 +92,13 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
         self._timeout = timeout
 
     async def dispatch(self, conn: ServerConnection) -> None:
-        key: str = f"{self.__class__.__name__}:{conn.peer_tuple[0]}"
+        key: str = f"{self._key}:{conn.peer_tuple[0]}"
         now_cnt: int = await self._redis.incr(key)
         try:
             if now_cnt > self._ip_max_conn:
                 logging.error(f"Currently exceeding the maximum number of ip conn limit, close {conn.peer_tuple}")
-                await Sender(conn)(
-                    Response.from_event(
-                        Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of ip conn limit")
-                    )
+                await Sender(conn).send_event(
+                    Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of ip conn limit")
                 )
                 await conn.await_close()
             else:

@@ -4,8 +4,8 @@ from typing import Any, Awaitable, Callable, Coroutine, List, Optional, Union
 
 from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
-from rap.server.processor.limit.backend import BaseLimitBackend
-from rap.server.processor.limit.rule import Rule
+from rap.server.plugin.processor.limit.backend import BaseLimitBackend
+from rap.server.plugin.processor.limit.rule import Rule
 
 
 class BaseRedisBackend(BaseLimitBackend, ABC):

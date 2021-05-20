@@ -4,7 +4,7 @@ from aredis import StrictRedis  # type: ignore
 
 from rap.server import Server
 from rap.server.model import Request
-from rap.server.processor import limit
+from rap.server.plugin.processor import limit
 
 
 async def demo(a: int, b: int) -> int:

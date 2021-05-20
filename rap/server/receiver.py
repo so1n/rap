@@ -41,7 +41,7 @@ from rap.common.utils import (
     response_num_dict,
 )
 from rap.server.model import Request, Response
-from rap.server.processor.base import BaseProcessor
+from rap.server.plugin.processor.base import BaseProcessor
 from rap.server.registry import FuncModel
 from rap.server.sender import Sender
 

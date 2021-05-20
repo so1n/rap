@@ -1,13 +1,13 @@
 import inspect
-from typing import Awaitable, Callable, List, Optional, Set, Tuple, Union
+from typing import Awaitable, List, Optional, Set, Tuple, Union
 
 from rap.common.exceptions import TooManyRequest
 from rap.common.utils import Constant
 from rap.server.model import Request, Response
-from rap.server.processor.base import BaseProcessor
-from rap.server.processor.limit.backend import BaseLimitBackend
-from rap.server.processor.limit.rule import Rule
-from rap.server.processor.limit.util import RULE_FUNC_TYPE
+from rap.server.plugin.processor.base import BaseProcessor
+from rap.server.plugin.processor.limit.backend import BaseLimitBackend
+from rap.server.plugin.processor.limit.rule import Rule
+from rap.server.plugin.processor.limit.util import RULE_FUNC_TYPE
 
 
 class LimitProcessor(BaseProcessor):
