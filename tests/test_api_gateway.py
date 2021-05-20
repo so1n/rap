@@ -1,9 +1,9 @@
 import asyncio
 import json
-import pytest
 from multiprocessing import Process, Queue
 from typing import Generator, Set
 
+import pytest
 from requests import Response
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
@@ -11,12 +11,11 @@ from starlette.websockets import WebSocket
 from uvicorn.config import Config  # type: ignore
 from uvicorn.server import Server as AppServer  # type: ignore
 
+from example.api_gateway.api_client import example_websockets_client
+from example.api_gateway.server import Server, create_server
 from rap.api_gateway.app import create_app
 from rap.client import Client
 from rap.common.utils import Constant
-
-from example.api_gateway.server import create_server, Server
-from example.api_gateway.api_client import example_websockets_client
 
 
 @pytest.fixture()
@@ -73,13 +72,12 @@ class TestApiGateWay:
                 "http://localhost:8000/api/normal",
                 json={"group": "default", "func_type": "normal", "arg_list": [1, 2]},
             )
-            assert {'code': 1, 'msg': "param error:'func_name'"} == resp.json()
+            assert {"code": 1, "msg": "param error:'func_name'"} == resp.json()
             resp = client.post(
                 "http://localhost:8000/api/normal",
                 json={"group": "default", "func_name": "sync_sum", "func_type": "normal", "arg_list": 1},
             )
-            assert {'code': 1, 'msg': "param error"} == resp.json()
-
+            assert {"code": 1, "msg": "param error"} == resp.json()
 
     def test_not_found(self) -> None:
         group_set: Set[str] = set()
@@ -101,5 +99,4 @@ class TestApiGateWay:
                 "http://localhost:8000/api/normal",
                 json={"group": "default", "func_name": "sync_sum", "func_type": "normal", "arg_list": [1, 2]},
             )
-            assert {'code': 1, 'msg': 'Not Found'} == resp.json()
-
+            assert {"code": 1, "msg": "Not Found"} == resp.json()

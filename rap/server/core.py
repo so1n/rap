@@ -7,6 +7,7 @@ from typing import Any, Callable, List, Optional, Set, Union
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import ServerError
+from rap.common.state import WindowState
 from rap.common.types import BASE_REQUEST_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utils import Constant, Event, RapFunc
 from rap.server.context import rap_context
@@ -36,6 +37,7 @@ class Server(object):
         stop_event_list: List[Callable] = None,
         middleware_list: List[BaseMiddleware] = None,
         processor_list: List[BaseProcessor] = None,
+        window_state: Optional[WindowState] = None,
     ):
         if isinstance(host, str):
             self._host: List[str] = [host]
@@ -71,6 +73,9 @@ class Server(object):
             self.load_processor(processor_list)
 
         self.registry: RegistryManager = RegistryManager()
+        self.window_state: Optional[WindowState] = window_state
+        if self.window_state and self.window_state.is_closed:
+            self.load_start_event([self.window_state.change_state])
 
     def _load_event(self, event_list: List[Callable], event: Callable) -> None:
         if not (inspect.isfunction(event) or asyncio.iscoroutine(event) or inspect.ismethod(event)):

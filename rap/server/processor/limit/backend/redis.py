@@ -58,6 +58,7 @@ class RedisFixedWindowBackend(BaseRedisBackend):
                 if token_num_int < rule.gen_token:
                     return 0
                 return await self._redis.ttl(key)
+
         return _expected_time()
 
 
@@ -106,6 +107,7 @@ class RedisCellBackend(BaseRedisBackend):
 
             result: List[int] = await self._call_cell(key, rule, 0)
             return float(max(result[3], 0))
+
         return _expected_time()
 
 
@@ -166,4 +168,5 @@ end
             if diff_time > 0:
                 return diff_time
             return 0
+
         return _expected_time()

@@ -3,8 +3,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from rap.common.exceptions import BaseRapError, ServerError
+from rap.common.state import State
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
-from rap.common.utils import Constant, Event, State
+from rap.common.utils import Constant, Event
 
 
 @dataclass()

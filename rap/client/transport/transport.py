@@ -70,7 +70,7 @@ class Transport(object):
         if index == -1:
             raise ValueError("Not a legal host")
         ip: str = host[:index]
-        port: str = host[index + 1:]
+        port: str = host[index + 1 :]
         await conn.connect(ip, int(port))
         future: asyncio.Future = asyncio.ensure_future(self._listen(conn))
         self._conn_dict[host] = ConnModel(conn, future)
