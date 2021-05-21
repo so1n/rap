@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from typing import Any, Callable, Dict, Optional, Set
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
 
 from rap.common.utils import get_event_loop
 
@@ -32,9 +32,14 @@ class State(object):
 
 class WindowState(object):
     def __init__(
-        self, interval: int = 1, change_callback_set: Optional[Set[Callable]] = None, change_callback_wait_cnt: int = 3
+        self,
+        interval: int = 1,
+        change_callback_set: Optional[Set[Callable[[dict], None]]] = None,
+        change_callback_priority_set: Optional[Set[Callable[[dict], None]]] = None,
+        change_callback_wait_cnt: int = 3,
     ) -> None:
         self._change_callback_set: Set[Callable] = change_callback_set or set()
+        self._change_callback_priority_set: Set[Callable] = change_callback_priority_set or set()
         self._change_callback_wait_cnt: int = change_callback_wait_cnt
         self._interval: int = interval
         self._timestamp: float = time.time()
@@ -65,13 +70,39 @@ class WindowState(object):
     def _update_change_callback_future_run_timestamp(self) -> None:
         self._change_callback_future_run_timestamp = self._loop.time()  # type: ignore
 
+    def _run_callback(self) -> asyncio.Future:
+        loop: asyncio.AbstractEventLoop = self._loop  # type: ignore
+
+        async def _safe_run_callback(fn: Callable) -> None:
+            if asyncio.iscoroutinefunction(fn):
+                coro: Awaitable = fn()
+            else:
+                coro = loop.run_in_executor(None, fn)
+            try:
+                await coro
+            except Exception as e:
+                logging.exception(f"{self.__class__.__name__} run {fn} error: {e}")
+
+        async def _real_run_callback() -> None:
+            coro_list: List[Awaitable] = []
+            for fn in self._change_callback_priority_set:
+                coro_list.append(_safe_run_callback(fn))
+            await asyncio.gather(*coro_list)
+
+            coro_list = []
+            for fn in self._change_callback_set:
+                coro_list.append(_safe_run_callback(fn))
+            await asyncio.gather(*coro_list)
+
+        return asyncio.ensure_future(_real_run_callback())
+
     def _change_state(self) -> None:
         loop: asyncio.AbstractEventLoop = self._loop  # type: ignore
         self._timestamp = loop.time()
         logging.debug("%s run once at loop time: %s" % (self.__class__.__name__, self._timestamp))
         self._dict = self._future_dict
         self._future_dict = {}
-        if self._change_callback_set:
+        if self._change_callback_set or self._change_callback_priority_set:
             if self._change_callback_future and not self._change_callback_future.done():
                 if (
                     self._change_callback_future_run_timestamp + self._interval * self._change_callback_wait_cnt
@@ -82,7 +113,7 @@ class WindowState(object):
                 elif self._change_callback_future.cancelled():
                     self._change_callback_future.cancel()
 
-            self._change_callback_future = asyncio.gather(*[fn() for fn in self._change_callback_set])
+            self._change_callback_future = self._run_callback()
             self._change_callback_future.add_done_callback(lambda f: self._update_change_callback_future_run_timestamp)
         loop.call_at(self._timestamp + self._interval, self._change_state)
 
@@ -91,6 +122,12 @@ class WindowState(object):
 
     def remove_callback(self, fn: Callable) -> None:
         self._change_callback_set.remove(fn)
+
+    def add_priority_callback(self, fn: Callable) -> None:
+        self._change_callback_priority_set.add(fn)
+
+    def remove_priority_callback(self, fn: Callable) -> None:
+        self._change_callback_priority_set.remove(fn)
 
     def change_state(self) -> None:
         if self._is_closed:

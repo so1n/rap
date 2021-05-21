@@ -6,8 +6,8 @@ from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
 from rap.common.conn import ServerConnection
 from rap.common.utils import Constant, Event
-from rap.server.plugin.middleware.base import BaseConnMiddleware
 from rap.server.model import Response
+from rap.server.plugin.middleware.base import BaseConnMiddleware
 from rap.server.sender import Sender
 
 
@@ -68,7 +68,7 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
         redis: Union[StrictRedis, StrictRedisCluster],
         ip_max_conn: int = 128,
         timeout: int = 180,
-        namespace: str = ""
+        namespace: str = "",
     ):
         self._redis: Union[StrictRedis, StrictRedisCluster] = redis
         self._ip_max_conn: int = ip_max_conn
@@ -78,6 +78,13 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
             self._key = f"{namespace}:{self._key}"
 
     def start_event_handle(self) -> None:
+        async def _add_data_to_state(state_dict: dict) -> None:
+            key: str = self.__class__.__name__
+            state_dict[f"{key}:conn_cnt"] = int(await self._redis.get(key))
+            state_dict[f"{key}:max_limit_cnt"] = self._ip_max_conn
+
+        if self.app.window_state:
+            self.app.window_state.add_priority_callback(_add_data_to_state)
         self.register(self.modify_max_ip_max_conn)
         self.register(self.modify_ip_max_timeout)
         self.register(self.get_info)

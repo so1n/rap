@@ -11,8 +11,8 @@ from rap.common.state import WindowState
 from rap.common.types import BASE_REQUEST_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utils import Constant, Event, RapFunc
 from rap.server.context import rap_context
-from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware, BaseMsgMiddleware
 from rap.server.model import Request, Response
+from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware, BaseMsgMiddleware
 from rap.server.plugin.processor.base import BaseProcessor
 from rap.server.receiver import Receiver
 from rap.server.registry import RegistryManager
