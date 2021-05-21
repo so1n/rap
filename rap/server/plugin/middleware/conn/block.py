@@ -6,7 +6,6 @@ from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 from rap.common.conn import ServerConnection
 from rap.common.utils import Constant, Event
 from rap.server.plugin.middleware.base import BaseConnMiddleware
-from rap.server.model import Response
 from rap.server.sender import Sender
 
 
@@ -22,7 +21,7 @@ class IpBlockMiddleware(BaseConnMiddleware):
         redis: Union[StrictRedis, StrictRedisCluster],
         allow_ip_list: Optional[List[str]] = None,
         block_ip_list: Optional[List[str]] = None,
-        namespace: str = ""
+        namespace: str = "",
     ):
         self._redis: Union[StrictRedis, StrictRedisCluster] = redis
         self.block_key: str = f"{self.__class__.__name__}:block_ip"
