@@ -26,6 +26,7 @@ class IpBlockMiddleware(BaseConnMiddleware):
         self._redis: Union[StrictRedis, StrictRedisCluster] = redis
         self.block_key: str = f"{self.__class__.__name__}:block_ip"
         self.allow_key: str = f"{self.__class__.__name__}:allow_ip"
+        self.block_cnt: int = 0
         if namespace:
             self.block_key = f"{namespace}:{self.block_key}"
             self.allow_key = f"{namespace}:{self.allow_key}"
@@ -34,6 +35,11 @@ class IpBlockMiddleware(BaseConnMiddleware):
         self._block_ip_list: List[str] = block_ip_list if block_ip_list else []
 
     async def start_event_handle(self) -> None:
+        async def _add_data_to_state(state_dict: dict) -> None:
+            state_dict[f"{self.__class__.__name__}:block_cnt"] = self.block_cnt
+
+        if self.app.window_state:
+            self.app.window_state.add_priority_callback(_add_data_to_state)
         self.register(self._add_allow_ip)
         self.register(self._add_block_ip)
         self.register(self._remove_allow_ip)
@@ -102,12 +108,14 @@ class IpBlockMiddleware(BaseConnMiddleware):
             if enable_allow:
                 is_allow: int = await self._redis.sismember(self.allow_key, ip)
                 if not is_allow:
+                    self.block_cnt += 1
                     await Sender(conn).send_event(Event(Constant.EVENT_CLOSE_CONN, "not allowed to access"))
                     await conn.await_close()
                     return
             else:
                 is_block: int = await self._redis.sismember(self.block_key, ip)
                 if is_block:
+                    self.block_cnt += 1
                     await Sender(conn).send_event(Event(Constant.EVENT_CLOSE_CONN, "not allowed to access"))
                     await conn.await_close()
                     return
