@@ -28,7 +28,7 @@ class BaseProcessor(object):
         self.app.register(func, name=name, group=group, is_private=True)
 
     async def process_request(self, request: Request) -> Request:
-        raise NotImplementedError
+        return request
 
     async def process_response(self, response: Response) -> Response:
-        raise NotImplementedError
+        return response

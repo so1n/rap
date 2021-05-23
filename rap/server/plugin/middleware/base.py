@@ -49,18 +49,3 @@ class BaseConnMiddleware(BaseMiddleware):
 
     async def dispatch(self, conn: ServerConnection) -> None:
         raise NotImplementedError
-
-
-class BaseMsgMiddleware(BaseMiddleware):
-    async def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        return await self.dispatch(*args)
-
-    async def dispatch(
-        self, request: Request, call_id: int, func: Callable, param: list, default_param: Dict[str, Any]
-    ) -> Tuple[int, Any]:
-        raise NotImplementedError
-
-    async def call_next(
-        self, request: Request, call_id: int, func: Callable, param: list, default_param: Dict[str, Any]
-    ) -> Tuple[int, Any]:
-        return await self._call_next(request, call_id, func, param, default_param)

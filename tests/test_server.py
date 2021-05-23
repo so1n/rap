@@ -7,7 +7,7 @@ from pytest_mock import MockerFixture
 from rap.client import Client
 from rap.common.exceptions import RpcRunTimeError, ServerError
 from rap.server import Server
-from rap.server.plugin.middleware.msg.access import AccessMsgMiddleware
+from rap.server.plugin.middleware.conn.limit import ConnLimitMiddleware
 from rap.server.plugin.processor import CryptoProcessor as ServerCryptoProcessor
 
 pytestmark = pytest.mark.asyncio
@@ -47,16 +47,16 @@ class TestServerMiddleware:
             Server(middleware_list=[ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])  # type: ignore
 
     def test_repeat_load_middleware(self) -> None:
-        access_msg_middleware: AccessMsgMiddleware = AccessMsgMiddleware()
-        rap_server: Server = Server(middleware_list=[access_msg_middleware])
+        conn_limit_middleware: ConnLimitMiddleware = ConnLimitMiddleware()
+        rap_server: Server = Server(middleware_list=[conn_limit_middleware])
         with pytest.raises(ImportError):
-            rap_server.load_middleware([access_msg_middleware])
+            rap_server.load_middleware([conn_limit_middleware])
 
 
 class TestServerProcessor:
     def test_load_error_processor(self) -> None:
         with pytest.raises(RuntimeError):
-            Server(processor_list=[AccessMsgMiddleware()])  # type: ignore
+            Server(processor_list=[ConnLimitMiddleware()])  # type: ignore
 
     def test_repeat_load_processor(self) -> None:
         crypto_process: ServerCryptoProcessor = ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis)

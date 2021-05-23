@@ -2,7 +2,7 @@ import asyncio
 from typing import AsyncIterator
 
 from rap.server import Server
-from rap.server.plugin.middleware import AccessMsgMiddleware, ConnLimitMiddleware
+from rap.server.plugin.middleware import ConnLimitMiddleware
 
 
 def sync_sum(a: int, b: int) -> int:
@@ -28,7 +28,7 @@ if __name__ == "__main__":
 
     loop = asyncio.new_event_loop()
     rpc_server = Server()
-    rpc_server.load_middleware([ConnLimitMiddleware(), AccessMsgMiddleware()])
+    rpc_server.load_middleware([ConnLimitMiddleware()])
     rpc_server.register(sync_sum)
     rpc_server.register(async_sum)
     rpc_server.register(async_gen)
