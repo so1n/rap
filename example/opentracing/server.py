@@ -5,7 +5,7 @@ from jaeger_client import Config, Tracer  # type: ignore
 from opentracing.scope_managers.contextvars import ContextVarsScopeManager  # type: ignore
 
 from rap.server import Server
-from rap.server.processor import TracingProcessor
+from rap.server.plugin.processor import TracingProcessor
 
 
 async def async_sum(a: int, b: int) -> int:

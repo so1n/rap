@@ -8,7 +8,6 @@ from rap.client import Client
 from rap.server import Server
 from rap.server.plugin.middleware.conn.block import IpBlockMiddleware
 from rap.server.plugin.middleware.conn.limit import ConnLimitMiddleware, IpMaxConnMiddleware
-from rap.server.plugin.middleware.msg.access import AccessMsgMiddleware
 
 pytestmark = pytest.mark.asyncio
 
@@ -55,14 +54,6 @@ class TestConnLimitMiddleware:
             "max_conn": 10,
             "release_timestamp": 1_600_000_000,
         } == await rap_client.raw_call("get_conn_limit_info", group=middleware.__class__.__name__)
-
-
-class TestAccessMsgMiddleware:
-    async def test_access(self, rap_server: Server) -> None:
-        rap_server.load_middleware([AccessMsgMiddleware()])
-        client: Client = Client()
-        await client.connect()
-        assert 3 == await client.raw_call("async_sum", [1, 2])
 
 
 class TestIpMaxConnMiddleware:

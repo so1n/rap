@@ -12,7 +12,7 @@ from rap.common.types import BASE_REQUEST_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utils import Constant, Event, RapFunc
 from rap.server.context import rap_context
 from rap.server.model import Request, Response
-from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware, BaseMsgMiddleware
+from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware
 from rap.server.plugin.processor.base import BaseProcessor
 from rap.server.receiver import Receiver
 from rap.server.registry import RegistryManager
@@ -186,11 +186,6 @@ class Server(object):
             self._ping_sleep_time,
             processor_list=self._processor_list,
         )
-        for middleware in self._middleware_list:
-            if isinstance(middleware, BaseMsgMiddleware):
-                middleware.load_sub_middleware(receiver._msg_handle)  # type: ignore
-                receiver._msg_handle = middleware  # type: ignore
-
         async def recv_msg_handle(_request_msg: Optional[BASE_REQUEST_TYPE]) -> None:
             if _request_msg is None:
                 await sender.send_event(Event(Constant.EVENT_CLOSE_CONN, "request is empty"))
