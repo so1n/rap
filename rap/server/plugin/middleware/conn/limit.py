@@ -6,7 +6,6 @@ from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
 from rap.common.conn import ServerConnection
 from rap.common.utils import Constant, Event
-from rap.server.model import Response
 from rap.server.plugin.middleware.base import BaseConnMiddleware
 from rap.server.sender import Sender
 
