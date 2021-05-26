@@ -139,8 +139,8 @@ class Client:
 
         @wraps(func)
         async def type_check_wrapper(*args: Any, **kwargs: Any) -> Any:
-            session: Optional[Session] = kwargs.pop("session") if "session" in kwargs else None
-            header: Optional[dict] = kwargs.pop("header") if "header" in kwargs else None
+            session: Optional[Session] = kwargs.pop("session", None)
+            header: Optional[dict] = kwargs.pop("header", None)
             check_func_type(func, args, kwargs)
             result: Any = await self.raw_call(
                 name, args, kwarg_param=kwargs, group=group, session=session, header=header
@@ -151,8 +151,8 @@ class Client:
 
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            session: Optional[Session] = kwargs.pop("session") if "session" in kwargs else None
-            header: Optional[dict] = kwargs.pop("header") if "header" in kwargs else None
+            session: Optional[Session] = kwargs.pop("session", None)
+            header: Optional[dict] = kwargs.pop("header", None)
             return await self.raw_call(name, args, kwarg_param=kwargs, group=group, session=session, header=header)
 
         new_func: Callable = type_check_wrapper if enable_type_check else wrapper
@@ -167,8 +167,8 @@ class Client:
 
         @wraps(func)
         async def type_check_wrapper(*args: Any, **kwargs: Any) -> Any:
-            session: Optional[Session] = kwargs.pop("session") if "session" in kwargs else None
-            header: Optional[dict] = kwargs.pop("header") if "header" in kwargs else None
+            session: Optional[Session] = kwargs.pop("session", None)
+            header: Optional[dict] = kwargs.pop("header", None)
             check_func_type(func, args, kwargs)
             async with AsyncIteratorCall(
                 name, self, args, kwarg_param=kwargs, group=group, session=session, header=header
@@ -180,8 +180,8 @@ class Client:
 
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            session: Optional[Session] = kwargs.pop("session") if "session" in kwargs else None
-            header: Optional[dict] = kwargs.pop("header") if "header" in kwargs else None
+            session: Optional[Session] = kwargs.pop("session", None)
+            header: Optional[dict] = kwargs.pop("header", None)
             async with AsyncIteratorCall(
                 name, self, args, kwarg_param=kwargs, group=group, session=session, header=header
             ) as async_iterator:

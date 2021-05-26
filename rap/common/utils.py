@@ -177,3 +177,10 @@ def check_func_type(func: Callable, param_list: Sequence[Any], default_param_dic
         else:
             if not is_type(type(default_param_dict.get(name, parameter.default)), parameter.annotation):
                 raise TypeError(f"{default_param_dict[name]} type must: {parameter.annotation}")
+
+
+def del_future(future: asyncio.Future) -> None:
+    if future.cancelled():
+        future.cancel()
+    if future.done():
+        future.result()
