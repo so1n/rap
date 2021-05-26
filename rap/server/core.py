@@ -186,6 +186,7 @@ class Server(object):
             self._ping_sleep_time,
             processor_list=self._processor_list,
         )
+
         async def recv_msg_handle(_request_msg: Optional[BASE_REQUEST_TYPE]) -> None:
             if _request_msg is None:
                 await sender.send_event(Event(Constant.EVENT_CLOSE_CONN, "request is empty"))

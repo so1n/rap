@@ -21,21 +21,14 @@ from typing import (
 
 from rap.common.channel import BaseChannel
 from rap.common.conn import ServerConnection
-from rap.common.exceptions import (
-    BaseRapError,
-    ChannelError,
-    FuncNotFoundError,
-    ParseError,
-    ProtocolError,
-    RpcRunTimeError,
-    ServerError,
-)
+from rap.common.exceptions import BaseRapError, ChannelError, ParseError, ProtocolError, RpcRunTimeError, ServerError
 from rap.common.types import is_type
 from rap.common.utils import (
     Constant,
     Event,
     as_first_completed,
     check_func_type,
+    del_future,
     get_event_loop,
     parse_error,
     response_num_dict,
@@ -111,10 +104,7 @@ class Channel(BaseChannel):
             await self._write(None, {"channel_life_cycle": Constant.DROP})
 
         # Actively cancel the future may not be successful, such as cancel asyncio.sleep
-        if not self._func_future.cancelled():
-            self._func_future.cancel()
-        if self._func_future.done():
-            self._func_future.result()
+        del_future(self._func_future)
         self._close()
 
 
@@ -212,14 +202,11 @@ class Receiver(object):
                     logging.debug(f"{self._conn} ping event exit.. error:{e}")
 
     async def channel_handle(self, request: Request, response: Response) -> Optional[Response]:
-        func: Callable = self.get_func_model(request, Constant.CHANNEL_TYPE).func
+        func: Callable = self._app.registry.get_func_model(request, Constant.CHANNEL_TYPE).func
         # declare var
-        if "channel_id" not in request.header:
-            raise ProtocolError("channel request must channel id")
-
         channel_id: str = request.header.get("channel_id", None)
         if channel_id is None:
-            raise ChannelError("error channel id")
+            raise ProtocolError("channel request must channel id")
 
         life_cycle: str = request.header.get("channel_life_cycle", "error")
         channel: Optional[Channel] = self._channel_dict.get(channel_id, None)
@@ -262,20 +249,9 @@ class Receiver(object):
         else:
             raise ChannelError("channel life cycle error")
 
-    def get_func_model(self, request: Request, func_type: str) -> FuncModel:
-        func_key: str = self._app.registry.gen_key(request.group, request.func_name, func_type)
-        if func_key not in self._app.registry:
-            raise FuncNotFoundError(extra_msg=f"name: {request.func_name}")
-
-        func_model: FuncModel = self._app.registry[func_key]
-        if func_model.is_private and self._conn.peer_tuple[0] not in ("::1", "127.0.0.1", "localhost"):
-            raise FuncNotFoundError(f"No permission to call:`{request.func_name}`, {self._conn.peer_tuple}")
-        return func_model
-
     async def _msg_handle(
         self, request: Request, call_id: int, func: Callable, param: list, default_param: Dict[str, Any]
     ) -> Tuple[int, Any]:
-        user_agent: str = request.header.get("user_agent", "None")
 
         if call_id in self._generator_dict:
             # run generator func next
@@ -303,6 +279,7 @@ class Receiver(object):
                 return call_id, e
 
             if inspect.isgenerator(result) or inspect.isasyncgen(result):
+                user_agent: str = request.header.get("user_agent", "None")
                 if user_agent != Constant.USER_AGENT:
                     result = ProtocolError(f"{user_agent} not support generator")
                 else:
@@ -315,7 +292,7 @@ class Receiver(object):
         return call_id, result
 
     async def msg_handle(self, request: Request, response: Response) -> Optional[Response]:
-        func_model: FuncModel = self.get_func_model(request, Constant.NORMAL_TYPE)
+        func_model: FuncModel = self._app.registry.get_func_model(request, Constant.NORMAL_TYPE)
 
         try:
             call_id: int = request.body["call_id"]
@@ -324,7 +301,7 @@ class Receiver(object):
         param: list = request.body.get("param", [])
         kwarg_param: Dict[str, Any] = request.body.get("default_param", {})
 
-        # param check
+        # Check whether the parameter is legal
         if len(func_model.arg_list) != len(param):
             raise ParseError(
                 extra_msg=f"{func_model.func_name} takes {len(func_model.arg_list)}"
@@ -338,6 +315,7 @@ class Receiver(object):
                 f"param name:{kwarg_param_set.difference(fun_kwarg_set)}"
             )
 
+        # Check param type
         try:
             check_func_type(func_model.func, param, kwarg_param)
         except TypeError as e:
