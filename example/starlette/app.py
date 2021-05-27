@@ -7,11 +7,12 @@ from example.starlette.route import demo1, demo2, demo3
 
 
 async def start_client() -> None:
-    await client.connect()
+    client.add_conn("localhost", 9000)
+    await client.start()
 
 
 async def stop_client() -> None:
-    await client.await_close()
+    await client.stop()
 
 
 app: Starlette = Starlette(

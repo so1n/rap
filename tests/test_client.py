@@ -24,19 +24,10 @@ async def mock_func(self: Any) -> None:
 class TestClient:
     async def test_client_repeat_conn(self, rap_server: Server, rap_client: Client) -> None:
         with pytest.raises(ConnectionError) as e:
-            await rap_client.connect()
+            await rap_client.start()
 
         exec_msg = e.value.args[0]
-        assert exec_msg == "Transport already connect"
-
-    async def test_client_repeat_close(self) -> None:
-        client: Client = Client()
-
-        with pytest.raises(RuntimeError) as e:
-            await client.await_close()
-
-        exec_msg: str = e.value.args[0]
-        assert exec_msg == "Transport already closed"
+        assert exec_msg == "Transport is running"
 
 
 class TestTransport:
@@ -44,11 +35,13 @@ class TestTransport:
     async def _read_helper(mocker: MockerFixture, once_target: Any) -> None:
         mocker_obj: Any = mocker.patch("rap.client.transport.transport.logging.error")
         client: Client = Client()
+        client.add_conn("localhost", 9000)
         setattr(client.transport, "_listen", mock_func)
-        await client.connect()
+        await client.start()
 
-        for conn_model in client.transport._conn_dict.values():
-            await client.transport._read_from_conn(conn_model.conn)
+        for conn_model_list in client.transport._conn_dict.values():
+            for conn_model in conn_model_list:
+                await client.transport._read_from_conn(conn_model.conn)
 
         mocker_obj.assert_called_once_with(once_target)
 

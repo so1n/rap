@@ -32,7 +32,7 @@ if __name__ == "__main__":
     if secret_key:
         crypto_key_id, crypto_key = secret_key.split(",")
         client.load_processor([CryptoProcessor(crypto_key_id, crypto_key)])
-    loop.run_until_complete(client.connect())
+    loop.run_until_complete(client.start())
 
     if mode == "d":
         result_tuple: Tuple[Dict[str, str]] = loop.run_until_complete(client.raw_call("list", group="registry"))
@@ -47,4 +47,4 @@ if __name__ == "__main__":
     elif mode == "r" and func_name:
         print(loop.run_until_complete(client.raw_call(func_name, arg_param=arg_list, group=group)))
 
-    loop.run_until_complete(client.await_close())
+    loop.run_until_complete(client.stop())

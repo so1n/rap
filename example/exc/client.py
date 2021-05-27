@@ -21,7 +21,8 @@ async def raise_server_not_found_func_exc(a: int) -> None:
 
 async def main() -> None:
     s_t = time.time()
-    await client.connect()
+    client.add_conn("localhost", 9000)
+    await client.start()
     try:
         await raise_msg_exc(1, 2)
     except Exception as e:
@@ -31,7 +32,7 @@ async def main() -> None:
     except Exception as e:
         assert isinstance(e, FuncNotFoundError)
     print(time.time() - s_t)
-    await client.await_close()
+    await client.stop()
 
 
 if __name__ == "__main__":

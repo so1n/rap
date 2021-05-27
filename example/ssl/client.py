@@ -16,9 +16,10 @@ async def main() -> None:
     # gen ssl key sh
     > openssl req -newkey rsa:2048 -nodes -keyout rap_ssl.key -x509 -days 365 -out rap_ssl.crt
     """
-    await client.connect()
+    client.add_conn("localhost", 9000)
+    await client.start()
     print(f"async result: {await async_sum(1, 3)}")
-    await client.await_close()
+    await client.stop()
 
 
 if __name__ == "__main__":

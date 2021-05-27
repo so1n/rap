@@ -25,11 +25,11 @@ def create_app(
 
         @app.on_event("startup")
         async def connect() -> None:
-            await rap_client.connect()  # type: ignore
+            await rap_client.start()  # type: ignore
 
         @app.on_event("shutdown")
         async def disconnect() -> None:
-            await rap_client.await_close()  # type: ignore
+            await rap_client.stop()  # type: ignore
 
     app.add_route(f"{prefix}/normal", route_func, ["POST"])
     app.add_websocket_route(f"{prefix}/channel", websocket_route_func)

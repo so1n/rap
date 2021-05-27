@@ -23,7 +23,8 @@ async def async_gen(a: int) -> AsyncIterator[int]:
 
 
 async def main() -> None:
-    await client.connect()
+    client.add_conn("localhost", 9000)
+    await client.start()
     print(f"sync result: {await client.call(sync_sum, [1, 2])}")
     print(f"sync result: {await client.raw_call('sync_sum', [1, 2])}")
 

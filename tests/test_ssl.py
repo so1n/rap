@@ -17,9 +17,10 @@ async def sync_sum(a: int, b: int) -> int:
 
 @pytest.fixture
 async def ssl_client() -> AsyncGenerator[Client, None]:
-    await client.connect()
+    client.add_conn("localhost", 9000)
+    await client.start()
     yield client
-    await client.await_close()
+    await client.stop()
 
 
 @pytest.fixture

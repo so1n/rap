@@ -4,13 +4,10 @@ from rap.client import Channel, Client
 from rap.client.model import Response
 from rap.client.processor import CryptoProcessor
 
-client = Client(
-    host_list=[
-        "localhost:9000",
-        "localhost:9001",
-        "localhost:9002",
-    ]
-)
+client = Client()
+client.add_conn("localhost", 9000)
+client.add_conn("localhost", 9001)
+client.add_conn("localhost", 9002)
 client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
 
 
@@ -42,11 +39,11 @@ async def echo_response(channel: Channel) -> None:
 
 
 async def run_once() -> None:
-    await client.connect()
+    await client.start()
     await echo_body()
     await echo_response()
     await async_channel()
-    await client.await_close()
+    await client.stop()
 
 
 if __name__ == "__main__":

@@ -86,7 +86,8 @@ async def async_gen(a: int) -> AsyncIterator[int]:
 
 
 async def main():
-    await client.connect()
+    client.add_conn("localhost", 9000)
+    await client.start()
     # call调用,通过读取函数名再调用
     print(f"call result: {await client.call(sync_sum, 1, 2)}")
     # rap.client的基础调用
@@ -221,25 +222,25 @@ async def param_run(session: "Session"):
 
 
 async def execute(session: "Session"):
-  # 使用类似于mysql cursor的方法进行调用,显式调用会话的最好方法
-  # execute会自动识别调用类型
-  print(f"sync result: {await session.execute(sync_sum, arg_list=[1, 2])}")
-  print(f"sync result: {await session.execute('sync_sum', arg_list=[1, 2])}")
-  print(f"async result: {await session.execute(async_sum(1, 3))}")
+    # 使用类似于mysql cursor的方法进行调用,显式调用会话的最好方法
+    # execute会自动识别调用类型
+    print(f"sync result: {await session.execute(sync_sum, arg_list=[1, 2])}")
+    print(f"sync result: {await session.execute('sync_sum', arg_list=[1, 2])}")
+    print(f"async result: {await session.execute(async_sum(1, 3))}")
 
-  # 异步生成器在启动时会检测是否启动会话,如果启动会自动复用当前的会话, 否则创建会话
-  async for i in async_gen(10):
-    print(f"async gen result:{i}")
+    # 异步生成器在启动时会检测是否启动会话,如果启动会自动复用当前的会话, 否则创建会话
+    async for i in async_gen(10):
+        print(f"async gen result:{i}")
 
 
 async def run_once():
-  await client.connect()
-  # 初始化会话, 使用`async with`语法会优雅的关闭会话
-  async with client.session as s:
-    await no_param_run()
-    await param_run(s)
-    await execute(s)
-  await client.await_close()
+    await client.start()
+    # 初始化会话, 使用`async with`语法会优雅的关闭会话
+    async with client.session as s:
+        await no_param_run()
+        await param_run(s)
+        await execute(s)
+    await client.stop()
 ```
 ## 3.3.channel
 [示例代码](https://github.com/so1n/rap/tree/master/example/channel)
@@ -342,10 +343,10 @@ server.load_stop_event([mock_stop()])
 
 ```Python
 from rap.server import Server
-from rap.server.plugin.middleware import AccessMsgMiddleware, ConnLimitMiddleware
+from rap.server.plugin.middleware import ConnLimitMiddleware
 
 rpc_server = Server()
-rpc_server.load_middleware([ConnLimitMiddleware(), AccessMsgMiddleware()])
+rpc_server.load_middleware([ConnLimitMiddleware()])
 ```
 ## 3.7.processor
 `rap`的processor用于处理入站流量和出站流量,其中`process_request`是处理入站流量,`process_response`是处理出站流量.

@@ -97,17 +97,19 @@ class BaseConnection:
 class Connection(BaseConnection):
     def __init__(
         self,
+        host: str,
+        port: int,
         timeout: int,
         pack_param: Optional[dict] = None,
         ssl_crt_path: Optional[str] = None,
     ):
         super().__init__(timeout, pack_param)
-        self.connection_info: Optional[str] = None
+        self._host: str = host
+        self._port: int = port
+        self.connection_info: str = f"{host}:{port}"
         self._ssl_crt_path: Optional[str] = ssl_crt_path
 
-    async def connect(self, host: str, port: int) -> None:
-        self.connection_info = f"{host}:{port}"
-
+    async def connect(self) -> None:
         ssl_context: Optional[ssl.SSLContext] = None
         if self._ssl_crt_path:
             ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
@@ -115,7 +117,7 @@ class Connection(BaseConnection):
             ssl_context.load_verify_locations(self._ssl_crt_path)
             logging.info(f"connection enable ssl")
 
-        self._reader, self._writer = await asyncio.open_connection(host, port, ssl=ssl_context)
+        self._reader, self._writer = await asyncio.open_connection(self._host, self._port, ssl=ssl_context)
         self.sock_tuple = self._writer.get_extra_info("sockname")
         self.peer_tuple = self._writer.get_extra_info("peername")
         self.conn_future: asyncio.Future = asyncio.Future()

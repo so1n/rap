@@ -23,13 +23,10 @@ class CheckSessionProcessor(BaseProcessor):
 
 
 check_session_processor: CheckSessionProcessor = CheckSessionProcessor()
-client = Client(
-    host_list=[
-        "localhost:9000",
-        "localhost:9001",
-        "localhost:9002",
-    ]
-)
+client = Client()
+client.add_conn("localhost", 9000)
+client.add_conn("localhost", 9001)
+client.add_conn("localhost", 9002)
 client.load_processor([check_session_processor])
 
 
@@ -80,14 +77,14 @@ async def execute(session: "Session") -> None:
 
 async def run_once() -> None:
     s_t = time.time()
-    await client.connect()
+    await client.start()
     async with client.session as s:
         check_session_processor.session_id = s.id
         await no_param_run()
         await param_run(s)
         await execute(s)
     print(time.time() - s_t)
-    await client.await_close()
+    await client.stop()
 
 
 if __name__ == "__main__":

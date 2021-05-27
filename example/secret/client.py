@@ -14,9 +14,10 @@ async def async_sum(a: int, b: int) -> int:
 
 
 async def main() -> None:
-    await client.connect()
+    client.add_conn("localhost", 9000)
+    await client.start()
     print(f"async result: {await async_sum(1, 3)}")
-    await client.await_close()
+    await client.stop()
 
 
 if __name__ == "__main__":

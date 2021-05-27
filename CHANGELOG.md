@@ -137,7 +137,7 @@
  - Refactor: modify server iterator design
 
 ### 0.2.1 
- - Fix: one connect concurrent bug
+ - Fix: one start concurrent bug
 
 ## 0.2
  - Feature: support pool
