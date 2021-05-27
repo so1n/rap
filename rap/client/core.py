@@ -110,15 +110,23 @@ class Client:
         )
 
     ##################
-    # connect& close #
+    # start& close #
     ##################
-    async def await_close(self) -> None:
-        """close client transport"""
-        await self.transport.await_close()
+    def add_conn(
+        self, ip: str, port: int, weight: float = 1.0, min_weight: Optional[float] = None, conn_cnt: int = 1
+    ) -> None:
+        self.transport.add_conn(ip, port, weight, min_weight, conn_cnt)
 
-    async def connect(self) -> None:
+    def remove_conn(self, ip: str, port: int) -> None:
+        self.transport.remove_conn(ip, port)
+
+    async def stop(self) -> None:
+        """close client transport"""
+        await self.transport.stop()
+
+    async def start(self) -> None:
         """Create client transport"""
-        await self.transport.connect()
+        await self.transport.start()
 
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:
         self.transport.load_processor(processor_list)

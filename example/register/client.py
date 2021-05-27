@@ -29,7 +29,8 @@ async def async_gen(a: int) -> AsyncIterator[int]:
 
 
 async def main() -> None:
-    await client.connect()
+    client.add_conn("localhost", 9000)
+    await client.start()
     # client auto use func name
     print(f"call result: {await client.call(sync_sum, [1, 2])}")
     # call function according to protocol

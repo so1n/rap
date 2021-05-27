@@ -4,7 +4,7 @@ from typing import AsyncIterator
 
 from rap.client import Client
 
-client = Client()
+client: Client = Client()
 
 
 def sync_sum(a: int, b: int) -> int:
@@ -35,18 +35,22 @@ async def _run_once() -> None:
 
 async def run_once() -> None:
     s_t = time.time()
-    await client.connect()
     await _run_once()
     print(time.time() - s_t)
-    await client.await_close()
 
 
 async def run_mutli() -> None:
     s_t = time.time()
-    await client.connect()
     await asyncio.wait([_run_once() for _ in range(100)])
     print(time.time() - s_t)
-    await client.await_close()
+
+
+async def main() -> None:
+    client.add_conn("localhost", 9000)
+    await client.start()
+    await run_once()
+    await run_mutli()
+    await client.stop()
 
 
 if __name__ == "__main__":
@@ -57,5 +61,4 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(run_once())
-    loop.run_until_complete(run_mutli())
+    loop.run_until_complete(main())

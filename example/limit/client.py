@@ -33,12 +33,13 @@ async def retry_handle(func: Callable) -> None:
 
 async def main() -> None:
     s_t = time.time()
-    await client.connect()
+    await client.start()
+    client.add_conn("localhost", 9000)
     await retry_handle(demo)
     await retry_handle(demo1)
 
     print(time.time() - s_t)
-    await client.await_close()
+    await client.stop()
 
 
 if __name__ == "__main__":

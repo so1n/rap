@@ -91,7 +91,8 @@ async def async_gen(a: int) -> AsyncIterator:
 
 
 async def main():
-    await client.connect()
+    client.add_conn("localhost", 9000)
+    await client.start()
     # Call the call method; read the function name and then call `raw_call`. 
     print(f"call result: {await client.call(sync_sum, 1, 2)}")
     # Basic calls to rap.client 
@@ -241,13 +242,14 @@ async def execute(session: "Session"):
 
 
 async def run_once():
-  await client.connect()
-  # init session
-  async with client.session as s:
-    await no_param_run()
-    await param_run(s)
-    await execute(s)
-  await client.await_close()
+    client.add_conn("localhost", 9000)
+    await client.start()
+    # init session
+    async with client.session as s:
+        await no_param_run()
+        await param_run(s)
+        await execute(s)
+    await client.stop()
 ```
 ## 3.3.channel
 [example](https://github.com/so1n/rap/tree/master/example/channel)
@@ -351,10 +353,10 @@ example:
 
 ```Python
 from rap.server import Server
-from rap.server.plugin.middleware import AccessMsgMiddleware, ConnLimitMiddleware
+from rap.server.plugin.middleware import ConnLimitMiddleware
 
 rpc_server = Server()
-rpc_server.load_middleware([ConnLimitMiddleware(), AccessMsgMiddleware()])
+rpc_server.load_middleware([ConnLimitMiddleware()])
 ```
 ## 3.7.processor
 The `rap` processor is used to handle inbound and outbound traffic, where `process_request` is for inbound traffic and `process_response` is for outbound traffic.

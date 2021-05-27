@@ -6,7 +6,8 @@ client = Client()
 
 
 async def main() -> None:
-    await client.connect()
+    client.add_conn("localhost", 9000)
+    await client.start()
 
 
 if __name__ == "__main__":

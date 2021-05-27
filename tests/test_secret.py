@@ -33,14 +33,14 @@ class TestCrypto:
             crypto._body_handle(demo_body_dict)
 
         exec_msg: str = e.value.args[0]
-        assert exec_msg == "timeout error"
+        assert exec_msg == "timeout param error"
 
         demo_body_dict = {"nonce": "aaa", "timestamp": int(time.time())}
         crypto._body_handle(demo_body_dict)
         with pytest.raises(CryptoError) as e:
             crypto._body_handle(demo_body_dict)
         exec_msg = e.value.args[0]
-        assert exec_msg == "nonce error"
+        assert exec_msg == "nonce param error"
 
 
 class TestServerCryptoProcess:

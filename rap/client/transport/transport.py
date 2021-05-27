@@ -3,7 +3,8 @@ import logging
 import random
 import uuid
 from contextvars import ContextVar, Token
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, field
 from types import FunctionType
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Sequence, Tuple, Type, Union
 
@@ -24,7 +25,12 @@ __all__ = ["Session", "Transport"]
 @dataclass()
 class ConnModel(object):
     conn: Connection
-    future: asyncio.Future
+    future: asyncio.Future = field(default_factory=asyncio.Future)
+    weight: float = 0.0
+    min_weight: float = 0.0
+
+    def __post_init__(self) -> None:
+        self.future.set_result(True)
 
     def is_closed(self) -> bool:
         return self.conn.is_closed() or self.future.done()
@@ -47,8 +53,8 @@ class Transport(object):
         ssl_crt_path: Optional[str] = None,
     ):
         self._host_list: List[str] = host_list
-        self._conn_dict: Dict[str, ConnModel] = {}
-        self._is_close: bool = True
+        self._conn_dict: Dict[str, List[ConnModel]] = {}
+        self._connected_cnt: int = 0
         self._timeout: int = timeout
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._keep_alive_time: int = keep_alive_time
@@ -60,48 +66,79 @@ class Transport(object):
         self._resp_future_dict: Dict[str, asyncio.Future[Response]] = {}
         self._channel_queue_dict: Dict[str, asyncio.Queue[Union[Response, Exception]]] = {}
 
-    async def _connect(self, host: str) -> None:
+    async def _connect(self, conn_model: ConnModel) -> None:
         """create conn and listen future by host"""
-        if host in self._conn_dict:
-            await self._conn_dict[host].await_close()
 
-        conn: Connection = Connection(self._timeout, ssl_crt_path=self._ssl_crt_path)
-        index: int = host.rfind(":")
-        if index == -1:
-            raise ValueError("Not a legal host")
-        ip: str = host[:index]
-        port: str = host[index + 1 :]
-        await conn.connect(ip, int(port))
-        future: asyncio.Future = asyncio.ensure_future(self._listen(conn))
-        self._conn_dict[host] = ConnModel(conn, future)
-        logging.debug(f"Connection to %s...", conn.connection_info)
+        def _conn_done(f: asyncio.Future) -> None:
+            self._connected_cnt -= 1
 
-    async def connect(self) -> None:
+        await conn_model.conn.connect()
+        self._connected_cnt += 1
+        conn_model.future = asyncio.ensure_future(self._listen(conn_model.conn))
+        conn_model.future.add_done_callback(lambda f: _conn_done(f))
+        logging.debug(f"Connection to %s...", conn_model.conn.connection_info)
+
+    def add_conn(
+        self, ip: str, port: int, weight: float = 1.0, min_weight: Optional[float] = None, conn_cnt: int = 1
+    ) -> None:
+        if not min_weight:
+            min_weight = weight * 0.1
+        key: str = f"{ip}:{port}"
+        if key not in self._conn_dict:
+            self._conn_dict[key] = []
+        for _ in range(conn_cnt):
+            self._host_list.append(key)
+            conn_model: ConnModel = ConnModel(
+                Connection(ip, port, self._timeout, ssl_crt_path=self._ssl_crt_path),
+                weight=weight,
+                min_weight=min_weight,
+            )
+            self._conn_dict[key].append(conn_model)
+            if not self.is_close:
+                asyncio.ensure_future(self._connect(conn_model))
+
+    def remove_conn(self, ip: str, port: int) -> List[asyncio.Future]:
+        key: str = f"{ip}:{port}"
+        if key not in self._conn_dict:
+            return []
+
+        future_list: List[asyncio.Future] = []
+        if not self.is_close:
+            for conn_model in self._conn_dict[key]:
+                if not conn_model.is_closed():
+                    conn_model.conn.close()
+                    future_list.append(conn_model.conn.wait_closed())
+
+        self._host_list.remove(key)
+        del self._conn_dict[key]
+        return future_list
+
+    async def start(self) -> None:
         """create conn and listen future"""
-        if not self._is_close:
-            raise ConnectionError(f"{self.__class__.__name__} already connect")
-        for host in self._host_list:
-            await self._connect(host)
-        self._is_close = False
+        if not self.is_close:
+            raise ConnectionError(f"{self.__class__.__name__} is running")
+        if not self._conn_dict:
+            raise RuntimeError("Not add conn, can not start")
+        for key, conn_model_list in self._conn_dict.items():
+            for conn_model in conn_model_list:
+                if conn_model.is_closed():
+                    await self._connect(conn_model)
 
     @property
     def is_close(self) -> bool:
-        return self._is_close
+        return self._connected_cnt == 0
 
-    async def await_close(self) -> None:
+    async def stop(self) -> None:
         """close all conn and cancel future"""
-        if self._is_close:
-            raise RuntimeError(f"{self.__class__.__name__} already closed")
-        for host in self._host_list:
-            if host not in self._conn_dict:
-                logging.warning(f"{host} not init")
-            elif self._conn_dict[host].is_closed():
-                logging.warning(f"{host} already close")
-                del self._conn_dict[host]
-            else:
-                await self._conn_dict[host].await_close()
-                del self._conn_dict[host]
-        self._is_close = True
+        if self.is_close and not self._host_list:
+            raise RuntimeError("Transport already closed")
+        future_list: List[asyncio.Future] = []
+        for host in deepcopy(self._host_list):
+            index: int = host.rfind(":")
+            ip: str = host[:index]
+            port: int = int(host[index + 1 :])
+            future_list.extend(self.remove_conn(ip, port))
+        await asyncio.gather(*future_list)
 
     async def _listen(self, conn: Connection) -> None:
         """listen server msg"""
@@ -113,7 +150,7 @@ class Transport(object):
             pass
         except Exception as e:
             conn.set_reader_exc(e)
-            logging.exception(f"listen status:{self._is_close} error: {e}, close conn:{conn}")
+            logging.exception(f"listen {conn} error:{e}")
             if not conn.is_closed():
                 await conn.await_close()
 
@@ -316,7 +353,7 @@ class Transport(object):
     ############
     def get_random_conn(self) -> Connection:
         key: str = random.choice(self._host_list)
-        return self._conn_dict[key].conn
+        return random.choice(self._conn_dict[key]).conn
 
     @property
     def session(self) -> "Session":
