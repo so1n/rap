@@ -6,7 +6,7 @@ from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError
 from rap.common.utils import gen_random_time_id, get_event_loop
 
-from .base import BaseProcessor
+from rap.client.processor.base import BaseProcessor
 
 
 class AutoExpireSet(object):
@@ -39,15 +39,19 @@ class AutoExpireSet(object):
                 continue
             elif self._dict[key] < now_timestamp:
                 del self._dict[key]
+            else:
+                # NOTE: After Python 3.7, the dict is ordered.
+                # Since the inserted data is related to time, the dict here is also ordered by time
+                break
 
         get_event_loop().call_later(self._interval, self._auto_remove)
 
 
 class CryptoProcessor(BaseProcessor):
-    def __init__(self, crypto_key_id: str, crypto_key: str, timeout: int = 60, interval: int = 120):
+    def __init__(self, crypto_key_id: str, crypto_key: str, nonce_timeout: int = 60, interval: int = 120):
         self._crypto_id: str = crypto_key_id
         self._crypto_key: str = crypto_key
-        self._timeout: int = timeout
+        self._nonce_timeout: int = nonce_timeout
 
         self._nonce_set: AutoExpireSet = AutoExpireSet(interval=interval)
         self._crypto: "Crypto" = Crypto(self._crypto_key)
@@ -55,12 +59,12 @@ class CryptoProcessor(BaseProcessor):
     def _body_handle(self, body: dict) -> None:
         timestamp: int = body.get("timestamp", 0)
         if (int(time.time()) - timestamp) > 60:
-            raise CryptoError("timeout error")
+            raise CryptoError("timeout param error")
         nonce: str = body.get("nonce", "")
         if nonce in self._nonce_set:
-            raise CryptoError("nonce error")
+            raise CryptoError("nonce param error")
         else:
-            self._nonce_set.add(nonce, self._timeout)
+            self._nonce_set.add(nonce, self._nonce_timeout)
 
     async def process_request(self, request: Request) -> Request:
         request.body = {"body": request.body, "timestamp": int(time.time()), "nonce": gen_random_time_id()}
