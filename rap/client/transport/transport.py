@@ -70,7 +70,15 @@ class Transport(object):
         """create conn and listen future by host"""
 
         def _conn_done(f: asyncio.Future) -> None:
-            self._connected_cnt -= 1
+            try:
+                key: str = conn_model.conn.connection_info
+                if key in self._conn_dict:
+                    self._conn_dict[key].remove(conn_model)
+                    if not self._conn_dict[key]:
+                        self._host_list.remove(key)
+                self._connected_cnt -= 1
+            except Exception as e:
+                logging.exception(f"close conn error: {e}")
 
         await conn_model.conn.connect()
         self._connected_cnt += 1
@@ -130,8 +138,6 @@ class Transport(object):
 
     async def stop(self) -> None:
         """close all conn and cancel future"""
-        if self.is_close and not self._host_list:
-            raise RuntimeError("Transport already closed")
         future_list: List[asyncio.Future] = []
         for host in deepcopy(self._host_list):
             index: int = host.rfind(":")
