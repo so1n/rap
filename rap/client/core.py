@@ -8,6 +8,7 @@ from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.transport.channel import Channel
 from rap.client.transport.transport import Session, Transport
+from rap.common.state import WindowState
 from rap.common.types import is_type
 from rap.common.utils import RapFunc, check_func_type
 
@@ -90,6 +91,9 @@ class Client:
         timeout: int = 9,
         keep_alive_time: int = 1200,
         ssl_crt_path: Optional[str] = None,
+        fuse_window_state: Optional[WindowState] = None,
+        fuse_k: float = 2.0,  # google sre default
+        fuse_enable_cnt: int = 100,
     ):
         """
         host_list:
@@ -106,7 +110,13 @@ class Client:
         if not host_list:
             host_list = ["localhost:9000"]
         self.transport: Transport = Transport(
-            host_list, timeout=timeout, keep_alive_time=keep_alive_time, ssl_crt_path=ssl_crt_path
+            host_list,
+            timeout=timeout,
+            keep_alive_time=keep_alive_time,
+            ssl_crt_path=ssl_crt_path,
+            fuse_window_state=fuse_window_state,
+            fuse_k=fuse_k,
+            fuse_enable_cnt=fuse_enable_cnt,
         )
 
     ##################
