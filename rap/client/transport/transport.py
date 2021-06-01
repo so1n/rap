@@ -14,7 +14,8 @@ from rap.client.transport.channel import Channel
 from rap.client.utils import get_exc_status_code_dict, raise_rap_error
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
-from rap.common.exceptions import ChannelError, RPCError
+from rap.common.exceptions import ChannelError, RPCError, ServerError
+from rap.common.state import WindowState
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.common.utils import Constant, Event, RapFunc, as_first_completed
 
@@ -51,6 +52,9 @@ class Transport(object):
         timeout: int = 9,
         keep_alive_time: int = 1200,
         ssl_crt_path: Optional[str] = None,
+        fuse_window_state: Optional[WindowState] = None,
+        fuse_k: float = 2.0,  # google sre default
+        fuse_enable_cnt: int = 100,
     ):
         self._host_list: List[str] = host_list
         self._conn_dict: Dict[str, List[ConnModel]] = {}
@@ -65,6 +69,20 @@ class Transport(object):
         self._exc_status_code_dict = get_exc_status_code_dict()
         self._resp_future_dict: Dict[str, asyncio.Future[Response]] = {}
         self._channel_queue_dict: Dict[str, asyncio.Queue[Union[Response, Exception]]] = {}
+        self._fuse_enable_cnt: int = fuse_enable_cnt
+        self._fuse_window_state: WindowState = fuse_window_state or WindowState(interval=2 * 60)
+
+        def upload_probability(stats_dict: dict) -> None:
+            for key, value in self._conn_dict.items():
+                for conn_model in value:
+                    peer_tuple: Tuple[str, int] = conn_model.conn.peer_tuple
+                    total: int = self._fuse_window_state.get_value(f"{peer_tuple}:total", 0)  # type: ignore
+                    error_cnt: int = self._fuse_window_state.get_value(f"{peer_tuple}:error", 0)  # type: ignore
+                    stats_dict[f"{peer_tuple}:probability"] = max(
+                        0.0, (total - fuse_k * (total - error_cnt)) / (total + 1)
+                    )
+
+        self._fuse_window_state.add_priority_callback(upload_probability)
 
     async def _connect(self, conn_model: ConnModel) -> None:
         """create conn and listen future by host"""
@@ -105,21 +123,21 @@ class Transport(object):
             if not self.is_close:
                 asyncio.ensure_future(self._connect(conn_model))
 
-    def remove_conn(self, ip: str, port: int) -> List[asyncio.Future]:
+    def remove_conn(self, ip: str, port: int) -> List[Coroutine]:
         key: str = f"{ip}:{port}"
+        coro_list: List[Coroutine] = []
         if key not in self._conn_dict:
-            return []
+            return coro_list
 
-        future_list: List[asyncio.Future] = []
         if not self.is_close:
             for conn_model in self._conn_dict[key]:
                 if not conn_model.is_closed():
                     conn_model.conn.close()
-                    future_list.append(conn_model.conn.wait_closed())
+                    coro_list.append(conn_model.conn.wait_closed())
 
         self._host_list.remove(key)
         del self._conn_dict[key]
-        return future_list
+        return coro_list
 
     async def start(self) -> None:
         """create conn and listen future"""
@@ -127,6 +145,8 @@ class Transport(object):
             raise ConnectionError(f"{self.__class__.__name__} is running")
         if not self._conn_dict:
             raise RuntimeError("Not add conn, can not start")
+        if self._fuse_window_state.is_closed:
+            self._fuse_window_state.change_state()
         for key, conn_model_list in self._conn_dict.items():
             for conn_model in conn_model_list:
                 if conn_model.is_closed():
@@ -138,12 +158,14 @@ class Transport(object):
 
     async def stop(self) -> None:
         """close all conn and cancel future"""
-        future_list: List[asyncio.Future] = []
+        future_list: List[Coroutine] = []
         for host in deepcopy(self._host_list):
             index: int = host.rfind(":")
             ip: str = host[:index]
             port: int = int(host[index + 1 :])
             future_list.extend(self.remove_conn(ip, port))
+        if not self._fuse_window_state.is_closed:
+            self._fuse_window_state.change_state()
         await asyncio.gather(*future_list)
 
     async def _listen(self, conn: Connection) -> None:
@@ -162,6 +184,7 @@ class Transport(object):
 
     async def _read_from_conn(self, conn: Connection) -> None:
         """recv server msg handle"""
+        self._fuse_window_state.increment(f"{conn.peer_tuple}:total")
         try:
             response_msg: Optional[BASE_RESPONSE_TYPE] = await conn.read(self._keep_alive_time)
             logging.debug(f"recv raw data: %s", response_msg)
@@ -193,6 +216,7 @@ class Transport(object):
         status_code: int = response.header.get("status_code", 500)
 
         def put_exc_to_receiver(put_exc: Exception) -> None:
+            self._fuse_window_state.increment(f"{conn.peer_tuple}:error")
             if channel_id in self._channel_queue_dict:
                 self._channel_queue_dict[channel_id].put_nowait(put_exc)
             elif response.msg_id != -1 and resp_future_id in self._resp_future_dict:
@@ -279,6 +303,12 @@ class Transport(object):
         elif conn is None:
             conn = self.get_random_conn()
         request.header["host"] = conn.peer_tuple
+
+        total: int = self._fuse_window_state.get_value(f"{conn.peer_tuple}:total", 0)  # type: ignore
+        if total > self._fuse_enable_cnt:
+            probability: float = self._fuse_window_state.get_value(f"{conn.peer_tuple}:probability", 0.0)
+            if (random.randint(0, 10) / 10) > probability:
+                raise ServerError("Service Unavailable")
 
         async def _write(_request: Request) -> None:
             self.before_write_handle(_request)

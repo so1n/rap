@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+from functools import partial
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
 
 from rap.common.utils import get_event_loop
@@ -55,13 +56,27 @@ class WindowState(object):
     def is_closed(self) -> bool:
         return self._is_closed
 
+    def increment(self, key: str, value: int = 1) -> None:
+        if key not in self._future_dict:
+            self._future_dict[key] = value
+        else:
+            self._future_dict[key] += value
+
+    def decrement(self, key: str, value: int = 1) -> None:
+        if key not in self._future_dict:
+            self._future_dict[key] = -value
+        else:
+            self._future_dict[key] -= value
+
     def set_value(self, key: Any, value: Any) -> None:
         self._future_dict[key] = value
 
-    def get_value(self, key: Any) -> Any:
+    def get_value(self, key: Any, default_value: Any = ...) -> Any:
         try:
             return self._dict[key]
         except KeyError:
+            if default_value is not ...:
+                return default_value
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{key}'")
 
     def __len__(self) -> int:
@@ -75,9 +90,9 @@ class WindowState(object):
 
         async def _safe_run_callback(fn: Callable) -> None:
             if asyncio.iscoroutinefunction(fn):
-                coro: Awaitable = fn()
+                coro: Awaitable = fn(self._dict)
             else:
-                coro = loop.run_in_executor(None, fn)
+                coro = loop.run_in_executor(None, partial(fn, self._dict))
             try:
                 await coro
             except Exception as e:
@@ -97,6 +112,8 @@ class WindowState(object):
         return asyncio.ensure_future(_real_run_callback())
 
     def _change_state(self) -> None:
+        if self._is_closed:
+            return
         loop: asyncio.AbstractEventLoop = self._loop  # type: ignore
         self._timestamp = loop.time()
         logging.debug("%s run once at loop time: %s" % (self.__class__.__name__, self._timestamp))
@@ -129,12 +146,15 @@ class WindowState(object):
     def remove_priority_callback(self, fn: Callable) -> None:
         self._change_callback_priority_set.remove(fn)
 
+    def close(self) -> None:
+        self._is_closed = True
+
     def change_state(self) -> None:
         if self._is_closed:
             if not self._loop:
                 self._loop = get_event_loop()
             self._timestamp = self._loop.time()
+            self._is_closed = False
             self._loop.call_later(self._interval, self._change_state)
-            self._is_closed = True
         else:
             raise RuntimeError(f"{self.__class__.__name__} already run")
