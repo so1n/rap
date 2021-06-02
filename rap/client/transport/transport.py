@@ -27,8 +27,9 @@ __all__ = ["Session", "Transport"]
 class ConnModel(object):
     conn: Connection
     future: asyncio.Future = field(default_factory=asyncio.Future)
-    weight: float = 0.0
-    min_weight: float = 0.0
+    weight: int = 0
+    min_weight: int = 0
+    probability: float = 1
 
     def __post_init__(self) -> None:
         self.future.set_result(True)
@@ -55,9 +56,10 @@ class Transport(object):
         fuse_window_state: Optional[WindowState] = None,
         fuse_k: float = 2.0,  # google sre default
         fuse_enable_cnt: int = 100,
+        fuse_min_probability: float = 0.1,
     ):
-        self._host_list: List[str] = host_list
-        self._conn_dict: Dict[str, List[ConnModel]] = {}
+        self._host_weight_list: List[str] = host_list
+        self._conn_dict: Dict[str, ConnModel] = {}
         self._connected_cnt: int = 0
         self._timeout: int = timeout
         self._ssl_crt_path: Optional[str] = ssl_crt_path
@@ -66,6 +68,7 @@ class Transport(object):
         self._process_response_list: List = []
 
         self._msg_id: int = random.randrange(65535)
+        self._round_robin_index: int = 0
         self._exc_status_code_dict = get_exc_status_code_dict()
         self._resp_future_dict: Dict[str, asyncio.Future[Response]] = {}
         self._channel_queue_dict: Dict[str, asyncio.Queue[Union[Response, Exception]]] = {}
@@ -73,14 +76,20 @@ class Transport(object):
         self._fuse_window_state: WindowState = fuse_window_state or WindowState(interval=2 * 60)
 
         def upload_probability(stats_dict: dict) -> None:
-            for key, value in self._conn_dict.items():
-                for conn_model in value:
-                    peer_tuple: Tuple[str, int] = conn_model.conn.peer_tuple
-                    total: int = self._fuse_window_state.get_value(f"{peer_tuple}:total", 0)  # type: ignore
-                    error_cnt: int = self._fuse_window_state.get_value(f"{peer_tuple}:error", 0)  # type: ignore
-                    stats_dict[f"{peer_tuple}:probability"] = max(
-                        0.0, (total - fuse_k * (total - error_cnt)) / (total + 1)
-                    )
+            host_weight_list: List[str] = []
+            for key, conn_model in self._conn_dict.items():
+                peer_tuple: Tuple[str, int] = conn_model.conn.peer_tuple
+                total: int = stats_dict.get(f"{peer_tuple}:total", 0)  # type: ignore
+                error_cnt: int = stats_dict.get(f"{peer_tuple}:error", 0)  # type: ignore
+                conn_model.probability = max(fuse_min_probability, (total - fuse_k * (total - error_cnt)) / (total + 1))
+                host_weight_list.extend(
+                    [
+                        f"{peer_tuple[0]}:{peer_tuple[1]}"
+                        for _ in range(int(conn_model.probability * conn_model.weight * 10))
+                    ]
+                )
+            random.shuffle(host_weight_list)
+            self._host_weight_list = host_weight_list
 
         self._fuse_window_state.add_priority_callback(upload_probability)
 
@@ -91,9 +100,8 @@ class Transport(object):
             try:
                 key: str = conn_model.conn.connection_info
                 if key in self._conn_dict:
-                    self._conn_dict[key].remove(conn_model)
-                    if not self._conn_dict[key]:
-                        self._host_list.remove(key)
+                    del self._conn_dict[key]
+                    self._host_weight_list.remove(key)
                 self._connected_cnt -= 1
             except Exception as e:
                 logging.exception(f"close conn error: {e}")
@@ -104,40 +112,37 @@ class Transport(object):
         conn_model.future.add_done_callback(lambda f: _conn_done(f))
         logging.debug(f"Connection to %s...", conn_model.conn.connection_info)
 
-    def add_conn(
-        self, ip: str, port: int, weight: float = 1.0, min_weight: Optional[float] = None, conn_cnt: int = 1
-    ) -> None:
-        if not min_weight:
-            min_weight = weight * 0.1
+    def add_conn(self, ip: str, port: int, weight: int = 1, min_weight: Optional[int] = None) -> None:
+        if not min_weight or min_weight >= 1:
+            min_weight = 1
         key: str = f"{ip}:{port}"
-        if key not in self._conn_dict:
-            self._conn_dict[key] = []
-        for _ in range(conn_cnt):
-            self._host_list.append(key)
-            conn_model: ConnModel = ConnModel(
-                Connection(ip, port, self._timeout, ssl_crt_path=self._ssl_crt_path),
-                weight=weight,
-                min_weight=min_weight,
-            )
-            self._conn_dict[key].append(conn_model)
-            if not self.is_close:
-                asyncio.ensure_future(self._connect(conn_model))
+        self._host_weight_list.extend([key for _ in range(weight)])
+        random.shuffle(self._host_weight_list)
 
-    def remove_conn(self, ip: str, port: int) -> List[Coroutine]:
+        conn_model: ConnModel = ConnModel(
+            Connection(ip, port, self._timeout, ssl_crt_path=self._ssl_crt_path),
+            weight=weight,
+            min_weight=min_weight,
+        )
+        self._conn_dict[key] = conn_model
+        if not self.is_close:
+            asyncio.ensure_future(self._connect(conn_model))
+
+    def remove_conn(self, ip: str, port: int) -> Optional[Coroutine]:
         key: str = f"{ip}:{port}"
-        coro_list: List[Coroutine] = []
+        coro: Optional[Coroutine] = None
         if key not in self._conn_dict:
-            return coro_list
+            return coro
 
         if not self.is_close:
-            for conn_model in self._conn_dict[key]:
-                if not conn_model.is_closed():
-                    conn_model.conn.close()
-                    coro_list.append(conn_model.conn.wait_closed())
+            conn_model: ConnModel = self._conn_dict[key]
+            if not conn_model.is_closed():
+                conn_model.conn.close()
+                coro = conn_model.conn.wait_closed()
 
-        self._host_list.remove(key)
+        self._host_weight_list = [i for i in self._host_weight_list if i != key]
         del self._conn_dict[key]
-        return coro_list
+        return coro
 
     async def start(self) -> None:
         """create conn and listen future"""
@@ -147,10 +152,9 @@ class Transport(object):
             raise RuntimeError("Not add conn, can not start")
         if self._fuse_window_state.is_closed:
             self._fuse_window_state.change_state()
-        for key, conn_model_list in self._conn_dict.items():
-            for conn_model in conn_model_list:
-                if conn_model.is_closed():
-                    await self._connect(conn_model)
+        for key, conn_model in self._conn_dict.items():
+            if conn_model.is_closed():
+                await self._connect(conn_model)
 
     @property
     def is_close(self) -> bool:
@@ -159,13 +163,15 @@ class Transport(object):
     async def stop(self) -> None:
         """close all conn and cancel future"""
         future_list: List[Coroutine] = []
-        for host in deepcopy(self._host_list):
+        for host in deepcopy(self._host_weight_list):
             index: int = host.rfind(":")
             ip: str = host[:index]
             port: int = int(host[index + 1 :])
-            future_list.extend(self.remove_conn(ip, port))
+            coro: Optional[Coroutine] = self.remove_conn(ip, port)
+            if coro:
+                future_list.append(coro)
         if not self._fuse_window_state.is_closed:
-            self._fuse_window_state.change_state()
+            self._fuse_window_state.close()
         await asyncio.gather(*future_list)
 
     async def _listen(self, conn: Connection) -> None:
@@ -388,8 +394,14 @@ class Transport(object):
     # get conn #
     ############
     def get_random_conn(self) -> Connection:
-        key: str = random.choice(self._host_list)
-        return random.choice(self._conn_dict[key]).conn
+        key: str = random.choice(self._host_weight_list)
+        return self._conn_dict[key].conn
+
+    def get_round_robin_conn(self) -> Connection:
+        self._round_robin_index += 1
+        index = self._round_robin_index % (len(self._host_weight_list))
+        key: str = self._host_weight_list[index]
+        return self._conn_dict[key].conn
 
     @property
     def session(self) -> "Session":

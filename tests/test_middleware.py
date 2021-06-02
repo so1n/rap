@@ -1,4 +1,5 @@
 import asyncio
+from copy import deepcopy
 from typing import Any
 
 import pytest
@@ -32,10 +33,9 @@ class TestConnLimitMiddleware:
         setattr(client.transport, "_listen", mock_func)
         await client.start()
 
-        for conn_model_list in client.transport._conn_dict.values():
-            for conn_model in conn_model_list:
-                with pytest.raises(ConnectionError):
-                    await client.transport._read_from_conn(conn_model.conn)
+        for conn_model in client.transport._conn_dict.copy().values():
+            with pytest.raises(ConnectionError):
+                await client.transport._read_from_conn(conn_model.conn)
 
     async def test_conn_limit_allow(self, rap_server: Server) -> None:
         rap_server.load_middleware([ConnLimitMiddleware(max_conn=1)])
@@ -82,10 +82,9 @@ class TestIpMaxConnMiddleware:
         setattr(client.transport, "_listen", mock_func)
         await client.start()
 
-        for conn_model_list in client.transport._conn_dict.values():
-            for conn_model in conn_model_list:
-                with pytest.raises(ConnectionError):
-                    await client.transport._read_from_conn(conn_model.conn)
+        for conn_model in client.transport._conn_dict.copy().values():
+            with pytest.raises(ConnectionError):
+                await client.transport._read_from_conn(conn_model.conn)
 
     async def test_ip_max_conn_allow(self, rap_server: Server) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
@@ -142,10 +141,9 @@ class TestIpBlockMiddleware:
         setattr(client.transport, "_listen", mock_func)
         await client.start()
 
-        for conn_model_list in client.transport._conn_dict.values():
-            for conn_model in conn_model_list:
-                with pytest.raises(ConnectionError):
-                    await client.transport._read_from_conn(conn_model.conn)
+        for conn_model in client.transport._conn_dict.copy().values():
+            with pytest.raises(ConnectionError):
+                await client.transport._read_from_conn(conn_model.conn)
 
     async def test_ip_block_ip_not_in_block_list(self, rap_server: Server) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
@@ -173,7 +171,6 @@ class TestIpBlockMiddleware:
         setattr(client.transport, "_listen", mock_func)
         await client.start()
 
-        for conn_model_list in client.transport._conn_dict.values():
-            for conn_model in conn_model_list:
-                with pytest.raises(ConnectionError):
-                    await client.transport._read_from_conn(conn_model.conn)
+        for conn_model in client.transport._conn_dict.copy().values():
+            with pytest.raises(ConnectionError):
+                await client.transport._read_from_conn(conn_model.conn)
