@@ -122,10 +122,8 @@ class Client:
     ##################
     # start& close #
     ##################
-    def add_conn(
-        self, ip: str, port: int, weight: float = 1.0, min_weight: Optional[float] = None, conn_cnt: int = 1
-    ) -> None:
-        self.transport.add_conn(ip, port, weight, min_weight, conn_cnt)
+    def add_conn(self, ip: str, port: int, weight: int = 1, min_weight: Optional[int] = None) -> None:
+        self.transport.add_conn(ip, port, weight, min_weight)
 
     def remove_conn(self, ip: str, port: int) -> None:
         self.transport.remove_conn(ip, port)

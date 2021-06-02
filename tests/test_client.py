@@ -39,9 +39,8 @@ class TestTransport:
         setattr(client.transport, "_listen", mock_func)
         await client.start()
 
-        for conn_model_list in client.transport._conn_dict.values():
-            for conn_model in conn_model_list:
-                await client.transport._read_from_conn(conn_model.conn)
+        for conn_model in client.transport._conn_dict.values():
+            await client.transport._read_from_conn(conn_model.conn)
 
         mocker_obj.assert_called_once_with(once_target)
 

@@ -100,8 +100,8 @@ class TestApiGateWay:
         app.router.on_startup.insert(0, create_rap_server)
         app.router.on_shutdown.append(close_rap_server)
 
-        with TestClient(app) as client:
-            resp = client.post(
+        with TestClient(app) as test_client:
+            resp = test_client.post(
                 "http://localhost:8000/api/normal",
                 json={"group": "default", "func_name": "sync_sum", "func_type": "normal", "arg_list": [1, 2]},
             )
