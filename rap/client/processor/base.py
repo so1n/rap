@@ -1,13 +1,20 @@
-from abc import ABCMeta, abstractmethod
+from typing import Tuple
 
 from rap.client.model import Request, Response
 
 
-class BaseProcessor(metaclass=ABCMeta):
-    @abstractmethod
-    async def process_request(self, request: Request) -> Request:
-        raise NotImplementedError
+class BaseProcessor(object):
+    def start_event_handle(self) -> None:
+        pass
 
-    @abstractmethod
+    def stop_event_handle(self) -> None:
+        pass
+
+    async def process_request(self, request: Request) -> Request:
+        return request
+
     async def process_response(self, response: Response) -> Response:
-        raise NotImplementedError
+        return response
+
+    async def process_exc(self, response: Response, exc: Exception) -> Tuple[Response, Exception]:
+        return response, exc
