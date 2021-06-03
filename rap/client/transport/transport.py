@@ -5,6 +5,7 @@ import uuid
 from contextvars import ContextVar, Token
 from copy import deepcopy
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from types import FunctionType
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Sequence, Tuple, Type, Union
 
@@ -14,8 +15,7 @@ from rap.client.transport.channel import Channel
 from rap.client.utils import get_exc_status_code_dict, raise_rap_error
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
-from rap.common.exceptions import ChannelError, RPCError, ServerError
-from rap.common.state import WindowState
+from rap.common.exceptions import ChannelError, RPCError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.common.utils import Constant, Event, RapFunc, as_first_completed
 
@@ -44,6 +44,11 @@ class ConnModel(object):
             await self.conn.await_close()
 
 
+class SelectConnEnum(Enum):
+    random = auto()
+    round_robin = auto()
+
+
 class Transport(object):
     """base client transport, encapsulation of custom transport protocol"""
 
@@ -53,10 +58,7 @@ class Transport(object):
         timeout: int = 9,
         keep_alive_time: int = 1200,
         ssl_crt_path: Optional[str] = None,
-        fuse_window_state: Optional[WindowState] = None,
-        fuse_k: float = 2.0,  # google sre default
-        fuse_enable_cnt: int = 100,
-        fuse_min_probability: float = 0.1,
+        select_conn_method: SelectConnEnum = SelectConnEnum.random,
     ):
         self._host_weight_list: List[str] = host_list
         self._conn_dict: Dict[str, ConnModel] = {}
@@ -66,32 +68,20 @@ class Transport(object):
         self._keep_alive_time: int = keep_alive_time
         self._process_request_list: List = []
         self._process_response_list: List = []
+        self._process_exception_list: List = []
+        self._start_event_list: List = []
+        self._stop_event_list: List = []
 
         self._msg_id: int = random.randrange(65535)
         self._round_robin_index: int = 0
         self._exc_status_code_dict = get_exc_status_code_dict()
         self._resp_future_dict: Dict[str, asyncio.Future[Response]] = {}
         self._channel_queue_dict: Dict[str, asyncio.Queue[Union[Response, Exception]]] = {}
-        self._fuse_enable_cnt: int = fuse_enable_cnt
-        self._fuse_window_state: WindowState = fuse_window_state or WindowState(interval=2 * 60)
 
-        def upload_probability(stats_dict: dict) -> None:
-            host_weight_list: List[str] = []
-            for key, conn_model in self._conn_dict.items():
-                peer_tuple: Tuple[str, int] = conn_model.conn.peer_tuple
-                total: int = stats_dict.get(f"{peer_tuple}:total", 0)  # type: ignore
-                error_cnt: int = stats_dict.get(f"{peer_tuple}:error", 0)  # type: ignore
-                conn_model.probability = max(fuse_min_probability, (total - fuse_k * (total - error_cnt)) / (total + 1))
-                host_weight_list.extend(
-                    [
-                        f"{peer_tuple[0]}:{peer_tuple[1]}"
-                        for _ in range(int(conn_model.probability * conn_model.weight * 10))
-                    ]
-                )
-            random.shuffle(host_weight_list)
-            self._host_weight_list = host_weight_list
-
-        self._fuse_window_state.add_priority_callback(upload_probability)
+        if select_conn_method == select_conn_method.random:
+            setattr(self, self.get_conn.__name__, self.get_random_conn)
+        else:
+            setattr(self, self.get_conn.__name__, self.get_round_robin_conn)
 
     async def _connect(self, conn_model: ConnModel) -> None:
         """create conn and listen future by host"""
@@ -150,8 +140,8 @@ class Transport(object):
             raise ConnectionError(f"{self.__class__.__name__} is running")
         if not self._conn_dict:
             raise RuntimeError("Not add conn, can not start")
-        if self._fuse_window_state.is_closed:
-            self._fuse_window_state.change_state()
+        for fn in self._start_event_list:
+            fn()
         for key, conn_model in self._conn_dict.items():
             if conn_model.is_closed():
                 await self._connect(conn_model)
@@ -170,9 +160,10 @@ class Transport(object):
             coro: Optional[Coroutine] = self.remove_conn(ip, port)
             if coro:
                 future_list.append(coro)
-        if not self._fuse_window_state.is_closed:
-            self._fuse_window_state.close()
         await asyncio.gather(*future_list)
+
+        for fn in self._start_event_list:
+            fn()
 
     async def _listen(self, conn: Connection) -> None:
         """listen server msg"""
@@ -190,7 +181,6 @@ class Transport(object):
 
     async def _read_from_conn(self, conn: Connection) -> None:
         """recv server msg handle"""
-        self._fuse_window_state.increment(f"{conn.peer_tuple}:total")
         try:
             response_msg: Optional[BASE_RESPONSE_TYPE] = await conn.read(self._keep_alive_time)
             logging.debug(f"recv raw data: %s", response_msg)
@@ -221,11 +211,12 @@ class Transport(object):
         channel_id: Optional[str] = response.header.get("channel_id")
         status_code: int = response.header.get("status_code", 500)
 
-        def put_exc_to_receiver(put_exc: Exception) -> None:
-            self._fuse_window_state.increment(f"{conn.peer_tuple}:error")
+        async def put_exc_to_receiver(put_response: Response, put_exc: Exception) -> None:
+            for process_exc in self._process_exception_list:
+                put_response, put_exc = await process_exc(put_response, put_exc)
             if channel_id in self._channel_queue_dict:
                 self._channel_queue_dict[channel_id].put_nowait(put_exc)
-            elif response.msg_id != -1 and resp_future_id in self._resp_future_dict:
+            elif put_response.msg_id != -1 and resp_future_id in self._resp_future_dict:
                 self._resp_future_dict[resp_future_id].set_exception(put_exc)
             elif isinstance(put_exc, rap_exc.ServerError):
                 raise put_exc
@@ -233,12 +224,12 @@ class Transport(object):
                 logging.error(f"recv error msg:{response}, ignore")
 
         if exc:
-            put_exc_to_receiver(exc)
+            await put_exc_to_receiver(response, exc)
             return
         elif response.num == Constant.SERVER_ERROR_RESPONSE or status_code in self._exc_status_code_dict:
             # server error response handle
             exc_class: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(status_code, rap_exc.BaseRapError)
-            put_exc_to_receiver(exc_class(response.body))
+            await put_exc_to_receiver(response, exc_class(response.body))
             return
         elif response.num == Constant.SERVER_EVENT:
             # server event msg handle
@@ -309,12 +300,6 @@ class Transport(object):
         elif conn is None:
             conn = self.get_random_conn()
         request.header["host"] = conn.peer_tuple
-
-        total: int = self._fuse_window_state.get_value(f"{conn.peer_tuple}:total", 0)  # type: ignore
-        if total > self._fuse_enable_cnt:
-            probability: float = self._fuse_window_state.get_value(f"{conn.peer_tuple}:probability", 0.0)
-            if (random.randint(0, 10) / 10) > probability:
-                raise ServerError("Service Unavailable")
 
         async def _write(_request: Request) -> None:
             self.before_write_handle(_request)
@@ -393,6 +378,9 @@ class Transport(object):
     ############
     # get conn #
     ############
+    def get_conn(self) -> Connection:
+        raise NotImplementedError
+
     def get_random_conn(self) -> Connection:
         key: str = random.choice(self._host_weight_list)
         return self._conn_dict[key].conn
@@ -434,9 +422,10 @@ class Transport(object):
     # processor #
     #############
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:
-        for middleware in processor_list:
-            self._process_request_list.append(middleware.process_request)
-            self._process_response_list.append(middleware.process_response)
+        for processor in processor_list:
+            self._process_request_list.append(processor.process_request)
+            self._process_response_list.append(processor.process_response)
+            self._process_exception_list.append(processor.process_exc)
 
 
 class Session(object):

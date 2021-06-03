@@ -68,7 +68,6 @@ async def rap_server() -> AsyncGenerator[Server, None]:
 
 @pytest.fixture
 async def rap_client() -> AsyncGenerator[Client, None]:
-    client.transport._fuse_window_state = WindowState(interval=2 * 60)
     client.transport._process_request_list = []
     client.transport._process_response_list = []
     client.add_conn("localhost", 9000)
