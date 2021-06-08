@@ -249,46 +249,67 @@ class Receiver(object):
         else:
             raise ChannelError("channel life cycle error")
 
-    async def _msg_handle(
-        self, request: Request, call_id: int, func: Callable, param: list, default_param: Dict[str, Any]
-    ) -> Tuple[int, Any]:
+    async def _gen_msg_handle(self, call_id: int) -> Tuple[int, Any]:
+        # run generator func next
+        try:
+            result: Any = self._generator_dict[call_id]
+            if inspect.isgenerator(result):
+                result = next(result)
+            elif inspect.isasyncgen(result):
+                result = await result.__anext__()
+        except (StopAsyncIteration, StopIteration) as e:
+            del self._generator_dict[call_id]
+            result = e
+        return call_id, result
 
-        if call_id in self._generator_dict:
-            # run generator func next
-            try:
-                result: Any = self._generator_dict[call_id]
+    async def _msg_handle(self, request: Request, call_id: int, func_model: FuncModel) -> Tuple[int, Any]:
+        param: list = request.body.get("param", [])
+        kwarg_param: Dict[str, Any] = request.body.get("default_param", {})
+
+        # Check whether the parameter is legal
+        if len(func_model.arg_list) != len(param):
+            raise ParseError(
+                extra_msg=f"{func_model.func_name} takes {len(func_model.arg_list)}"
+                          f" positional arguments but {len(param)} were given"
+            )
+        kwarg_param_set: set = set(kwarg_param.keys())
+        fun_kwarg_set: set = set(func_model.kwarg_dict.keys())
+        if not kwarg_param_set.issubset(fun_kwarg_set):
+            raise ParseError(
+                extra_msg=f"{func_model.func_name} can not find default "
+                          f"param name:{kwarg_param_set.difference(fun_kwarg_set)}"
+            )
+
+        # Check param type
+        try:
+            check_func_type(func_model.func, param, kwarg_param)
+        except TypeError as e:
+            raise ParseError(extra_msg=str(e))
+
+        # called func
+        if asyncio.iscoroutinefunction(func_model.func):
+            coroutine: Union[Awaitable, Coroutine] = func_model.func(*param, **kwarg_param)
+        else:
+            coroutine = get_event_loop().run_in_executor(None, partial(func_model.func, *param, **kwarg_param))
+
+        try:
+            result = await asyncio.wait_for(coroutine, self._run_timeout)
+        except asyncio.TimeoutError:
+            return call_id, RpcRunTimeError(f"Call {func_model.func.__name__} timeout")
+        except Exception as e:
+            return call_id, e
+
+        if inspect.isgenerator(result) or inspect.isasyncgen(result):
+            user_agent: str = request.header.get("user_agent", "None")
+            if user_agent != Constant.USER_AGENT:
+                result = ProtocolError(f"{user_agent} not support generator")
+            else:
+                call_id = id(result)
+                self._generator_dict[call_id] = result
                 if inspect.isgenerator(result):
                     result = next(result)
-                elif inspect.isasyncgen(result):
-                    result = await result.__anext__()
-            except (StopAsyncIteration, StopIteration) as e:
-                del self._generator_dict[call_id]
-                result = e
-        else:
-            # called func
-            if asyncio.iscoroutinefunction(func):
-                coroutine: Union[Awaitable, Coroutine] = func(*param, **default_param)
-            else:
-                coroutine = get_event_loop().run_in_executor(None, partial(func, *param, **default_param))
-
-            try:
-                result = await asyncio.wait_for(coroutine, self._run_timeout)
-            except asyncio.TimeoutError:
-                return call_id, RpcRunTimeError(f"Call {func.__name__} timeout")
-            except Exception as e:
-                return call_id, e
-
-            if inspect.isgenerator(result) or inspect.isasyncgen(result):
-                user_agent: str = request.header.get("user_agent", "None")
-                if user_agent != Constant.USER_AGENT:
-                    result = ProtocolError(f"{user_agent} not support generator")
                 else:
-                    call_id = id(result)
-                    self._generator_dict[call_id] = result
-                    if inspect.isgenerator(result):
-                        result = next(result)
-                    else:
-                        result = await result.__anext__()
+                    result = await result.__anext__()
         return call_id, result
 
     async def msg_handle(self, request: Request, response: Response) -> Optional[Response]:
@@ -298,30 +319,10 @@ class Receiver(object):
             call_id: int = request.body["call_id"]
         except KeyError:
             raise ParseError(extra_msg="body miss params")
-        param: list = request.body.get("param", [])
-        kwarg_param: Dict[str, Any] = request.body.get("default_param", {})
-
-        # Check whether the parameter is legal
-        if len(func_model.arg_list) != len(param):
-            raise ParseError(
-                extra_msg=f"{func_model.func_name} takes {len(func_model.arg_list)}"
-                f" positional arguments but {len(param)} were given"
-            )
-        kwarg_param_set: set = set(kwarg_param.keys())
-        fun_kwarg_set: set = set(func_model.kwarg_dict.keys())
-        if not kwarg_param_set.issubset(fun_kwarg_set):
-            raise ParseError(
-                extra_msg=f"{func_model.func_name} can not find default "
-                f"param name:{kwarg_param_set.difference(fun_kwarg_set)}"
-            )
-
-        # Check param type
-        try:
-            check_func_type(func_model.func, param, kwarg_param)
-        except TypeError as e:
-            raise ParseError(extra_msg=str(e))
-
-        new_call_id, result = await self._msg_handle(request, call_id, func_model.func, param, kwarg_param)
+        if call_id in self._generator_dict:
+            new_call_id, result = await self._gen_msg_handle(call_id)
+        else:
+            new_call_id, result = await self._msg_handle(request, call_id, func_model)
         response.body = {"call_id": new_call_id}
         if isinstance(result, StopAsyncIteration) or isinstance(result, StopIteration):
             response.header["status_code"] = 301

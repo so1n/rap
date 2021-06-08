@@ -4,7 +4,6 @@ from typing import AsyncGenerator, AsyncIterator, Iterator
 import pytest
 
 from rap.client import Client
-from rap.common.state import WindowState
 from rap.server import Server
 
 client: Client = Client()
