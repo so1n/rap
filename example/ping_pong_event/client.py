@@ -2,7 +2,7 @@ import asyncio
 
 from rap.client import Client
 
-client = Client()
+client: Client = Client("example")
 
 
 async def main() -> None:

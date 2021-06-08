@@ -28,7 +28,7 @@ class TestConnLimitMiddleware:
     async def test_conn_limit(self, rap_server: Server) -> None:
         rap_server.load_middleware([ConnLimitMiddleware(max_conn=0)])
 
-        client: Client = Client()
+        client: Client = Client("test")
         client.add_conn("localhost", 9000)
         setattr(client.transport, "_listen", mock_func)
         await client.start()
@@ -39,7 +39,7 @@ class TestConnLimitMiddleware:
 
     async def test_conn_limit_allow(self, rap_server: Server) -> None:
         rap_server.load_middleware([ConnLimitMiddleware(max_conn=1)])
-        client: Client = Client()
+        client: Client = Client("test")
         client.add_conn("localhost", 9000)
         await client.start()
         assert 3 == await client.raw_call("async_sum", [1, 2])
@@ -77,7 +77,7 @@ class TestIpMaxConnMiddleware:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
         middleware: IpMaxConnMiddleware = IpMaxConnMiddleware(redis, ip_max_conn=0)
         rap_server.load_middleware([middleware])
-        client: Client = Client()
+        client: Client = Client("test")
         client.add_conn("localhost", 9000)
         setattr(client.transport, "_listen", mock_func)
         await client.start()
@@ -90,7 +90,7 @@ class TestIpMaxConnMiddleware:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
         middleware: IpMaxConnMiddleware = IpMaxConnMiddleware(redis, ip_max_conn=1)
         rap_server.load_middleware([middleware])
-        client: Client = Client()
+        client: Client = Client("test")
         client.add_conn("localhost", 9000)
         await client.start()
         assert 3 == await client.raw_call("async_sum", [1, 2])
@@ -105,7 +105,7 @@ class TestIpBlockMiddleware:
         rap_server.load_middleware([middleware])
         await middleware.start_event_handle()
 
-        client: Client = Client()
+        client: Client = Client("test")
         client.add_conn("localhost", 9000)
         await client.start()
         await client.raw_call("add_block_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
@@ -123,7 +123,7 @@ class TestIpBlockMiddleware:
 
         rap_server.load_middleware([middleware])
         await middleware.start_event_handle()
-        client: Client = Client()
+        client: Client = Client("test")
         client.add_conn("localhost", 9000)
         await client.start()
         assert 3 == await client.raw_call("async_sum", [1, 2])
@@ -136,7 +136,7 @@ class TestIpBlockMiddleware:
 
         rap_server.load_middleware([middleware])
         await middleware.start_event_handle()
-        client: Client = Client()
+        client: Client = Client("test")
         client.add_conn("localhost", 9000)
         setattr(client.transport, "_listen", mock_func)
         await client.start()
@@ -152,7 +152,7 @@ class TestIpBlockMiddleware:
 
         rap_server.load_middleware([middleware])
         await middleware.start_event_handle()
-        client: Client = Client()
+        client: Client = Client("test")
         client.add_conn("localhost", 9000)
         await client.start()
         assert 3 == await client.raw_call("async_sum", [1, 2])
@@ -166,7 +166,7 @@ class TestIpBlockMiddleware:
         rap_server.load_middleware([middleware])
         await middleware.start_event_handle()
 
-        client: Client = Client()
+        client: Client = Client("test")
         client.add_conn("localhost", 9000)
         setattr(client.transport, "_listen", mock_func)
         await client.start()

@@ -14,7 +14,7 @@ config: Config = Config(
 )
 tracer: Tracer = config.initialize_tracer()
 
-client = Client()
+client: Client = Client("example")
 client.load_processor([TracingProcessor(tracer)])
 
 

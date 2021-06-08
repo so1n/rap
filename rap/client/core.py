@@ -86,6 +86,7 @@ class AsyncIteratorCall:
 class Client:
     def __init__(
         self,
+        server_name: str,
         host_list: Optional[List[str]] = None,
         timeout: int = 9,
         keep_alive_time: int = 1200,
@@ -106,6 +107,7 @@ class Client:
         if not host_list:
             host_list = ["localhost:9000"]
         self.transport: Transport = Transport(
+            server_name,
             host_list,
             timeout=timeout,
             keep_alive_time=keep_alive_time,

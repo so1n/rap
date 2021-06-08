@@ -23,20 +23,20 @@ class TestServerEvent:
         async def demo_stop_event() -> None:
             pass
 
-        rap_server: Server = Server(start_event_list=[demo_start_event], stop_event_list=[demo_stop_event])
+        rap_server: Server = Server("test", start_event_list=[demo_start_event], stop_event_list=[demo_stop_event])
         assert rap_server._start_event_list[0] == demo_start_event
         assert rap_server._stop_event_list[0] == demo_stop_event
 
     def test_load_error_event(self) -> None:
 
         with pytest.raises(ImportError):
-            Server(start_event_list=["111"])  # type: ignore
+            Server("test", start_event_list=["111"])  # type: ignore
 
     def test_repeat_error_event(self) -> None:
         async def demo_start_event() -> None:
             pass
 
-        rap_server: Server = Server(start_event_list=[demo_start_event])
+        rap_server: Server = Server("test", start_event_list=[demo_start_event])
         with pytest.raises(ImportError):
             rap_server.load_start_event([demo_start_event])
 
@@ -44,11 +44,11 @@ class TestServerEvent:
 class TestServerMiddleware:
     def test_load_error_middleware(self) -> None:
         with pytest.raises(RuntimeError):
-            Server(middleware_list=[ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])  # type: ignore
+            Server("test", middleware_list=[ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])  # type: ignore
 
     def test_repeat_load_middleware(self) -> None:
         conn_limit_middleware: ConnLimitMiddleware = ConnLimitMiddleware()
-        rap_server: Server = Server(middleware_list=[conn_limit_middleware])
+        rap_server: Server = Server("test", middleware_list=[conn_limit_middleware])
         with pytest.raises(ImportError):
             rap_server.load_middleware([conn_limit_middleware])
 
@@ -56,11 +56,11 @@ class TestServerMiddleware:
 class TestServerProcessor:
     def test_load_error_processor(self) -> None:
         with pytest.raises(RuntimeError):
-            Server(processor_list=[ConnLimitMiddleware()])  # type: ignore
+            Server("test", processor_list=[ConnLimitMiddleware()])  # type: ignore
 
     def test_repeat_load_processor(self) -> None:
         crypto_process: ServerCryptoProcessor = ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis)
-        rap_server: Server = Server(processor_list=[crypto_process])
+        rap_server: Server = Server("test", processor_list=[crypto_process])
         with pytest.raises(ImportError):
             rap_server.load_processor([crypto_process])
 

@@ -6,7 +6,7 @@ import pytest
 from rap.client import Client
 from rap.server import Server
 
-client: Client = Client()
+client: Client = Client("test")
 
 
 def sync_sum(a: int, b: int) -> int:
@@ -55,7 +55,10 @@ async def rap_server() -> AsyncGenerator[Server, None]:
         for i in range(a):
             yield i
 
-    rpc_server = Server(host=["localhost:9000", "localhost:9001", "localhost:9002"], ping_sleep_time=1)
+    rpc_server = Server("test", ping_sleep_time=1)
+    rpc_server.bind()
+    rpc_server.bind(port=9001)
+    rpc_server.bind(port=9002)
     rpc_server.register(_sync_sum, "sync_sum")
     rpc_server.register(_async_sum, "async_sum")
     rpc_server.register(_async_gen, "async_gen")

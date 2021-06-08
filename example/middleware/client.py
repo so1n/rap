@@ -3,7 +3,7 @@ from typing import AsyncIterator
 
 from rap.client import Client
 
-client = Client()
+client = Client("example")
 
 
 def sync_sum(a: int, b: int) -> int:

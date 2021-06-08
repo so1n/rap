@@ -22,7 +22,8 @@ if __name__ == "__main__":
 
     loop = asyncio.new_event_loop()
     redis: StrictRedis = StrictRedis.from_url("redis://localhost")
-    rpc_server = Server()
+    rpc_server: Server = Server("example")
+    rpc_server.bind()
     opentracing_config: Config = Config(
         config={
             "sampler": {"type": "const", "param": 1},

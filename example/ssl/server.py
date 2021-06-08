@@ -16,11 +16,13 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
-    rpc_server = Server(
+    rpc_server: Server = Server(
+        "example",
         # enable ssl
         ssl_crt_path="./rap_ssl.crt",
         ssl_key_path="./rap_ssl.key",
     )
+    rpc_server.bind()
     rpc_server.register(async_sum)
     loop.run_until_complete(rpc_server.create_server())
 

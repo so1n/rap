@@ -3,9 +3,10 @@ from typing import Any
 
 from aredis import StrictRedis  # type: ignore
 
-from rap.server import Channel, Server
+from rap.server.core import Server
 from rap.server.model import Response
 from rap.server.plugin.processor import CryptoProcessor
+from rap.server.receiver import Channel
 
 
 async def async_channel(channel: Channel) -> None:
@@ -51,7 +52,10 @@ if __name__ == "__main__":
 
     loop = asyncio.new_event_loop()
     redis: StrictRedis = StrictRedis.from_url("redis://localhost")
-    rpc_server = Server(host=["localhost:9000", "localhost:9001", "localhost:9002"])
+    rpc_server = Server("example")
+    rpc_server.bind()
+    rpc_server.bind(port=9001)
+    rpc_server.bind(port=9002)
     rpc_server.load_processor([CryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])
     rpc_server.register(async_channel)
     rpc_server.register(echo_body)

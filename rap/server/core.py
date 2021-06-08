@@ -3,7 +3,7 @@ import inspect
 import logging
 import ssl
 from contextvars import Token
-from typing import Any, Callable, List, Optional, Set, Union
+from typing import Any, Callable, List, Optional, Set, Tuple, Union
 
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import ServerError
@@ -24,7 +24,7 @@ __all__ = ["Server"]
 class Server(object):
     def __init__(
         self,
-        host: Union[str, List] = "localhost:9000",
+        server_name: str,
         timeout: int = 9,
         keep_alive: int = 1200,
         run_timeout: int = 9,
@@ -39,10 +39,8 @@ class Server(object):
         processor_list: List[BaseProcessor] = None,
         window_state: Optional[WindowState] = None,
     ):
-        if isinstance(host, str):
-            self._host: List[str] = [host]
-        else:
-            self._host = host
+        self._host_list: List[Tuple[str, int]] = []
+        self.server_name: str = server_name
         self._timeout: int = timeout
         self._run_timeout: int = run_timeout
         self._keep_alive: int = keep_alive
@@ -142,6 +140,16 @@ class Server(object):
 
         self.registry.register(func, name, group=group, is_private=is_private, doc=doc)
 
+    def bind(self, local_ip: str = "localhost", port: int = 9000, host_ip: str = "") -> None:
+        if not self.is_closed:
+            raise RuntimeError("Server status is running...can not bind")
+        self._host_list.append((local_ip, port))
+        # TODO register center
+
+    @property
+    def is_closed(self) -> bool:
+        return not bool(self._server_list)
+
     @staticmethod
     async def run_callback_list(callback_list: List[Callable]) -> None:
         if not callback_list:
@@ -153,9 +161,13 @@ class Server(object):
                 callback()
 
     async def create_server(self) -> "Server":
+        if not self._host_list:
+            raise RuntimeError("Could not find the bind conn")
+        if not self.is_closed:
+            raise RuntimeError("Server status is running...")
         await self.run_callback_list(self._start_event_list)
-        for host in self._host:
-            ip, port = host.split(":")
+        for host in self._host_list:
+            ip, port = host
             self._server_list.append(
                 await asyncio.start_server(self.conn_handle, ip, port, ssl=self._ssl_context, backlog=self._backlog)
             )
@@ -173,7 +185,10 @@ class Server(object):
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE) -> None:
         conn: ServerConnection = ServerConnection(reader, writer, self._timeout)
         await self._conn_handle(conn)
-        conn.conn_future.result()
+        try:
+            conn.conn_future.result()
+        except Exception:
+            pass
 
     async def _conn_handle(self, conn: ServerConnection) -> None:
         sender: Sender = Sender(conn, self._timeout, processor_list=self._processor_list)

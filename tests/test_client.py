@@ -34,7 +34,7 @@ class TestTransport:
     @staticmethod
     async def _read_helper(mocker: MockerFixture, once_target: Any) -> None:
         mocker_obj: Any = mocker.patch("rap.client.transport.transport.logging.error")
-        client: Client = Client()
+        client: Client = Client("test")
         client.add_conn("localhost", 9000)
         setattr(client.transport, "_listen", mock_func)
         await client.start()

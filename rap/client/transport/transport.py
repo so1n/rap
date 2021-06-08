@@ -54,12 +54,14 @@ class Transport(object):
 
     def __init__(
         self,
+        server_name: str,
         host_list: List[str],
         timeout: int = 9,
         keep_alive_time: int = 1200,
         ssl_crt_path: Optional[str] = None,
         select_conn_method: SelectConnEnum = SelectConnEnum.random,
     ):
+        self._server_name: str = server_name
         self._host_weight_list: List[str] = host_list
         self._conn_dict: Dict[str, ConnModel] = {}
         self._connected_cnt: int = 0
@@ -97,6 +99,8 @@ class Transport(object):
                 logging.exception(f"close conn error: {e}")
 
         await conn_model.conn.connect()
+        request: Request = Request.from_event(Event(Constant.DECLARE, {"server_name": self._server_name}))
+        await self.write(request, -1, conn_model.conn)
         self._connected_cnt += 1
         conn_model.future = asyncio.ensure_future(self._listen(conn_model.conn))
         conn_model.future.add_done_callback(lambda f: _conn_done(f))
@@ -118,17 +122,15 @@ class Transport(object):
         if not self.is_close:
             asyncio.ensure_future(self._connect(conn_model))
 
-    def remove_conn(self, ip: str, port: int) -> Optional[Coroutine]:
+    def remove_conn(self, ip: str, port: int) -> Optional[asyncio.Future]:
         key: str = f"{ip}:{port}"
-        coro: Optional[Coroutine] = None
+        coro: Optional[asyncio.Future] = None
         if key not in self._conn_dict:
             return coro
 
         if not self.is_close:
             conn_model: ConnModel = self._conn_dict[key]
-            if not conn_model.is_closed():
-                conn_model.conn.close()
-                coro = conn_model.conn.wait_closed()
+            coro = asyncio.ensure_future(conn_model.await_close())
 
         self._host_weight_list = [i for i in self._host_weight_list if i != key]
         del self._conn_dict[key]
@@ -142,7 +144,7 @@ class Transport(object):
             raise RuntimeError("Not add conn, can not start")
         for fn in self._start_event_list:
             fn()
-        for key, conn_model in self._conn_dict.items():
+        for key, conn_model in self._conn_dict.copy().items():
             if conn_model.is_closed():
                 await self._connect(conn_model)
 
@@ -152,12 +154,12 @@ class Transport(object):
 
     async def stop(self) -> None:
         """close all conn and cancel future"""
-        future_list: List[Coroutine] = []
+        future_list: List[asyncio.Future] = []
         for host in deepcopy(self._host_weight_list):
             index: int = host.rfind(":")
             ip: str = host[:index]
             port: int = int(host[index + 1 :])
-            coro: Optional[Coroutine] = self.remove_conn(ip, port)
+            coro: Optional[asyncio.Future] = self.remove_conn(ip, port)
             if coro:
                 future_list.append(coro)
         await asyncio.gather(*future_list)
@@ -240,16 +242,19 @@ class Transport(object):
                 request: Request = Request.from_event(Event(Constant.PONG_EVENT, ""))
                 await self.write(request, -1, conn)
                 return
+            elif response.func_name == Constant.DECLARE:
+                if not response.body.get("result"):
+                    raise rap_exc.AuthError("Declare error")
             else:
                 logging.error(f"recv error event {response}")
-        elif channel_id:
+        elif response.num == Constant.CHANNEL_RESPONSE and channel_id:
             # put msg to channel
             if channel_id not in self._channel_queue_dict:
                 logging.error(f"recv {channel_id} msg, but {channel_id} not create")
             else:
                 self._channel_queue_dict[channel_id].put_nowait(response)
             return
-        elif resp_future_id in self._resp_future_dict:
+        elif response.num == Constant.MSG_RESPONSE and resp_future_id in self._resp_future_dict:
             # set msg to future_dict's `future`
             self._resp_future_dict[resp_future_id].set_result(response)
         else:

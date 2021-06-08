@@ -24,8 +24,9 @@ async def async_channel(channel: Channel) -> None:
         await channel.write(body)
 
 
-def create_server() -> Server:
-    rpc_server: Server = Server()
+def create_server(server_name: str) -> Server:
+    rpc_server: Server = Server(server_name)
+    rpc_server.bind()
     rpc_server.register(sync_sum)
     rpc_server.register(async_sum)
     rpc_server.register(async_gen)
@@ -41,7 +42,7 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
-    server: Server = create_server()
+    server: Server = create_server("example")
     loop.run_until_complete(server.create_server())
 
     try:
