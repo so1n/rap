@@ -5,7 +5,7 @@ from typing import Callable
 from rap.client import Client
 from rap.common.exceptions import TooManyRequest
 
-client = Client()
+client = Client("example")
 
 
 # in register, must use async def...

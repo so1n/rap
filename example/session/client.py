@@ -23,7 +23,7 @@ class CheckSessionProcessor(BaseProcessor):
 
 
 check_session_processor: CheckSessionProcessor = CheckSessionProcessor()
-client = Client()
+client: "Client" = Client("example")
 client.add_conn("localhost", 9000)
 client.add_conn("localhost", 9001)
 client.add_conn("localhost", 9002)

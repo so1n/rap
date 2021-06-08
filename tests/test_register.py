@@ -167,7 +167,7 @@ class TestRegister:
 
         rap_server.register(_demo1, name="demo1")
         with pytest.raises(TypeError):
-            async for i in demo1("1"):
+            async for i in demo1("1"):  # type: ignore
                 print(i)
 
         with pytest.raises(RuntimeError):
@@ -187,7 +187,7 @@ class TestRegister:
         assert [0] == [i async for i in demo1(1)]
 
         with pytest.raises(ParseError) as e:
-            async for i in demo1("1"):
+            async for i in demo1("1"):  # type: ignore
                 print(i)
 
         exec_msg = e.value.args[0]

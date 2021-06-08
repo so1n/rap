@@ -26,7 +26,10 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
-    rpc_server = Server(host=["localhost:9000", "localhost:9001", "localhost:9002"])
+    rpc_server: Server = Server("example")
+    rpc_server.bind()
+    rpc_server.bind(port=9001)
+    rpc_server.bind(port=9002)
     rpc_server.register(sync_sum)
     rpc_server.register(async_sum)
     rpc_server.register(async_gen)

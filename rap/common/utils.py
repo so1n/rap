@@ -98,9 +98,9 @@ class RapFunc(object):
 @dataclass()
 class Event(object):
     event_name: str
-    event_info: str
+    event_info: Union[str, dict]
 
-    def to_tuple(self) -> Tuple[str, str]:
+    def to_tuple(self) -> Tuple[str, Union[str, dict]]:
         return self.event_name, self.event_info
 
 

@@ -4,7 +4,7 @@ from rap.client import Channel, Client
 from rap.client.model import Response
 from rap.client.processor import CryptoProcessor
 
-client = Client()
+client = Client("example")
 client.add_conn("localhost", 9000)
 client.add_conn("localhost", 9001)
 client.add_conn("localhost", 9002)

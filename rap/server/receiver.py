@@ -188,8 +188,6 @@ class Receiver(object):
             diff_time: int = int(time.time()) - self._keepalive_timestamp
             if diff_time > ping_interval:
                 await self.sender.send_event(Event(Constant.EVENT_CLOSE_CONN, "recv pong timeout"))
-                if not self._conn.is_closed():
-                    self._conn.close()
                 return
             else:
                 await self.sender.send_event(Event(Constant.PING_EVENT, ""))
@@ -270,14 +268,14 @@ class Receiver(object):
         if len(func_model.arg_list) != len(param):
             raise ParseError(
                 extra_msg=f"{func_model.func_name} takes {len(func_model.arg_list)}"
-                          f" positional arguments but {len(param)} were given"
+                f" positional arguments but {len(param)} were given"
             )
         kwarg_param_set: set = set(kwarg_param.keys())
         fun_kwarg_set: set = set(func_model.kwarg_dict.keys())
         if not kwarg_param_set.issubset(fun_kwarg_set):
             raise ParseError(
                 extra_msg=f"{func_model.func_name} can not find default "
-                          f"param name:{kwarg_param_set.difference(fun_kwarg_set)}"
+                f"param name:{kwarg_param_set.difference(fun_kwarg_set)}"
             )
 
         # Check param type
@@ -340,10 +338,18 @@ class Receiver(object):
                 response.header["status_code"] = 302
         return response
 
-    async def event(self, request: Request, response: Response) -> None:
+    async def event(self, request: Request, response: Response) -> Optional[Response]:
         if request.func_name == Constant.PONG_EVENT:
             self._keepalive_timestamp = int(time.time())
-        return None
+            return None
+        elif request.func_name == Constant.DECLARE:
+            if request.body.get("server_name") != self._app.server_name:
+                response.set_event(Event(Constant.EVENT_CLOSE_CONN, "error server name"))
+            else:
+                response.set_event(Event(Constant.DECLARE, {"result": True}))
+        elif request.func_name == Constant.DROP:
+            response.set_event(Event(Constant.DECLARE, "success"))
+        return response
 
     def __del__(self) -> None:
         if self._ping_pong_future and not self._ping_pong_future.done() and self._ping_pong_future.cancelled():

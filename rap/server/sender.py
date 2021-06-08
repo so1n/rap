@@ -47,9 +47,12 @@ class Sender(object):
         logging.debug(f"resp: %s", resp)
         try:
             await self._conn.write(resp.to_msg(), self._timeout)
-            return True
         except asyncio.TimeoutError:
             raise asyncio.TimeoutError(f"response to {self._conn.peer_tuple} timeout. resp:{resp}")
+        if resp.func_name == Constant.EVENT_CLOSE_CONN:
+            if not self._conn.is_closed():
+                self._conn.close()
+        return True
 
     async def send_event(self, event: Event) -> bool:
         return await self.__call__(Response.from_event(event))

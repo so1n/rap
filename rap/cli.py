@@ -8,6 +8,9 @@ from rap.client.processor import CryptoProcessor
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("-h", "--server_host", help="server host", default="localhost")
+    parser.add_argument("-p", "--server_port", help="server port", default="9000")
+    parser.add_argument("-S", "--server_name", help="server name")
     parser.add_argument("-s", "--secret_key", default=None, help="conn server secret key")
     parser.add_argument("-m", "--mode", help="`d` display func list, `r` run func", choices=["d", "r"])
     parser.add_argument("-k", "--key", help="secret key")
@@ -16,6 +19,9 @@ if __name__ == "__main__":
     parser.add_argument("-a", "--arg", help="func param", default=tuple())
     parser.add_argument("-g", "--group", help="func group", default="default")
     args, unknown = parser.parse_known_args()
+    server_name: str = args.server_name
+    server_host: str = args.server_host
+    server_port: str = args.server_port
     secret_key: str = args.secret_key
     mode: str = args.mode
     func_name: str = args.name
@@ -28,7 +34,8 @@ if __name__ == "__main__":
         arg_list = arg
 
     loop = asyncio.get_event_loop()
-    client = Client()
+    client: Client = Client(server_name)
+    client.add_conn(server_host, int(server_port))
     if secret_key:
         crypto_key_id, crypto_key = secret_key.split(",")
         client.load_processor([CryptoProcessor(crypto_key_id, crypto_key)])
