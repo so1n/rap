@@ -30,7 +30,7 @@ class TestConnLimitMiddleware:
 
         client: Client = Client("test")
         client.add_conn("localhost", 9000)
-        setattr(client.transport, "_listen", mock_func)
+        setattr(client.transport, "listen", mock_func)
         await client.start()
 
         for conn_model in client.transport._conn_dict.copy().values():
@@ -79,7 +79,7 @@ class TestIpMaxConnMiddleware:
         rap_server.load_middleware([middleware])
         client: Client = Client("test")
         client.add_conn("localhost", 9000)
-        setattr(client.transport, "_listen", mock_func)
+        setattr(client.transport, "listen", mock_func)
         await client.start()
 
         for conn_model in client.transport._conn_dict.copy().values():
@@ -138,7 +138,7 @@ class TestIpBlockMiddleware:
         await middleware.start_event_handle()
         client: Client = Client("test")
         client.add_conn("localhost", 9000)
-        setattr(client.transport, "_listen", mock_func)
+        setattr(client.transport, "listen", mock_func)
         await client.start()
 
         for conn_model in client.transport._conn_dict.copy().values():
@@ -168,7 +168,7 @@ class TestIpBlockMiddleware:
 
         client: Client = Client("test")
         client.add_conn("localhost", 9000)
-        setattr(client.transport, "_listen", mock_func)
+        setattr(client.transport, "listen", mock_func)
         await client.start()
 
         for conn_model in client.transport._conn_dict.copy().values():

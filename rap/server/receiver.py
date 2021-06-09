@@ -133,7 +133,7 @@ class Receiver(object):
             Constant.CHANNEL_REQUEST: self.channel_handle,
         }
         # now one conn one Request object
-        self._ping_pong_future: asyncio.Future = asyncio.ensure_future(self.ping_event())
+        self._ping_pong_future: Optional[asyncio.Future] = None
         self._keepalive_timestamp: int = int(time.time())
         self._generator_dict: Dict[int, Union[Generator, AsyncGenerator]] = {}
         self._channel_dict: Dict[str, Channel] = {}
@@ -345,6 +345,7 @@ class Receiver(object):
         elif request.func_name == Constant.DECLARE:
             if request.body.get("server_name") != self._app.server_name:
                 response.set_event(Event(Constant.EVENT_CLOSE_CONN, "error server name"))
+                self._ping_pong_future = asyncio.ensure_future(self.ping_event())
             else:
                 response.set_event(Event(Constant.DECLARE, {"result": True}))
         elif request.func_name == Constant.DROP:

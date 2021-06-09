@@ -3,9 +3,7 @@ import logging
 import random
 import uuid
 from contextvars import ContextVar, Token
-from copy import deepcopy
 from dataclasses import dataclass, field
-from enum import Enum, auto
 from types import FunctionType
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Sequence, Tuple, Type, Union
 
@@ -19,34 +17,8 @@ from rap.common.exceptions import ChannelError, RPCError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.common.utils import Constant, Event, RapFunc, as_first_completed
 
-_session_context: ContextVar["Optional[Session]"] = ContextVar("session_context", default=None)
-__all__ = ["Session", "Transport"]
-
-
-@dataclass()
-class ConnModel(object):
-    conn: Connection
-    future: asyncio.Future = field(default_factory=asyncio.Future)
-    weight: int = 0
-    min_weight: int = 0
-    probability: float = 1
-
-    def __post_init__(self) -> None:
-        self.future.set_result(True)
-
-    def is_closed(self) -> bool:
-        return self.conn.is_closed() or self.future.done()
-
-    async def await_close(self) -> None:
-        if not self.future.cancelled():
-            self.future.cancel()
-        if not self.conn.is_closed():
-            await self.conn.await_close()
-
-
-class SelectConnEnum(Enum):
-    random = auto()
-    round_robin = auto()
+# _session_context: ContextVar["Optional[Session]"] = ContextVar("session_context", default=None)
+__all__ = ["Transport"]
 
 
 class Transport(object):
@@ -54,18 +26,11 @@ class Transport(object):
 
     def __init__(
         self,
-        server_name: str,
-        host_list: List[str],
-        timeout: int = 9,
+        read_timeout: int = 9,
         keep_alive_time: int = 1200,
         ssl_crt_path: Optional[str] = None,
-        select_conn_method: SelectConnEnum = SelectConnEnum.random,
     ):
-        self._server_name: str = server_name
-        self._host_weight_list: List[str] = host_list
-        self._conn_dict: Dict[str, ConnModel] = {}
-        self._connected_cnt: int = 0
-        self._timeout: int = timeout
+        self._read_timeout: int = read_timeout
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._keep_alive_time: int = keep_alive_time
         self._process_request_list: List = []
@@ -75,104 +40,16 @@ class Transport(object):
         self._stop_event_list: List = []
 
         self._msg_id: int = random.randrange(65535)
-        self._round_robin_index: int = 0
         self._exc_status_code_dict = get_exc_status_code_dict()
         self._resp_future_dict: Dict[str, asyncio.Future[Response]] = {}
         self._channel_queue_dict: Dict[str, asyncio.Queue[Union[Response, Exception]]] = {}
 
-        if select_conn_method == select_conn_method.random:
-            setattr(self, self.get_conn.__name__, self.get_random_conn)
-        else:
-            setattr(self, self.get_conn.__name__, self.get_round_robin_conn)
-
-    async def _connect(self, conn_model: ConnModel) -> None:
-        """create conn and listen future by host"""
-
-        def _conn_done(f: asyncio.Future) -> None:
-            try:
-                key: str = conn_model.conn.connection_info
-                if key in self._conn_dict:
-                    del self._conn_dict[key]
-                    self._host_weight_list.remove(key)
-                self._connected_cnt -= 1
-            except Exception as e:
-                logging.exception(f"close conn error: {e}")
-
-        await conn_model.conn.connect()
-        request: Request = Request.from_event(Event(Constant.DECLARE, {"server_name": self._server_name}))
-        await self.write(request, -1, conn_model.conn)
-        self._connected_cnt += 1
-        conn_model.future = asyncio.ensure_future(self._listen(conn_model.conn))
-        conn_model.future.add_done_callback(lambda f: _conn_done(f))
-        logging.debug(f"Connection to %s...", conn_model.conn.connection_info)
-
-    def add_conn(self, ip: str, port: int, weight: int = 1, min_weight: Optional[int] = None) -> None:
-        if not min_weight or min_weight >= 1:
-            min_weight = 1
-        key: str = f"{ip}:{port}"
-        self._host_weight_list.extend([key for _ in range(weight)])
-        random.shuffle(self._host_weight_list)
-
-        conn_model: ConnModel = ConnModel(
-            Connection(ip, port, self._timeout, ssl_crt_path=self._ssl_crt_path),
-            weight=weight,
-            min_weight=min_weight,
-        )
-        self._conn_dict[key] = conn_model
-        if not self.is_close:
-            asyncio.ensure_future(self._connect(conn_model))
-
-    def remove_conn(self, ip: str, port: int) -> Optional[asyncio.Future]:
-        key: str = f"{ip}:{port}"
-        coro: Optional[asyncio.Future] = None
-        if key not in self._conn_dict:
-            return coro
-
-        if not self.is_close:
-            conn_model: ConnModel = self._conn_dict[key]
-            coro = asyncio.ensure_future(conn_model.await_close())
-
-        self._host_weight_list = [i for i in self._host_weight_list if i != key]
-        del self._conn_dict[key]
-        return coro
-
-    async def start(self) -> None:
-        """create conn and listen future"""
-        if not self.is_close:
-            raise ConnectionError(f"{self.__class__.__name__} is running")
-        if not self._conn_dict:
-            raise RuntimeError("Not add conn, can not start")
-        for fn in self._start_event_list:
-            fn()
-        for key, conn_model in self._conn_dict.copy().items():
-            if conn_model.is_closed():
-                await self._connect(conn_model)
-
-    @property
-    def is_close(self) -> bool:
-        return self._connected_cnt == 0
-
-    async def stop(self) -> None:
-        """close all conn and cancel future"""
-        future_list: List[asyncio.Future] = []
-        for host in deepcopy(self._host_weight_list):
-            index: int = host.rfind(":")
-            ip: str = host[:index]
-            port: int = int(host[index + 1 :])
-            coro: Optional[asyncio.Future] = self.remove_conn(ip, port)
-            if coro:
-                future_list.append(coro)
-        await asyncio.gather(*future_list)
-
-        for fn in self._start_event_list:
-            fn()
-
-    async def _listen(self, conn: Connection) -> None:
+    async def listen(self, conn: Connection) -> None:
         """listen server msg"""
         logging.debug(f"listen:%s start", conn.peer_tuple)
         try:
             while not conn.is_closed():
-                await self._read_from_conn(conn)
+                await self._dispatch_resp_from_conn(conn)
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -181,33 +58,13 @@ class Transport(object):
             if not conn.is_closed():
                 await conn.await_close()
 
-    async def _read_from_conn(self, conn: Connection) -> None:
-        """recv server msg handle"""
-        try:
-            response_msg: Optional[BASE_RESPONSE_TYPE] = await conn.read(self._keep_alive_time)
-            logging.debug(f"recv raw data: %s", response_msg)
-        except asyncio.TimeoutError as e:
-            logging.error(f"recv response from {conn.connection_info} timeout")
-            raise e
-        except asyncio.CancelledError:
+    async def _dispatch_resp_from_conn(self, conn: Connection) -> None:
+        response, exc = await self._read_from_conn(conn)
+        if not response:
+            logging.error(str(exc))
             return
-
-        if response_msg is None:
-            raise ConnectionError("Connection has been closed")
-
-        # parse response
-        try:
-            response: Response = Response.from_msg(response_msg)
-        except Exception as e:
-            logging.error(f"recv wrong response:{response_msg}, ignore error:{e}")
-            return
-
-        exc: Optional[Exception] = None
-        try:
-            for process_response in self._process_response_list:
-                response = await process_response(response)
-        except Exception as e:
-            exc = e
+        if exc:
+            raise exc
 
         resp_future_id: str = f"{conn.sock_tuple}:{response.msg_id}"
         channel_id: Optional[str] = response.header.get("channel_id")
@@ -261,16 +118,49 @@ class Transport(object):
             logging.error(f"Can' parse response: {response}, ignore")
             return
 
+    async def read_from_conn(self, conn: Connection) -> Optional[Response]:
+        response, exc = await self._read_from_conn(conn)
+        if exc:
+            raise exc
+        return response
+
+    async def _read_from_conn(self, conn: Connection) -> Tuple[Optional[Response], Optional[Exception]]:
+        """recv server msg handle"""
+        try:
+            response_msg: Optional[BASE_RESPONSE_TYPE] = await conn.read(self._keep_alive_time)
+            logging.debug(f"recv raw data: %s", response_msg)
+        except asyncio.TimeoutError as e:
+            logging.error(f"recv response from {conn.connection_info} timeout")
+            raise e
+
+        if response_msg is None:
+            raise ConnectionError("Connection has been closed")
+
+        # parse response
+        try:
+            response: Response = Response.from_msg(response_msg)
+        except Exception as e:
+            e_msg: str = f"recv wrong response:{response_msg}, ignore error:{e}"
+            return None, rap_exc.ProtocolError(e_msg)
+
+        exc: Optional[Exception] = None
+        try:
+            for process_response in self._process_response_list:
+                response = await process_response(response)
+        except Exception as e:
+            exc = e
+        return response, exc
+
     ####################################
     # base one by one request response #
     ####################################
-    async def _base_request(self, request: Request, session: Optional["Session"] = None) -> Response:
+    async def _base_request(self, request: Request, conn: Connection) -> Response:
         """gen msg id, send and recv response"""
         msg_id: int = self._msg_id + 1
         # Avoid too big numbers
         self._msg_id = msg_id & 65535
 
-        conn, resp_future_id = await self.write(request, msg_id, session=session)
+        resp_future_id = await self.write(request, msg_id, conn)
         try:
             return await self.read(resp_future_id, conn)
         finally:
@@ -293,17 +183,8 @@ class Transport(object):
     #######################
     # base write&read api #
     #######################
-    async def write(
-        self, request: Request, msg_id: int, conn: Optional[Connection] = None, session: Optional["Session"] = None
-    ) -> Tuple[Connection, str]:
+    async def write(self, request: Request, msg_id: int, conn: Connection) -> str:
         """write msg to conn, If it is not a normal request, you need to set msg_id: -1"""
-        if not session or not session.id:
-            session = _session_context.get(None)
-        if session:
-            conn = session.conn
-            request.header["session_id"] = session.id
-        elif conn is None:
-            conn = self.get_random_conn()
         request.header["host"] = conn.peer_tuple
 
         async def _write(_request: Request) -> None:
@@ -326,18 +207,18 @@ class Transport(object):
             if "channel_id" not in request.header:
                 raise ChannelError("not found channel id in header")
             await _write(request)
-            return conn, request.header["channel_id"]
+            return request.header["channel_id"]
         else:
             await _write(request)
             resp_future_id: str = f"{conn.sock_tuple}:{msg_id}"
             self._resp_future_dict[resp_future_id] = asyncio.Future()
-            return conn, resp_future_id
+            return resp_future_id
 
     async def read(self, resp_future_id: str, conn: Connection) -> Response:
         """write response msg(except channel response)"""
         try:
             return await as_first_completed(
-                [asyncio.wait_for(self._resp_future_dict[resp_future_id], self._timeout)],
+                [asyncio.wait_for(self._resp_future_dict[resp_future_id], self._read_timeout)],
                 not_cancel_future_list=[conn.conn_future],
             )
         except asyncio.TimeoutError:
@@ -349,12 +230,12 @@ class Transport(object):
     async def request(
         self,
         func_name: str,
+        conn: Connection,
         arg_param: Optional[Sequence[Any]] = None,
         kwarg_param: Optional[Dict[str, Any]] = None,
         call_id: Optional[int] = None,
         group: Optional[str] = None,
         header: Optional[dict] = None,
-        session: Optional["Session"] = None,
     ) -> Response:
         """msg request handle"""
         group = group or Constant.DEFAULT_GROUP
@@ -369,7 +250,7 @@ class Transport(object):
         )
         if header:
             request.header.update(header)
-        response: Response = await self._base_request(request, session=session)
+        response: Response = await self._base_request(request, conn)
         if response.num != Constant.MSG_RESPONSE:
             raise RPCError(f"request num must:{Constant.MSG_RESPONSE} not {response.num}")
         if "exc" in response.body:
@@ -379,49 +260,33 @@ class Transport(object):
             else:
                 raise RuntimeError(exc_info)
         return response
+    #
+    # @property
+    # def session(self) -> "Session":
+    #     return Session(self)
+    #
+    # @staticmethod
+    # def get_now_session() -> "Optional[Session]":
+    #     return _session_context.get(None)
 
-    ############
-    # get conn #
-    ############
-    def get_conn(self) -> Connection:
-        raise NotImplementedError
-
-    def get_random_conn(self) -> Connection:
-        key: str = random.choice(self._host_weight_list)
-        return self._conn_dict[key].conn
-
-    def get_round_robin_conn(self) -> Connection:
-        self._round_robin_index += 1
-        index = self._round_robin_index % (len(self._host_weight_list))
-        key: str = self._host_weight_list[index]
-        return self._conn_dict[key].conn
-
-    @property
-    def session(self) -> "Session":
-        return Session(self)
-
-    @staticmethod
-    def get_now_session() -> "Optional[Session]":
-        return _session_context.get(None)
-
-    def channel(self, func_name: str, group: Optional[str] = None, session: Optional["Session"] = None) -> "Channel":
-        async def create(_channel_id: str) -> None:
-            self._channel_queue_dict[_channel_id] = asyncio.Queue()
-
-        async def read(_channel_id: str) -> Response:
-            result: Union[Response, Exception] = await self._channel_queue_dict[_channel_id].get()
-            if isinstance(result, Exception):
-                raise result
-            return result
-
-        async def write(request: Request, _session: "Session") -> None:
-            await self.write(request, -1, session=_session)
-
-        async def close(_call_id: str) -> None:
-            del self._channel_queue_dict[_call_id]
-
-        session = session if session else self.session
-        return Channel(func_name, session, create, read, write, close, group=group)
+    # def channel(self, func_name: str, group: Optional[str] = None, session: Optional["Session"] = None) -> "Channel":
+    #     async def create(_channel_id: str) -> None:
+    #         self._channel_queue_dict[_channel_id] = asyncio.Queue()
+    #
+    #     async def read(_channel_id: str) -> Response:
+    #         result: Union[Response, Exception] = await self._channel_queue_dict[_channel_id].get()
+    #         if isinstance(result, Exception):
+    #             raise result
+    #         return result
+    #
+    #     async def write(request: Request, _session: "Session") -> None:
+    #         await self.write(request, -1, session.conn)
+    #
+    #     async def close(_call_id: str) -> None:
+    #         del self._channel_queue_dict[_call_id]
+    #
+    #     session = session if session else self.session
+    #     return Channel(func_name, session, create, read, write, close, group=group)
 
     #############
     # processor #
@@ -433,84 +298,84 @@ class Transport(object):
             self._process_exception_list.append(processor.process_exc)
 
 
-class Session(object):
-    """
-    `Session` uses `contextvar` to enable transport to use only the same conn in session
-    """
-
-    def __init__(self, transport: "Transport"):
-        self._transport: "Transport" = transport
-        self._token: Optional[Token[Optional[Session]]] = None
-        self.id: str = ""
-        self._conn: Optional[Connection] = None
-
-    async def __aenter__(self) -> "Session":
-        self.create()
-        return self
-
-    async def __aexit__(self, *args: Tuple) -> None:
-        self.close()
-
-    def create(self) -> None:
-        self.id = str(uuid.uuid4())
-        self._conn = self._transport.get_random_conn()
-        self._token = _session_context.set(self)
-
-    def close(self) -> None:
-        self.id = ""
-        self._conn = None
-        if self._token:
-            _session_context.reset(self._token)
-
-    @property
-    def in_session(self) -> bool:
-        return _session_context.get(None) is not None
-
-    @property
-    def conn(self) -> Connection:
-        if not self._conn:
-            raise ConnectionError("Session has not been created")
-        return self._conn
-
-    async def request(
-        self,
-        name: str,
-        arg_param: Sequence[Any],
-        kwarg_param: Optional[Dict[str, Any]] = None,
-        call_id: int = -1,
-        header: Optional[dict] = None,
-    ) -> Any:
-        return await self._transport.request(
-            name, arg_param, kwarg_param=kwarg_param, call_id=call_id, header=header, session=self
-        )
-
-    async def write(self, request: Request, msg_id: int) -> None:
-        await self._transport.write(request, msg_id, session=self)
-
-    async def read(self, resp_future_id: str) -> Response:
-        return await self._transport.read(resp_future_id, self.conn)
-
-    async def execute(
-        self,
-        obj: Union[RapFunc, Callable, Coroutine, str],
-        arg_list: Optional[List] = None,
-        kwarg_dict: Optional[Dict[str, Any]] = None,
-    ) -> Any:
-        if isinstance(obj, RapFunc):
-            obj._kwargs_param["session"] = self
-            return await obj
-        # Has been replaced by rap func
-        # elif asyncio.iscoroutine(obj):
-        #     assert obj.cr_frame.f_locals["self"].transport is self._transport
-        #     obj.cr_frame.f_locals["kwargs"]["session"] = self
-        #     return await obj
-        elif isinstance(obj, FunctionType) and arg_list:
-            kwarg_dict = kwarg_dict if kwarg_dict else {}
-            response: Response = await self.request(obj.__name__, arg_list, kwarg_param=kwarg_dict)
-            return response.body["result"]
-        elif isinstance(obj, str) and arg_list:
-            kwarg_dict = kwarg_dict if kwarg_dict else {}
-            response = await self.request(obj, arg_list, kwarg_param=kwarg_dict)
-            return response.body["result"]
-        else:
-            raise TypeError(f"Not support {type(obj)}, obj type must: {Callable}, {Coroutine}, {str}")
+# class Session(object):
+#     """
+#     `Session` uses `contextvar` to enable transport to use only the same conn in session
+#     """
+#
+#     def __init__(self, transport: "Transport"):
+#         self._transport: "Transport" = transport
+#         self._token: Optional[Token[Optional[Session]]] = None
+#         self.id: str = ""
+#         self._conn: Optional[Connection] = None
+#
+#     async def __aenter__(self) -> "Session":
+#         self.create()
+#         return self
+#
+#     async def __aexit__(self, *args: Tuple) -> None:
+#         self.close()
+#
+#     def create(self) -> None:
+#         self.id = str(uuid.uuid4())
+#         self._conn = self._transport.get_random_conn()
+#         self._token = _session_context.set(self)
+#
+#     def close(self) -> None:
+#         self.id = ""
+#         self._conn = None
+#         if self._token:
+#             _session_context.reset(self._token)
+#
+#     @property
+#     def in_session(self) -> bool:
+#         return _session_context.get(None) is not None
+#
+#     @property
+#     def conn(self) -> Connection:
+#         if not self._conn:
+#             raise ConnectionError("Session has not been created")
+#         return self._conn
+#
+#     async def request(
+#         self,
+#         name: str,
+#         arg_param: Sequence[Any],
+#         kwarg_param: Optional[Dict[str, Any]] = None,
+#         call_id: int = -1,
+#         header: Optional[dict] = None,
+#     ) -> Any:
+#         return await self._transport.request(
+#             name, arg_param, kwarg_param=kwarg_param, call_id=call_id, header=header, session=self
+#         )
+#
+#     async def write(self, request: Request, msg_id: int) -> None:
+#         await self._transport.write(request, msg_id, session=self)
+#
+#     async def read(self, resp_future_id: str) -> Response:
+#         return await self._transport.read(resp_future_id, self.conn)
+#
+#     async def execute(
+#         self,
+#         obj: Union[RapFunc, Callable, Coroutine, str],
+#         arg_list: Optional[List] = None,
+#         kwarg_dict: Optional[Dict[str, Any]] = None,
+#     ) -> Any:
+#         if isinstance(obj, RapFunc):
+#             obj._kwargs_param["session"] = self
+#             return await obj
+#         # Has been replaced by rap func
+#         # elif asyncio.iscoroutine(obj):
+#         #     assert obj.cr_frame.f_locals["self"].transport is self._transport
+#         #     obj.cr_frame.f_locals["kwargs"]["session"] = self
+#         #     return await obj
+#         elif isinstance(obj, FunctionType) and arg_list:
+#             kwarg_dict = kwarg_dict if kwarg_dict else {}
+#             response: Response = await self.request(obj.__name__, arg_list, kwarg_param=kwarg_dict)
+#             return response.body["result"]
+#         elif isinstance(obj, str) and arg_list:
+#             kwarg_dict = kwarg_dict if kwarg_dict else {}
+#             response = await self.request(obj, arg_list, kwarg_param=kwarg_dict)
+#             return response.body["result"]
+#         else:
+#             raise TypeError(f"Not support {type(obj)}, obj type must: {Callable}, {Coroutine}, {str}")
