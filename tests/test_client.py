@@ -36,7 +36,7 @@ class TestTransport:
         mocker_obj: Any = mocker.patch("rap.client.transport.transport.logging.error")
         client: Client = Client("test")
         client.add_conn("localhost", 9000)
-        setattr(client.transport, "_listen", mock_func)
+        setattr(client.transport, "listen", mock_func)
         await client.start()
 
         for conn_model in client.transport._conn_dict.values():
