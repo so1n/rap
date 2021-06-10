@@ -120,12 +120,7 @@ class BaseClient:
         async def type_check_wrapper(*args: Any, **kwargs: Any) -> Any:
             header: Optional[dict] = kwargs.pop("header", None)
             check_func_type(func, args, kwargs)
-            conn_list: Optional[List[Connection]] = kwargs.pop("conn_list", None)
-            if not conn_list:
-                conn_list = [self._enpoints.get_conn()]
-            result: Any = await self.raw_call(
-                name, args, kwarg_param=kwargs, group=group, header=header, conn_list=conn_list
-            )
+            result: Any = await self.raw_call(name, args, kwarg_param=kwargs, group=group, header=header)
             if not is_type(return_type, type(result)):
                 raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
             return result
@@ -133,11 +128,7 @@ class BaseClient:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             header: Optional[dict] = kwargs.pop("header", None)
-            conn_list: Optional[List[Connection]] = kwargs.pop("conn_list", None)
-            if not conn_list:
-                conn_list = [self._enpoints.get_conn()]
-
-            return await self.raw_call(name, args, kwarg_param=kwargs, group=group, header=header, conn_list=conn_list)
+            return await self.raw_call(name, args, kwarg_param=kwargs, group=group, header=header)
 
         new_func: Callable = type_check_wrapper if enable_type_check else wrapper
         return RapFunc(new_func, func)
@@ -152,12 +143,9 @@ class BaseClient:
         @wraps(func)
         async def type_check_wrapper(*args: Any, **kwargs: Any) -> Any:
             header: Optional[dict] = kwargs.pop("header", None)
-            conn: Optional[Connection] = kwargs.pop("conn", None)
             check_func_type(func, args, kwargs)
-            if not conn:
-                conn = self._enpoints.get_conn()
             async for result in AsyncIteratorCall(
-                name, self, conn, args, kwarg_param=kwargs, group=group, header=header
+                name, self, self.get_conn(), args, kwarg_param=kwargs, group=group, header=header
             ):
                 if not is_type(return_type, type(result)):
                     raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
@@ -166,11 +154,8 @@ class BaseClient:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             header: Optional[dict] = kwargs.pop("header", None)
-            conn: Optional[Connection] = kwargs.pop("conn", None)
-            if not conn:
-                conn = self._enpoints.get_conn()
             async for result in AsyncIteratorCall(
-                name, self, conn, args, kwarg_param=kwargs, group=group, header=header
+                name, self, self.get_conn(), args, kwarg_param=kwargs, group=group, header=header
             ):
                 yield result
 
@@ -183,8 +168,7 @@ class BaseClient:
 
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            conn: Connection = self._enpoints.get_conn()
-            async with self.transport.channel(name, conn, group) as channel:
+            async with self.transport.channel(name, self.get_conn(), group) as channel:
                 return await func(channel)
 
         return RapFunc(wrapper, func)
@@ -209,7 +193,6 @@ class BaseClient:
         kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
-        conn_list: Optional[List[Connection]] = None,
     ) -> Any:
         """rpc client base call method
         Note: This method does not support parameter type checking, nor does it support channels;
@@ -218,7 +201,7 @@ class BaseClient:
         header: request's header
         group: func group, default group value is `default`
         """
-        conn_list = conn_list if conn_list else self._enpoints.get_conn_list()
+        conn_list: List[Connection] = self._enpoints.get_conn_list()
         response = await self.transport.request(name, conn_list, arg_param, kwarg_param, group=group, header=header)
         return response.body["result"]
 
@@ -229,7 +212,6 @@ class BaseClient:
         kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
-        conn_list: Optional[List[Connection]] = None,
     ) -> Any:
         """automatically resolve function names and call raw_call
         func: rpc func
@@ -237,9 +219,7 @@ class BaseClient:
         header: request's header
         group: func's group, default group value is `default`
         """
-        return await self.raw_call(
-            func.__name__, arg_param, kwarg_param=kwarg_param, group=group, header=header, conn_list=conn_list
-        )
+        return await self.raw_call(func.__name__, arg_param, kwarg_param=kwarg_param, group=group, header=header)
 
     async def iterator_call(
         self,
@@ -248,7 +228,6 @@ class BaseClient:
         kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
-        conn: Optional[Connection] = None,
     ) -> Any:
         """Python-specific generator call
         func: rap func
@@ -256,10 +235,8 @@ class BaseClient:
         header: request's header
         group: func's group, default group value is `default`
         """
-        if not conn:
-            conn = self._enpoints.get_conn()
         async for result in AsyncIteratorCall(
-            func.__name__, self, conn, arg_param, kwarg_param=kwarg_param, header=header, group=group
+            func.__name__, self, self.get_conn(), arg_param, kwarg_param=kwarg_param, header=header, group=group
         ):
             yield result
 
