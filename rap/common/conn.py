@@ -100,15 +100,25 @@ class Connection(BaseConnection):
         host: str,
         port: int,
         timeout: int,
+        weight: int,
+        min_weight: int,
+        probability: float = 1,
         pack_param: Optional[dict] = None,
         ssl_crt_path: Optional[str] = None,
     ):
         super().__init__(timeout, pack_param)
         self._host: str = host
         self._port: int = port
-        self.connection_info: str = f"{host}:{port}"
+        self._weight: int = weight
+        self._min_weight: int = min_weight
+        self._probability: float = probability
         self._ssl_crt_path: Optional[str] = ssl_crt_path
+
+        self.listen_future: asyncio.Future = asyncio.Future()
+        self.connection_info: str = f"{host}:{port}"
         self.conn_id: str = ""
+
+        self.listen_future.set_result(True)
 
     async def connect(self) -> None:
         ssl_context: Optional[ssl.SSLContext] = None
@@ -123,6 +133,16 @@ class Connection(BaseConnection):
         self.peer_tuple = self._writer.get_extra_info("peername")
         self.conn_future: asyncio.Future = asyncio.Future()
         self._is_closed = False
+
+    def is_closed(self) -> bool:
+        return super(Connection, self).is_closed() or self.listen_future.done()
+
+    async def await_close(self) -> None:
+        if self.listen_future.cancelled():
+            self.listen_future.cancel()
+        if not super(Connection, self).is_closed():
+            await super(Connection, self).await_close()
+
 
 
 class ServerConnection(BaseConnection):
