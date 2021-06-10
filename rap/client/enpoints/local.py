@@ -1,10 +1,10 @@
 from typing import List, Optional
 
-from rap.client.conn_manager.base import BaseConnManager, SelectConnEnum
+from rap.client.enpoints.base import BaseEnpoints, SelectConnEnum
 from rap.common.conn import Connection
 
 
-class LocalConnManager(BaseConnManager):
+class LocalEnpoints(BaseEnpoints):
     def __init__(
         self,
         server_name: str,
@@ -28,6 +28,8 @@ class LocalConnManager(BaseConnManager):
         raise NotImplementedError
 
     async def start(self) -> None:
+        if not self.is_close:
+            raise ConnectionError(f"{self.__class__.__name__} is running")
         for conn_dict in self._conn_list:
             ip: str = conn_dict["ip"]
             port: int = conn_dict["port"]
