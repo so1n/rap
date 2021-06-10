@@ -1,16 +1,13 @@
 import asyncio
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Optional, Tuple
+from typing import Any, Callable, Coroutine, Optional, Tuple
 
 from rap.client.model import Request, Response
 from rap.common.channel import BaseChannel
+from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError
 from rap.common.utils import Constant, as_first_completed
-
-if TYPE_CHECKING:
-    from rap.client.transport.transport import Session
-
 
 __all__ = ["Channel"]
 
@@ -21,20 +18,20 @@ class Channel(BaseChannel):
     def __init__(
         self,
         fun_name: str,
-        session: "Session",
+        conn: Connection,
         create: Callable[[str], Coroutine[Any, Any, Any]],
         read: Callable[[str], Coroutine[Any, Any, Response]],
-        write: Callable[[Request, "Session"], Coroutine[Any, Any, None]],
+        write: Callable[[Request], Coroutine[Any, Any, None]],
         close: Callable[[str], Coroutine[Any, Any, Any]],
         group: Optional[str] = None,
     ):
         self.channel_id: str = str(uuid.uuid4())
         self._func_name: str = fun_name
+        self._conn: Connection = conn
         self._group: str = group if group else Constant.DEFAULT_GROUP
-        self._session: "Session" = session
         self._create: Callable[[str], Coroutine[Any, Any, Any]] = create
         self._read: Callable[[str], Coroutine[Any, Any, Response]] = read
-        self._write: Callable[[Request, "Session"], Coroutine[Any, Any, None]] = write
+        self._write: Callable[[Request], Coroutine[Any, Any, None]] = write
         self._close: Callable[[str], Coroutine[Any, Any, Any]] = close
         self._channel_conn_future: asyncio.Future = asyncio.Future()
         self._channel_conn_future.set_result(True)
@@ -46,10 +43,9 @@ class Channel(BaseChannel):
             raise ChannelError("channel already create")
 
         # init channel data structure
-        self._session.create()
         await self._create(self.channel_id)
         self._channel_conn_future = asyncio.Future()
-        self._session.conn.conn_future.add_done_callback(lambda f: self.set_finish("channel is close"))
+        self._conn.conn_future.add_done_callback(lambda f: self.set_finish("channel is close"))
 
         # init with server
         life_cycle: str = Constant.DECLARE
@@ -90,7 +86,7 @@ class Channel(BaseChannel):
             group=self._group,
             header={"channel_life_cycle": life_cycle, "channel_id": self.channel_id},
         )
-        await self._write(request, self._session)
+        await self._write(request)
 
     async def read(self) -> Response:
         response: Response = await self._base_read()
@@ -130,7 +126,6 @@ class Channel(BaseChannel):
             await asyncio.wait_for(wait_drop_response(), 3)
         except asyncio.TimeoutError:
             logging.warning("wait drop response timeout")
-        self._session.close()
 
     ######################
     # async with support #

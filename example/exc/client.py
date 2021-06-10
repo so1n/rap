@@ -4,7 +4,7 @@ import time
 from rap.client import Client
 from rap.common.exceptions import FuncNotFoundError
 
-client = Client("example")
+client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
 
 
 # in register, must use async def...
@@ -21,7 +21,6 @@ async def raise_server_not_found_func_exc(a: int) -> None:
 
 async def main() -> None:
     s_t = time.time()
-    client.add_conn("localhost", 9000)
     await client.start()
     try:
         await raise_msg_exc(1, 2)

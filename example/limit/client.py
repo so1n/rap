@@ -5,7 +5,7 @@ from typing import Callable
 from rap.client import Client
 from rap.common.exceptions import TooManyRequest
 
-client = Client("example")
+client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
 
 
 # in register, must use async def...
@@ -34,7 +34,6 @@ async def retry_handle(func: Callable) -> None:
 async def main() -> None:
     s_t = time.time()
     await client.start()
-    client.add_conn("localhost", 9000)
     await retry_handle(demo)
     await retry_handle(demo1)
 

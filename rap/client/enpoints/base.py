@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Dict, List, Optional
 
-from rap.common.conn import Connection
 from rap.client.transport.transport import Transport
+from rap.common.conn import Connection
 
 
 class SelectConnEnum(Enum):
@@ -128,6 +128,13 @@ class BaseEnpoints(object):
     def get_conn(self) -> Connection:
         raise NotImplementedError
 
+    def get_conn_list(self, cnt: Optional[int] = None) -> List[Connection]:
+        if not cnt:
+            cnt = self._connected_cnt // 3
+        if cnt <= 0:
+            cnt = 1
+        return [self.get_conn() for _ in range(cnt)]
+
     def get_random_conn(self) -> Connection:
         key: str = random.choice(self._host_weight_list)
         return self._conn_dict[key].conn
@@ -137,3 +144,6 @@ class BaseEnpoints(object):
         index = self._round_robin_index % (len(self._host_weight_list))
         key: str = self._host_weight_list[index]
         return self._conn_dict[key].conn
+
+    def __len__(self) -> int:
+        return self._connected_cnt

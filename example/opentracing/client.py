@@ -14,7 +14,7 @@ config: Config = Config(
 )
 tracer: Tracer = config.initialize_tracer()
 
-client: Client = Client("example")
+client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
 client.load_processor([TracingProcessor(tracer)])
 
 
@@ -25,7 +25,6 @@ async def async_sum(a: int, b: int) -> int:
 
 
 async def main() -> None:
-    client.add_conn("localhost", 9000)
     await client.start()
     print(f"async result: {await async_sum(1, 3)}")
     await client.stop()

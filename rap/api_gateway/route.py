@@ -42,7 +42,7 @@ async def websocket_route_func(websocket: WebSocket) -> None:
         await websocket.close()
 
     try:
-        async with rap_client.transport.channel(func_name, group) as channel:
+        async with rap_client.transport.channel(func_name, rap_client.get_conn(), group) as channel:
             await websocket.send_json({"code": 0, "data": "accept"})
 
             async def send() -> None:

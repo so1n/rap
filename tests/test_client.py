@@ -27,20 +27,23 @@ class TestClient:
             await rap_client.start()
 
         exec_msg = e.value.args[0]
-        assert exec_msg == "Transport is running"
+        assert exec_msg == "LocalEnpoints is running"
 
 
 class TestTransport:
     @staticmethod
-    async def _read_helper(mocker: MockerFixture, once_target: Any) -> None:
+    async def _read_helper(mocker: MockerFixture, request_tuple: tuple, once_target: Any) -> None:
         mocker_obj: Any = mocker.patch("rap.client.transport.transport.logging.error")
-        client: Client = Client("test")
-        client.add_conn("localhost", 9000)
+        client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
         setattr(client.transport, "listen", mock_func)
         await client.start()
 
-        for conn_model in client.transport._conn_dict.values():
-            await client.transport._read_from_conn(conn_model.conn)
+        mock_future: asyncio.Future = asyncio.Future()
+        mocker.patch("rap.common.conn.Connection.read").return_value = mock_future
+        mock_future.set_result(request_tuple)
+
+        for conn_model in client._enpoints._conn_dict.values():
+            await client.transport._dispatch_resp_from_conn(conn_model.conn)
 
         mocker_obj.assert_called_once_with(once_target)
 
@@ -98,13 +101,16 @@ class TestTransport:
         mocker.patch("rap.common.conn.Connection.read").return_value = mock_future
         response_msg: tuple = (1, 2, 3, 4, 5)
         mock_future.set_result(response_msg)
+        client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
+        with pytest.raises(Exception) as e:
+            await client.start()
 
-        await self._read_helper(mocker, AnyStringWith(f"recv wrong response:{response_msg}, ignore"))
+        exec_msg = e.value.args[0]
+        assert f"recv wrong response:{response_msg}, ignore" in exec_msg
 
     async def test_read_error_event(self, rap_server: Server, mocker: MockerFixture) -> None:
-        mock_future: asyncio.Future = asyncio.Future()
-        mocker.patch("rap.common.conn.Connection.read").return_value = mock_future
-        mock_future.set_result(
+        await self._read_helper(
+            mocker,
             (
                 203,
                 -1,
@@ -117,16 +123,14 @@ class TestTransport:
                     "request_id": "cf172603-5783-4b0c-92b1-62667626e9d0",
                 },
                 "",
-            )
+            ),
+            AnyStringWith("recv error event"),
         )
 
-        await self._read_helper(mocker, AnyStringWith("recv error event"))
-
     async def test_read_not_found_channel_id(self, rap_server: Server, mocker: MockerFixture) -> None:
-        mock_future: asyncio.Future = asyncio.Future()
-        mocker.patch("rap.common.conn.Connection.read").return_value = mock_future
         channel_id: str = "faker_id"
-        mock_future.set_result(
+        await self._read_helper(
+            mocker,
             (
                 202,
                 -1,
@@ -141,15 +145,13 @@ class TestTransport:
                     "status_code": 200,
                 },
                 "hi!",
-            )
+            ),
+            AnyStringWith(f"recv {channel_id} msg, but {channel_id} not create"),
         )
 
-        await self._read_helper(mocker, f"recv {channel_id} msg, but {channel_id} not create")
-
     async def test_read_not_parse_response(self, rap_server: Server, mocker: MockerFixture) -> None:
-        mock_future: asyncio.Future = asyncio.Future()
-        mocker.patch("rap.common.conn.Connection.read").return_value = mock_future
-        mock_future.set_result(
+        await self._read_helper(
+            mocker,
             (
                 202,
                 -1,
@@ -163,10 +165,9 @@ class TestTransport:
                     "status_code": 200,
                 },
                 "hi!",
-            )
+            ),
+            AnyStringWith("Can' parse response:"),
         )
-
-        await self._read_helper(mocker, AnyStringWith("Can' parse response:"))
 
     async def test_request_receive_error_response_num(
         self, rap_server: Server, rap_client: Client, mocker: MockerFixture
@@ -233,10 +234,9 @@ class TestTransport:
 
     async def test_write_channel_msg_not_channel_id(self, rap_server: Server, rap_client: Client) -> None:
         with pytest.raises(ChannelError) as e:
-            async with rap_client.session as s:
-                await rap_client.transport.write(
-                    Request(Constant.CHANNEL_REQUEST, "test", None, "default"), -1, session=s
-                )
+            await rap_client.transport.write_to_conn(
+                Request(Constant.CHANNEL_REQUEST, "test", None, "default"), rap_client.get_conn()
+            )
 
         exec_msg: str = e.value.args[0]
         assert exec_msg == "not found channel id in header"

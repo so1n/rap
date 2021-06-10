@@ -7,7 +7,6 @@ from example.starlette.route import demo1, demo2, demo3
 
 
 async def start_client() -> None:
-    client.add_conn("localhost", 9000)
     await client.start()
 
 
@@ -22,6 +21,4 @@ app: Starlette = Starlette(
 )
 
 if __name__ == "__main__":
-    import sys
-
     uvicorn.run(app)

@@ -12,9 +12,10 @@ class Request(object):
     body: Any
     group: str = ""
     header: dict = field(default_factory=lambda: dict())
+    msg_id: int = -1
 
-    def gen_request_msg(self, msg_id: int) -> BASE_REQUEST_TYPE:
-        return self.num, msg_id, self.group, self.func_name, self.header, self.body
+    def to_msg(self) -> BASE_REQUEST_TYPE:
+        return self.num, self.msg_id, self.group, self.func_name, self.header, self.body
 
     @classmethod
     def from_event(cls, event: Event) -> "Request":

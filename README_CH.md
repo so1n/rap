@@ -259,7 +259,7 @@ client = Client()
 
 @client.register()
 async def async_channel(channel: Channel) -> None:
-    await channel.write("hello")  # 发送数据
+    await channel.write_to_conn("hello")  # 发送数据
     cnt: int = 0
     while await channel.loop(cnt < 3):
         cnt += 1
@@ -269,21 +269,21 @@ async def async_channel(channel: Channel) -> None:
 
 @client.register()
 async def echo_body(channel: Channel) -> None:
-    await channel.write("hi!")
+    await channel.write_to_conn("hi!")
     # 读取数据, 只有读取到数据才会返回, 如果收到关闭channel的信令, 则会退出循环
     async for body in channel.iter_body():
         print(f"body:{body}")
-        await channel.write(body)
+        await channel.write_to_conn(body)
 
 
 @client.register()
 async def echo_response(channel: Channel) -> None:
-    await channel.write("hi!")
+    await channel.write_to_conn("hi!")
     # 读取响应数据(包括header等数据), 只有读取到数据才会返回, 如果收到关闭channel的信令, 则会退出循环
     async for response in channel.iter_response():
         response: Response = response  #  IDE 无法检查出该类型.... 
         print(f"response: {response}")
-        await channel.write(response.body)
+        await channel.write_to_conn(response.body)
 ```
 ## 3.4.ssl支持
 [示例代码](https://github.com/so1n/rap/tree/master/example/ssl)

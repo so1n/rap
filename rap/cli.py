@@ -34,8 +34,8 @@ if __name__ == "__main__":
         arg_list = arg
 
     loop = asyncio.get_event_loop()
-    client: Client = Client(server_name)
-    client.add_conn(server_host, int(server_port))
+
+    client: Client = Client(server_name, [{"ip": server_host, "port": int(server_port)}])
     if secret_key:
         crypto_key_id, crypto_key = secret_key.split(",")
         client.load_processor([CryptoProcessor(crypto_key_id, crypto_key)])

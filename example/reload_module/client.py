@@ -2,7 +2,7 @@ import asyncio
 
 from rap.client import Client
 
-client: "Client" = Client("example")
+client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
 
 
 @client.register()
@@ -11,7 +11,6 @@ async def sync_sum(a: int, b: int) -> int:
 
 
 async def main() -> None:
-    client.add_conn("localhost", 9000)
     await client.start()
     print(f"sync result: {await client.call(sync_sum, [1, 2])}")
     print(f"reload :{ await client.raw_call('reload', ['test_module', 'sync_sum'], group='registry')}")

@@ -14,6 +14,7 @@ __all__ = [
     "RapFunc",
     "as_first_completed",
     "check_func_type",
+    "del_future",
     "gen_new_param_coro",
     "gen_random_time_id",
     "get_event_loop",

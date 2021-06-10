@@ -2,11 +2,10 @@ import asyncio
 
 from rap.client import Client
 
-client: Client = Client("example")
+client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
 
 
 async def main() -> None:
-    client.add_conn("localhost", 9000)
     await client.start()
 
 

@@ -72,7 +72,7 @@ class BaseChannel(object):
         raise NotImplementedError
 
     async def write(self, body: Any) -> Any:
-        """write body to channel"""
+        """write_to_conn body to channel"""
         raise NotImplementedError
 
     async def close(self) -> Any:

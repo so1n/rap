@@ -21,7 +21,7 @@ def create_app(
     app.state.group_filter = group_filter
     app.state.func_info_dict = func_info_dict
 
-    if rap_client.transport.is_close:
+    if rap_client.is_close:
 
         @app.on_event("startup")
         async def connect() -> None:
