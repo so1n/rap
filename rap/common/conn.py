@@ -144,7 +144,6 @@ class Connection(BaseConnection):
             await super(Connection, self).await_close()
 
 
-
 class ServerConnection(BaseConnection):
     def __init__(
         self,

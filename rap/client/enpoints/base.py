@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import random
-from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Dict, List, Optional
 

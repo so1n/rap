@@ -55,8 +55,6 @@ class Transport(object):
         if not response:
             logging.error(str(exc))
             return
-        if exc:
-            raise exc
 
         resp_future_id: str = f"{conn.sock_tuple}:{response.msg_id}"
         channel_id: Optional[str] = response.header.get("channel_id")

@@ -56,13 +56,13 @@ class WindowState(object):
     def is_closed(self) -> bool:
         return self._is_closed
 
-    def increment(self, key: str, value: int = 1) -> None:
+    def increment(self, key: Any, value: int = 1) -> None:
         if key not in self._future_dict:
             self._future_dict[key] = value
         else:
             self._future_dict[key] += value
 
-    def decrement(self, key: str, value: int = 1) -> None:
+    def decrement(self, key: Any, value: int = 1) -> None:
         if key not in self._future_dict:
             self._future_dict[key] = -value
         else:

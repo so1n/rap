@@ -91,6 +91,7 @@ class BaseClient:
         )
         enpoints.set_transport(self.transport)
         self._enpoints: BaseEnpoints = enpoints
+        self._processor_list: List[BaseProcessor] = []
 
     ##################
     # start& close #
@@ -98,12 +99,21 @@ class BaseClient:
     async def stop(self) -> None:
         """close client transport"""
         await self._enpoints.stop()
+        for processor in self._processor_list:
+            processor.stop_event_handle()
 
     async def start(self) -> None:
         """Create client transport"""
+        for processor in self._processor_list:
+            processor.start_event_handle()
         await self._enpoints.start()
 
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:
+        if self.is_close:
+            self._processor_list.extend(processor_list)
+        else:
+            for processor in processor_list:
+                processor.start_event_handle()
         self.transport.load_processor(processor_list)
 
     #####################
