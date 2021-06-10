@@ -237,7 +237,7 @@ class Transport(object):
             await _write(request)
             if request.msg_id != -1:
                 return f"{conn.sock_tuple}:{request.msg_id}"
-        return
+        return None
 
     ######################
     # one by one request #

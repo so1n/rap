@@ -46,7 +46,7 @@ class FuseProcessor(BaseProcessor):
         host: str = request.header["host"]
         total: int = self._fuse_window_state.get_value(f"{host}:total", 0)  # type: ignore
         if total > self._fuse_enable_cnt:
-            if random.randint(0, 100) > self._probability_dict.get("probability", 0.0) * 100:
+            if random.randint(0, 100) > self._probability_dict.get(host, 0.0) * 100:
                 raise ServerError("Service Unavailable")
 
         self._fuse_window_state.increment(f"{request.header['host']}:total")

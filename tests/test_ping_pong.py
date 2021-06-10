@@ -33,7 +33,7 @@ class TestPingPong:
         setattr(rap_client.transport, "write_to_conn", mock_write)
 
         # until close
-        for conn_model in rap_client._enpoints._conn_dict.copy().values():
-            await conn_model.future
+        for conn in rap_client._enpoints._conn_dict.copy().values():
+            await conn.listen_future
 
         setattr(rap_client.transport, "write_to_conn", rap_client_write)

@@ -14,27 +14,6 @@ class SelectConnEnum(Enum):
     round_robin = auto()
 
 
-@dataclass()
-class ConnModel(object):
-    conn: Connection
-    future: asyncio.Future = field(default_factory=asyncio.Future)
-    weight: int = 0
-    min_weight: int = 0
-    probability: float = 1
-
-    def __post_init__(self) -> None:
-        self.future.set_result(True)
-
-    def is_closed(self) -> bool:
-        return self.conn.is_closed() or self.future.done()
-
-    async def await_close(self) -> None:
-        if not self.future.cancelled():
-            self.future.cancel()
-        if not self.conn.is_closed():
-            await self.conn.await_close()
-
-
 class BaseEnpoints(object):
     def __init__(
         self,
@@ -49,7 +28,7 @@ class BaseEnpoints(object):
         self._timeout: int = timeout
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._connected_cnt: int = 0
-        self._conn_dict: Dict[str, ConnModel] = {}
+        self._conn_dict: Dict[str, Connection] = {}
         self._round_robin_index: int = 0
 
         if select_conn_method == select_conn_method.random:
@@ -75,11 +54,7 @@ class BaseEnpoints(object):
         if key in self._conn_dict:
             raise ConnectionError(f"conn:{key} already create")
 
-        conn_model: ConnModel = ConnModel(
-            Connection(ip, port, self._timeout, ssl_crt_path=self._ssl_crt_path),
-            weight=weight,
-            min_weight=min_weight,
-        )
+        conn: Connection = Connection(ip, port, self._timeout, weight, min_weight, ssl_crt_path=self._ssl_crt_path)
 
         def _conn_done(f: asyncio.Future) -> None:
             try:
@@ -90,17 +65,17 @@ class BaseEnpoints(object):
             except Exception as e:
                 logging.exception(f"close conn error: {e}")
 
-        await conn_model.conn.connect()
-        conn_model.conn.conn_id = await self._transport.declare(self.server_name, conn_model.conn)
+        await conn.connect()
+        conn.conn_id = await self._transport.declare(self.server_name, conn)
         self._connected_cnt += 1
-        conn_model.future = asyncio.ensure_future(self._transport.listen(conn_model.conn))
-        conn_model.future.add_done_callback(lambda f: _conn_done(f))
-        logging.debug(f"Connection to %s...", conn_model.conn.connection_info)
+        conn.listen_future = asyncio.ensure_future(self._transport.listen(conn))
+        conn.listen_future.add_done_callback(lambda f: _conn_done(f))
+        logging.debug(f"Connection to %s...", conn.connection_info)
 
-        self._host_weight_list.extend([key for _ in range(conn_model.weight)])
+        self._host_weight_list.extend([key for _ in range(weight)])
         random.shuffle(self._host_weight_list)
 
-        self._conn_dict[key] = conn_model
+        self._conn_dict[key] = conn
 
     async def destroy(self, ip: str, port: int) -> None:
         key: str = f"{ip}:{port}"
@@ -108,8 +83,7 @@ class BaseEnpoints(object):
             return
 
         if not self.is_close:
-            conn_model: ConnModel = self._conn_dict[key]
-            await conn_model.await_close()
+            await self._conn_dict[key].await_close()
 
         self._host_weight_list = [i for i in self._host_weight_list if i != key]
         del self._conn_dict[key]
@@ -137,13 +111,13 @@ class BaseEnpoints(object):
 
     def get_random_conn(self) -> Connection:
         key: str = random.choice(self._host_weight_list)
-        return self._conn_dict[key].conn
+        return self._conn_dict[key]
 
     def get_round_robin_conn(self) -> Connection:
         self._round_robin_index += 1
         index = self._round_robin_index % (len(self._host_weight_list))
         key: str = self._host_weight_list[index]
-        return self._conn_dict[key].conn
+        return self._conn_dict[key]
 
     def __len__(self) -> int:
         return self._connected_cnt
