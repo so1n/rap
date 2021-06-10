@@ -167,17 +167,13 @@ class Transport(object):
     ####################################
     async def _base_request(self, request: Request, conn_list: List[Connection]) -> Response:
         """gen msg id, send and recv response"""
-        msg_id: int = self._msg_id + 1
-        request.msg_id = msg_id
-        # Avoid too big numbers
-        self._msg_id = msg_id & 65535
-
         exc: Exception = rap_exc.RPCError("request error")
         for conn in conn_list:
             try:
-                resp_future_id: str = f"{conn.sock_tuple}:{request.msg_id}"
+                resp_future_id: Optional[str] = await self.write_to_conn(request, conn)
+                if not resp_future_id:
+                    raise rap_exc.ProtocolError(f"request error. please check:{request}")
                 self._resp_future_dict[resp_future_id] = asyncio.Future()
-                await self.write_to_conn(request, conn)
                 try:
                     try:
                         return await as_first_completed(
@@ -209,13 +205,16 @@ class Transport(object):
     #######################
     # base write_to_conn&read api #
     #######################
-    async def write_to_conn(self, request: Request, conn: Connection) -> None:
+    async def write_to_conn(self, request: Request, conn: Connection) -> Optional[str]:
         """write_to_conn msg to conn"""
         request.header["host"] = conn.peer_tuple
 
         async def _write(_request: Request) -> None:
             self.before_write_handle(_request)
-            request.header["conn_id"] = conn.conn_id
+            msg_id: int = self._msg_id + 1
+            request.msg_id = msg_id
+            # Avoid too big numbers
+            self._msg_id = msg_id & 65535
 
             for process_request in self._process_request_list:
                 _request = await process_request(_request)
@@ -236,6 +235,9 @@ class Transport(object):
             await _write(request)
         else:
             await _write(request)
+            if request.msg_id != -1:
+                return f"{conn.sock_tuple}:{request.msg_id}"
+        return
 
     ######################
     # one by one request #
