@@ -108,6 +108,7 @@ class Connection(BaseConnection):
         self._port: int = port
         self.connection_info: str = f"{host}:{port}"
         self._ssl_crt_path: Optional[str] = ssl_crt_path
+        self.conn_id: str = ""
 
     async def connect(self) -> None:
         ssl_context: Optional[ssl.SSLContext] = None

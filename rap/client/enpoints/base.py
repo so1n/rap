@@ -6,10 +6,7 @@ from enum import Enum, auto
 from typing import Dict, List, Optional
 
 from rap.common.conn import Connection
-from rap.common.utils import Constant, Event
 from rap.client.transport.transport import Transport
-from rap.client.processor.base import BaseProcessor
-from rap.client.model import Request, Response
 
 
 class SelectConnEnum(Enum):
@@ -38,7 +35,7 @@ class ConnModel(object):
             await self.conn.await_close()
 
 
-class BaseConnManager(object):
+class BaseEnpoints(object):
     def __init__(
         self,
         server_name: str,
@@ -66,13 +63,11 @@ class BaseConnManager(object):
 
     @property
     def is_close(self) -> bool:
-        return self._connected_cnt > 0
+        return self._connected_cnt <= 0
 
     async def create(self, ip: str, port: int, weight: int = 1, min_weight: Optional[int] = None) -> None:
         if not self._transport:
             raise ConnectionError("conn manager need transport")
-        if self.is_close:
-            raise ConnectionError("conn manger is closed")
 
         if not min_weight or min_weight >= 1:
             min_weight = 1
@@ -96,14 +91,7 @@ class BaseConnManager(object):
                 logging.exception(f"close conn error: {e}")
 
         await conn_model.conn.connect()
-        request: Request = Request.from_event(Event(Constant.DECLARE, {"server_name": self.server_name}))
-        await self._transport.write(request, -1, conn_model.conn)
-        response: Optional[Response] = await self._transport.read_from_conn(conn_model.conn)
-        if not (
-            response and response.num == Constant.SERVER_EVENT and response.func_name == Constant.DECLARE
-            and response.body.get("result", False)
-        ):
-            raise ConnectionError("create conn error")
+        conn_model.conn.conn_id = await self._transport.declare(self.server_name, conn_model.conn)
         self._connected_cnt += 1
         conn_model.future = asyncio.ensure_future(self._transport.listen(conn_model.conn))
         conn_model.future.add_done_callback(lambda f: _conn_done(f))
@@ -125,13 +113,6 @@ class BaseConnManager(object):
 
         self._host_weight_list = [i for i in self._host_weight_list if i != key]
         del self._conn_dict[key]
-
-    def before_start(self) -> None:
-        """create conn and listen future"""
-        if not self.is_close:
-            raise ConnectionError(f"{self.__class__.__name__} is running")
-        if not self._conn_dict:
-            raise RuntimeError("Not add conn, can not start")
 
     async def start(self) -> None:
         raise NotImplementedError

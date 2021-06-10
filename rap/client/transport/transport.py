@@ -151,6 +151,17 @@ class Transport(object):
             exc = e
         return response, exc
 
+    async def declare(self, server_name: str, conn: Connection) -> str:
+        request: Request = Request.from_event(Event(Constant.DECLARE, {"server_name": server_name}))
+        await self.write(request, -1, conn)
+        response: Optional[Response] = await self.read_from_conn(conn)
+        if not (
+                response and response.num == Constant.SERVER_EVENT and response.func_name == Constant.DECLARE
+                and response.body.get("result", False) and "conn_id" in response.body
+        ):
+            raise ConnectionError("create conn error")
+        return response.body["conn_id"]
+
     ####################################
     # base one by one request response #
     ####################################
@@ -189,6 +200,7 @@ class Transport(object):
 
         async def _write(_request: Request) -> None:
             self.before_write_handle(_request)
+            request.header["conn_id"] = conn.conn_id
 
             for process_request in self._process_request_list:
                 _request = await process_request(_request)

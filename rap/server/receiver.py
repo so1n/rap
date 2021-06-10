@@ -3,6 +3,7 @@ import inspect
 import logging
 import time
 import traceback
+import uuid
 from functools import partial
 from typing import (
     TYPE_CHECKING,
@@ -121,6 +122,7 @@ class Receiver(object):
     ):
         self._app: "Server" = app
         self._conn: ServerConnection = conn
+        self._conn_id: str = str(uuid.uuid4())
         self._run_timeout: int = run_timeout
         self.sender: Sender = sender
         self._ping_sleep_time: int = ping_sleep_time
@@ -345,9 +347,10 @@ class Receiver(object):
         elif request.func_name == Constant.DECLARE:
             if request.body.get("server_name") != self._app.server_name:
                 response.set_event(Event(Constant.EVENT_CLOSE_CONN, "error server name"))
-                self._ping_pong_future = asyncio.ensure_future(self.ping_event())
             else:
-                response.set_event(Event(Constant.DECLARE, {"result": True}))
+                response.set_event(Event(Constant.DECLARE, {"result": True, "conn_id": self._conn_id}))
+                self._keepalive_timestamp: int = int(time.time())
+                self._ping_pong_future = asyncio.ensure_future(self.ping_event())
         elif request.func_name == Constant.DROP:
             response.set_event(Event(Constant.DECLARE, "success"))
         return response
