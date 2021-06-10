@@ -55,6 +55,9 @@ async def rap_server() -> AsyncGenerator[Server, None]:
         for i in range(a):
             yield i
 
+    def error_func() -> float:
+        return 1 / 0
+
     rpc_server = Server("test", ping_sleep_time=1)
     rpc_server.bind()
     rpc_server.bind(port=9001)
@@ -63,6 +66,7 @@ async def rap_server() -> AsyncGenerator[Server, None]:
     rpc_server.register(_async_sum, "async_sum")
     rpc_server.register(_async_gen, "async_gen")
     rpc_server.register(_sync_gen, "sync_gen")
+    rpc_server.register(error_func)
     server: Server = await rpc_server.create_server()
     yield server
     await rpc_server.await_closed()
