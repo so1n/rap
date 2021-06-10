@@ -61,7 +61,7 @@ class Channel(BaseChannel):
         self._queue: asyncio.Queue = asyncio.Queue()
         self.channel_id: str = channel_id
 
-        # if conn close, channel future will done and channel not read & write
+        # if conn close, channel future will done and channel not read & write_to_conn
         self._channel_conn_future: asyncio.Future = asyncio.Future()
         self._conn.conn_future.add_done_callback(lambda f: self.set_finish("connection already close"))
 
@@ -70,6 +70,8 @@ class Channel(BaseChannel):
     async def _run_func(self, func: Callable) -> None:
         try:
             await func(self)
+        except Exception as e:
+            logging.debug("channel:%s, func: %s, ignore raise exc:%s", self.channel_id, func.__name__, e)
         finally:
             if not self.is_close:
                 await self.close()
@@ -349,7 +351,7 @@ class Receiver(object):
                 response.set_event(Event(Constant.EVENT_CLOSE_CONN, "error server name"))
             else:
                 response.set_event(Event(Constant.DECLARE, {"result": True, "conn_id": self._conn_id}))
-                self._keepalive_timestamp: int = int(time.time())
+                self._keepalive_timestamp = int(time.time())
                 self._ping_pong_future = asyncio.ensure_future(self.ping_event())
         elif request.func_name == Constant.DROP:
             response.set_event(Event(Constant.DECLARE, "success"))

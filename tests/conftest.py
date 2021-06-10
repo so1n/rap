@@ -6,7 +6,7 @@ import pytest
 from rap.client import Client
 from rap.server import Server
 
-client: Client = Client("test")
+client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
 
 
 def sync_sum(a: int, b: int) -> int:
@@ -72,9 +72,6 @@ async def rap_server() -> AsyncGenerator[Server, None]:
 async def rap_client() -> AsyncGenerator[Client, None]:
     client.transport._process_request_list = []
     client.transport._process_response_list = []
-    client.add_conn("localhost", 9000)
-    client.add_conn("localhost", 9001)
-    client.add_conn("localhost", 9002)
     await client.start()
     yield client
     await client.stop()

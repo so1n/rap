@@ -268,7 +268,7 @@ client = Client()
 
 @client.register()
 async def async_channel(channel: Channel) -> None:
-    await channel.write("hello")  # send data
+    await channel.write_to_conn("hello")  # send data
     cnt: int = 0
     while await channel.loop(cnt < 3):
         cnt += 1
@@ -277,21 +277,21 @@ async def async_channel(channel: Channel) -> None:
 
 @client.register()
 async def echo_body(channel: Channel) -> None:
-    await channel.write("hi!")
+    await channel.write_to_conn("hi!")
     # Reads data, returns only when data is read, and exits the loop if it receives a signal to close the channel 
     async for body in channel.iter_body():
         print(f"body:{body}")
-        await channel.write(body)
+        await channel.write_to_conn(body)
 
 
 @client.register()
 async def echo_response(channel: Channel) -> None:
-    await channel.write("hi!")
+    await channel.write_to_conn("hi!")
     # Read the response data (including header data), and return only if the data is read, or exit the loop if a signal is received to close the channel 
     async for response in channel.iter_response():
         response: Response = response  #  help IDE check type.... 
         print(f"response: {response}")
-        await channel.write(response.body)
+        await channel.write_to_conn(response.body)
 ```
 ## 3.4.ssl
 [example](https://github.com/so1n/rap/tree/master/example/ssl)

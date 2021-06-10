@@ -2,7 +2,7 @@ import asyncio
 
 from rap.client import Client
 
-client: "Client" = Client("example")
+client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
 
 
 # in register, must use async def...
@@ -12,7 +12,6 @@ async def async_sum(a: int, b: int) -> int:
 
 
 async def main() -> None:
-    client.add_conn("localhost", 9000)
     await client.start()
     print(f"async result: {await async_sum(1, 3)}")
     await client.stop()

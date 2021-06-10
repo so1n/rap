@@ -4,7 +4,6 @@ from typing import AsyncIterator
 
 from rap.client import Client
 
-
 client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
 
 

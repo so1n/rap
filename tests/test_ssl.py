@@ -6,7 +6,7 @@ from rap.client import Client
 from rap.server import Server
 
 pytestmark = pytest.mark.asyncio
-client = Client("test", ssl_crt_path="./tests/rap_ssl.crt")  # enable secret
+client: Client = Client("test", [{"ip": "localhost", "port": "9000"}], ssl_crt_path="./tests/rap_ssl.crt")
 
 
 # in register, must use async def...
@@ -17,7 +17,6 @@ async def sync_sum(a: int, b: int) -> int:
 
 @pytest.fixture
 async def ssl_client() -> AsyncGenerator[Client, None]:
-    client.add_conn("localhost", 9000)
     await client.start()
     yield client
     await client.stop()

@@ -6,14 +6,15 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type
 
 from rap.client.enpoints import BaseEnpoints, LocalEnpoints
 from rap.client.model import Response
-from rap.client.transport.transport import Transport
 from rap.client.processor.base import BaseProcessor
+from rap.client.transport.channel import Channel
+from rap.client.transport.transport import Transport
 from rap.common.conn import Connection
 from rap.common.types import is_type
 from rap.common.utils import RapFunc, check_func_type
 
 __all__ = ["Client"]
-# CHANNEL_F = Callable[[Channel], Any]
+CHANNEL_F = Callable[[Channel], Any]
 
 
 class AsyncIteratorCall:
@@ -22,7 +23,7 @@ class AsyncIteratorCall:
     def __init__(
         self,
         name: str,
-        client: "Client",
+        client: "BaseClient",
         conn: Connection,
         arg_param: Sequence[Any],
         kwarg_param: Optional[Dict[str, Any]] = None,
@@ -30,7 +31,7 @@ class AsyncIteratorCall:
         group: Optional[str] = None,
     ):
         self._name: str = name
-        self._client: "Client" = client
+        self._client: "BaseClient" = client
         self._conn: Connection = conn
         self._call_id: Optional[int] = None
         self._arg_param: Sequence[Any] = arg_param
@@ -52,7 +53,7 @@ class AsyncIteratorCall:
         """
         response: Response = await self._client.transport.request(
             self._name,
-            self._conn,
+            [self._conn],
             arg_param=self._arg_param,
             kwarg_param=self._kwarg_param,
             call_id=self._call_id,
@@ -71,7 +72,6 @@ class BaseClient:
         enpoints: BaseEnpoints,
         timeout: int = 9,
         keep_alive_time: int = 1200,
-        ssl_crt_path: Optional[str] = None,
     ):
         """
         host_list:
@@ -88,7 +88,6 @@ class BaseClient:
         self.transport: Transport = Transport(
             read_timeout=timeout,
             keep_alive_time=keep_alive_time,
-            ssl_crt_path=ssl_crt_path
         )
         enpoints.set_transport(self.transport)
         self._enpoints: BaseEnpoints = enpoints
@@ -107,10 +106,6 @@ class BaseClient:
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:
         self.transport.load_processor(processor_list)
 
-    # @property
-    # def session(self) -> "Session":
-    #     return self.transport.session
-
     #####################
     # register func api #
     #####################
@@ -123,11 +118,13 @@ class BaseClient:
 
         @wraps(func)
         async def type_check_wrapper(*args: Any, **kwargs: Any) -> Any:
-            session: Optional[Session] = kwargs.pop("session", None)
             header: Optional[dict] = kwargs.pop("header", None)
             check_func_type(func, args, kwargs)
+            conn_list: Optional[List[Connection]] = kwargs.pop("conn_list", None)
+            if not conn_list:
+                conn_list = [self._enpoints.get_conn()]
             result: Any = await self.raw_call(
-                name, args, kwarg_param=kwargs, group=group, header=header
+                name, args, kwarg_param=kwargs, group=group, header=header, conn_list=conn_list
             )
             if not is_type(return_type, type(result)):
                 raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
@@ -135,9 +132,12 @@ class BaseClient:
 
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            session: Optional[Session] = kwargs.pop("session", None)
             header: Optional[dict] = kwargs.pop("header", None)
-            return await self.raw_call(name, args, kwarg_param=kwargs, group=group, session=session, header=header)
+            conn_list: Optional[List[Connection]] = kwargs.pop("conn_list", None)
+            if not conn_list:
+                conn_list = [self._enpoints.get_conn()]
+
+            return await self.raw_call(name, args, kwarg_param=kwargs, group=group, header=header, conn_list=conn_list)
 
         new_func: Callable = type_check_wrapper if enable_type_check else wrapper
         return RapFunc(new_func, func)
@@ -152,9 +152,12 @@ class BaseClient:
         @wraps(func)
         async def type_check_wrapper(*args: Any, **kwargs: Any) -> Any:
             header: Optional[dict] = kwargs.pop("header", None)
+            conn: Optional[Connection] = kwargs.pop("conn", None)
             check_func_type(func, args, kwargs)
+            if not conn:
+                conn = self._enpoints.get_conn()
             async for result in AsyncIteratorCall(
-                name, self, self._enpoints.get_conn(), args, kwarg_param=kwargs, group=group, header=header
+                name, self, conn, args, kwarg_param=kwargs, group=group, header=header
             ):
                 if not is_type(return_type, type(result)):
                     raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
@@ -163,28 +166,42 @@ class BaseClient:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             header: Optional[dict] = kwargs.pop("header", None)
+            conn: Optional[Connection] = kwargs.pop("conn", None)
+            if not conn:
+                conn = self._enpoints.get_conn()
             async for result in AsyncIteratorCall(
-                    name, self, self._enpoints.get_conn(), args, kwarg_param=kwargs, group=group, header=header
+                name, self, conn, args, kwarg_param=kwargs, group=group, header=header
             ):
                 yield result
 
         new_func: Callable = type_check_wrapper if enable_type_check else wrapper
         return RapFunc(new_func, func)
 
-    # def _async_channel_register(self, func: CHANNEL_F, group: Optional[str], name: str = "") -> RapFunc:
-    #     """Decoration channel function"""
-    #     name = name if name else func.__name__
-    #
-    #     @wraps(func)
-    #     async def wrapper(*args: Any, **kwargs: Any) -> Any:
-    #         async with self.transport.channel(name, group) as channel:
-    #             return await func(channel)
-    #
-    #     return RapFunc(wrapper, func)
+    def _async_channel_register(self, func: CHANNEL_F, group: Optional[str], name: str = "") -> RapFunc:
+        """Decoration channel function"""
+        name = name if name else func.__name__
+
+        @wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            conn: Connection = self._enpoints.get_conn()
+            async with self.transport.channel(name, conn, group) as channel:
+                return await func(channel)
+
+        return RapFunc(wrapper, func)
 
     ###################
     # client base api #
     ###################
+    def get_conn(self) -> Connection:
+        return self._enpoints.get_conn()
+
+    def get_conn_list(self, cnt: Optional[int] = None) -> List[Connection]:
+        return self._enpoints.get_conn_list(cnt)
+
+    @property
+    def is_close(self) -> bool:
+        return self._enpoints.is_close
+
     async def raw_call(
         self,
         name: str,
@@ -192,6 +209,7 @@ class BaseClient:
         kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
+        conn_list: Optional[List[Connection]] = None,
     ) -> Any:
         """rpc client base call method
         Note: This method does not support parameter type checking, nor does it support channels;
@@ -199,12 +217,9 @@ class BaseClient:
         args: python args
         header: request's header
         group: func group, default group value is `default`
-        session: conn session
         """
-        conn: Connection = self._enpoints.get_conn()
-        response = await self.transport.request(
-            name, conn, arg_param, kwarg_param, group=group, header=header
-        )
+        conn_list = conn_list if conn_list else self._enpoints.get_conn_list()
+        response = await self.transport.request(name, conn_list, arg_param, kwarg_param, group=group, header=header)
         return response.body["result"]
 
     async def call(
@@ -214,16 +229,16 @@ class BaseClient:
         kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
+        conn_list: Optional[List[Connection]] = None,
     ) -> Any:
         """automatically resolve function names and call raw_call
         func: rpc func
         args: python args
         header: request's header
         group: func's group, default group value is `default`
-        session: conn session
         """
         return await self.raw_call(
-            func.__name__, arg_param, kwarg_param=kwarg_param, group=group, header=header
+            func.__name__, arg_param, kwarg_param=kwarg_param, group=group, header=header, conn_list=conn_list
         )
 
     async def iterator_call(
@@ -233,17 +248,18 @@ class BaseClient:
         kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
+        conn: Optional[Connection] = None,
     ) -> Any:
         """Python-specific generator call
         func: rap func
         args: python args
         header: request's header
         group: func's group, default group value is `default`
-        session: conn session
         """
+        if not conn:
+            conn = self._enpoints.get_conn()
         async for result in AsyncIteratorCall(
-            func.__name__, self, self._enpoints.get_conn(), arg_param,
-            kwarg_param=kwarg_param, header=header, group=group
+            func.__name__, self, conn, arg_param, kwarg_param=kwarg_param, header=header, group=group
         ):
             yield result
 
@@ -284,8 +300,8 @@ class BaseClient:
             func_arg_parameter: List[inspect.Parameter] = [
                 i for i in func_sig.parameters.values() if i.default == i.empty
             ]
-            # if len(func_arg_parameter) == 1 and func_arg_parameter[0].annotation is Channel:
-            #     return self._async_channel_register(func, group, name=name)
+            if len(func_arg_parameter) == 1 and func_arg_parameter[0].annotation is Channel:
+                return self._async_channel_register(func, group, name=name)
             if inspect.iscoroutinefunction(func):
                 return self._async_register(func, group, name=name, enable_type_check=enable_type_check)
             elif inspect.isasyncgenfunction(func):
@@ -305,8 +321,7 @@ class Client(BaseClient):
         ssl_crt_path: Optional[str] = None,
     ):
         super().__init__(
-            LocalEnpoints(server_name, conn_list),
+            LocalEnpoints(server_name, conn_list, ssl_crt_path=ssl_crt_path),
             timeout,
             keep_alive_time,
-            ssl_crt_path
         )

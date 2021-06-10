@@ -3,7 +3,7 @@ from typing import AsyncIterator
 
 from rap.client import Client
 
-client = Client("example")
+client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
 
 
 def sync_sum(a: int, b: int) -> int:
@@ -23,7 +23,6 @@ async def async_gen(a: int) -> AsyncIterator[int]:
 
 
 async def main() -> None:
-    client.add_conn("localhost", 9000)
     await client.start()
     print(f"sync result: {await client.call(sync_sum, [1, 2])}")
     print(f"sync result: {await client.raw_call('sync_sum', [1, 2])}")
