@@ -1,10 +1,10 @@
 from typing import List, Optional
 
-from rap.client.enpoints.base import BaseEnpoints, SelectConnEnum
+from rap.client.endpoint.base import BaseEndpoint, SelectConnEnum
 from rap.common.conn import Connection
 
 
-class LocalEnpoints(BaseEnpoints):
+class LocalEndpoint(BaseEndpoint):
     def __init__(
         self,
         server_name: str,
@@ -34,13 +34,5 @@ class LocalEnpoints(BaseEnpoints):
             ip: str = conn_dict["ip"]
             port: int = conn_dict["port"]
             weight: int = conn_dict.get("weight", 1)
-            if weight > 10:
-                weight = 10
-            if weight < 1:
-                weight = 1
             min_weight: int = conn_dict.get("weight", 1)
-            if min_weight > weight:
-                min_weight = weight
-            if min_weight < 1:
-                min_weight = 1
             await self.create(ip, port, weight, min_weight)

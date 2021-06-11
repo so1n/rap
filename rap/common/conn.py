@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import random
 import ssl
 from typing import Any, Optional, Tuple
 
@@ -60,7 +61,7 @@ class BaseConnection:
             raise e
 
     def set_reader_exc(self, exc: Exception) -> None:
-        if not isinstance(exc, Exception):
+        if not isinstance(exc, Exception) or self.is_closed():
             return
 
         if self.conn_future and not self.conn_future.done():
@@ -102,7 +103,7 @@ class Connection(BaseConnection):
         timeout: int,
         weight: int,
         min_weight: int,
-        probability: float = 1,
+        probability: int = 1,
         pack_param: Optional[dict] = None,
         ssl_crt_path: Optional[str] = None,
     ):
@@ -111,7 +112,7 @@ class Connection(BaseConnection):
         self._port: int = port
         self._weight: int = weight
         self._min_weight: int = min_weight
-        self._probability: float = probability
+        self.probability: int = probability
         self._ssl_crt_path: Optional[str] = ssl_crt_path
 
         self.listen_future: asyncio.Future = asyncio.Future()
@@ -134,11 +135,15 @@ class Connection(BaseConnection):
         self.conn_future: asyncio.Future = asyncio.Future()
         self._is_closed = False
 
+    @property
+    def is_available(self) -> bool:
+        return random.randint(0, 10) <= self.probability
+
     def is_closed(self) -> bool:
         return super(Connection, self).is_closed() or self.listen_future.done()
 
     async def await_close(self) -> None:
-        if self.listen_future.cancelled():
+        if not self.listen_future.cancelled():
             self.listen_future.cancel()
         if not super(Connection, self).is_closed():
             await super(Connection, self).await_close()

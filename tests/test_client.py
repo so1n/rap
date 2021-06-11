@@ -8,13 +8,10 @@ from rap.client import Client, Request, Response
 from rap.common.exceptions import ChannelError, RPCError
 from rap.common.utils import Constant
 from rap.server import Server
+from .conftest import AnyStringWith
 
 pytestmark = pytest.mark.asyncio
 
-
-class AnyStringWith(str):
-    def __eq__(self, other: Any) -> bool:
-        return self in other
 
 
 async def mock_func(self: Any) -> None:
@@ -27,7 +24,7 @@ class TestClient:
             await rap_client.start()
 
         exec_msg = e.value.args[0]
-        assert exec_msg == "LocalEnpoints is running"
+        assert exec_msg == "LocalEndpoint is running"
 
 
 class TestTransport:
@@ -42,7 +39,7 @@ class TestTransport:
         mocker.patch("rap.common.conn.Connection.read").return_value = mock_future
         mock_future.set_result(request_tuple)
 
-        for conn in client._enpoints._conn_dict.values():
+        for conn in client._endpoint._conn_dict.values():
             await client.transport._dispatch_resp_from_conn(conn)
 
         mocker_obj.assert_called_once_with(once_target)
@@ -176,6 +173,7 @@ class TestTransport:
         mocker.patch("rap.client.transport.transport.Transport._base_request").return_value = mock_future
         mock_future.set_result(
             Response.from_msg(
+                rap_client.get_conn(),
                 (
                     202,
                     -1,
@@ -210,6 +208,7 @@ class TestTransport:
         mocker.patch("rap.client.transport.transport.Transport._base_request").return_value = mock_future
         mock_future.set_result(
             Response.from_msg(
+                rap_client.get_conn(),
                 (
                     201,
                     29759,

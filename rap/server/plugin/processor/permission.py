@@ -16,6 +16,6 @@ class PermissionProcessor(BaseProcessor):
             request, Constant.NORMAL_TYPE if request.num == Constant.MSG_REQUEST else Constant.CHANNEL_TYPE
         )
 
-        if func_model.is_private and request.header["host"][0] not in ("::1", "127.0.0.1", "localhost"):
+        if func_model.is_private and request.conn.peer_tuple[0] not in ("::1", "127.0.0.1", "localhost"):
             raise FuncNotFoundError(f"No permission to call:`{request.func_name}`")
         return request

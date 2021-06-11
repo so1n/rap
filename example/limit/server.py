@@ -24,7 +24,7 @@ def match_demo_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
 
 def match_ip_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
     key: str = "127.0.0.1"
-    if request.header["host"][0] == key:
+    if request.conn.peer_tuple[0] == "127.0.0.1":
         return key
     else:
         return None

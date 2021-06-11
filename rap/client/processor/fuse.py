@@ -79,7 +79,7 @@ class HostFuseProcessor(BaseFuseProcessor):
         return request.header["host"]
 
     def get_response_index(self, response: Response) -> str:
-        return response.header["host"]
+        return response.conn.peer_tuple[0]
 
 
 class FuncFuseProcessor(BaseFuseProcessor):

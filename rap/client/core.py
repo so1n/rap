@@ -4,7 +4,7 @@ import sys
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type
 
-from rap.client.enpoints import BaseEnpoints, LocalEnpoints
+from rap.client.endpoint import BaseEndpoint, LocalEndpoint
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.transport.channel import Channel
@@ -69,7 +69,7 @@ class AsyncIteratorCall:
 class BaseClient:
     def __init__(
         self,
-        enpoints: BaseEnpoints,
+        endpoint: BaseEndpoint,
         timeout: int = 9,
         keep_alive_time: int = 1200,
     ):
@@ -89,8 +89,8 @@ class BaseClient:
             read_timeout=timeout,
             keep_alive_time=keep_alive_time,
         )
-        enpoints.set_transport(self.transport)
-        self._enpoints: BaseEnpoints = enpoints
+        endpoint.set_transport(self.transport)
+        self._endpoint: BaseEndpoint = endpoint
         self._processor_list: List[BaseProcessor] = []
 
     ##################
@@ -98,7 +98,7 @@ class BaseClient:
     ##################
     async def stop(self) -> None:
         """close client transport"""
-        await self._enpoints.stop()
+        await self._endpoint.stop()
         for processor in self._processor_list:
             processor.stop_event_handle()
 
@@ -106,7 +106,7 @@ class BaseClient:
         """Create client transport"""
         for processor in self._processor_list:
             processor.start_event_handle()
-        await self._enpoints.start()
+        await self._endpoint.start()
 
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:
         if self.is_close:
@@ -187,14 +187,14 @@ class BaseClient:
     # client base api #
     ###################
     def get_conn(self) -> Connection:
-        return self._enpoints.get_conn()
+        return self._endpoint.get_conn()
 
     def get_conn_list(self, cnt: Optional[int] = None) -> List[Connection]:
-        return self._enpoints.get_conn_list(cnt)
+        return self._endpoint.get_conn_list(cnt)
 
     @property
     def is_close(self) -> bool:
-        return self._enpoints.is_close
+        return self._endpoint.is_close
 
     async def raw_call(
         self,
@@ -211,7 +211,7 @@ class BaseClient:
         header: request's header
         group: func group, default group value is `default`
         """
-        conn_list: List[Connection] = self._enpoints.get_conn_list()
+        conn_list: List[Connection] = self._endpoint.get_conn_list()
         response = await self.transport.request(name, conn_list, arg_param, kwarg_param, group=group, header=header)
         return response.body["result"]
 
@@ -308,7 +308,7 @@ class Client(BaseClient):
         ssl_crt_path: Optional[str] = None,
     ):
         super().__init__(
-            LocalEnpoints(server_name, conn_list, ssl_crt_path=ssl_crt_path),
+            LocalEndpoint(server_name, conn_list, ssl_crt_path=ssl_crt_path),
             timeout,
             keep_alive_time,
         )
