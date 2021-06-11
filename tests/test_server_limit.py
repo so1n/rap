@@ -54,7 +54,7 @@ class TestLimit:
                 return None
 
         def match_ip_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
-            host: str = request.header["host"][0]
+            host: str = request.conn.peer_tuple[0]
             if host in ("127.0.0.1", "::1"):
                 return host + "1"
             else:
@@ -84,7 +84,7 @@ class TestLimit:
 
     async def test_limit_by_redis_fixed_window_backend(self, rap_server: Server, rap_client: Client) -> None:
         def match_ip_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
-            host: str = request.header["host"][0]
+            host: str = request.conn.peer_tuple[0]
             if host in ("127.0.0.1", "::1"):
                 return host + "2"
             else:
@@ -113,7 +113,7 @@ class TestLimit:
 
     async def test_limit_by_redis_cell_backend(self, rap_server: Server, rap_client: Client) -> None:
         def match_ip_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
-            host: str = request.header["host"][0]
+            host: str = request.conn.peer_tuple[0]
             if host in ("127.0.0.1", "::1"):
                 return host + "3"
             else:

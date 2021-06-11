@@ -42,11 +42,11 @@ class Transport(object):
         try:
             while not conn.is_closed():
                 await self._dispatch_resp_from_conn(conn)
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as e:
             pass
         except Exception as e:
             conn.set_reader_exc(e)
-            logging.exception(f"listen {conn} error:{e}")
+            logging.exception(f"listen {conn.connection_info} error:{e}")
             if not conn.is_closed():
                 await conn.await_close()
 
@@ -130,7 +130,7 @@ class Transport(object):
 
         # parse response
         try:
-            response: Response = Response.from_msg(response_msg)
+            response: Response = Response.from_msg(conn, response_msg)
         except Exception as e:
             e_msg: str = f"recv wrong response:{response_msg}, ignore error:{e}"
             return None, rap_exc.ProtocolError(e_msg)

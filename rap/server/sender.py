@@ -40,6 +40,7 @@ class Sender(object):
         if resp is None:
             return False
 
+        resp.conn = self._conn
         self.header_handle(resp)
         if self._processor_list:
             for processor in reversed(self._processor_list):

@@ -207,7 +207,7 @@ class Server(object):
                 await sender.send_event(Event(Constant.EVENT_CLOSE_CONN, "request is empty"))
                 return
             try:
-                request: Request = Request.from_msg(_request_msg)
+                request: Request = Request.from_msg(_request_msg, conn)
             except Exception as closer_e:
                 logging.error(f"{conn.peer_tuple} send bad msg:{_request_msg}, error:{closer_e}")
                 await sender.send_event(Event(Constant.EVENT_CLOSE_CONN, "protocol error"))
@@ -216,7 +216,6 @@ class Server(object):
 
             token: Token = rap_context.set({"request": request})
             try:
-                request.header["host"] = conn.peer_tuple
                 response: Optional[Response] = await receiver.dispatch(request)
                 await sender(response)
             except Exception as closer_e:

@@ -1,10 +1,16 @@
 import asyncio
-from typing import AsyncGenerator, AsyncIterator, Iterator
+from typing import Any, AsyncGenerator, AsyncIterator, Iterator
 
 import pytest
 
 from rap.client import Client
 from rap.server import Server
+
+
+class AnyStringWith(str):
+    def __eq__(self, other: Any) -> bool:
+        return self in other
+
 
 client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
 

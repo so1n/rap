@@ -1,7 +1,9 @@
 import logging
-from dataclasses import dataclass, field
-from typing import Any
 
+from dataclasses import dataclass, field
+from typing import Any, Optional
+
+from rap.common.conn import ServerConnection
 from rap.common.exceptions import BaseRapError, ServerError
 from rap.common.state import State
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
@@ -10,6 +12,7 @@ from rap.common.utils import Constant, Event
 
 @dataclass()
 class Request(object):
+    conn: ServerConnection
     num: int
     msg_id: int
     group: str
@@ -19,8 +22,8 @@ class Request(object):
     stats: "State" = State()
 
     @classmethod
-    def from_msg(cls, msg: BASE_REQUEST_TYPE) -> "Request":
-        return cls(*msg)
+    def from_msg(cls, msg: BASE_REQUEST_TYPE, conn: ServerConnection) -> "Request":
+        return cls(conn, *msg)
 
 
 @dataclass()
@@ -32,6 +35,7 @@ class Response(object):
     header: dict = field(default_factory=lambda: {"status_code": 200})
     body: Any = None
     stats: "State" = State()
+    conn: Optional[ServerConnection] = None
 
     def set_exception(self, exc: Exception) -> None:
         if not isinstance(exc, Exception):
