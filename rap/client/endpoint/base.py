@@ -2,7 +2,7 @@ import asyncio
 import logging
 import random
 from enum import Enum, auto
-from typing import Callable, Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set
 
 from rap.client.transport.transport import Transport
 from rap.common.conn import Connection
@@ -29,7 +29,11 @@ class BaseEndpoint(object):
         self._connected_cnt: int = 0
         self._conn_dict: Dict[str, Connection] = {}
         self._round_robin_index: int = 0
-        self._select_conn_method: SelectConnEnum = select_conn_method
+
+        if select_conn_method == SelectConnEnum.random:
+            setattr(self, self.get_conn.__name__, self._get_random_conn)
+        else:
+            setattr(self, self.get_conn.__name__, self._get_round_robin_conn)
 
     def set_transport(self, transport: Transport) -> None:
         assert isinstance(transport, Transport), TypeError(f"{transport} type must{Transport}")
@@ -39,34 +43,15 @@ class BaseEndpoint(object):
     def is_close(self) -> bool:
         return self._connected_cnt <= 0
 
-    async def create(
-        self, ip: str, port: int, weight: int = 1, min_weight: Optional[int] = None, probability: int = 10
-    ) -> None:
+    async def create(self, ip: str, port: int, weight: int = 10) -> None:
         if not self._transport:
             raise ConnectionError("conn manager need transport")
-
-        if weight > 10:
-            weight = 10
-        if weight < 1:
-            weight = 1
-        if not min_weight:
-            min_weight = 1
-        else:
-            if min_weight > weight:
-                min_weight = weight
-            if min_weight < 1:
-                min_weight = 1
 
         key: str = f"{ip}:{port}"
         if key in self._conn_dict:
             raise ConnectionError(f"conn:{key} already create")
 
-        if not (1 <= probability <= 10):
-            raise ValueError(f"probability value must between 0 and 10")
-
-        conn: Connection = Connection(
-            ip, port, self._timeout, weight, min_weight, ssl_crt_path=self._ssl_crt_path, probability=probability
-        )
+        conn: Connection = Connection(ip, port, self._timeout, weight, ssl_crt_path=self._ssl_crt_path)
 
         def _conn_done(f: asyncio.Future) -> None:
             try:
@@ -88,37 +73,19 @@ class BaseEndpoint(object):
         random.shuffle(self._host_weight_list)
 
         self._conn_dict[key] = conn
-        self._auto_select_conn_method()
 
-    async def set_probability(self, ip: str, port: int, probability: int) -> None:
+    async def set_weight(self, ip: str, port: int, weight: int) -> None:
         key: str = f"{ip}:{port}"
         if key not in self._conn_dict:
             raise KeyError(f"Not found {key}")
-        if not (1 < probability < 10):
+        if not (1 < weight < 10):
             raise ValueError(f"probability value must between 0 and 10")
-        self._conn_dict[key].probability = probability
-        self._auto_select_conn_method()
 
-    def _auto_select_conn_method(self) -> None:
-        enable_probability_filter: bool = True
-        if len(self._conn_dict) > 1:
-            for conn in self._conn_dict.values():
-                if conn.probability < 10:
-                    enable_probability_filter = True
-                    break
-
-        if self._select_conn_method == SelectConnEnum.random:
-            if enable_probability_filter:
-                target_func: Callable = self._get_random_conn_by_probability
-            else:
-                target_func = self._get_random_conn
-        else:
-            if enable_probability_filter:
-                target_func = self._get_round_robin_conn_by_probability
-            else:
-                target_func = self._get_round_robin_conn
-        logging.debug(f"use get conn method:{target_func}")
-        setattr(self, self.get_conn.__name__, target_func)
+        host_weight_list: List[str] = []
+        for conn in self._conn_dict.values():
+            host_weight_list.extend([key for _ in range(conn.weight)])
+        random.shuffle(host_weight_list)
+        self._host_weight_list = host_weight_list
 
     async def destroy(self, ip: str, port: int) -> None:
         key: str = f"{ip}:{port}"
@@ -150,47 +117,20 @@ class BaseEndpoint(object):
             cnt = self._connected_cnt // 3
         if cnt <= 0:
             cnt = 1
-        return [self.get_conn() for _ in range(cnt)]
+        conn_set: Set[Connection] = set()
+        while len(conn_set) < cnt:
+            conn_set.add(self.get_conn())
+        return list(conn_set)
 
     def _get_random_conn(self) -> Connection:
         key = random.choice(self._host_weight_list)
         return self._conn_dict[key]
-
-    def _get_random_conn_by_probability(self) -> Connection:
-        conn_set: Set[Connection] = set()
-        while True:
-            key: str = random.choice(self._host_weight_list)
-            conn: Connection = self._conn_dict[key]
-            if conn in conn_set:
-                continue
-            if len(conn_set) == len(self._conn_dict):
-                break
-            if conn.is_available:
-                return conn
-            conn_set.add(conn)
-        raise ValueError("Get conn fail")
 
     def _get_round_robin_conn(self) -> Connection:
         self._round_robin_index += 1
         index = self._round_robin_index % (len(self._host_weight_list))
         key = self._host_weight_list[index]
         return self._conn_dict[key]
-
-    def _get_round_robin_conn_by_probability(self) -> Connection:
-        conn_set: Set[Connection] = set()
-        while True:
-            self._round_robin_index += 1
-            index = self._round_robin_index % (len(self._host_weight_list))
-            key: str = self._host_weight_list[index]
-            conn: Connection = self._conn_dict[key]
-            if conn in conn_set:
-                continue
-            if len(conn_set) == len(self._conn_dict):
-                break
-            if conn.is_available:
-                return conn
-            conn_set.add(conn)
-        raise ValueError("Get conn fail")
 
     def __len__(self) -> int:
         return self._connected_cnt

@@ -8,10 +8,10 @@ from rap.client import Client, Request, Response
 from rap.common.exceptions import ChannelError, RPCError
 from rap.common.utils import Constant
 from rap.server import Server
+
 from .conftest import AnyStringWith
 
 pytestmark = pytest.mark.asyncio
-
 
 
 async def mock_func(self: Any) -> None:
@@ -186,7 +186,7 @@ class TestTransport:
                         "status_code": 200,
                     },
                     "hi!",
-                )
+                ),
             )
         )
 
@@ -221,7 +221,7 @@ class TestTransport:
                         "host": ("127.0.0.1", 59022),
                     },
                     {"call_id": -1, "exc_info": "division by zero", "exc": "ZeroDivisionError"},
-                )
+                ),
             )
         )
 

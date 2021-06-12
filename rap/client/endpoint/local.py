@@ -18,7 +18,6 @@ class LocalEndpoint(BaseEndpoint):
             "ip": "localhost",
             "port": 9000,
             "weight": 1,
-            "min_weight": 0.1
         }]
         """
         self._conn_list: List[dict] = conn_list
@@ -33,6 +32,5 @@ class LocalEndpoint(BaseEndpoint):
         for conn_dict in self._conn_list:
             ip: str = conn_dict["ip"]
             port: int = conn_dict["port"]
-            weight: int = conn_dict.get("weight", 1)
-            min_weight: int = conn_dict.get("weight", 1)
-            await self.create(ip, port, weight, min_weight)
+            weight: int = conn_dict.get("weight", 10)
+            await self.create(ip, port, weight)

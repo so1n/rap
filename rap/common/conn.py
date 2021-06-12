@@ -102,17 +102,17 @@ class Connection(BaseConnection):
         port: int,
         timeout: int,
         weight: int,
-        min_weight: int,
-        probability: int = 1,
         pack_param: Optional[dict] = None,
         ssl_crt_path: Optional[str] = None,
     ):
         super().__init__(timeout, pack_param)
         self._host: str = host
         self._port: int = port
-        self._weight: int = weight
-        self._min_weight: int = min_weight
-        self.probability: int = probability
+        if weight > 10:
+            weight = 10
+        if weight < 0:
+            weight = 0
+        self.weight: int = weight
         self._ssl_crt_path: Optional[str] = ssl_crt_path
 
         self.listen_future: asyncio.Future = asyncio.Future()
@@ -134,10 +134,6 @@ class Connection(BaseConnection):
         self.peer_tuple = self._writer.get_extra_info("peername")
         self.conn_future: asyncio.Future = asyncio.Future()
         self._is_closed = False
-
-    @property
-    def is_available(self) -> bool:
-        return random.randint(0, 10) <= self.probability
 
     def is_closed(self) -> bool:
         return super(Connection, self).is_closed() or self.listen_future.done()

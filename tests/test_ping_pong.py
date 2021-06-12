@@ -1,5 +1,4 @@
 import asyncio
-
 from typing import Any
 
 import pytest
@@ -7,6 +6,7 @@ from pytest_mock import MockerFixture
 
 from rap.client import Client
 from rap.server import Server
+
 from .conftest import AnyStringWith
 
 pytestmark = pytest.mark.asyncio
