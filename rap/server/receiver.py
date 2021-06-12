@@ -22,11 +22,11 @@ from typing import (
 
 from rap.common.channel import BaseChannel
 from rap.common.conn import ServerConnection
+from rap.common.event import PingEvent, CloseConnEvent, DropEvent, DeclareEvent
 from rap.common.exceptions import BaseRapError, ChannelError, ParseError, ProtocolError, RpcRunTimeError, ServerError
 from rap.common.types import is_type
 from rap.common.utils import (
     Constant,
-    Event,
     as_first_completed,
     check_func_type,
     del_future,
@@ -191,10 +191,10 @@ class Receiver(object):
         while not self._conn.is_closed():
             diff_time: int = int(time.time()) - self._keepalive_timestamp
             if diff_time > ping_interval:
-                await self.sender.send_event(Event(Constant.EVENT_CLOSE_CONN, "recv pong timeout"))
+                await self.sender.send_event(CloseConnEvent("recv pong timeout"))
                 return
             else:
-                await self.sender.send_event(Event(Constant.PING_EVENT, ""))
+                await self.sender.send_event(PingEvent(""))
                 try:
                     await as_first_completed(
                         [asyncio.sleep(self._ping_sleep_time)],
@@ -348,13 +348,13 @@ class Receiver(object):
             return None
         elif request.func_name == Constant.DECLARE:
             if request.body.get("server_name") != self._app.server_name:
-                response.set_event(Event(Constant.EVENT_CLOSE_CONN, "error server name"))
+                response.set_event(CloseConnEvent("error server name"))
             else:
-                response.set_event(Event(Constant.DECLARE, {"result": True, "conn_id": self._conn_id}))
+                response.set_event(DeclareEvent({"result": True, "conn_id": self._conn_id}))
                 self._keepalive_timestamp = int(time.time())
                 self._ping_pong_future = asyncio.ensure_future(self.ping_event())
         elif request.func_name == Constant.DROP:
-            response.set_event(Event(Constant.DECLARE, "success"))
+            response.set_event(DropEvent("success"))
         return response
 
     def __del__(self) -> None:

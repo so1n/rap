@@ -8,7 +8,7 @@ from rap.common.state import WindowState
 from rap.common.utils import Constant
 
 
-class BaseFuseProcessor(BaseProcessor):
+class BaseCircuitBreakerProcessor(BaseProcessor):
     exc: Exception = NotImplementedError()
 
     def __init__(
@@ -72,7 +72,7 @@ class BaseFuseProcessor(BaseProcessor):
         return response, exc
 
 
-class HostFuseProcessor(BaseFuseProcessor):
+class HostCircuitBreakerProcessor(BaseCircuitBreakerProcessor):
     exc: Exception = ServerError("Service Unavailable")
 
     def get_request_index(self, request: Request) -> str:
@@ -82,7 +82,7 @@ class HostFuseProcessor(BaseFuseProcessor):
         return response.conn.peer_tuple[0]
 
 
-class FuncFuseProcessor(BaseFuseProcessor):
+class FuncCircuitBreakerProcessor(BaseCircuitBreakerProcessor):
     exc: Exception = ServerError("Service's func Unavailable")
 
     def get_request_index(self, request: Request) -> str:

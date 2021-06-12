@@ -4,7 +4,7 @@ import pytest
 from aredis import StrictRedis  # type: ignore
 
 from rap.client import Client
-from rap.client.processor.fuse import FuncFuseProcessor, HostFuseProcessor
+from rap.client.processor.circuit_breaker import FuncCircuitBreakerProcessor, HostCircuitBreakerProcessor
 from rap.common.exceptions import ServerError
 from rap.server import Server
 
@@ -15,7 +15,7 @@ pytestmark = pytest.mark.asyncio
 
 class TestFuse:
     async def test_host_fuse(self, rap_server: Server, rap_client: Client) -> None:
-        rap_client.load_processor([HostFuseProcessor(interval=1, fuse_enable_cnt=1)])
+        rap_client.load_processor([HostCircuitBreakerProcessor(interval=1, fuse_enable_cnt=1)])
         for _ in range(10):
             try:
                 await rap_client.raw_call("not_found_func")
@@ -30,7 +30,7 @@ class TestFuse:
         assert exec_msg == "Service Unavailable"
 
     async def test_func_fuse(self, rap_server: Server, rap_client: Client) -> None:
-        rap_client.load_processor([FuncFuseProcessor(interval=1, fuse_enable_cnt=1)])
+        rap_client.load_processor([FuncCircuitBreakerProcessor(interval=1, fuse_enable_cnt=1)])
         for _ in range(10):
             try:
                 await rap_client.raw_call("error_func")

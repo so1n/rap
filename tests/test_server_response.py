@@ -6,7 +6,8 @@ import pytest
 from rap.client import Client
 from rap.common.conn import BaseConnection
 from rap.common.exceptions import RPCError, ServerError
-from rap.common.utils import Constant, Event
+from rap.common.utils import Constant
+from rap.common.event import Event
 from rap.server import Server
 from rap.server.model import Response
 from rap.server.sender import Sender
