@@ -4,12 +4,10 @@ import random
 import string
 import sys
 import time
-from dataclasses import dataclass
 from typing import Any, Callable, Coroutine, Dict, List, Sequence, Union
 
 __all__ = [
     "Constant",
-    "Event",
     "MISS_OBJECT",
     "RapFunc",
     "as_first_completed",
@@ -94,15 +92,6 @@ class RapFunc(object):
         """support async for i in coro(x, x)"""
         self._check()
         return self.func(*self._arg_param, **self._kwargs_param).__aiter__()
-
-
-@dataclass()
-class Event(object):
-    event_name: str
-    event_info: Union[str, dict]
-
-    def to_tuple(self) -> Tuple[str, Union[str, dict]]:
-        return self.event_name, self.event_info
 
 
 def _get_event_loop() -> Callable[[], asyncio.AbstractEventLoop]:

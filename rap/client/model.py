@@ -3,7 +3,8 @@ from typing import Any
 
 from rap.common.conn import Connection
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
-from rap.common.utils import Constant, Event
+from rap.common.utils import Constant
+from rap.common.event import Event
 
 
 @dataclass()

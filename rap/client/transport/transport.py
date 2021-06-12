@@ -10,9 +10,10 @@ from rap.client.transport.channel import Channel
 from rap.client.utils import get_exc_status_code_dict, raise_rap_error
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
+from rap.common.event import DeclareEvent, PongEvent
 from rap.common.exceptions import ChannelError, RPCError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
-from rap.common.utils import Constant, Event, as_first_completed
+from rap.common.utils import Constant, as_first_completed
 
 __all__ = ["Transport"]
 
@@ -86,8 +87,7 @@ class Transport(object):
                 event_exc: Exception = ConnectionError(f"recv close conn event, event info:{response.body}")
                 raise event_exc
             elif response.func_name == Constant.PING_EVENT:
-                request: Request = Request.from_event(Event(Constant.PONG_EVENT, ""))
-                await self.write_to_conn(request, conn)
+                await self.write_to_conn(Request.from_event(PongEvent("")), conn)
                 return
             elif response.func_name == Constant.DECLARE:
                 if not response.body.get("result"):
@@ -144,8 +144,7 @@ class Transport(object):
         return response, exc
 
     async def declare(self, server_name: str, conn: Connection) -> str:
-        request: Request = Request.from_event(Event(Constant.DECLARE, {"server_name": server_name}))
-        await self.write_to_conn(request, conn)
+        await self.write_to_conn(Request.from_event(DeclareEvent({"server_name": server_name})), conn)
         response: Optional[Response] = await self.read_from_conn(conn)
 
         exc: Exception = ConnectionError("create conn error")
@@ -218,14 +217,7 @@ class Transport(object):
                 _request = await process_request(_request)
 
             request_msg: BASE_REQUEST_TYPE = _request.to_msg()
-            try:
-                await conn.write(request_msg)  # type: ignore
-            except asyncio.TimeoutError:
-                raise asyncio.TimeoutError(
-                    f"send to %s timeout, drop data:%s", conn.connection_info, request_msg  # type: ignore
-                )
-            except Exception as e:
-                raise e
+            await conn.write(request_msg)  # type: ignore
 
         if request.num == Constant.CHANNEL_REQUEST:
             if "channel_id" not in request.header:

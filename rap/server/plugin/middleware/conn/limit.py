@@ -5,7 +5,8 @@ from typing import Dict, Union
 from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
 from rap.common.conn import ServerConnection
-from rap.common.utils import Constant, Event
+from rap.common.event import CloseConnEvent
+from rap.common.utils import Constant
 from rap.server.plugin.middleware.base import BaseConnMiddleware
 from rap.server.sender import Sender
 
@@ -46,8 +47,9 @@ class ConnLimitMiddleware(BaseConnMiddleware):
             if self._release_timestamp > now_timestamp or self._conn_count > self._max_conn:
                 if now_timestamp > self._release_timestamp:
                     self._release_timestamp = now_timestamp + self._block_time
+
                 await Sender(conn).send_event(
-                    Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of connections limit")
+                    CloseConnEvent("Currently exceeding the maximum number of connections limit")
                 )
                 await conn.await_close()
                 return
@@ -104,7 +106,7 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
             if now_cnt > self._ip_max_conn:
                 logging.error(f"Currently exceeding the maximum number of ip conn limit, close {conn.peer_tuple}")
                 await Sender(conn).send_event(
-                    Event(Constant.EVENT_CLOSE_CONN, "Currently exceeding the maximum number of ip conn limit")
+                    CloseConnEvent("Currently exceeding the maximum number of ip conn limit")
                 )
                 await conn.await_close()
             else:

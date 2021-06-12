@@ -46,10 +46,7 @@ class Sender(object):
             for processor in reversed(self._processor_list):
                 resp = await processor.process_response(resp)
         logging.debug(f"resp: %s", resp)
-        try:
-            await self._conn.write(resp.to_msg(), self._timeout)
-        except asyncio.TimeoutError:
-            raise asyncio.TimeoutError(f"response to {self._conn.peer_tuple} timeout. resp:{resp}")
+        await self._conn.write(resp.to_msg())
         if resp.func_name == Constant.EVENT_CLOSE_CONN:
             if not self._conn.is_closed():
                 self._conn.close()

@@ -6,10 +6,11 @@ from contextvars import Token
 from typing import Any, Callable, List, Optional, Set, Tuple, Union
 
 from rap.common.conn import ServerConnection
+from rap.common.event import CloseConnEvent
 from rap.common.exceptions import ServerError
 from rap.common.state import WindowState
 from rap.common.types import BASE_REQUEST_TYPE, READER_TYPE, WRITER_TYPE
-from rap.common.utils import Constant, Event, RapFunc
+from rap.common.utils import Constant, RapFunc
 from rap.server.context import rap_context
 from rap.server.model import Request, Response
 from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware
@@ -204,13 +205,13 @@ class Server(object):
 
         async def recv_msg_handle(_request_msg: Optional[BASE_REQUEST_TYPE]) -> None:
             if _request_msg is None:
-                await sender.send_event(Event(Constant.EVENT_CLOSE_CONN, "request is empty"))
+                await sender.send_event(CloseConnEvent("request is empty"))
                 return
             try:
                 request: Request = Request.from_msg(_request_msg, conn)
             except Exception as closer_e:
                 logging.error(f"{conn.peer_tuple} send bad msg:{_request_msg}, error:{closer_e}")
-                await sender.send_event(Event(Constant.EVENT_CLOSE_CONN, "protocol error"))
+                await sender.send_event(CloseConnEvent("protocol error"))
                 await conn.await_close()
                 return
 
@@ -231,7 +232,7 @@ class Server(object):
                 asyncio.ensure_future(recv_msg_handle(request_msg))
             except asyncio.TimeoutError:
                 logging.error(f"recv data from {conn.peer_tuple} timeout. close conn")
-                await sender.send_event(Event(Constant.EVENT_CLOSE_CONN, "keep alive timeout"))
+                await sender.send_event(CloseConnEvent("keep alive timeout"))
                 break
             except IOError:
                 break
