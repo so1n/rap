@@ -15,7 +15,7 @@ from rap.server.sender import Sender
 pytestmark = pytest.mark.asyncio
 test_exc: Exception = Exception("this is test exc")
 test_rpc_exc: RPCError = RPCError("this is rpc error")
-test_event: Event = Event(event_name="test", event_info="test event")
+test_event: Event = Event(event_info="test event", event_name="test")
 
 
 class TestServerResponse:

@@ -31,7 +31,7 @@ class TestUtil:
         assert exec_msg.endswith("object has no attribute 'demo'")
 
     def test_event_to_tuple(self) -> None:
-        event: Event = Event("name", "info")
+        event: Event = Event(event_info="info", event_name="name")
         assert ("name", "info") == event.to_tuple()
 
     async def test_gen_new_param_coro(self) -> None:
