@@ -3,10 +3,10 @@ import inspect
 import logging
 import ssl
 from contextvars import Token
-from typing import Any, Callable, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, List, Optional, Set, Type, Tuple, Union
 
 from rap.common.conn import ServerConnection
-from rap.common.event import CloseConnEvent
+from rap.common import event
 from rap.common.exceptions import ServerError
 from rap.common.state import WindowState
 from rap.common.types import BASE_REQUEST_TYPE, READER_TYPE, WRITER_TYPE
@@ -60,6 +60,7 @@ class Server(object):
         self._stop_event_list: List[Callable] = []
         self._middleware_list: List[BaseMiddleware] = []
         self._processor_list: List[BaseProcessor] = []
+        self._event_handle_dict: Dict[str, List[Callable]] = {}
         self._depend_set: Set[Any] = set()  # Check whether any components have been re-introduced
 
         if start_event_list:
@@ -93,6 +94,18 @@ class Server(object):
     def load_stop_event(self, event_list: List[Callable]) -> None:
         for event in event_list:
             self._load_event(self._stop_event_list, event)
+
+    def register_request_event_handle(self, event_class: Type[event.Event], fn: Callable) -> None:
+        if event_class not in self._event_handle_dict:
+            raise KeyError(f"{event_class}")
+        if fn in self._event_handle_dict[event_class.event_name]:
+            raise ValueError(f"{fn} already exists {event_class}")
+        self._event_handle_dict[event_class.event_name].append(fn)
+
+    def unregister_request_event_handle(self, event_class: Type[event.Event], fn: Callable) -> None:
+        if event_class not in self._event_handle_dict:
+            raise KeyError(f"{event_class}")
+        self._event_handle_dict[event_class.event_name].remove(fn)
 
     def load_middleware(self, middleware_list: List[BaseMiddleware]) -> None:
         for middleware in middleware_list:
@@ -200,18 +213,19 @@ class Server(object):
             sender,
             self._ping_fail_cnt,
             self._ping_sleep_time,
+            self._event_handle_dict,
             processor_list=self._processor_list,
         )
 
         async def recv_msg_handle(_request_msg: Optional[BASE_REQUEST_TYPE]) -> None:
             if _request_msg is None:
-                await sender.send_event(CloseConnEvent("request is empty"))
+                await sender.send_event(event.CloseConnEvent("request is empty"))
                 return
             try:
                 request: Request = Request.from_msg(_request_msg, conn)
             except Exception as closer_e:
                 logging.error(f"{conn.peer_tuple} send bad msg:{_request_msg}, error:{closer_e}")
-                await sender.send_event(CloseConnEvent("protocol error"))
+                await sender.send_event(event.CloseConnEvent("protocol error"))
                 await conn.await_close()
                 return
 
@@ -232,7 +246,7 @@ class Server(object):
                 asyncio.ensure_future(recv_msg_handle(request_msg))
             except asyncio.TimeoutError:
                 logging.error(f"recv data from {conn.peer_tuple} timeout. close conn")
-                await sender.send_event(CloseConnEvent("keep alive timeout"))
+                await sender.send_event(event.CloseConnEvent("keep alive timeout"))
                 break
             except IOError:
                 break

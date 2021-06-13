@@ -9,6 +9,7 @@ from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.transport.channel import Channel
 from rap.client.transport.transport import Transport
+from rap.common import event
 from rap.common.conn import Connection
 from rap.common.types import is_type
 from rap.common.utils import RapFunc, check_func_type
@@ -107,6 +108,12 @@ class BaseClient:
         for processor in self._processor_list:
             processor.start_event_handle()
         await self._endpoint.start()
+
+    def register_event_handle(self, event_class: Type[event.Event], fn: Callable) -> None:
+        self.transport.register_event_handle(event_class, fn)
+
+    def unregister_event_handle(self, event_class: Type[event.Event], fn: Callable) -> None:
+        self.transport.unregister_event_handle(event_class, fn)
 
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:
         if self.is_close:
