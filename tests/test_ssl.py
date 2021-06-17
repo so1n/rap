@@ -37,7 +37,7 @@ async def ssl_server() -> AsyncGenerator[Server, None]:
     rpc_server.register(_sync_sum, "sync_sum")
     await rpc_server.create_server()
     yield rpc_server
-    await rpc_server.await_closed()
+    await rpc_server.shutdown()
 
 
 class TestSSL:

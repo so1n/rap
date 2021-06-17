@@ -49,6 +49,7 @@ class Server(object):
         self._ping_fail_cnt: int = ping_fail_cnt
         self._ping_sleep_time: int = ping_sleep_time
         self._server_list: List[asyncio.AbstractServer] = []
+        self._connected_set: Set[ServerConnection] = set()
 
         self._ssl_context: Optional[ssl.SSLContext] = None
         if ssl_crt_path and ssl_key_path:
@@ -188,21 +189,30 @@ class Server(object):
             logging.info(f"server running on {host}. use ssl:{bool(self._ssl_context)}")
         return self
 
-    async def await_closed(self) -> None:
+    async def shutdown(self) -> None:
         for server in self._server_list:
+            # # Stop accepting new connections.
             server.close()
+        for server in self._server_list:
             await server.wait_closed()
+
+        logging.info("Waiting for connections to close. (CTRL+C to force quit)")
+        # until connections close
+        while self._connected_set:
+            await asyncio.sleep(0.1)
         await self.run_callback_list(self._stop_event_list)
-        # NOTE: await bg future cancel or done
-        await asyncio.sleep(0.1)
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE) -> None:
         conn: ServerConnection = ServerConnection(reader, writer, self._timeout)
-        await self._conn_handle(conn)
         try:
-            conn.conn_future.result()
-        except Exception:
-            pass
+            self._connected_set.add(conn)
+            await self._conn_handle(conn)
+            try:
+                conn.conn_future.result()
+            except Exception:
+                pass
+        finally:
+            self._connected_set.remove(conn)
 
     async def _conn_handle(self, conn: ServerConnection) -> None:
         sender: Sender = Sender(conn, self._timeout, processor_list=self._processor_list)
