@@ -12,7 +12,8 @@ pip install rap
 
 # 2.快速上手 
 
-## 服务端 
+## 服务端
+
 ```Python
 import asyncio
 from typing import AsyncIterator
@@ -25,7 +26,7 @@ def sync_sum(a: int, b: int) -> int:
 
 
 async def async_sum(a: int, b: int) -> int:
-    await asyncio.sleep(1)  #  模拟io处理 
+    await asyncio.sleep(1)  # 模拟io处理 
     return a + b
 
 
@@ -48,7 +49,7 @@ try:
     loop.run_forever()
 except KeyboardInterrupt:
     # 关闭服务
-    loop.run_until_complete(rpc_server.await_closed())
+    loop.run_until_complete(rpc_server.shutdown())
 ```
 
 ## 客户端

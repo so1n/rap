@@ -75,7 +75,7 @@ async def rap_server() -> AsyncGenerator[Server, None]:
     rpc_server.register(error_func)
     server: Server = await rpc_server.create_server()
     yield server
-    await rpc_server.await_closed()
+    await rpc_server.shutdown()
 
 
 @pytest.fixture
