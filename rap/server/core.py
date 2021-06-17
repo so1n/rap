@@ -60,7 +60,7 @@ class Server(object):
         self._stop_event_list: List[Callable] = []
         self._middleware_list: List[BaseMiddleware] = []
         self._processor_list: List[BaseProcessor] = []
-        self._event_handle_dict: Dict[str, List[Callable]] = {}
+        self._event_handle_dict: Dict[str, List[Callable[[Request], None]]] = {}
         self._depend_set: Set[Any] = set()  # Check whether any components have been re-introduced
 
         if start_event_list:
@@ -95,14 +95,14 @@ class Server(object):
         for event in event_list:
             self._load_event(self._stop_event_list, event)
 
-    def register_request_event_handle(self, event_class: Type[event.Event], fn: Callable) -> None:
+    def register_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Request], None]) -> None:
         if event_class not in self._event_handle_dict:
             raise KeyError(f"{event_class}")
         if fn in self._event_handle_dict[event_class.event_name]:
             raise ValueError(f"{fn} already exists {event_class}")
         self._event_handle_dict[event_class.event_name].append(fn)
 
-    def unregister_request_event_handle(self, event_class: Type[event.Event], fn: Callable) -> None:
+    def unregister_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Request], None]) -> None:
         if event_class not in self._event_handle_dict:
             raise KeyError(f"{event_class}")
         self._event_handle_dict[event_class.event_name].remove(fn)

@@ -109,10 +109,10 @@ class BaseClient:
             processor.start_event_handle()
         await self._endpoint.start()
 
-    def register_event_handle(self, event_class: Type[event.Event], fn: Callable) -> None:
+    def register_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
         self.transport.register_event_handle(event_class, fn)
 
-    def unregister_event_handle(self, event_class: Type[event.Event], fn: Callable) -> None:
+    def unregister_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
         self.transport.unregister_event_handle(event_class, fn)
 
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:

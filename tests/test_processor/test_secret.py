@@ -13,7 +13,7 @@ from rap.common.exceptions import CryptoError
 from rap.server import Server
 from rap.server.plugin.processor import CryptoProcessor as ServerCryptoProcessor
 
-from .conftest import async_sum  # type: ignore
+from tests.conftest import async_sum  # type: ignore
 
 pytestmark = pytest.mark.asyncio
 

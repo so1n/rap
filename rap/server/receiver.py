@@ -120,7 +120,7 @@ class Receiver(object):
         sender: Sender,
         ping_fail_cnt: int,
         ping_sleep_time: int,
-        event_handle_dict: Dict[str, List[Callable]],
+        event_handle_dict: Dict[str, List[Callable[[Request], None]]],
         processor_list: Optional[List[BaseProcessor]] = None,
     ):
         self._app: "Server" = app
@@ -131,7 +131,7 @@ class Receiver(object):
         self._ping_sleep_time: int = ping_sleep_time
         self._ping_fail_cnt: int = ping_fail_cnt
         self._processor_list: Optional[List[BaseProcessor]] = processor_list
-        self._event_handle_dict: Dict[str, List[Callable]] = event_handle_dict
+        self._event_handle_dict: Dict[str, List[Callable[[Request], None]]] = event_handle_dict
 
         self.dispatch_func_dict: Dict[int, Callable] = {
             Constant.CLIENT_EVENT: self.event,
@@ -345,12 +345,13 @@ class Receiver(object):
         return response
 
     async def event(self, request: Request, response: Response) -> Optional[Response]:
-        event_handle_list: List[Callable] = self._event_handle_dict.get(request.func_name, [])
-        for fn in event_handle_list:
-            try:
-                fn()
-            except Exception as e:
-                logging.exception(f"run event name:{response.func_name} raise error:{e}")
+        if request.func_name in self._event_handle_dict:
+            event_handle_list: List[Callable[[Request], None]] = self._event_handle_dict[request.func_name]
+            for fn in event_handle_list:
+                try:
+                    fn(request)
+                except Exception as e:
+                    logging.exception(f"run event name:{response.func_name} raise error:{e}")
 
         if request.func_name == Constant.PONG_EVENT:
             self._keepalive_timestamp = int(time.time())
