@@ -28,7 +28,7 @@ def create_test_app() -> Generator[Starlette, None, None]:
         await server.create_server()
 
     async def close_rap_server() -> None:
-        await server.await_closed()
+        await server.shutdown()
 
     app.router.on_startup.insert(0, create_rap_server)
     app.router.on_shutdown.append(close_rap_server)
@@ -63,8 +63,8 @@ class TestApiGateWay:
             # test api
             await example_websockets_client()
             # close servers...
-            await rap_server.await_closed()
             await app_server.shutdown()
+            await rap_server.shutdown()
 
         loop.run_until_complete(main())
 
@@ -92,7 +92,7 @@ class TestApiGateWay:
             await server.create_server()
 
         async def close_rap_server() -> None:
-            await server.await_closed()
+            await server.shutdown()
 
         app.router.on_startup.insert(0, create_rap_server)
         app.router.on_shutdown.append(close_rap_server)

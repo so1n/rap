@@ -1,16 +1,19 @@
 import asyncio
 import inspect
 import logging
+import signal
 import ssl
+import threading
+import time
 from contextvars import Token
-from typing import Any, Callable, List, Optional, Set, Type, Tuple, Union
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Tuple, Type, Union
 
-from rap.common.conn import ServerConnection
 from rap.common import event
+from rap.common.conn import ServerConnection
 from rap.common.exceptions import ServerError
 from rap.common.state import WindowState
 from rap.common.types import BASE_REQUEST_TYPE, READER_TYPE, WRITER_TYPE
-from rap.common.utils import Constant, RapFunc
+from rap.common.utils import Constant, RapFunc, get_event_loop
 from rap.server.context import rap_context
 from rap.server.model import Request, Response
 from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware
@@ -32,6 +35,7 @@ class Server(object):
         ping_fail_cnt: int = 2,
         ping_sleep_time: int = 60,
         backlog: int = 1024,
+        close_timeout: int = 9,
         ssl_crt_path: Optional[str] = None,
         ssl_key_path: Optional[str] = None,
         start_event_list: List[Callable] = None,
@@ -44,12 +48,15 @@ class Server(object):
         self.server_name: str = server_name
         self._timeout: int = timeout
         self._run_timeout: int = run_timeout
+        self._close_timeout: int = close_timeout
         self._keep_alive: int = keep_alive
         self._backlog: int = backlog
         self._ping_fail_cnt: int = ping_fail_cnt
         self._ping_sleep_time: int = ping_sleep_time
         self._server_list: List[asyncio.AbstractServer] = []
         self._connected_set: Set[ServerConnection] = set()
+        self._run_event: asyncio.Event = asyncio.Event()
+        self._run_event.set()
 
         self._ssl_context: Optional[ssl.SSLContext] = None
         if ssl_crt_path and ssl_key_path:
@@ -163,7 +170,7 @@ class Server(object):
 
     @property
     def is_closed(self) -> bool:
-        return not bool(self._server_list)
+        return self._run_event.is_set()
 
     @staticmethod
     async def run_callback_list(callback_list: List[Callable]) -> None:
@@ -187,20 +194,66 @@ class Server(object):
                 await asyncio.start_server(self.conn_handle, ip, port, ssl=self._ssl_context, backlog=self._backlog)
             )
             logging.info(f"server running on {host}. use ssl:{bool(self._ssl_context)}")
+
+        # fix different loop event
+        self._run_event.clear()
+        self._run_event = asyncio.Event()
         return self
 
+    async def run_forever(self) -> None:
+        if self.is_closed:
+            await self.create_server()
+
+        def _shutdown(signum: int, frame: Any) -> None:
+            logging.debug("Receive signal %s, run shutdown...", signum)
+            asyncio.ensure_future(self.shutdown())
+
+        if threading.current_thread() is not threading.main_thread():
+            logging.error("Signals can only be listened to from the main thread.")
+        else:
+            try:
+                # only use in unix
+                loop = asyncio.get_event_loop()
+                for sig in [signal.SIGINT, signal.SIGTERM]:
+                    loop.add_signal_handler(sig, _shutdown, sig, None)
+            except NotImplementedError:
+                for sig in [signal.SIGINT, signal.SIGTERM]:
+                    signal.signal(sig, _shutdown)
+        await self._run_event.wait()
+
     async def shutdown(self) -> None:
+        if self.is_closed:
+            return
+
+        # Notify the client that the server is ready to shut down
+        async def send_shutdown_event(_conn: ServerConnection) -> None:
+            # conn may be closed
+            if not _conn.is_closed():
+                try:
+                    await Sender(_conn, self._timeout, processor_list=self._processor_list).send_event(
+                        event.ShutdownEvent({"close_timeout": self._close_timeout})
+                    )
+                except ConnectionError:
+                    # conn may be closed
+                    pass
+
+        task_list: List[Coroutine] = [send_shutdown_event(conn) for conn in self._connected_set if not conn.is_closed()]
+        await asyncio.gather(*task_list)
+
+        # Stop accepting new connections.
         for server in self._server_list:
-            # # Stop accepting new connections.
             server.close()
         for server in self._server_list:
             await server.wait_closed()
 
-        logging.info("Waiting for connections to close. (CTRL+C to force quit)")
         # until connections close
-        while self._connected_set:
+        logging.info("Waiting for connections to close. (CTRL+C to force quit)")
+        close_timestamp: int = int(time.time()) + self._close_timeout
+        while self._connected_set and close_timestamp > int(time.time()):
             await asyncio.sleep(0.1)
+
         await self.run_callback_list(self._stop_event_list)
+        self._run_event.set()
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE) -> None:
         conn: ServerConnection = ServerConnection(reader, writer, self._timeout)
@@ -217,7 +270,7 @@ class Server(object):
     async def _conn_handle(self, conn: ServerConnection) -> None:
         sender: Sender = Sender(conn, self._timeout, processor_list=self._processor_list)
         receiver: Receiver = Receiver(
-            self,  # type: ignore
+            self,
             conn,
             self._run_timeout,
             sender,

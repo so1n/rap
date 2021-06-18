@@ -43,9 +43,4 @@ if __name__ == "__main__":
 
     loop = asyncio.new_event_loop()
     server: Server = create_server("example")
-    loop.run_until_complete(server.create_server())
-
-    try:
-        loop.run_forever()
-    except KeyboardInterrupt:
-        loop.run_until_complete(server.await_closed())
+    loop.run_until_complete(server.run_forever())

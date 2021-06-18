@@ -69,6 +69,7 @@ async def websocket_route_func(websocket: WebSocket) -> None:
             elif receive_future.done():
                 receive_future.result()
             await websocket.send_json({"code": 0, "data": "close"})
+            await websocket.close()
     except WebSocketDisconnect:
         pass
     finally:

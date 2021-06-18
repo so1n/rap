@@ -9,7 +9,6 @@ from rap.common.exceptions import ServerError, TooManyRequest
 from rap.server import Request, Response, Server
 from rap.server.plugin.processor import limit
 from rap.server.plugin.processor.base import BaseProcessor
-
 from tests.conftest import async_sum  # type: ignore
 
 pytestmark = pytest.mark.asyncio

@@ -18,9 +18,4 @@ if __name__ == "__main__":
     rpc_server: Server = Server("example")
     rpc_server.bind()
     rpc_server.register(sync_sum)
-    loop.run_until_complete(rpc_server.create_server())
-
-    try:
-        loop.run_forever()
-    except KeyboardInterrupt:
-        loop.run_until_complete(rpc_server.shutdown())
+    loop.run_until_complete(rpc_server.run_forever())

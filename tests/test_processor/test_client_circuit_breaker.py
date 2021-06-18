@@ -7,7 +7,6 @@ from rap.client import Client
 from rap.client.processor.circuit_breaker import FuncCircuitBreakerProcessor, HostCircuitBreakerProcessor
 from rap.common.exceptions import ServerError
 from rap.server import Server
-
 from tests.conftest import async_sum  # type: ignore
 
 pytestmark = pytest.mark.asyncio

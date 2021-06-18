@@ -3,16 +3,15 @@ import inspect
 import logging
 import random
 import uuid
-
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.transport.channel import Channel
 from rap.client.utils import get_exc_status_code_dict, raise_rap_error
+from rap.common import event
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
-from rap.common import event
 from rap.common.exceptions import ChannelError, RPCError
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.common.utils import Constant, as_first_completed
@@ -22,6 +21,7 @@ __all__ = ["Transport"]
 
 class Transport(object):
     """base client transport, encapsulation of custom transport protocol"""
+
     def __init__(
         self,
         read_timeout: int = 9,

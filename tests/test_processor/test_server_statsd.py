@@ -5,9 +5,8 @@ import pytest
 from aredis import StrictRedis  # type: ignore
 
 from rap.client import Client
-from rap.server.plugin.processor.statsd import StatsdProcessor, StatsdClient
 from rap.server import Server
-
+from rap.server.plugin.processor.statsd import StatsdClient, StatsdProcessor
 from tests.conftest import async_sum  # type: ignore
 
 pytestmark = pytest.mark.asyncio

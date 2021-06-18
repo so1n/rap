@@ -51,9 +51,4 @@ if __name__ == "__main__":
         ],
     )
     rpc_server.load_processor([limit_processor])
-    loop.run_until_complete(rpc_server.create_server())
-
-    try:
-        loop.run_forever()
-    except KeyboardInterrupt:
-        loop.run_until_complete(rpc_server.shutdown())
+    loop.run_until_complete(rpc_server.run_forever())

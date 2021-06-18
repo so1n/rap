@@ -22,7 +22,7 @@ from typing import (
 
 from rap.common.channel import BaseChannel
 from rap.common.conn import ServerConnection
-from rap.common.event import PingEvent, CloseConnEvent, DropEvent, DeclareEvent
+from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent
 from rap.common.exceptions import BaseRapError, ChannelError, ParseError, ProtocolError, RpcRunTimeError, ServerError
 from rap.common.types import is_type
 from rap.common.utils import (
