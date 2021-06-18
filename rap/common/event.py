@@ -1,4 +1,4 @@
-from typing import Union, Tuple
+from typing import Tuple, Union
 
 
 class Event(object):
@@ -43,6 +43,13 @@ class DeclareEvent(Event):
 
 class DropEvent(Event):
     event_name: str = "drop"
+
+    def __init__(self, event_info: Union[str, dict]):
+        super().__init__(event_info)
+
+
+class ShutdownEvent(Event):
+    event_name: str = "shutdown"
 
     def __init__(self, event_info: Union[str, dict]):
         super().__init__(event_info)

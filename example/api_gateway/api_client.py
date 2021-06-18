@@ -29,6 +29,7 @@ async def example_websockets_client() -> None:
             result = await receive_json()
             assert str(cnt) == result
             cnt += 1
+        await websocket.close()
 
 
 async def example_http_client() -> None:

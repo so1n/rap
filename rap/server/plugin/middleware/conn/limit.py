@@ -105,9 +105,7 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
         try:
             if now_cnt > self._ip_max_conn:
                 logging.error(f"Currently exceeding the maximum number of ip conn limit, close {conn.peer_tuple}")
-                await Sender(conn).send_event(
-                    CloseConnEvent("Currently exceeding the maximum number of ip conn limit")
-                )
+                await Sender(conn).send_event(CloseConnEvent("Currently exceeding the maximum number of ip conn limit"))
                 await conn.await_close()
             else:
                 await self.call_next(conn)

@@ -36,9 +36,4 @@ if __name__ == "__main__":
     jaeger_tracer: Tracer = opentracing_config.initialize_tracer()
     rpc_server.load_processor([TracingProcessor(jaeger_tracer)])
     rpc_server.register(async_sum)
-    loop.run_until_complete(rpc_server.create_server())
-
-    try:
-        loop.run_forever()
-    except KeyboardInterrupt:
-        loop.run_until_complete(rpc_server.await_closed())
+    loop.run_until_complete(rpc_server.run_forever())

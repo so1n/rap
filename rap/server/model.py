@@ -3,11 +3,11 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from rap.common.conn import ServerConnection
+from rap.common.event import Event
 from rap.common.exceptions import BaseRapError, ServerError
 from rap.common.state import State
 from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
 from rap.common.utils import Constant
-from rap.common.event import Event
 
 
 @dataclass()

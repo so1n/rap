@@ -61,8 +61,4 @@ if __name__ == "__main__":
     rpc_server.register(echo_body)
     rpc_server.register(echo_response)
 
-    loop.run_until_complete(rpc_server.create_server())
-    try:
-        loop.run_forever()
-    except KeyboardInterrupt:
-        loop.run_until_complete(rpc_server.shutdown())
+    loop.run_until_complete(rpc_server.run_forever())
