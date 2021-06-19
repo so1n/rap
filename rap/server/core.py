@@ -6,14 +6,14 @@ import ssl
 import threading
 import time
 from contextvars import Token
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Tuple, Type, Union
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Type
 
 from rap.common import event
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import ServerError
 from rap.common.state import WindowState
 from rap.common.types import BASE_REQUEST_TYPE, READER_TYPE, WRITER_TYPE
-from rap.common.utils import Constant, RapFunc, get_event_loop
+from rap.common.utils import RapFunc
 from rap.server.context import rap_context
 from rap.server.model import Request, Response
 from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware
@@ -29,6 +29,8 @@ class Server(object):
     def __init__(
         self,
         server_name: str,
+        local_ip: str = "localhost",
+        port: int = 9000,
         timeout: int = 9,
         keep_alive: int = 1200,
         run_timeout: int = 9,
@@ -44,8 +46,9 @@ class Server(object):
         processor_list: List[BaseProcessor] = None,
         window_state: Optional[WindowState] = None,
     ):
-        self._host_list: List[Tuple[str, int]] = []
         self.server_name: str = server_name
+        self._local_ip: str = local_ip
+        self._port: int = port
         self._timeout: int = timeout
         self._run_timeout: int = run_timeout
         self._close_timeout: int = close_timeout
@@ -53,7 +56,7 @@ class Server(object):
         self._backlog: int = backlog
         self._ping_fail_cnt: int = ping_fail_cnt
         self._ping_sleep_time: int = ping_sleep_time
-        self._server_list: List[asyncio.AbstractServer] = []
+        self._server: Optional[asyncio.AbstractServer] = None
         self._connected_set: Set[ServerConnection] = set()
         self._run_event: asyncio.Event = asyncio.Event()
         self._run_event.set()
@@ -85,23 +88,23 @@ class Server(object):
         if self.window_state and self.window_state.is_closed:
             self.load_start_event([self.window_state.change_state])
 
-    def _load_event(self, event_list: List[Callable], event: Callable) -> None:
-        if not (inspect.isfunction(event) or asyncio.iscoroutine(event) or inspect.ismethod(event)):
-            raise ImportError(f"{event} must be fun or coroutine, not {type(event)}")
+    def _load_event(self, event_list: List[Callable], _event: Callable) -> None:
+        if not (inspect.isfunction(_event) or asyncio.iscoroutine(_event) or inspect.ismethod(_event)):
+            raise ImportError(f"{_event} must be fun or coroutine, not {type(_event)}")
 
-        if event not in self._depend_set:
-            self._depend_set.add(event)
+        if _event not in self._depend_set:
+            self._depend_set.add(_event)
         else:
-            raise ImportError(f"{event} event already load")
-        event_list.append(event)
+            raise ImportError(f"{_event} event already load")
+        event_list.append(_event)
 
     def load_start_event(self, event_list: List[Callable]) -> None:
-        for event in event_list:
-            self._load_event(self._start_event_list, event)
+        for start_event in event_list:
+            self._load_event(self._start_event_list, start_event)
 
     def load_stop_event(self, event_list: List[Callable]) -> None:
-        for event in event_list:
-            self._load_event(self._stop_event_list, event)
+        for stop_event in event_list:
+            self._load_event(self._stop_event_list, stop_event)
 
     def register_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Request], None]) -> None:
         if event_class not in self._event_handle_dict:
@@ -125,7 +128,7 @@ class Server(object):
             middleware.app = self  # type: ignore
             if isinstance(middleware, BaseConnMiddleware):
                 middleware.load_sub_middleware(self._conn_handle)
-                self._conn_handle = middleware  # type: ignore
+                setattr(self, self._conn_handle.__name__, middleware)
             elif isinstance(middleware, BaseMiddleware):
                 self._middleware_list.append(middleware)
             else:
@@ -162,12 +165,6 @@ class Server(object):
 
         self.registry.register(func, name, group=group, is_private=is_private, doc=doc)
 
-    def bind(self, local_ip: str = "localhost", port: int = 9000, host_ip: str = "") -> None:
-        if not self.is_closed:
-            raise RuntimeError("Server status is running...can not bind")
-        self._host_list.append((local_ip, port))
-        # TODO register center
-
     @property
     def is_closed(self) -> bool:
         return self._run_event.is_set()
@@ -183,17 +180,13 @@ class Server(object):
                 callback()
 
     async def create_server(self) -> "Server":
-        if not self._host_list:
-            raise RuntimeError("Could not find the bind conn")
         if not self.is_closed:
             raise RuntimeError("Server status is running...")
         await self.run_callback_list(self._start_event_list)
-        for host in self._host_list:
-            ip, port = host
-            self._server_list.append(
-                await asyncio.start_server(self.conn_handle, ip, port, ssl=self._ssl_context, backlog=self._backlog)
-            )
-            logging.info(f"server running on {host}. use ssl:{bool(self._ssl_context)}")
+        self._server = await asyncio.start_server(
+            self.conn_handle, self._local_ip, self._port, ssl=self._ssl_context, backlog=self._backlog
+        )
+        logging.info(f"server running on {self._local_ip}:{self._port}. use ssl:{bool(self._ssl_context)}")
 
         # fix different loop event
         self._run_event.clear()
@@ -241,10 +234,9 @@ class Server(object):
         await asyncio.gather(*task_list)
 
         # Stop accepting new connections.
-        for server in self._server_list:
-            server.close()
-        for server in self._server_list:
-            await server.wait_closed()
+        if self._server:
+            self._server.close()
+            await self._server.wait_closed()
 
         # until connections close
         logging.info("Waiting for connections to close. (CTRL+C to force quit)")
@@ -270,7 +262,7 @@ class Server(object):
     async def _conn_handle(self, conn: ServerConnection) -> None:
         sender: Sender = Sender(conn, self._timeout, processor_list=self._processor_list)
         receiver: Receiver = Receiver(
-            self,
+            self,  # type: ignore
             conn,
             self._run_timeout,
             sender,

@@ -33,7 +33,6 @@ async def ssl_server() -> AsyncGenerator[Server, None]:
         ssl_crt_path="./tests/rap_ssl.crt",
         ssl_key_path="./tests/rap_ssl.key",
     )
-    rpc_server.bind()
     rpc_server.register(_sync_sum, "sync_sum")
     await rpc_server.create_server()
     yield rpc_server

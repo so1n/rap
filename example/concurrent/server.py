@@ -27,7 +27,6 @@ if __name__ == "__main__":
 
     loop = asyncio.new_event_loop()
     rpc_server = Server("example")
-    rpc_server.bind()
     rpc_server.register(sync_sum)
     rpc_server.register(async_sum)
     rpc_server.register(async_gen)
