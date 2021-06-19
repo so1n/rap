@@ -26,7 +26,6 @@ async def async_channel(channel: Channel) -> None:
 
 def create_server(server_name: str) -> Server:
     rpc_server: Server = Server(server_name)
-    rpc_server.bind()
     rpc_server.register(sync_sum)
     rpc_server.register(async_sum)
     rpc_server.register(async_gen)

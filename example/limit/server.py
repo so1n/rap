@@ -40,7 +40,6 @@ if __name__ == "__main__":
     loop = asyncio.new_event_loop()
     redis: StrictRedis = StrictRedis.from_url("redis://localhost")
     rpc_server = Server("example")
-    rpc_server.bind()
     rpc_server.register(demo)
     rpc_server.register(demo1)
     limit_processor = limit.LimitProcessor(

@@ -22,6 +22,5 @@ if __name__ == "__main__":
         ssl_crt_path="./rap_ssl.crt",
         ssl_key_path="./rap_ssl.key",
     )
-    rpc_server.bind()
     rpc_server.register(async_sum)
     loop.run_until_complete(rpc_server.run_forever())

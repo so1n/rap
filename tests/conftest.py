@@ -65,9 +65,6 @@ async def rap_server() -> AsyncGenerator[Server, None]:
         return 1 / 0
 
     rpc_server = Server("test", ping_sleep_time=1)
-    rpc_server.bind()
-    rpc_server.bind(port=9001)
-    rpc_server.bind(port=9002)
     rpc_server.register(_sync_sum, "sync_sum")
     rpc_server.register(_async_sum, "async_sum")
     rpc_server.register(_async_gen, "async_gen")

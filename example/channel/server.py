@@ -52,13 +52,25 @@ if __name__ == "__main__":
 
     loop = asyncio.new_event_loop()
     redis: StrictRedis = StrictRedis.from_url("redis://localhost")
-    rpc_server = Server("example")
-    rpc_server.bind()
-    rpc_server.bind(port=9001)
-    rpc_server.bind(port=9002)
-    rpc_server.load_processor([CryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])
-    rpc_server.register(async_channel)
-    rpc_server.register(echo_body)
-    rpc_server.register(echo_response)
+    rpc_server_1: Server = Server("example")
+    rpc_server_1.load_processor([CryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])
+    rpc_server_1.register(async_channel)
+    rpc_server_1.register(echo_body)
+    rpc_server_1.register(echo_response)
 
-    loop.run_until_complete(rpc_server.run_forever())
+    rpc_server_2: Server = Server("example", port=9001)
+    rpc_server_2.load_processor([CryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])
+    rpc_server_2.register(async_channel)
+    rpc_server_2.register(echo_body)
+    rpc_server_2.register(echo_response)
+
+    rpc_server_3: Server = Server("example", port=9002)
+    rpc_server_3.load_processor([CryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])
+    rpc_server_3.register(async_channel)
+    rpc_server_3.register(echo_body)
+    rpc_server_3.register(echo_response)
+
+    async def run_forever() -> None:
+        await asyncio.gather(*[rpc_server_1.run_forever(), rpc_server_2.run_forever(), rpc_server_3.run_forever()])
+
+    loop.run_until_complete(run_forever())
