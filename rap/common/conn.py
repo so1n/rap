@@ -6,7 +6,7 @@ from typing import Any, Optional, Tuple
 
 import msgpack  # type: ignore
 
-from rap.common.types import BASE_RESPONSE_TYPE, READER_TYPE, UNPACKER_TYPE, WRITER_TYPE
+from rap.common.types import BASE_MSG_TYPE, MSG_TYPE, READER_TYPE, UNPACKER_TYPE, WRITER_TYPE
 from rap.common.utils import Constant
 
 __all__ = ["Connection", "ServerConnection"]
@@ -20,19 +20,25 @@ class BaseConnection:
         self._unpacker: UNPACKER_TYPE = msgpack.Unpacker(raw=False, use_list=False)
         self._reader: Optional[READER_TYPE] = None
         self._writer: Optional[WRITER_TYPE] = None
+        self._msg_id: int = random.randrange(65535)
 
         self.conn_future: asyncio.Future = asyncio.Future()
         self.peer_tuple: Tuple[str, int] = ("", -1)
         self.sock_tuple: Tuple[str, int] = ("", -1)
 
-    async def write(self, data: tuple) -> None:
+    async def write(self, data: MSG_TYPE) -> int:
         if not self._writer or self._is_closed:
             raise ConnectionError("connection has not been created")
-        logging.debug("write %s to %s", data, self.peer_tuple)
-        self._writer.write(msgpack.packb(data, **self._pack_param))
+        msg_id: int = self._msg_id + 1
+        # Avoid too big numbers
+        self._msg_id = msg_id & 65535
+        new_data: tuple = (msg_id, *data)
+        logging.debug("write %s to %s", new_data, self.peer_tuple)
+        self._writer.write(msgpack.packb(new_data, **self._pack_param))
         await self._writer.drain()
+        return msg_id
 
-    async def read(self, timeout: Optional[int] = None) -> Optional[BASE_RESPONSE_TYPE]:
+    async def read(self, timeout: Optional[int] = None) -> Optional[BASE_MSG_TYPE]:
         if not self._reader or self._is_closed:
             raise ConnectionError("connection has not been created")
         try:

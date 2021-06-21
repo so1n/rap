@@ -3,7 +3,7 @@ from typing import Any
 
 from rap.common.conn import Connection
 from rap.common.event import Event
-from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
+from rap.common.types import BASE_MSG_TYPE, MSG_TYPE
 from rap.common.utils import Constant
 
 
@@ -14,10 +14,9 @@ class Request(object):
     body: Any
     group: str = ""
     header: dict = field(default_factory=lambda: dict())
-    msg_id: int = -1
 
-    def to_msg(self) -> BASE_REQUEST_TYPE:
-        return self.num, self.msg_id, self.group, self.func_name, self.header, self.body
+    def to_msg(self) -> MSG_TYPE:
+        return self.num, self.group, self.func_name, self.header, self.body
 
     @classmethod
     def from_event(cls, event: Event) -> "Request":
@@ -27,13 +26,13 @@ class Request(object):
 @dataclass()
 class Response(object):
     conn: Connection
-    num: int
     msg_id: int
+    num: int
     group: str
     func_name: str
     header: dict
     body: Any
 
     @classmethod
-    def from_msg(cls, conn: Connection, msg: BASE_RESPONSE_TYPE) -> "Response":
+    def from_msg(cls, conn: Connection, msg: BASE_MSG_TYPE) -> "Response":
         return cls(conn, *msg)

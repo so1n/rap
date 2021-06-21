@@ -73,14 +73,6 @@ class TestServerConnHandle:
         with pytest.raises(ServerError):
             await rap_client.raw_call("sync_sum", [1, 2])
 
-    async def test_receive_none_msg(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
-        mocker.patch("rap.client.model.Request.to_msg").return_value = None
-        with pytest.raises(ConnectionError) as e:
-            await rap_client.raw_call("sync_sum", [1, 2])
-
-        exec_msg = e.value.args[0]
-        assert exec_msg == "recv close conn event, event info:request is empty"
-
     async def test_receive_error_msg(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
         mocker.patch("rap.server.model.Request.from_msg").side_effect = Exception()
         with pytest.raises(ConnectionError) as e:
@@ -105,7 +97,7 @@ class TestRequestHandle:
     async def test_request_dispatch_not_found(
         self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
-        mocker.patch("rap.client.model.Request.to_msg").return_value = (-1, -1, "default", "", {}, None)
+        mocker.patch("rap.client.model.Request.to_msg").return_value = (-1, "default", "", {}, None)
         # self.num, msg_id, self.group, self.func_name, self.header, self.body
 
         with pytest.raises(ServerError) as e:

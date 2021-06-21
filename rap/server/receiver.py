@@ -150,12 +150,12 @@ class Receiver(object):
         # gen response object
         response: "Response" = Response(
             num=response_num,
-            msg_id=request.msg_id,
             group=request.group,
             func_name=request.func_name,
             stats=request.stats,
         )
         response.header.update(request.header)
+        response.header["correlation-id"] = request.msg_id
 
         # check type_id
         if response.num is Constant.SERVER_ERROR_RESPONSE:
@@ -228,7 +228,6 @@ class Receiver(object):
                 await self.sender(
                     Response(
                         num=Constant.CHANNEL_RESPONSE,
-                        msg_id=-1,
                         group=response.group,
                         func_name=response.func_name,
                         header=header,

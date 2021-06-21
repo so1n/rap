@@ -9,9 +9,10 @@ def _f(*args: Any, **kwargs: Any) -> None:
     pass
 
 
-# request num, msg id, group, func name, header, body
-BASE_REQUEST_TYPE = Tuple[int, int, str, str, dict, Any]
-BASE_RESPONSE_TYPE = Tuple[int, int, str, str, dict, Any]
+# request num, group, func name, header, body
+MSG_TYPE = Tuple[int, str, str, dict, Any]
+# msg id, request num, group, func name, header, body
+BASE_MSG_TYPE = Tuple[int, int, str, str, dict, Any]
 LOOP_TYPE = asyncio.get_event_loop
 READER_TYPE = asyncio.streams.StreamReader
 WRITER_TYPE = asyncio.streams.StreamWriter

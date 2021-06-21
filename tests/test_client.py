@@ -109,8 +109,8 @@ class TestTransport:
         await self._read_helper(
             mocker,
             (
-                203,
                 -1,
+                203,
                 "default",
                 "facker",
                 {
@@ -129,8 +129,8 @@ class TestTransport:
         await self._read_helper(
             mocker,
             (
-                202,
                 -1,
+                202,
                 "default",
                 "faker",
                 {
@@ -150,8 +150,8 @@ class TestTransport:
         await self._read_helper(
             mocker,
             (
-                202,
                 -1,
+                202,
                 "default",
                 "faker",
                 {
@@ -175,8 +175,8 @@ class TestTransport:
             Response.from_msg(
                 rap_client.get_conn(),
                 (
-                    202,
                     -1,
+                    202,
                     "default",
                     "faker",
                     {
@@ -210,8 +210,8 @@ class TestTransport:
             Response.from_msg(
                 rap_client.get_conn(),
                 (
-                    201,
                     29759,
+                    201,
                     "default",
                     "raise_msg_exc",
                     {
