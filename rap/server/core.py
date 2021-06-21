@@ -12,7 +12,7 @@ from rap.common import event
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import ServerError
 from rap.common.state import WindowState
-from rap.common.types import BASE_REQUEST_TYPE, READER_TYPE, WRITER_TYPE
+from rap.common.types import BASE_MSG_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utils import RapFunc
 from rap.server.context import rap_context
 from rap.server.model import Request, Response
@@ -272,7 +272,7 @@ class Server(object):
             processor_list=self._processor_list,
         )
 
-        async def recv_msg_handle(_request_msg: Optional[BASE_REQUEST_TYPE]) -> None:
+        async def recv_msg_handle(_request_msg: Optional[BASE_MSG_TYPE]) -> None:
             if _request_msg is None:
                 await sender.send_event(event.CloseConnEvent("request is empty"))
                 return
@@ -296,7 +296,7 @@ class Server(object):
 
         while not conn.is_closed():
             try:
-                request_msg: Optional[BASE_REQUEST_TYPE] = await conn.read(self._keep_alive)
+                request_msg: Optional[BASE_MSG_TYPE] = await conn.read(self._keep_alive)
                 # create future handle msg
                 asyncio.ensure_future(recv_msg_handle(request_msg))
             except asyncio.TimeoutError:

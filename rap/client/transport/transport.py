@@ -13,7 +13,7 @@ from rap.common import event
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError, RPCError
-from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
+from rap.common.types import BASE_MSG_TYPE
 from rap.common.utils import Constant, as_first_completed
 
 __all__ = ["Transport"]
@@ -77,7 +77,7 @@ class Transport(object):
             logging.error(str(exc))
             return
 
-        resp_future_id: str = f"{conn.sock_tuple}:{response.msg_id}"
+        resp_future_id: str = f"{conn.sock_tuple}:{response.header.get('correlation-id')}"
         channel_id: Optional[str] = response.header.get("channel_id")
         status_code: int = response.header.get("status_code", 500)
 
@@ -146,7 +146,7 @@ class Transport(object):
     async def _read_from_conn(self, conn: Connection) -> Tuple[Optional[Response], Optional[Exception]]:
         """recv server msg handle"""
         try:
-            response_msg: Optional[BASE_RESPONSE_TYPE] = await conn.read(self._keep_alive_time)
+            response_msg: Optional[BASE_MSG_TYPE] = await conn.read(self._keep_alive_time)
             logging.debug(f"recv raw data: %s", response_msg)
         except asyncio.TimeoutError as e:
             logging.error(f"recv response from {conn.connection_info} timeout")
@@ -233,27 +233,21 @@ class Transport(object):
         """write_to_conn msg to conn"""
         request.header["host"] = conn.peer_tuple
 
-        async def _write(_request: Request) -> None:
+        async def _write(_request: Request) -> int:
             self.before_write_handle(_request)
-            msg_id: int = self._msg_id + 1
-            request.msg_id = msg_id
-            # Avoid too big numbers
-            self._msg_id = msg_id & 65535
 
             for process_request in self._process_request_list:
                 _request = await process_request(_request)
 
-            request_msg: BASE_REQUEST_TYPE = _request.to_msg()
-            await conn.write(request_msg)  # type: ignore
+            return await conn.write(_request.to_msg())  # type: ignore
 
         if request.num == Constant.CHANNEL_REQUEST:
             if "channel_id" not in request.header:
                 raise ChannelError("not found channel id in header")
             await _write(request)
         else:
-            await _write(request)
-            if request.msg_id != -1:
-                return f"{conn.sock_tuple}:{request.msg_id}"
+            msg_id: int = await _write(request)
+            return f"{conn.sock_tuple}:{msg_id}"
         return None
 
     ######################

@@ -6,15 +6,15 @@ from rap.common.conn import ServerConnection
 from rap.common.event import Event
 from rap.common.exceptions import BaseRapError, ServerError
 from rap.common.state import State
-from rap.common.types import BASE_REQUEST_TYPE, BASE_RESPONSE_TYPE
+from rap.common.types import BASE_MSG_TYPE, MSG_TYPE
 from rap.common.utils import Constant
 
 
 @dataclass()
 class Request(object):
     conn: ServerConnection
-    num: int
     msg_id: int
+    num: int
     group: str
     func_name: str
     header: dict
@@ -22,14 +22,13 @@ class Request(object):
     stats: "State" = State()
 
     @classmethod
-    def from_msg(cls, msg: BASE_REQUEST_TYPE, conn: ServerConnection) -> "Request":
+    def from_msg(cls, msg: BASE_MSG_TYPE, conn: ServerConnection) -> "Request":
         return cls(conn, *msg)
 
 
 @dataclass()
 class Response(object):
     num: int = Constant.MSG_RESPONSE
-    msg_id: int = -1
     group: str = Constant.DEFAULT_GROUP
     func_name: str = ""
     header: dict = field(default_factory=lambda: {"status_code": 200})
@@ -68,8 +67,8 @@ class Response(object):
         response.set_event(event)
         return response
 
-    def to_msg(self) -> BASE_RESPONSE_TYPE:
-        return self.num, self.msg_id, self.group, self.func_name, self.header, self.body
+    def to_msg(self) -> MSG_TYPE:
+        return self.num, self.group, self.func_name, self.header, self.body
 
     def __call__(self, content: Any) -> None:
         if isinstance(content, Exception):
