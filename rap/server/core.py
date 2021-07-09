@@ -14,7 +14,7 @@ from rap.common.exceptions import ServerError
 from rap.common.state import WindowState
 from rap.common.types import BASE_MSG_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utils import RapFunc
-from rap.server.context import rap_context
+from rap.server.context import context
 from rap.server.model import Request, Response
 from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware
 from rap.server.plugin.processor.base import BaseProcessor
@@ -284,15 +284,14 @@ class Server(object):
                 await conn.await_close()
                 return
 
-            token: Token = rap_context.set({"request": request})
-            try:
-                response: Optional[Response] = await receiver.dispatch(request)
-                await sender(response)
-            except Exception as closer_e:
-                logging.exception(f"raw_request handle error e")
-                await sender.send_exc(ServerError(str(closer_e)))
-            finally:
-                rap_context.reset(token)
+            with context as c:
+                c.request = request
+                try:
+                    response: Optional[Response] = await receiver.dispatch(request)
+                    await sender(response)
+                except Exception as closer_e:
+                    logging.exception(f"raw_request handle error e")
+                    await sender.send_exc(ServerError(str(closer_e)))
 
         while not conn.is_closed():
             try:
