@@ -1,5 +1,5 @@
 import ipaddress
-from typing import List, Optional, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional, Union
 
 from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
