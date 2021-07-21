@@ -96,7 +96,8 @@ class BaseEndpoint(object):
             await self._conn_dict[key].await_close()
 
         self._host_weight_list = [i for i in self._host_weight_list if i != key]
-        del self._conn_dict[key]
+        if key in self._conn_dict:
+            del self._conn_dict[key]
 
     async def start(self) -> None:
         raise NotImplementedError
@@ -110,7 +111,7 @@ class BaseEndpoint(object):
         self._conn_dict = {}
 
     def get_conn(self) -> Connection:
-        raise NotImplementedError
+        pass
 
     def get_conn_list(self, cnt: Optional[int] = None) -> List[Connection]:
         if not cnt:
