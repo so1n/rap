@@ -6,11 +6,15 @@ from typing import Any, AsyncGenerator, Callable, List, Optional
 
 from etcd3 import AioClient
 from etcd3.models import EventEventType
+from mypy_extensions import TypedDict
+
+from .bass import BaseCoordinator
 
 logger: logging.Logger = logging.getLogger()
+ETCD_EVENT_VALUE_DICT_TYPE = TypedDict("ETCD_EVENT_VALUE_DICT_TYPE", {"key": str, "value": dict})
 
 
-class Etcd(object):
+class EtcdClient(BaseCoordinator):
     """TODO replace etcd client"""
 
     def __init__(
@@ -59,11 +63,19 @@ class Etcd(object):
 
     async def discovery(self, server_name: str) -> AsyncGenerator[dict, Any]:
         key: str = f"{self.namespace}/{server_name}"
-        resp = await self._client.range(key, prefix=True)
-        for item in resp.kvs:
-            yield json.loads(item.value.decode())
+        resp: Any = await self._client.range(key, prefix=True)
+        if not resp.kvs:
+            return
+        else:
+            for item in resp.kvs:
+                yield json.loads(item.value.decode())
 
-    async def watch(self, server_name: str, put_callback: List[Callable], del_callback: List[Callable]) -> None:
+    async def watch(
+        self,
+        server_name: str,
+        put_callback: List[Callable[[ETCD_EVENT_VALUE_DICT_TYPE], Any]],
+        del_callback: List[Callable[[ETCD_EVENT_VALUE_DICT_TYPE], Any]],
+    ) -> None:
         """etcd.AioClient not implemented api"""
         key: str = f"{self.namespace}/{server_name}"
         async for i in self._client.watch_create(key, prefix=True):
@@ -71,15 +83,21 @@ class Etcd(object):
             if "events" in resp_dict:
                 for event in resp_dict["events"]:
                     event_type = event.get("type", EventEventType.PUT)
-                    run_callback: Optional[List[Callable]] = []
                     if event_type == EventEventType.PUT:
-                        run_callback = put_callback
+                        run_callback: List[Callable] = put_callback
+                        etcd_value_dict: ETCD_EVENT_VALUE_DICT_TYPE = {
+                            "key": event["kv"]["key"].decode(),
+                            "value": json.loads(event["kv"]["value"].decode()),
+                        }
                     elif event_type == EventEventType.DELETE:
                         run_callback = del_callback
+                        etcd_value_dict = {"key": event["kv"]["key"].decode(), "value": {}}
+                    else:
+                        continue
 
                     for fn in run_callback:
-                        ret = fn(event)
+                        ret = fn(etcd_value_dict)
                         if inspect.iscoroutine(ret):
                             await ret
             elif "created" in resp_dict:
-                logging.info("watch success")
+                logging.info(f"watch {key} success")

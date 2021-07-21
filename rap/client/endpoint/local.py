@@ -1,7 +1,6 @@
 from typing import List, Optional
 
 from rap.client.endpoint.base import BaseEndpoint, SelectConnEnum
-from rap.common.conn import Connection
 
 
 class LocalEndpoint(BaseEndpoint):
@@ -22,9 +21,6 @@ class LocalEndpoint(BaseEndpoint):
         """
         self._conn_list: List[dict] = conn_list
         super().__init__(server_name, timeout, ssl_crt_path, select_conn_method)
-
-    def get_conn(self) -> Connection:
-        raise NotImplementedError
 
     async def start(self) -> None:
         if not self.is_close:

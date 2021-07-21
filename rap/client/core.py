@@ -1,10 +1,9 @@
-import importlib
 import inspect
 import sys
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type
+from typing import Any, Callable, Dict, List, Optional, Sequence, Type
 
-from rap.client.endpoint import BaseEndpoint, LocalEndpoint
+from rap.client.endpoint import BaseEndpoint, LocalEndpoint, SelectConnEnum
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.transport.channel import Channel
@@ -14,7 +13,7 @@ from rap.common.conn import Connection
 from rap.common.types import is_type
 from rap.common.utils import RapFunc, check_func_type
 
-__all__ = ["Client"]
+__all__ = ["BaseEndpoint", "Client"]
 CHANNEL_F = Callable[[Channel], Any]
 
 
@@ -68,31 +67,12 @@ class AsyncIteratorCall:
 
 
 class BaseClient:
-    def __init__(
-        self,
-        endpoint: BaseEndpoint,
-        timeout: int = 9,
-        keep_alive_time: int = 1200,
-    ):
-        """
-        host_list:
-         server host
-         example value: ['127.0.0.1:9000', '127.0.0.1:9001']
-        timeout:
-         send msg timeout
-        keep_alive_time
-         recv msg timeout
-        ssl_crt_path:
-         ssl.crt  path
-         example value: "./rap_ssl.crt"
-        """
-        self.transport: Transport = Transport(
-            read_timeout=timeout,
-            keep_alive_time=keep_alive_time,
-        )
-        endpoint.set_transport(self.transport)
+    def __init__(self, endpoint: BaseEndpoint, timeout: int = 9, keep_alive_time: int = 1200):
+        self.transport: Transport = Transport(read_timeout=timeout, keep_alive_time=keep_alive_time)
         self._endpoint: BaseEndpoint = endpoint
         self._processor_list: List[BaseProcessor] = []
+
+        self._endpoint.set_transport(self.transport)
 
     ##################
     # start& close #
@@ -313,9 +293,16 @@ class Client(BaseClient):
         timeout: int = 9,
         keep_alive_time: int = 1200,
         ssl_crt_path: Optional[str] = None,
+        select_conn_method: SelectConnEnum = SelectConnEnum.random,
     ):
         super().__init__(
-            LocalEndpoint(server_name, conn_list, ssl_crt_path=ssl_crt_path),
+            LocalEndpoint(
+                server_name,
+                conn_list,
+                ssl_crt_path=ssl_crt_path,
+                timeout=timeout,
+                select_conn_method=select_conn_method,
+            ),
             timeout,
             keep_alive_time,
         )

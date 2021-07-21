@@ -1,2 +1,2 @@
-from .base import BaseEndpoint
+from .base import BaseEndpoint, SelectConnEnum
 from .local import LocalEndpoint

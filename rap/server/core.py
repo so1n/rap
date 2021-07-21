@@ -5,7 +5,6 @@ import signal
 import ssl
 import threading
 import time
-from contextvars import Token
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Type
 
 from rap.common import event
