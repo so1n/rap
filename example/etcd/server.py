@@ -13,9 +13,9 @@ async def main() -> None:
     etcd_client: EtcdClient = EtcdClient()
     rpc_server = Server("example")
     rpc_server.register(async_sum)
-    await etcd_client.register(rpc_server.server_name, rpc_server._local_ip, str(rpc_server._port))
+    await etcd_client.register(rpc_server.server_name, rpc_server.host, str(rpc_server.port))
     await rpc_server.run_forever()
-    await etcd_client.deregister(rpc_server.server_name, rpc_server._local_ip, str(rpc_server._port))
+    await etcd_client.deregister(rpc_server.server_name, rpc_server.host, str(rpc_server.port))
 
 
 if __name__ == "__main__":

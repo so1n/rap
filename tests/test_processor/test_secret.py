@@ -133,7 +133,7 @@ class TestServerCryptoProcess:
         rap_client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
         middleware: ServerCryptoProcessor = ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis)
         rap_server.load_processor([middleware])
-        middleware.start_event_handle()
+        middleware.start_event_handle(rap_server)
 
         await rap_client.raw_call("modify_crypto_timeout", [10], group=middleware.__class__.__name__)
         assert middleware._timeout == 10

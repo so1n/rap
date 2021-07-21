@@ -42,7 +42,7 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
 
     def start_event_handle(self) -> None:
         if self._fuse_window_state.is_closed:
-            self._fuse_window_state.change_state()
+            self._fuse_window_state.change_state(None)
 
     def stop_event_handle(self) -> None:
         if not self._fuse_window_state.is_closed:

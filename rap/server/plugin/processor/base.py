@@ -14,10 +14,10 @@ class BaseProcessor(object):
 
     app: "Server"
 
-    def start_event_handle(self) -> None:
+    def start_event_handle(self, app: "Server") -> None:
         pass
 
-    def stop_event_handle(self) -> None:
+    def stop_event_handle(self, app: "Server") -> None:
         pass
 
     def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None) -> None:

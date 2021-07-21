@@ -149,7 +149,7 @@ class WindowState(object):
     def close(self) -> None:
         self._is_closed = True
 
-    def change_state(self) -> None:
+    def change_state(self, app: Any) -> None:
         if self._is_closed:
             if not self._loop:
                 self._loop = get_event_loop()

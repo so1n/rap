@@ -18,10 +18,10 @@ redis: StrictRedis = StrictRedis.from_url("redis://localhost")
 
 class TestServerEvent:
     def test_load_event_by_init(self) -> None:
-        async def demo_start_event() -> None:
+        async def demo_start_event(app: Server) -> None:
             pass
 
-        async def demo_stop_event() -> None:
+        async def demo_stop_event(app: Server) -> None:
             pass
 
         rap_server: Server = Server("test", start_event_list=[demo_start_event], stop_event_list=[demo_stop_event])
@@ -34,7 +34,7 @@ class TestServerEvent:
             Server("test", start_event_list=["111"])  # type: ignore
 
     def test_repeat_error_event(self) -> None:
-        async def demo_start_event() -> None:
+        async def demo_start_event(app: Server) -> None:
             pass
 
         rap_server: Server = Server("test", start_event_list=[demo_start_event])
