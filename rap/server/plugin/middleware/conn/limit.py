@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Dict, Union
+from typing import Dict, Union, TYPE_CHECKING
 
 from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
@@ -9,6 +9,9 @@ from rap.common.event import CloseConnEvent
 from rap.common.utils import Constant
 from rap.server.plugin.middleware.base import BaseConnMiddleware
 from rap.server.sender import Sender
+
+if TYPE_CHECKING:
+    from rap.server.core import Server
 
 
 class ConnLimitMiddleware(BaseConnMiddleware):
@@ -22,7 +25,7 @@ class ConnLimitMiddleware(BaseConnMiddleware):
         self._block_time: int = block_time
         self._release_timestamp: int = int(time.time())
 
-    def start_event_handle(self) -> None:
+    def start_event_handle(self, app: "Server") -> None:
         self.register(self._get_conn_limit_info)
         self.register(self._modify_max_conn)
         self.register(self._modify_release_timestamp)
@@ -78,7 +81,7 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
         if namespace:
             self._key = f"{namespace}:{self._key}"
 
-    def start_event_handle(self) -> None:
+    def start_event_handle(self, app: "Server") -> None:
         async def _add_data_to_state(state_dict: dict) -> None:
             key: str = self.__class__.__name__
             state_dict[f"{key}:conn_cnt"] = int(await self._redis.get(key))

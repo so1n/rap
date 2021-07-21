@@ -23,10 +23,10 @@ class BaseMiddleware(object):
             name = func.__name__.strip("_")
         self.app.register(func, name=name, group=group, is_private=True)
 
-    def start_event_handle(self) -> Any:
+    def start_event_handle(self, app: "Server") -> Any:
         pass
 
-    def stop_event_handle(self) -> Any:
+    def stop_event_handle(self, app: "Server") -> Any:
         pass
 
     def load_sub_middleware(self, call_next: "Union[Callable, BaseMiddleware]") -> None:

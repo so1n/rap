@@ -22,13 +22,14 @@ from rap.server.registry import RegistryManager
 from rap.server.sender import Sender
 
 __all__ = ["Server"]
+EVENT_FN = Callable[["Server"], Any]
 
 
 class Server(object):
     def __init__(
         self,
         server_name: str,
-        local_ip: str = "localhost",
+        host: str = "localhost",
         port: int = 9000,
         timeout: int = 9,
         keep_alive: int = 1200,
@@ -39,15 +40,15 @@ class Server(object):
         close_timeout: int = 9,
         ssl_crt_path: Optional[str] = None,
         ssl_key_path: Optional[str] = None,
-        start_event_list: List[Callable] = None,
-        stop_event_list: List[Callable] = None,
+        start_event_list: List[EVENT_FN] = None,
+        stop_event_list: List[EVENT_FN] = None,
         middleware_list: List[BaseMiddleware] = None,
         processor_list: List[BaseProcessor] = None,
         window_state: Optional[WindowState] = None,
     ):
         self.server_name: str = server_name
-        self._local_ip: str = local_ip
-        self._port: int = port
+        self.host: str = host
+        self.port: int = port
         self._timeout: int = timeout
         self._run_timeout: int = run_timeout
         self._close_timeout: int = close_timeout
@@ -87,7 +88,7 @@ class Server(object):
         if self.window_state and self.window_state.is_closed:
             self.load_start_event([self.window_state.change_state])
 
-    def _load_event(self, event_list: List[Callable], _event: Callable) -> None:
+    def _load_event(self, event_list: List[EVENT_FN], _event: EVENT_FN) -> None:
         if not (inspect.isfunction(_event) or asyncio.iscoroutine(_event) or inspect.ismethod(_event)):
             raise ImportError(f"{_event} must be fun or coroutine, not {type(_event)}")
 
@@ -97,11 +98,11 @@ class Server(object):
             raise ImportError(f"{_event} event already load")
         event_list.append(_event)
 
-    def load_start_event(self, event_list: List[Callable]) -> None:
+    def load_start_event(self, event_list: List[EVENT_FN]) -> None:
         for start_event in event_list:
             self._load_event(self._start_event_list, start_event)
 
-    def load_stop_event(self, event_list: List[Callable]) -> None:
+    def load_stop_event(self, event_list: List[EVENT_FN]) -> None:
         for stop_event in event_list:
             self._load_event(self._stop_event_list, stop_event)
 
@@ -168,24 +169,22 @@ class Server(object):
     def is_closed(self) -> bool:
         return self._run_event.is_set()
 
-    @staticmethod
-    async def run_callback_list(callback_list: List[Callable]) -> None:
+    async def run_event_list(self, callback_list: List[Callable]) -> None:
         if not callback_list:
             return
         for callback in callback_list:
-            if asyncio.iscoroutine(callback) or asyncio.isfuture(callback) or asyncio.iscoroutinefunction(callback):
-                await callback()
-            else:
-                callback()
+            ret: Any = callback(self)
+            if asyncio.iscoroutine(ret):
+                await ret
 
     async def create_server(self) -> "Server":
         if not self.is_closed:
             raise RuntimeError("Server status is running...")
-        await self.run_callback_list(self._start_event_list)
+        await self.run_event_list(self._start_event_list)
         self._server = await asyncio.start_server(
-            self.conn_handle, self._local_ip, self._port, ssl=self._ssl_context, backlog=self._backlog
+            self.conn_handle, self.host, self.port, ssl=self._ssl_context, backlog=self._backlog
         )
-        logging.info(f"server running on {self._local_ip}:{self._port}. use ssl:{bool(self._ssl_context)}")
+        logging.info(f"server running on {self.host}:{self.port}. use ssl:{bool(self._ssl_context)}")
 
         # fix different loop event
         self._run_event.clear()
@@ -243,7 +242,7 @@ class Server(object):
         while self._connected_set and close_timestamp > int(time.time()):
             await asyncio.sleep(0.1)
 
-        await self.run_callback_list(self._stop_event_list)
+        await self.run_event_list(self._stop_event_list)
         self._run_event.set()
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE) -> None:

@@ -1,13 +1,15 @@
 import ipaddress
-from typing import List, Optional, Union
+from typing import List, Optional, Union, TYPE_CHECKING
 
 from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
 from rap.common.conn import ServerConnection
 from rap.common.event import CloseConnEvent
-from rap.common.utils import Constant
 from rap.server.plugin.middleware.base import BaseConnMiddleware
 from rap.server.sender import Sender
+
+if TYPE_CHECKING:
+    from rap.server.core import Server
 
 
 class IpBlockMiddleware(BaseConnMiddleware):
@@ -35,7 +37,7 @@ class IpBlockMiddleware(BaseConnMiddleware):
         self._allow_ip_list: List[str] = allow_ip_list if allow_ip_list else []
         self._block_ip_list: List[str] = block_ip_list if block_ip_list else []
 
-    async def start_event_handle(self) -> None:
+    async def start_event_handle(self, app: "Server") -> None:
         async def _add_data_to_state(state_dict: dict) -> None:
             state_dict[f"{self.__class__.__name__}:block_cnt"] = self.block_cnt
 

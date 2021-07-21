@@ -1,5 +1,5 @@
 import time
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, TYPE_CHECKING
 
 from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
@@ -8,6 +8,9 @@ from rap.common.exceptions import CryptoError, ParseError
 from rap.common.utils import Constant, gen_random_time_id
 from rap.server.model import Request, Response
 from rap.server.plugin.processor.base import BaseProcessor
+
+if TYPE_CHECKING:
+    from rap.server.core import Server
 
 
 class CryptoProcessor(BaseProcessor):
@@ -28,7 +31,7 @@ class CryptoProcessor(BaseProcessor):
 
         self.load_aes_key_dict(secret_dict)
 
-    def start_event_handle(self) -> None:
+    def start_event_handle(self, app: "Server") -> None:
         self.register(self.modify_crypto_timeout)
         self.register(self.modify_crypto_nonce_timeout)
 
