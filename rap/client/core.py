@@ -13,7 +13,7 @@ from rap.common.conn import Connection
 from rap.common.types import is_type
 from rap.common.utils import RapFunc, check_func_type
 
-__all__ = ["BaseEndpoint", "Client"]
+__all__ = ["BaseClient", "Client"]
 CHANNEL_F = Callable[[Channel], Any]
 
 

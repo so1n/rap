@@ -5,7 +5,7 @@ from rap.client.endpoint import SelectConnEnum
 from rap.client.endpoint.etcd import EtcdEndpoint
 
 
-class EClient(BaseClient):
+class Client(BaseClient):
     def __init__(
         self,
         server_name: str,

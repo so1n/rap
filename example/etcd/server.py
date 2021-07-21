@@ -1,7 +1,7 @@
 import asyncio
 
-from rap.common.coordinator import EtcdClient
 from rap.server import Server
+from rap.server.plugin.etcd import add_etcd_client
 
 
 async def async_sum(a: int, b: int) -> int:
@@ -10,12 +10,9 @@ async def async_sum(a: int, b: int) -> int:
 
 
 async def main() -> None:
-    etcd_client: EtcdClient = EtcdClient()
-    rpc_server = Server("example")
+    rpc_server: Server = Server("example")
     rpc_server.register(async_sum)
-    await etcd_client.register(rpc_server.server_name, rpc_server.host, str(rpc_server.port))
-    await rpc_server.run_forever()
-    await etcd_client.deregister(rpc_server.server_name, rpc_server.host, str(rpc_server.port))
+    await add_etcd_client(rpc_server).run_forever()
 
 
 if __name__ == "__main__":

@@ -1,8 +1,8 @@
 import asyncio
 
-from rap.client.extend_client.etcd import EClient
+from rap.client.extend_client.etcd import Client
 
-client: EClient = EClient("example")
+client: Client = Client("example")
 
 
 # in register, must use async def...
