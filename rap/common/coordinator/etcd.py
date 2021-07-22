@@ -45,14 +45,15 @@ class EtcdClient(BaseCoordinator):
         await self._client.close()
 
     async def _heartbeat(self) -> None:
-        logger.debug(f"heartbeat by etcd, id: {self._lease_id}")
-        try:
-            await self._client.lease_keep_alive(b'{"ID":%d}\n' % self._lease_id).resp
-            await asyncio.sleep(self._ttl // 2)
-        finally:
-            await asyncio.sleep(min(5, self._ttl // 2))
-            pass
-        asyncio.ensure_future(self._heartbeat())
+        while True:
+            logger.debug(f"heartbeat by etcd, id: {self._lease_id}")
+            try:
+                await self._client.lease_keep_alive(b'{"ID":%d}\n' % self._lease_id).resp
+                await asyncio.sleep(self._ttl // 2)
+            except Exception as e:
+                logger.exception(f"heartbeat id:{self._lease_id}. error:{e}")
+            finally:
+                await asyncio.sleep(min(5, self._ttl // 2))
 
     async def register(self, server_name: str, host: str, port: str, weight: int) -> None:
         key: str = f"{self.namespace}/{server_name}/{host}/{port}"

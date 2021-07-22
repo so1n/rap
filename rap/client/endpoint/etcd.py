@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from rap.client.endpoint.base import BaseEndpoint, SelectConnEnum
-from rap.common.coordinator import ETCD_EVENT_VALUE_DICT_TYPE, EtcdClient
+from rap.common.coordinator.etcd import ETCD_EVENT_VALUE_DICT_TYPE, EtcdClient
 
 
 class EtcdEndpoint(BaseEndpoint):

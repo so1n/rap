@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Optional
 
-from rap.common.coordinator import EtcdClient
+from rap.common.coordinator.etcd import EtcdClient
 
 if TYPE_CHECKING:
     from rap.server import Server
