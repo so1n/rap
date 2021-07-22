@@ -1,7 +1,10 @@
-from typing import Any, AsyncGenerator, Callable, List
+from typing import Any, AsyncGenerator
 
 
 class BaseCoordinator(object):
+    async def stop(self) -> None:
+        pass
+
     async def register(self, server_name: str, host: str, port: str, weight: int) -> None:
         pass
 
@@ -10,6 +13,3 @@ class BaseCoordinator(object):
 
     async def discovery(self, server_name: str) -> AsyncGenerator[dict, Any]:
         yield {}
-
-    async def watch(self, server_name: str, put_callback: List[Callable], del_callback: List[Callable]) -> None:
-        pass
