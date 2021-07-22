@@ -8,6 +8,7 @@ if TYPE_CHECKING:
 
 def add_etcd_client(
     server: "Server",
+    weight: int = 10,
     host: str = "localhost",
     port: int = 2379,
     ttl: int = 60,
@@ -21,10 +22,11 @@ def add_etcd_client(
     )
 
     async def register(app: "Server") -> None:
-        await etcd_client.register(app.server_name, app.host, str(app.port))
+        await etcd_client.register(app.server_name, app.host, str(app.port), weight)
 
     async def deregister(app: "Server") -> None:
         await etcd_client.deregister(app.server_name, app.host, str(app.port))
+        await etcd_client.stop()
 
     server.load_start_event([register])
     server.load_stop_event([deregister])
