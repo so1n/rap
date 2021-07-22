@@ -44,7 +44,7 @@ class ConsulClient(BaseCoordinator):
         for service_id, future in self._heartbeat_future_dict.items():
             if not future.done() and not future.cancelled():
                 future.cancel()
-        await self._client.close()
+        self._client.close()
 
     async def _heartbeat(self, service_id: str) -> None:
         while True:
@@ -64,7 +64,6 @@ class ConsulClient(BaseCoordinator):
             service_id=service_id,
             address=host,
             port=int(port),
-            tags={"weight": weight},
             check=Check.ttl(f"{self._ttl}s"),
         )
         if service_id not in self._heartbeat_future_dict:
@@ -80,14 +79,17 @@ class ConsulClient(BaseCoordinator):
         for item in resp[1]:
             yield {"host": item["ServiceAddress"], "port": item["ServicePort"]}
 
-    async def watch(self, server_name: str) -> AsyncGenerator[List[Dict[str, str]], Any]:
+    async def watch(self, server_name: str) -> AsyncGenerator[Dict[str, Dict[str, Any]], Any]:
         index: Optional[str] = None
         while True:
             resp: Tuple[str, List[Dict[str, Any]]] = await self._client.catalog.service(
-                f"{self.namespace}/{server_name}", index=index
+                f"{self.namespace}/{server_name}", index=index, wait=f"{self._ttl}s"
             )
             index = resp[0]
-            yield [
-                {"host": item["ServiceAddress"], "port": item["ServicePort"]}
-                for item in resp[1]
-            ]
+
+            conn_dict: Dict[str, Dict] = {}
+            for item in resp[1]:
+                host: str = item["ServiceAddress"]
+                port: int = item["ServicePort"]
+                conn_dict[f"{host}_{port}"] = {"host": host, "port": port}
+            yield conn_dict
