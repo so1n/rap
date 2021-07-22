@@ -37,6 +37,13 @@ class EtcdClient(BaseCoordinator):
         self._lease_id: int = 0
         self._heartbeat_future: Optional[asyncio.Future] = None
 
+    async def stop(self) -> None:
+        if self._heartbeat_future and not self._heartbeat_future.done() and not self._heartbeat_future.cancelled():
+            self._heartbeat_future.cancel()
+        if self._lease_id:
+            await self._client.lease_revoke(self._lease_id)
+        await self._client.close()
+
     async def _heartbeat(self) -> None:
         logger.debug(f"heartbeat by etcd, id: {self._lease_id}")
         try:
@@ -47,9 +54,9 @@ class EtcdClient(BaseCoordinator):
             pass
         asyncio.ensure_future(self._heartbeat())
 
-    async def register(self, server_name: str, host: str, port: str) -> None:
+    async def register(self, server_name: str, host: str, port: str, weight: int) -> None:
         key: str = f"{self.namespace}/{server_name}/{host}/{port}"
-        value: str = json.dumps({"host": host, "port": port})
+        value: str = json.dumps({"host": host, "port": port, "weight": weight})
         if not self._heartbeat_future:
             resp = await self._client.lease_grant(self._ttl, self._lease_id)
             self._lease_id = resp.ID

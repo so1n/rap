@@ -2,7 +2,7 @@ from typing import Any, AsyncGenerator, Callable, List
 
 
 class BaseCoordinator(object):
-    async def register(self, server_name: str, host: str, port: str) -> None:
+    async def register(self, server_name: str, host: str, port: str, weight: int) -> None:
         pass
 
     async def deregister(self, server_name: str, host: str, port: str) -> None:
