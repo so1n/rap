@@ -311,24 +311,25 @@ rpc_server = Server(
 ```
 ## 3.5.event
 在服务端中支持`start_event`和`stop_event`分别用于启动之前和关闭之后的事件处理.
+
 ```Python
 from rap.server import Server
 
 
 async def mock_start():
-    print('start event')
+  print('start event')
 
 
-async def mock_stop(): 
-    print('stop event')
+async def mock_stop():
+  print('stop event')
 
 
 # 方法一
 server = Server(start_event_list=[mock_start()], stop_event_list=[mock_stop()])
 # 方法二
 server = Server()
-server.load_start_event([mock_start()])
-server.load_stop_event([mock_stop()])
+server.load_before_start_event([mock_start()])
+server.load_after_stop_event([mock_stop()])
 ```
 ## 3.6.中间件
 `rap`目前支持2种中间件:

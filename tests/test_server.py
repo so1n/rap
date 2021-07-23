@@ -8,6 +8,7 @@ from rap.client import Client
 from rap.common.exceptions import RpcRunTimeError, ServerError
 from rap.server import Server
 from rap.server.context import Context
+from rap.server.model import ServerEventEnum
 from rap.server.plugin.middleware.conn.limit import ConnLimitMiddleware
 from rap.server.plugin.processor import CryptoProcessor as ServerCryptoProcessor
 
@@ -18,28 +19,23 @@ redis: StrictRedis = StrictRedis.from_url("redis://localhost")
 
 class TestServerEvent:
     def test_load_event_by_init(self) -> None:
-        async def demo_start_event(app: Server) -> None:
+        async def demo_event(app: Server) -> None:
             pass
 
-        async def demo_stop_event(app: Server) -> None:
-            pass
-
-        rap_server: Server = Server("test", start_event_list=[demo_start_event], stop_event_list=[demo_stop_event])
-        assert rap_server._start_event_list[0] == demo_start_event
-        assert rap_server._stop_event_list[0] == demo_stop_event
-
-    def test_load_error_event(self) -> None:
-
-        with pytest.raises(ImportError):
-            Server("test", start_event_list=["111"])  # type: ignore
+        rap_server: Server = Server("test")
+        for key, value in ServerEventEnum.__members__.items():
+            rap_server.register_server_event(value, demo_event)
+            assert rap_server._server_event_dict[value][0] == demo_event
 
     def test_repeat_error_event(self) -> None:
-        async def demo_start_event(app: Server) -> None:
+        async def demo_event(app: Server) -> None:
             pass
 
-        rap_server: Server = Server("test", start_event_list=[demo_start_event])
-        with pytest.raises(ImportError):
-            rap_server.load_start_event([demo_start_event])
+        for key, value in ServerEventEnum.__members__.items():
+            rap_server: Server = Server("test")
+            rap_server.register_server_event(value, demo_event)
+            with pytest.raises(ImportError):
+                rap_server.register_server_event(value, demo_event)
 
 
 class TestServerMiddleware:

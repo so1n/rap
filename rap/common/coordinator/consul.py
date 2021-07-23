@@ -5,6 +5,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 from consul import Check
 from consul.aio import Consul
+
 from .bass import BaseCoordinator
 
 logger: logging.Logger = logging.getLogger()
@@ -15,27 +16,20 @@ class ConsulClient(BaseCoordinator):
         self,
         namespace: str = "rap",
         ttl: int = 10,
-        host: str = '127.0.0.1',
+        host: str = "127.0.0.1",
         port: int = 8500,
         token: Optional[str] = None,
-        scheme: str = 'http',
-        consistency: str = 'default',
+        scheme: str = "http",
+        consistency: str = "default",
         dc: Optional[str] = None,
         verify: bool = True,
-        cert: Optional[str] = None
+        cert: Optional[str] = None,
     ):
         self._ttl: int = ttl
         self.namespace: str = namespace
         self._heartbeat_future_dict: Dict[str, asyncio.Future] = {}
         self._client: Consul = Consul(
-            host=host,
-            port=port,
-            token=token,
-            scheme=scheme,
-            consistency=consistency,
-            dc=dc,
-            verify=verify,
-            cert=cert
+            host=host, port=port, token=token, scheme=scheme, consistency=consistency, dc=dc, verify=verify, cert=cert
         )
 
     async def stop(self) -> None:
@@ -83,7 +77,7 @@ class ConsulClient(BaseCoordinator):
             kv_resp: Tuple[str, List[Dict[str, Any]]] = await self._client.kv.get(
                 f"{item['ServiceID']}/{item['ServicePort']}"
             )
-            result_dict: dict = json.loads(kv_resp[1]["Value"].decode())
+            result_dict: dict = json.loads(kv_resp[1]["Value"].decode())  # type: ignore
             result_dict["host"] = item["ServiceAddress"]
             result_dict["port"] = item["ServicePort"]
             yield result_dict
@@ -103,7 +97,7 @@ class ConsulClient(BaseCoordinator):
                 kv_resp: Tuple[str, List[Dict[str, Any]]] = await self._client.kv.get(
                     f"{item['ServiceID']}/{item['ServicePort']}"
                 )
-                result_dict: dict = json.loads(kv_resp[1]["Value"].decode())
+                result_dict: dict = json.loads(kv_resp[1]["Value"].decode())  # type: ignore
                 result_dict["host"] = host
                 result_dict["port"] = port
                 conn_dict[f"{host}_{port}"] = result_dict

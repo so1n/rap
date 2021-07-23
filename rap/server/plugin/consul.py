@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Optional
 
 from rap.common.coordinator.consul import ConsulClient
+from rap.server.model import ServerEventEnum
 
 if TYPE_CHECKING:
     from rap.server import Server
@@ -11,14 +12,14 @@ def add_consul_client(
     weight: int = 10,
     namespace: str = "rap",
     ttl: int = 10,
-    host: str = '127.0.0.1',
+    host: str = "127.0.0.1",
     port: int = 8500,
     token: Optional[str] = None,
-    scheme: str = 'http',
-    consistency: str = 'default',
+    scheme: str = "http",
+    consistency: str = "default",
     dc: Optional[str] = None,
     verify: bool = True,
-    cert: Optional[str] = None
+    cert: Optional[str] = None,
 ) -> "Server":
     consul_client: ConsulClient = ConsulClient(
         host=host,
@@ -30,7 +31,7 @@ def add_consul_client(
         consistency=consistency,
         dc=dc,
         verify=verify,
-        cert=cert
+        cert=cert,
     )
 
     async def register(app: "Server") -> None:
@@ -40,6 +41,6 @@ def add_consul_client(
         await consul_client.deregister(app.server_name, app.host, str(app.port))
         await consul_client.stop()
 
-    server.load_start_event([register])
-    server.load_stop_event([deregister])
+    server.register_server_event(ServerEventEnum.after_start, register)
+    server.register_server_event(ServerEventEnum.before_end, deregister)
     return server
