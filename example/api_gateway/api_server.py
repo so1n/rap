@@ -5,5 +5,5 @@ from rap.api_gateway.app import create_app
 from rap.client import Client
 
 client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
-app: Starlette = create_app("/api", client)
+app: Starlette = create_app("/api", [client])
 uvicorn.run(app)

@@ -19,7 +19,7 @@ async def example_websockets_client() -> None:
             else:
                 raise RuntimeError(resp["msg"])
 
-        await send_json({"group": "default", "func_name": "async_channel"})
+        await send_json({"server_name": "example", "group": "default", "func_name": "async_channel"})
         result: Any = await receive_json()
         if result != "accept":
             return
@@ -36,7 +36,13 @@ async def example_http_client() -> None:
     async with AsyncClient() as client:
         resp: Response = await client.post(
             "http://localhost:8000/api/normal",
-            json={"group": "default", "func_name": "sync_sum", "func_type": "normal", "arg_list": [1, 2]},
+            json={
+                "server_name": "example",
+                "group": "default",
+                "func_name": "sync_sum",
+                "func_type": "normal",
+                "arg_list": [1, 2]
+            },
         )
         assert 3 == resp.json()["data"]
 
