@@ -57,7 +57,7 @@ class ConsulEndpoint(BaseEndpoint):
                     del conn_dict[key]
             for key, value in conn_dict.items():
                 print(key)
-                await self.create(value["host"], value["port"])
+                await self.create(value["host"], value["port"], value["weight"])
 
     async def start(self) -> None:
         if not self.is_close:
@@ -71,6 +71,6 @@ class ConsulEndpoint(BaseEndpoint):
                 for key, value in conn_dict.items():
                     # TODO fix server start event
                     await asyncio.sleep(2)
-                    await self.create(value["host"], value["port"])
+                    await self.create(value["host"], value["port"], value["weight"])
                     return
         self._watch_future = asyncio.ensure_future(self._watch())
