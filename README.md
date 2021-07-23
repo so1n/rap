@@ -325,19 +325,19 @@ from rap.server import Server
 
 
 async def mock_start():
-    print('start event')
+  print('start event')
 
 
-async def mock_stop(): 
-    print('stop event')
+async def mock_stop():
+  print('stop event')
 
 
 # example 1
 server = Server(start_event_list=[mock_start()], stop_event_list=[mock_stop()])
 # example 2
 server = Server()
-server.load_start_event([mock_start()])
-server.load_stop_event([mock_stop()])
+server.load_before_start_event([mock_start()])
+server.load_after_stop_event([mock_stop()])
 ```
 ## 3.6.middleware
 `rap` currently supports 2 types of middleware::

@@ -1,5 +1,4 @@
 import asyncio
-import inspect
 import logging
 import signal
 import ssl
@@ -14,15 +13,15 @@ from rap.common.state import WindowState
 from rap.common.types import BASE_MSG_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utils import RapFunc
 from rap.server.context import context
-from rap.server.model import Request, Response
+from rap.server.model import Request, Response, ServerEventEnum
 from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware
 from rap.server.plugin.processor.base import BaseProcessor
 from rap.server.receiver import Receiver
 from rap.server.registry import RegistryManager
 from rap.server.sender import Sender
+from rap.server.types import SERVER_EVENT_FN
 
 __all__ = ["Server"]
-EVENT_FN = Callable[["Server"], Any]
 
 
 class Server(object):
@@ -40,8 +39,6 @@ class Server(object):
         close_timeout: int = 9,
         ssl_crt_path: Optional[str] = None,
         ssl_key_path: Optional[str] = None,
-        start_event_list: List[EVENT_FN] = None,
-        stop_event_list: List[EVENT_FN] = None,
         middleware_list: List[BaseMiddleware] = None,
         processor_list: List[BaseProcessor] = None,
         window_state: Optional[WindowState] = None,
@@ -67,17 +64,14 @@ class Server(object):
             self._ssl_context.check_hostname = False
             self._ssl_context.load_cert_chain(ssl_crt_path, ssl_key_path)
 
-        self._start_event_list: List[Callable] = []
-        self._stop_event_list: List[Callable] = []
+        self._server_event_dict: Dict[ServerEventEnum, List[SERVER_EVENT_FN]] = {
+            value: [] for value in ServerEventEnum.__members__.values()
+        }
         self._middleware_list: List[BaseMiddleware] = []
         self._processor_list: List[BaseProcessor] = []
-        self._event_handle_dict: Dict[str, List[Callable[[Request], None]]] = {}
-        self._depend_set: Set[Any] = set()  # Check whether any components have been re-introduced
+        self._request_event_handle_dict: Dict[str, List[Callable[[Request], None]]] = {}
 
-        if start_event_list:
-            self.load_start_event(start_event_list)
-        if stop_event_list:
-            self.load_stop_event(stop_event_list)
+        self._depend_set: Set[Any] = set()  # Check whether any components have been re-introduced
         if middleware_list:
             self.load_middleware(middleware_list)
         if processor_list:
@@ -86,37 +80,27 @@ class Server(object):
         self.registry: RegistryManager = RegistryManager()
         self.window_state: Optional[WindowState] = window_state
         if self.window_state and self.window_state.is_closed:
-            self.load_start_event([self.window_state.change_state])
+            self.register_server_event(ServerEventEnum.before_start, self.window_state.change_state)
 
-    def _load_event(self, event_list: List[EVENT_FN], _event: EVENT_FN) -> None:
-        if not (inspect.isfunction(_event) or asyncio.iscoroutine(_event) or inspect.ismethod(_event)):
-            raise ImportError(f"{_event} must be fun or coroutine, not {type(_event)}")
-
-        if _event not in self._depend_set:
-            self._depend_set.add(_event)
-        else:
-            raise ImportError(f"{_event} event already load")
-        event_list.append(_event)
-
-    def load_start_event(self, event_list: List[EVENT_FN]) -> None:
-        for start_event in event_list:
-            self._load_event(self._start_event_list, start_event)
-
-    def load_stop_event(self, event_list: List[EVENT_FN]) -> None:
-        for stop_event in event_list:
-            self._load_event(self._stop_event_list, stop_event)
+    def register_server_event(self, event_type: ServerEventEnum, *event_handle_list: SERVER_EVENT_FN) -> None:
+        for event_handle in event_handle_list:
+            if (event_type, event_handle) not in self._depend_set:
+                self._depend_set.add((event_type, event_handle))
+                self._server_event_dict[event_type].append(event_handle)
+            else:
+                raise ImportError(f"even type:{event_type}, handle:{event_handle} already load")
 
     def register_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Request], None]) -> None:
-        if event_class not in self._event_handle_dict:
+        if event_class not in self._request_event_handle_dict:
             raise KeyError(f"{event_class}")
-        if fn in self._event_handle_dict[event_class.event_name]:
+        if fn in self._request_event_handle_dict[event_class.event_name]:
             raise ValueError(f"{fn} already exists {event_class}")
-        self._event_handle_dict[event_class.event_name].append(fn)
+        self._request_event_handle_dict[event_class.event_name].append(fn)
 
     def unregister_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Request], None]) -> None:
-        if event_class not in self._event_handle_dict:
+        if event_class not in self._request_event_handle_dict:
             raise KeyError(f"{event_class}")
-        self._event_handle_dict[event_class.event_name].remove(fn)
+        self._request_event_handle_dict[event_class.event_name].remove(fn)
 
     def load_middleware(self, middleware_list: List[BaseMiddleware]) -> None:
         for middleware in middleware_list:
@@ -134,8 +118,8 @@ class Server(object):
             else:
                 raise RuntimeError(f"{middleware} must instance of {BaseMiddleware}")
 
-            self.load_start_event([middleware.start_event_handle])
-            self.load_stop_event([middleware.stop_event_handle])
+            for event_type, server_event_handle_list in middleware.server_event_dict.items():
+                self.register_server_event(event_type, *server_event_handle_list)
 
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:
         for processor in processor_list:
@@ -149,8 +133,8 @@ class Server(object):
             else:
                 raise RuntimeError(f"{processor} must instance of {BaseProcessor}")
 
-            self.load_start_event([processor.start_event_handle])
-            self.load_stop_event([processor.stop_event_handle])
+            for event_type, server_event_handle_list in processor.server_event_dict.items():
+                self.register_server_event(event_type, *server_event_handle_list)
 
     def register(
         self,
@@ -169,22 +153,30 @@ class Server(object):
     def is_closed(self) -> bool:
         return self._run_event.is_set()
 
-    async def run_event_list(self, callback_list: List[Callable]) -> None:
-        if not callback_list:
+    async def run_event_list(self, event_type: ServerEventEnum, is_raise: bool = False) -> None:
+        event_handle_list: Optional[List[SERVER_EVENT_FN]] = self._server_event_dict.get(event_type)
+        if not event_handle_list:
             return
-        for callback in callback_list:
-            ret: Any = callback(self)
-            if asyncio.iscoroutine(ret):
-                await ret
+        try:
+            for callback in event_handle_list:
+                ret: Any = callback(self)  # type: ignore
+                if asyncio.iscoroutine(ret):
+                    await ret
+        except Exception as e:
+            if is_raise:
+                raise e
+            else:
+                logging.exception(f"server event<{event_type}:{event_handle_list}> run error:{e}")
 
     async def create_server(self) -> "Server":
         if not self.is_closed:
             raise RuntimeError("Server status is running...")
-        await self.run_event_list(self._start_event_list)
+        await self.run_event_list(ServerEventEnum.before_start, is_raise=True)
         self._server = await asyncio.start_server(
             self.conn_handle, self.host, self.port, ssl=self._ssl_context, backlog=self._backlog
         )
         logging.info(f"server running on {self.host}:{self.port}. use ssl:{bool(self._ssl_context)}")
+        await self.run_event_list(ServerEventEnum.after_start)
 
         # fix different loop event
         self._run_event.clear()
@@ -216,6 +208,8 @@ class Server(object):
         if self.is_closed:
             return
 
+        await self.run_event_list(ServerEventEnum.before_end)
+
         # Notify the client that the server is ready to shut down
         async def send_shutdown_event(_conn: ServerConnection) -> None:
             # conn may be closed
@@ -242,8 +236,8 @@ class Server(object):
         while self._connected_set and close_timestamp > int(time.time()):
             await asyncio.sleep(0.1)
 
-        await self.run_event_list(self._stop_event_list)
         self._run_event.set()
+        await self.run_event_list(ServerEventEnum.after_end, is_raise=True)
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE) -> None:
         conn: ServerConnection = ServerConnection(reader, writer, self._timeout)
@@ -266,7 +260,7 @@ class Server(object):
             sender,
             self._ping_fail_cnt,
             self._ping_sleep_time,
-            self._event_handle_dict,
+            self._request_event_handle_dict,
             processor_list=self._processor_list,
         )
 

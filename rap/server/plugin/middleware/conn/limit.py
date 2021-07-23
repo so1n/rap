@@ -1,17 +1,18 @@
 import logging
 import time
-from typing import TYPE_CHECKING, Dict, Union
+from typing import TYPE_CHECKING, Dict, List, Union
 
 from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
 from rap.common.conn import ServerConnection
 from rap.common.event import CloseConnEvent
-from rap.common.utils import Constant
+from rap.server.model import ServerEventEnum
 from rap.server.plugin.middleware.base import BaseConnMiddleware
 from rap.server.sender import Sender
 
 if TYPE_CHECKING:
     from rap.server.core import Server
+    from rap.server.types import SERVER_EVENT_FN
 
 
 class ConnLimitMiddleware(BaseConnMiddleware):
@@ -24,6 +25,9 @@ class ConnLimitMiddleware(BaseConnMiddleware):
         self._conn_count: int = 0
         self._block_time: int = block_time
         self._release_timestamp: int = int(time.time())
+        self.server_event_dict: Dict[ServerEventEnum, List["SERVER_EVENT_FN"]] = {
+            ServerEventEnum.before_start: [self.start_event_handle]
+        }
 
     def start_event_handle(self, app: "Server") -> None:
         self.register(self._get_conn_limit_info)

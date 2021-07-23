@@ -6,11 +6,12 @@ from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError, ParseError
 from rap.common.utils import Constant, gen_random_time_id
-from rap.server.model import Request, Response
+from rap.server.model import Request, Response, ServerEventEnum
 from rap.server.plugin.processor.base import BaseProcessor
 
 if TYPE_CHECKING:
     from rap.server.core import Server
+    from rap.server.types import SERVER_EVENT_FN
 
 
 class CryptoProcessor(BaseProcessor):
@@ -29,6 +30,9 @@ class CryptoProcessor(BaseProcessor):
         self._key_dict: Dict[str, str] = {}
         self._crypto_dict: Dict[str, "Crypto"] = {}
 
+        self.server_event_dict: Dict[ServerEventEnum, List["SERVER_EVENT_FN"]] = {
+            ServerEventEnum.before_start: [self.start_event_handle]
+        }
         self.load_aes_key_dict(secret_dict)
 
     def start_event_handle(self, app: "Server") -> None:

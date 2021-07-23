@@ -6,7 +6,7 @@ from httpx import AsyncClient, Response
 from websockets import connect  # type: ignore
 
 
-async def example_websockets_client() -> None:
+async def example_websockets_client(server_name: str = "example") -> None:
     async with connect("ws://localhost:8000/api/channel") as websocket:
 
         async def send_json(data: dict) -> None:
@@ -19,7 +19,7 @@ async def example_websockets_client() -> None:
             else:
                 raise RuntimeError(resp["msg"])
 
-        await send_json({"server_name": "example", "group": "default", "func_name": "async_channel"})
+        await send_json({"server_name": server_name, "group": "default", "func_name": "async_channel"})
         result: Any = await receive_json()
         if result != "accept":
             return
@@ -41,7 +41,7 @@ async def example_http_client() -> None:
                 "group": "default",
                 "func_name": "sync_sum",
                 "func_type": "normal",
-                "arg_list": [1, 2]
+                "arg_list": [1, 2],
             },
         )
         assert 3 == resp.json()["data"]

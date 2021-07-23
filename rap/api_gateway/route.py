@@ -10,7 +10,7 @@ from rap.common.exceptions import ChannelError
 
 
 def before_check(
-        server_name: str, group: str, func_name: str, func_type: str, request: HTTPConnection
+    server_name: str, group: str, func_name: str, func_type: str, request: HTTPConnection
 ) -> Optional[dict]:
     key = f"{server_name}:{func_type}:{group}:{func_name}"
     if key not in request.app.state.func_info_dict:

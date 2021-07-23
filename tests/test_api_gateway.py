@@ -1,13 +1,9 @@
 import asyncio
-import json
-from multiprocessing import Process, Queue
 from typing import Generator, Set
 
 import pytest
-from requests import Response
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
-from starlette.websockets import WebSocket
 from uvicorn.config import Config  # type: ignore
 from uvicorn.server import Server as AppServer  # type: ignore
 
@@ -21,7 +17,7 @@ from rap.common.utils import Constant
 @pytest.fixture()
 def create_test_app() -> Generator[Starlette, None, None]:
     client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
-    app: Starlette = create_app("/api", client)
+    app: Starlette = create_app("/api", [client])
     server: Server = create_server("test")
 
     async def create_rap_server() -> None:
@@ -40,12 +36,18 @@ class TestApiGateWay:
         with TestClient(create_test_app) as client:
             resp = client.post(
                 "http://localhost:8000/api/normal",
-                json={"group": "default", "func_name": "sync_sum", "func_type": "normal", "arg_list": [1, 2]},
+                json={
+                    "server_name": "test",
+                    "group": "default",
+                    "func_name": "sync_sum",
+                    "func_type": "normal",
+                    "arg_list": [1, 2],
+                },
             )
             assert 3 == resp.json()["data"]
 
     def test_api_channel(self) -> None:
-        "starlette sync test client can not support other server "
+        """starlette sync test client can not support other server"""
         loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
 
         async def main() -> None:
@@ -54,14 +56,14 @@ class TestApiGateWay:
             await rap_server.create_server()
             # start app server and until start
             client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
-            app_server: AppServer = AppServer(Config(create_app("/api", client)))
+            app_server: AppServer = AppServer(Config(create_app("/api", [client])))
             asyncio.ensure_future(app_server.serve())
             while True:
                 if hasattr(app_server, "servers") and len(app_server.servers) > 0:
                     break
                 await asyncio.sleep(0.1)
             # test api
-            await example_websockets_client()
+            await example_websockets_client("test")
             # close servers...
             await app_server.shutdown()
             await rap_server.shutdown()
@@ -72,12 +74,18 @@ class TestApiGateWay:
         with TestClient(create_test_app) as client:
             resp = client.post(
                 "http://localhost:8000/api/normal",
-                json={"group": "default", "func_type": "normal", "arg_list": [1, 2]},
+                json={"server_name": "test", "group": "default", "func_type": "normal", "arg_list": [1, 2]},
             )
             assert {"code": 1, "msg": "param error:'func_name'"} == resp.json()
             resp = client.post(
                 "http://localhost:8000/api/normal",
-                json={"group": "default", "func_name": "sync_sum", "func_type": "normal", "arg_list": 1},
+                json={
+                    "server_name": "test",
+                    "group": "default",
+                    "func_name": "sync_sum",
+                    "func_type": "normal",
+                    "arg_list": 1,
+                },
             )
             assert {"code": 1, "msg": "param error"} == resp.json()
 
@@ -85,7 +93,7 @@ class TestApiGateWay:
         group_set: Set[str] = set()
         group_set.add(Constant.DEFAULT_GROUP)
         client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
-        app: Starlette = create_app("/api", client, group_filter=group_set)
+        app: Starlette = create_app("/api", [client], group_filter=group_set)
         server: Server = create_server("test")
 
         async def create_rap_server() -> None:
@@ -100,6 +108,12 @@ class TestApiGateWay:
         with TestClient(app) as test_client:
             resp = test_client.post(
                 "http://localhost:8000/api/normal",
-                json={"group": "default", "func_name": "sync_sum", "func_type": "normal", "arg_list": [1, 2]},
+                json={
+                    "server_name": "test",
+                    "group": "default",
+                    "func_name": "sync_sum",
+                    "func_type": "normal",
+                    "arg_list": [1, 2],
+                },
             )
             assert {"code": 1, "msg": "Not Found"} == resp.json()

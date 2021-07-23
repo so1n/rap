@@ -16,14 +16,14 @@ class ConsulEndpoint(BaseEndpoint):
         # consul client param
         consul_namespace: str = "rap",
         consul_ttl: int = 10,
-        consul_host: str = '127.0.0.1',
+        consul_host: str = "127.0.0.1",
         consul_port: int = 8500,
         consul_token: Optional[str] = None,
-        consul_scheme: str = 'http',
-        consul_consistency: str = 'default',
+        consul_scheme: str = "http",
+        consul_consistency: str = "default",
         consul_dc: Optional[str] = None,
         consul_verify: bool = True,
-        consul_cert: Optional[str] = None
+        consul_cert: Optional[str] = None,
     ):
         self.consul_client: ConsulClient = ConsulClient(
             namespace=consul_namespace,
@@ -35,7 +35,7 @@ class ConsulEndpoint(BaseEndpoint):
             consistency=consul_consistency,
             dc=consul_dc,
             verify=consul_verify,
-            cert=consul_cert
+            cert=consul_cert,
         )
         self._watch_future: asyncio.Future = asyncio.Future()
         self._watch_future.set_result(True)
@@ -53,7 +53,7 @@ class ConsulEndpoint(BaseEndpoint):
                 for key, value in conn_dict.items():
                     if key not in conn_dict:
                         await self.destroy(value["host"], value["port"])
-                    print('del', key)
+                    print("del", key)
                     del conn_dict[key]
             for key, value in conn_dict.items():
                 print(key)

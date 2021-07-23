@@ -1,14 +1,15 @@
 import socket
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from aio_statsd import StatsdClient  # type: ignore
 
 from rap.common.utils import Constant
-from rap.server.model import Request, Response
+from rap.server.model import Request, Response, ServerEventEnum
 from rap.server.plugin.processor.base import BaseProcessor
 
 if TYPE_CHECKING:
     from rap.server.core import Server
+    from rap.server.types import SERVER_EVENT_FN
 
 
 class StatsdProcessor(BaseProcessor):
@@ -27,6 +28,9 @@ class StatsdProcessor(BaseProcessor):
         self._error_msg_key: str = f"{self._namespace}.msg.error"
         self._request_key: str = f"{self._namespace}.request"
         self._error_request_key: str = f"{self._namespace}.request.error"
+        self.server_event_dict: Dict[ServerEventEnum, List["SERVER_EVENT_FN"]] = {
+            ServerEventEnum.before_start: [self.start_event_handle]
+        }
 
     def start_event_handle(self, app: "Server") -> None:
         def upload_metric(stats_dict: dict) -> None:

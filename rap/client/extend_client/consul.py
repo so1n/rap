@@ -16,14 +16,14 @@ class Client(BaseClient):
         # consul client param
         consul_namespace: str = "rap",
         consul_ttl: int = 10,
-        consul_host: str = '127.0.0.1',
+        consul_host: str = "127.0.0.1",
         consul_port: int = 8500,
         consul_token: Optional[str] = None,
-        consul_scheme: str = 'http',
-        consul_consistency: str = 'default',
+        consul_scheme: str = "http",
+        consul_consistency: str = "default",
         consul_dc: Optional[str] = None,
         consul_verify: bool = True,
-        consul_cert: Optional[str] = None
+        consul_cert: Optional[str] = None,
     ):
         super().__init__(
             ConsulEndpoint(
@@ -40,7 +40,7 @@ class Client(BaseClient):
                 consul_consistency=consul_consistency,
                 consul_dc=consul_dc,
                 consul_verify=consul_verify,
-                consul_cert=consul_cert
+                consul_cert=consul_cert,
             ),
             timeout,
             keep_alive_time,
