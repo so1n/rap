@@ -1,15 +1,13 @@
 import asyncio
+import json
 import logging
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
-
-from mypy_extensions import TypedDict
 
 from consul import Check
 from consul.aio import Consul
 from .bass import BaseCoordinator
 
 logger: logging.Logger = logging.getLogger()
-ETCD_EVENT_VALUE_DICT_TYPE = TypedDict("ETCD_EVENT_VALUE_DICT_TYPE", {"key": str, "value": dict})
 
 
 class ConsulClient(BaseCoordinator):
@@ -47,18 +45,22 @@ class ConsulClient(BaseCoordinator):
         self._client.close()
 
     async def _heartbeat(self, service_id: str) -> None:
-        while True:
-            logger.debug(f"heartbeat by consul, id: {service_id}")
-            try:
-                await self._client.agent.check.ttl_pass(service_id)
-                await asyncio.sleep(self._ttl // 2)
-            except Exception as e:
-                logger.exception(f"heartbeat id:{service_id}. error:{e}")
-            finally:
-                await asyncio.sleep(min(5, self._ttl // 2))
+        try:
+            while True:
+                logger.debug(f"heartbeat by consul, id: {service_id}")
+                try:
+                    await self._client.agent.check.ttl_pass(service_id)
+                    await asyncio.sleep(self._ttl // 2)
+                except Exception as e:
+                    logger.exception(f"heartbeat id:{service_id}. error:{e}")
+                finally:
+                    await asyncio.sleep(min(5, self._ttl // 2))
+        except asyncio.CancelledError:
+            pass
 
     async def register(self, server_name: str, host: str, port: str, weight: int) -> None:
         service_id: str = f"{self.namespace}/{server_name}/{host}"
+        await self._client.kv.put(f"{service_id}/{port}", json.dumps({"weight": weight}))
         await self._client.agent.service.register(
             f"{self.namespace}/{server_name}",
             service_id=service_id,
@@ -71,13 +73,20 @@ class ConsulClient(BaseCoordinator):
 
     async def deregister(self, server_name: str, host: str, port: str) -> None:
         service_id: str = f"{self.namespace}/{server_name}/{host}"
+        await self._client.kv.delete(f"{service_id}/{port}")
         await self._client.agent.service.deregister(service_id)
         await self._client.agent.check.deregister(service_id)
 
     async def discovery(self, server_name: str) -> AsyncGenerator[dict, Any]:
         resp: Tuple[str, List[Dict[str, Any]]] = await self._client.catalog.service(f"{self.namespace}/{server_name}")
         for item in resp[1]:
-            yield {"host": item["ServiceAddress"], "port": item["ServicePort"]}
+            kv_resp: Tuple[str, List[Dict[str, Any]]] = await self._client.kv.get(
+                f"{item['ServiceID']}/{item['ServicePort']}"
+            )
+            result_dict: dict = json.loads(kv_resp[1]["Value"].decode())
+            result_dict["host"] = item["ServiceAddress"]
+            result_dict["port"] = item["ServicePort"]
+            yield result_dict
 
     async def watch(self, server_name: str) -> AsyncGenerator[Dict[str, Dict[str, Any]], Any]:
         index: Optional[str] = None
@@ -91,5 +100,11 @@ class ConsulClient(BaseCoordinator):
             for item in resp[1]:
                 host: str = item["ServiceAddress"]
                 port: int = item["ServicePort"]
-                conn_dict[f"{host}_{port}"] = {"host": host, "port": port}
+                kv_resp: Tuple[str, List[Dict[str, Any]]] = await self._client.kv.get(
+                    f"{item['ServiceID']}/{item['ServicePort']}"
+                )
+                result_dict: dict = json.loads(kv_resp[1]["Value"].decode())
+                result_dict["host"] = host
+                result_dict["port"] = port
+                conn_dict[f"{host}_{port}"] = result_dict
             yield conn_dict
