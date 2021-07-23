@@ -69,17 +69,17 @@ class AsyncIteratorCall:
 class BaseClient:
     def __init__(self, endpoint: BaseEndpoint, timeout: int = 9, keep_alive_time: int = 1200):
         self.transport: Transport = Transport(read_timeout=timeout, keep_alive_time=keep_alive_time)
-        self._endpoint: BaseEndpoint = endpoint
+        self.endpoint: BaseEndpoint = endpoint
         self._processor_list: List[BaseProcessor] = []
 
-        self._endpoint.set_transport(self.transport)
+        self.endpoint.set_transport(self.transport)
 
     ##################
     # start& close #
     ##################
     async def stop(self) -> None:
         """close client transport"""
-        await self._endpoint.stop()
+        await self.endpoint.stop()
         for processor in self._processor_list:
             processor.stop_event_handle()
 
@@ -87,7 +87,7 @@ class BaseClient:
         """Create client transport"""
         for processor in self._processor_list:
             processor.start_event_handle()
-        await self._endpoint.start()
+        await self.endpoint.start()
 
     def register_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
         self.transport.register_event_handle(event_class, fn)
@@ -174,14 +174,14 @@ class BaseClient:
     # client base api #
     ###################
     def get_conn(self) -> Connection:
-        return self._endpoint.get_conn()
+        return self.endpoint.get_conn()
 
     def get_conn_list(self, cnt: Optional[int] = None) -> List[Connection]:
-        return self._endpoint.get_conn_list(cnt)
+        return self.endpoint.get_conn_list(cnt)
 
     @property
     def is_close(self) -> bool:
-        return self._endpoint.is_close
+        return self.endpoint.is_close
 
     async def raw_call(
         self,
@@ -198,7 +198,7 @@ class BaseClient:
         header: request's header
         group: func group, default group value is `default`
         """
-        conn_list: List[Connection] = self._endpoint.get_conn_list()
+        conn_list: List[Connection] = self.endpoint.get_conn_list()
         response = await self.transport.request(name, conn_list, arg_param, kwarg_param, group=group, header=header)
         return response.body["result"]
 

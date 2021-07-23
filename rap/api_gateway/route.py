@@ -9,8 +9,10 @@ from rap.client import Client
 from rap.common.exceptions import ChannelError
 
 
-def before_check(group: str, func_name: str, func_type: str, request: HTTPConnection) -> Optional[dict]:
-    key = f"{func_type}:{group}:{func_name}"
+def before_check(
+        server_name: str, group: str, func_name: str, func_type: str, request: HTTPConnection
+) -> Optional[dict]:
+    key = f"{server_name}:{func_type}:{group}:{func_name}"
     if key not in request.app.state.func_info_dict:
         return {"code": 1, "msg": "Not Found"}
 
@@ -26,9 +28,10 @@ def before_check(group: str, func_name: str, func_type: str, request: HTTPConnec
 
 async def websocket_route_func(websocket: WebSocket) -> None:
     await websocket.accept()
-    rap_client: Client = websocket.app.state.rap_client
+    rap_client_dict: Dict[str, Client] = websocket.app.state.rap_client_dict
     resp_dict: Dict[str, Any] = await websocket.receive_json()
     try:
+        server_name: str = resp_dict["server_name"]
         group: str = resp_dict["group"]
         func_name: str = resp_dict["func_name"]
     except KeyError as e:
@@ -36,11 +39,17 @@ async def websocket_route_func(websocket: WebSocket) -> None:
         await websocket.close()
         return
 
-    result: Optional[dict] = before_check(group, func_name, "channel", websocket)
+    if server_name not in rap_client_dict:
+        await websocket.send_json({"code": 1, "msg": f"server name error"})
+        await websocket.close()
+        return
+
+    result: Optional[dict] = before_check(server_name, group, func_name, "channel", websocket)
     if result:
         await websocket.send_json(result)
         await websocket.close()
 
+    rap_client: Client = rap_client_dict[server_name]
     try:
         async with rap_client.transport.channel(func_name, rap_client.get_conn(), group) as channel:
             await websocket.send_json({"code": 0, "data": "accept"})
@@ -77,16 +86,18 @@ async def websocket_route_func(websocket: WebSocket) -> None:
 
 
 async def route_func(request: Request) -> JSONResponse:
-    rap_client: Client = request.app.state.rap_client
+    rap_client_dict: Dict[str, Client] = request.app.state.rap_client_dict
     resp_dict: Dict[str, Any] = await request.json()
-
     try:
+        server_name: str = resp_dict["server_name"]
         group: str = resp_dict["group"]
         func_name: str = resp_dict["func_name"]
     except KeyError as e:
         return JSONResponse({"code": 1, "msg": f"param error:{e}"})
+    if server_name not in rap_client_dict:
+        return JSONResponse({"code": 1, "msg": f"server name error"})
 
-    check_result: Optional[dict] = before_check(group, func_name, "normal", request)
+    check_result: Optional[dict] = before_check(server_name, group, func_name, "normal", request)
     if check_result:
         return JSONResponse(check_result)
 
@@ -95,7 +106,7 @@ async def route_func(request: Request) -> JSONResponse:
     if not isinstance(arg_list, list) or not isinstance(kwarg_list, dict):
         return JSONResponse({"code": 1, "msg": "param error"})
 
-    result: Any = await rap_client.raw_call(
+    result: Any = await rap_client_dict[server_name].raw_call(
         func_name,
         arg_param=arg_list,
         kwarg_param=kwarg_list,

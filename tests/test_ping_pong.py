@@ -37,7 +37,7 @@ class TestPingPong:
 
         mocker_obj: Any = mocker.patch("rap.client.transport.transport.logging.exception")
         # until close
-        for conn in rap_client._endpoint._conn_dict.copy().values():
+        for conn in rap_client.endpoint._conn_dict.copy().values():
             try:
                 await conn.listen_future
             except asyncio.CancelledError:
