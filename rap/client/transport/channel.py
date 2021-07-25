@@ -45,7 +45,7 @@ class Channel(BaseChannel):
         # init channel data structure
         await self._create(self.channel_id)
         self._channel_conn_future = asyncio.Future()
-        self._conn.conn_future.add_done_callback(lambda f: self.set_finish("channel is close"))
+        self._conn.conn_future.add_done_callback(lambda f: self.set_fail_finish("channel is close"))
 
         # init with server
         life_cycle: str = Constant.DECLARE
@@ -71,7 +71,7 @@ class Channel(BaseChannel):
 
         if response.header.get("channel_life_cycle") == Constant.DROP:
             await self._close(self.channel_id)
-            self.set_finish(self._drop_msg)
+            self.set_fail_finish(self._drop_msg)
             raise ChannelError(self._drop_msg)
         return response
 

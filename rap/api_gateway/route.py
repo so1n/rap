@@ -1,12 +1,14 @@
 import asyncio
+import logging
 from typing import Any, Dict, List, Optional
 
 from starlette.requests import HTTPConnection, Request
 from starlette.responses import JSONResponse
-from starlette.websockets import WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 
 from rap.client import Client
 from rap.common.exceptions import ChannelError
+from rap.common.utils import del_future
 
 
 def before_check(
@@ -59,30 +61,35 @@ async def websocket_route_func(websocket: WebSocket) -> None:
                     await websocket.send_json({"code": 0, "data": await channel.read_body()})
 
             async def receive() -> None:
-                while True:
-                    await channel.write(await websocket.receive_text())
+                try:
+                    while True:
+                        await channel.write(await websocket.receive_text())
+                except WebSocketDisconnect:
+                    websocket.application_state = WebSocketState.DISCONNECTED
+                    logging.info("receive client close event, close websocket and rap channel")
 
             send_future: asyncio.Future = asyncio.ensure_future(send())
             receive_future: asyncio.Future = asyncio.ensure_future(receive())
-            receive_future.add_done_callback(lambda f: channel.set_finish(str(f.exception())))
+
+            def set_finish(f: asyncio.Future) -> None:
+                if f.exception():
+                    channel.set_fail_finish(str(f.exception()))
+                else:
+                    channel.set_success_finish()
+
+            receive_future.add_done_callback(lambda f: set_finish(f))
             try:
                 await channel.wait_close()
             except ChannelError:
                 pass
-            if send_future.cancelled():
-                send_future.cancel()
-            elif send_future.done():
-                send_future.result()
-            if receive_future.cancelled():
-                receive_future.cancel()
-            elif receive_future.done():
-                receive_future.result()
-            await websocket.send_json({"code": 0, "data": "close"})
-            await websocket.close()
+            del_future(send_future)
+            del_future(receive_future)
     except WebSocketDisconnect:
         pass
     finally:
-        await websocket.close()
+        if websocket.application_state != WebSocketState.DISCONNECTED:
+            await websocket.send_json({"code": 0, "data": "close"})
+            await websocket.close()
 
 
 async def route_func(request: Request) -> JSONResponse:
