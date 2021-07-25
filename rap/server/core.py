@@ -64,11 +64,11 @@ class Server(object):
             self._ssl_context.check_hostname = False
             self._ssl_context.load_cert_chain(ssl_crt_path, ssl_key_path)
 
+        self._middleware_list: List[BaseMiddleware] = []
+        self._processor_list: List[BaseProcessor] = []
         self._server_event_dict: Dict[ServerEventEnum, List[SERVER_EVENT_FN]] = {
             value: [] for value in ServerEventEnum.__members__.values()
         }
-        self._middleware_list: List[BaseMiddleware] = []
-        self._processor_list: List[BaseProcessor] = []
         self._request_event_handle_dict: Dict[str, List[Callable[[Request], None]]] = {}
 
         self._depend_set: Set[Any] = set()  # Check whether any components have been re-introduced
@@ -157,16 +157,16 @@ class Server(object):
         event_handle_list: Optional[List[SERVER_EVENT_FN]] = self._server_event_dict.get(event_type)
         if not event_handle_list:
             return
-        try:
-            for callback in event_handle_list:
+        for callback in event_handle_list:
+            try:
                 ret: Any = callback(self)  # type: ignore
                 if asyncio.iscoroutine(ret):
                     await ret
-        except Exception as e:
-            if is_raise:
-                raise e
-            else:
-                logging.exception(f"server event<{event_type}:{event_handle_list}> run error:{e}")
+            except Exception as e:
+                if is_raise:
+                    raise e
+                else:
+                    logging.exception(f"server event<{event_type}:{callback}> run error:{e}")
 
     async def create_server(self) -> "Server":
         if not self.is_closed:
@@ -263,6 +263,7 @@ class Server(object):
             self._request_event_handle_dict,
             processor_list=self._processor_list,
         )
+        recv_msg_handle_future_set: Set[asyncio.Future] = set()
 
         async def recv_msg_handle(_request_msg: Optional[BASE_MSG_TYPE]) -> None:
             if _request_msg is None:
@@ -289,7 +290,10 @@ class Server(object):
             try:
                 request_msg: Optional[BASE_MSG_TYPE] = await conn.read(self._keep_alive)
                 # create future handle msg
-                asyncio.ensure_future(recv_msg_handle(request_msg))
+                future: asyncio.Future = asyncio.ensure_future(recv_msg_handle(request_msg))
+                future.add_done_callback(lambda f: recv_msg_handle_future_set.remove(f))
+                recv_msg_handle_future_set.add(future)
+
             except asyncio.TimeoutError:
                 logging.error(f"recv data from {conn.peer_tuple} timeout. close conn")
                 await sender.send_event(event.CloseConnEvent("keep alive timeout"))
@@ -300,5 +304,9 @@ class Server(object):
                 logging.error(f"recv data from {conn.peer_tuple} error:{e}, conn has been closed")
 
         if not conn.is_closed():
+            if recv_msg_handle_future_set:
+                logging.debug("wait recv msg handle future")
+                while len(recv_msg_handle_future_set) > 0:
+                    await asyncio.sleep(0.1)
             conn.close()
             logging.debug(f"close connection: %s", conn.peer_tuple)

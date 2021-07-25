@@ -143,6 +143,10 @@ async def as_first_completed(
     for task in pending:
         if task not in not_cancel_future_list:
             task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
     result_list: List[Any] = [task.result() for task in done]
     if len(result_list) != 1:

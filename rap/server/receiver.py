@@ -367,5 +367,5 @@ class Receiver(object):
         return response
 
     def __del__(self) -> None:
-        if self._ping_pong_future and not self._ping_pong_future.done() and self._ping_pong_future.cancelled():
+        if self._ping_pong_future and not self._ping_pong_future.done() and not self._ping_pong_future.cancelled():
             self._ping_pong_future.cancel()
