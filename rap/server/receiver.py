@@ -199,10 +199,9 @@ class Receiver(object):
             else:
                 await self.sender.send_event(PingEvent(""))
                 try:
-                    await as_first_completed(
-                        [asyncio.sleep(self._ping_sleep_time)],
-                        not_cancel_future_list=[self._conn.conn_future],
-                    )
+                    await asyncio.wait_for(asyncio.shield(self._conn.conn_future), timeout=self._ping_sleep_time)
+                except asyncio.TimeoutError:
+                    pass
                 except Exception as e:
                     logging.debug(f"{self._conn} ping event exit.. error:{e}")
 
