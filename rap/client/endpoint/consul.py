@@ -69,8 +69,6 @@ class ConsulEndpoint(BaseEndpoint):
             logging.warning(f"Can not found conn info from etcd, wait {self.server_name} server start")
             async for conn_dict in self.consul_client.watch(self.server_name):
                 for key, value in conn_dict.items():
-                    # TODO fix server start event
-                    await asyncio.sleep(2)
                     await self.create(value["host"], value["port"], value["weight"])
                     return
         self._watch_future = asyncio.ensure_future(self._watch())
