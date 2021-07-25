@@ -65,7 +65,7 @@ class TestApiGateWay:
             # test api
             await example_websockets_client("test")
             # close servers...
-            await app_server.shutdown()
+            app_server.should_exit = True
             await rap_server.shutdown()
 
         loop.run_until_complete(main())

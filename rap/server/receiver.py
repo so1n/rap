@@ -363,9 +363,10 @@ class Receiver(object):
                 self._keepalive_timestamp = int(time.time())
                 self._ping_pong_future = asyncio.ensure_future(self.ping_event())
         elif request.func_name == Constant.DROP:
+            self.del_receiver()
             response.set_event(DropEvent("success"))
         return response
 
-    def __del__(self) -> None:
+    def del_receiver(self) -> None:
         if self._ping_pong_future and not self._ping_pong_future.done() and not self._ping_pong_future.cancelled():
             self._ping_pong_future.cancel()
