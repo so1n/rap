@@ -63,6 +63,7 @@ class Channel(BaseChannel):
 
         # if conn close, channel future will done and channel not read & write_to_conn
         self._channel_conn_future: asyncio.Future = asyncio.Future()
+        self._channel_conn_future.add_done_callback(lambda f: self._queue.put_nowait(f.exception()))
         self._conn.conn_future.add_done_callback(lambda f: self.set_fail_finish("connection already close"))
 
         self._func_future: asyncio.Future = asyncio.ensure_future(self._run_func(func))
@@ -88,10 +89,10 @@ class Channel(BaseChannel):
     async def read(self) -> Response:
         if self.is_close:
             raise ChannelError(f"channel{self.channel_id} is close")
-        return await as_first_completed(
-            [self._queue.get()],
-            not_cancel_future_list=[self._channel_conn_future],
-        )
+        result: Union[Response, Exception] = await self._queue.get()
+        if isinstance(result, Exception):
+            raise result
+        return result
 
     async def read_body(self) -> Any:
         response: Response = await self.read()
