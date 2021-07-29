@@ -95,7 +95,7 @@ class TestRegister:
             await rap_client.raw_call(
                 "reload",
                 ["tests.test_register", "new_reload_sum"],
-                kwarg_param={"name": "load", "group": "registry"},
+                kwarg_param={"name": "load", "correlation_id": "registry"},
                 group="registry",
             )
         exec_msg: str = e.value.args[0]
@@ -106,7 +106,7 @@ class TestRegister:
                 "reload", ["tests.test_register", "new_reload_sum"], kwarg_param={"name": "load"}, group="registry"
             )
         exec_msg = e.value.args[0]
-        assert "not in group" in exec_msg
+        assert "not in correlation_id" in exec_msg
 
     async def test_load_error_fun(self, rap_server: Server, rap_client: Client) -> None:
         with pytest.raises(RegisteredError) as e:
@@ -121,7 +121,7 @@ class TestRegister:
         with pytest.raises(RegisteredError) as e:
             rap_server.registry._load("tests.test_register", "new_reload_sum")
         exec_msg: str = e.value.args[0]
-        assert "Already exists in group " in exec_msg
+        assert "Already exists in correlation_id " in exec_msg
 
     async def test_register_func_error(self, rap_server: Server, rap_client: Client) -> None:
         def test_func() -> None:

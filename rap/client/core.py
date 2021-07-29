@@ -196,7 +196,7 @@ class BaseClient:
         name: func name
         args: python args
         header: request's header
-        group: func group, default group value is `default`
+        target: func target, default target value is `default`
         """
         conn_list: List[Connection] = self.endpoint.get_conn_list()
         response = await self.transport.request(name, conn_list, arg_param, kwarg_param, group=group, header=header)
@@ -214,7 +214,7 @@ class BaseClient:
         func: rpc func
         args: python args
         header: request's header
-        group: func's group, default group value is `default`
+        target: func's target, default target value is `default`
         """
         return await self.raw_call(func.__name__, arg_param, kwarg_param=kwarg_param, group=group, header=header)
 
@@ -230,7 +230,7 @@ class BaseClient:
         func: rap func
         args: python args
         header: request's header
-        group: func's group, default group value is `default`
+        target: func's target, default target value is `default`
         """
         async for result in AsyncIteratorCall(
             func.__name__, self, self.get_conn(), arg_param, kwarg_param=kwarg_param, header=header, group=group
@@ -264,7 +264,7 @@ class BaseClient:
         (such as ide completion, ide reconstruction and type hints)
         and will be automatically registered according to the function type
 
-        group: func group, default group value is `default`
+        target: func target, default target value is `default`
         """
 
         def wrapper(func: Callable) -> RapFunc:

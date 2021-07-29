@@ -9,30 +9,58 @@ from rap.common.utils import Constant
 
 @dataclass()
 class Request(object):
-    num: int
-    func_name: str
+    msg_type: int
+    target: str
     body: Any
-    group: str = ""
+    correlation_id: str = ""
     header: dict = field(default_factory=lambda: dict())
 
     def to_msg(self) -> MSG_TYPE:
-        return self.num, self.group, self.func_name, self.header, self.body
+        return self.msg_type, self.correlation_id, self.target, self.header, self.body
 
     @classmethod
-    def from_event(cls, event: Event) -> "Request":
-        return cls(num=Constant.CLIENT_EVENT, func_name=event.event_name, body=event.event_info)
+    def from_event(cls, server_name: str, event: Event) -> "Request":
+        return cls(
+            msg_type=Constant.CLIENT_EVENT,
+            target=f"{server_name}/_event/{event.event_name}",
+            body=event.event_info
+        )
 
 
 @dataclass()
 class Response(object):
     conn: Connection
     msg_id: int
-    num: int
-    group: str
-    func_name: str
+    msg_type: int
+    correlation_id: str
+    target: str
     header: dict
     body: Any
+
+    _target_dict: dict = field(default_factory=dict)
 
     @classmethod
     def from_msg(cls, conn: Connection, msg: BASE_MSG_TYPE) -> "Response":
         return cls(conn, *msg)
+
+    def _target_handle(self) -> None:
+        if not self._target_dict:
+            server_name, group, func_name = self.target.split("/")
+            self._target_dict = {"server_name": server_name, "group": group, "func_name": func_name}
+
+    @property
+    def server_name(self) -> str:
+        self._target_handle()
+        return self._target_dict["server_name"]
+
+    @property
+    def group(self) -> str:
+        self._target_handle()
+        return self._target_dict["group"]
+
+    @property
+    def func_name(self) -> str:
+        self._target_handle()
+        return self._target_dict["func_name"]
+
+

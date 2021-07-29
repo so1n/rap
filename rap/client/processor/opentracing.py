@@ -28,14 +28,14 @@ class TracingProcessor(BaseProcessor):
         except (InvalidCarrierException, SpanContextCorruptedException):
             pass
 
-        self._scope = self._tracer.start_active_span(str(request.func_name), child_of=span_ctx, finish_on_close=True)
+        self._scope = self._tracer.start_active_span(str(request.target), child_of=span_ctx, finish_on_close=True)
         self._scope.span.set_tag(tags.SPAN_KIND, tags.SPAN_KIND_RPC_CLIENT)
-        self._scope.span.set_tag(tags.PEER_SERVICE, request.func_name)
+        self._scope.span.set_tag(tags.PEER_SERVICE, request.target)
         self._scope.span.set_tag(tags.PEER_HOSTNAME, ":".join([str(i) for i in request.header["host"]]))
-        self._scope.span.set_tag("group", request.group)
-        self._scope.span.set_tag("num", request.num)
+        self._scope.span.set_tag("correlation_id", request.correlation_id)
+        self._scope.span.set_tag("msg_type", request.msg_type)
 
-        if request.num is Constant.CHANNEL_REQUEST and self._scope:
+        if request.msg_type is Constant.CHANNEL_REQUEST and self._scope:
             self._scope.close()
             self._scope = None
         return request

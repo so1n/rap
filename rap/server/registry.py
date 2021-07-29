@@ -47,7 +47,7 @@ class FuncModel(object):
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "group": self.group,
+            "correlation_id": self.group,
             "func_type": self.func_type,
             "is_gen_func": self.is_gen_func,
             "is_private": self.is_private,
@@ -103,9 +103,9 @@ class RegistryManager(object):
         func: Function that need to be registered
         name: If the function name is not specified, the system will obtain its own name according to the function,
               otherwise it will be replaced by the specified function name
-        group: Specify the group to which the function to be registered belongs.
+        correlation_id: Specify the correlation_id to which the function to be registered belongs.
                The same function can be registered to different groups.
-               The root group is generally used for system components, and there are restrictions when calling.
+               The root correlation_id is generally used for system components, and there are restrictions when calling.
         is_private: if True, it can only be accessed through the local cli
         """
         if inspect.isfunction(func) or inspect.ismethod(func):
@@ -170,7 +170,7 @@ class RegistryManager(object):
             func_type: str = self._get_func_type(func)
             func_key: str = self.gen_key(group, name, func_type)
             if func_key in self.func_dict:
-                raise RegisteredError(f"Already exists in group {group}")
+                raise RegisteredError(f"Already exists in correlation_id {group}")
 
             self.register(func, name, group, is_private, doc)
             return f"load {func_str} from {path} success"
@@ -195,7 +195,7 @@ class RegistryManager(object):
             func_type: str = self._get_func_type(func)
             func_key: str = self.gen_key(group, name, func_type)
             if func_key not in self.func_dict:
-                raise RegisteredError(f"{name} not in group {group}")
+                raise RegisteredError(f"{name} not in correlation_id {group}")
 
             func_model: FuncModel = self.func_dict[func_key]
             if func_model.is_private:

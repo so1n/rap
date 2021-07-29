@@ -139,7 +139,7 @@ server.register(demo1)   # 注册def函数
 server.register(demo2)   # 注册async def 函数
 server.register(demo_gen)  # 注册async iterator函数
 server.register(demo2, name='demo2-alias')   # 注册并重新设置注册的名字
-server.register(demo2, group='new-group')    # 注册并设定要注册的组
+server.register(demo2, group='new-correlation_id')    # 注册并设定要注册的组
 server.register(demo2, group='root', is_private=True)  # 注册并设定要注册的组,且设置为私有
 ```
 对于客户端, 建议使用`client.register`,不要使用`client.call`, `client.raw_call`.
@@ -170,8 +170,8 @@ async def demo_gen(a: int) -> AsyncIterator: yield
 async def demo2(a: int, b: int) -> int: pass
 
 
-# 注册普通函数,并且设置组为new-group
-@client.register(group='new-group')
+# 注册普通函数,并且设置组为new-correlation_id
+@client.register(group='new-correlation_id')
 async def demo2(a: int, b: int) -> int: pass
 ```
 ## 3.2.session
