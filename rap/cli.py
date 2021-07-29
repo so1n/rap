@@ -17,7 +17,7 @@ if __name__ == "__main__":
 
     parser.add_argument("-n", "--name", help="func name")
     parser.add_argument("-a", "--arg", help="func param", default=tuple())
-    parser.add_argument("-g", "--group", help="func group", default="default")
+    parser.add_argument("-g", "--target", help="func target", default="default")
     args, unknown = parser.parse_known_args()
     server_name: str = args.server_name
     server_host: str = args.server_host
@@ -48,8 +48,8 @@ if __name__ == "__main__":
         # display_table_list: List[List[str]] = [column_list]
         # for func_info in result_tuple:
         #     func_key, module_str, path_str = func_info
-        #     func_group, func_type, func_name = func_key.split(":")
-        #     display_table_list.append([func_name, func_group, func_type, path_str, module_str])
+        #     func_group, func_type, target = func_key.split(":")
+        #     display_table_list.append([target, func_group, func_type, path_str, module_str])
         # print_table(display_table_list)
     elif mode == "r" and func_name:
         print(loop.run_until_complete(client.raw_call(func_name, arg_param=arg_list, group=group)))

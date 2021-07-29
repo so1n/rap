@@ -146,8 +146,8 @@ server.register(demo1)   # register def func
 server.register(demo2)   # register async def func 
 server.register(demo_gen)  # register async iterator func
 server.register(demo2, name='demo2-alias')   # Register with the value of `name` 
-server.register(demo2, group='new-group')    # Register and set the groups to be registered 
-server.register(demo2, group='root', is_private=True)  # Register and set the group to be registered, and set it to private 
+server.register(demo2, group='new-correlation_id')    # Register and set the groups to be registered 
+server.register(demo2, group='root', is_private=True)  # Register and set the correlation_id to be registered, and set it to private 
 ```
 For clients, it is recommended to use `client.register` instead of `client.call`, `client.raw_call`.
 `client.register` uses Python syntax to define function names, arguments, parameter types, and return value types, 
@@ -176,8 +176,8 @@ async def demo_gen(a: int) -> AsyncIterator: yield
 async def demo2(a: int, b: int) -> int: pass
 
 
-# Register the general function and set the group to new-group 
-@client.register(group='new-group')
+# Register the general function and set the correlation_id to new-correlation_id 
+@client.register(group='new-correlation_id')
 async def demo2(a: int, b: int) -> int: pass
 ```
 ## 3.2.session

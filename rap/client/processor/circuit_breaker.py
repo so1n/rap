@@ -55,7 +55,7 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
         raise NotImplementedError
 
     async def process_request(self, request: Request) -> Request:
-        if request.num == Constant.CLIENT_EVENT:
+        if request.msg_type == Constant.CLIENT_EVENT:
             # do not process event
             return request
         index: str = self.get_request_index(request)
@@ -86,7 +86,7 @@ class FuncCircuitBreakerProcessor(BaseCircuitBreakerProcessor):
     exc: Exception = ServerError("Service's func Unavailable")
 
     def get_request_index(self, request: Request) -> str:
-        return request.func_name
+        return request.target
 
     def get_response_index(self, response: Response) -> str:
-        return response.func_name
+        return response.target

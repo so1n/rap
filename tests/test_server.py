@@ -95,7 +95,7 @@ class TestRequestHandle:
         self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
         mocker.patch("rap.client.model.Request.to_msg").return_value = (-1, "default", "", {}, None)
-        # self.num, msg_id, self.group, self.func_name, self.header, self.body
+        # self.msg_type, msg_id, self.correlation_id, self.target, self.header, self.body
 
         with pytest.raises(ServerError) as e:
             await rap_client.raw_call("sync_sum", [1, 2])

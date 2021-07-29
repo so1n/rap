@@ -18,7 +18,7 @@ class TestPingPong:
         rap_client_write = rap_client.transport.write_to_conn
 
         async def mock_write(*args: Any, **kwargs: Any) -> Any:
-            if args[0].func_name == "pong":
+            if args[0].target == "pong":
                 future.set_result(True)
             return await rap_client_write(*args, **kwargs)
 
@@ -30,7 +30,7 @@ class TestPingPong:
         rap_client_write = rap_client.transport.write_to_conn
 
         async def mock_write(*args: Any, **kwargs: Any) -> Any:
-            if args[0].func_name != "pong":
+            if args[0].target != "pong":
                 return await rap_client_write(*args, **kwargs)
 
         setattr(rap_client.transport, "write_to_conn", mock_write)

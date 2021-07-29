@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import uuid
-from typing import Any, Callable, Coroutine, Optional, Tuple
+from typing import Any, Callable, Coroutine, Tuple
 
 from rap.client.model import Request, Response
 from rap.common.channel import BaseChannel
@@ -17,18 +17,16 @@ class Channel(BaseChannel):
 
     def __init__(
         self,
-        fun_name: str,
+        target: str,
         conn: Connection,
         create: Callable[[str], Coroutine[Any, Any, Any]],
         read: Callable[[str], Coroutine[Any, Any, Response]],
         write: Callable[[Request], Coroutine[Any, Any, None]],
         close: Callable[[str], Coroutine[Any, Any, Any]],
-        group: Optional[str] = None,
     ):
         self.channel_id: str = str(uuid.uuid4())
-        self._func_name: str = fun_name
+        self._target: str = target
         self._conn: Connection = conn
-        self._group: str = group if group else Constant.DEFAULT_GROUP
         self._create: Callable[[str], Coroutine[Any, Any, Any]] = create
         self._read: Callable[[str], Coroutine[Any, Any, Response]] = read
         self._write: Callable[[Request], Coroutine[Any, Any, None]] = write
@@ -45,7 +43,10 @@ class Channel(BaseChannel):
         # init channel data structure
         await self._create(self.channel_id)
         self._channel_conn_future = asyncio.Future()
-        self._conn.conn_future.add_done_callback(lambda f: self.set_fail_finish("channel is close"))
+        self._conn.conn_future.add_done_callback(
+            lambda f: self.set_fail_finish(str(f.exception())) if f.exception()
+            else self.set_fail_finish("channel is close")
+        )
 
         # init with server
         life_cycle: str = Constant.DECLARE
@@ -81,9 +82,9 @@ class Channel(BaseChannel):
             raise ChannelError(f"channel is closed")
         request: Request = Request(
             Constant.CHANNEL_REQUEST,
-            self._func_name,
+            self._target,
             body,
-            group=self._group,
+            correlation_id=self.channel_id,
             header={"channel_life_cycle": life_cycle, "channel_id": self.channel_id},
         )
         await self._write(request)

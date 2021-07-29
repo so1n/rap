@@ -27,13 +27,15 @@ class Transport(object):
         read_timeout: int = 9,
         keep_alive_time: int = 1200,
     ):
+        self.server_name: str = ""
         self._read_timeout: int = read_timeout
         self._keep_alive_time: int = keep_alive_time
         self._process_request_list: List = []
         self._process_response_list: List = []
         self._process_exception_list: List = []
 
-        self._msg_id: int = random.randrange(65535)
+        self._max_msg_id: int = 65535
+        self._msg_id: int = random.randrange(self._max_msg_id)
         self._exc_status_code_dict = get_exc_status_code_dict()
         self._resp_future_dict: Dict[str, asyncio.Future[Response]] = {}
         self._channel_queue_dict: Dict[str, asyncio.Queue[Union[Response, Exception]]] = {}
@@ -77,17 +79,16 @@ class Transport(object):
             logging.error(str(exc))
             return
 
-        resp_future_id: str = f"{conn.sock_tuple}:{response.header.get('correlation-id')}"
-        channel_id: Optional[str] = response.header.get("channel_id")
+        correlation_id: str = f"{conn.sock_tuple}:{response.correlation_id}"
         status_code: int = response.header.get("status_code", 500)
 
         async def put_exc_to_receiver(put_response: Response, put_exc: Exception) -> None:
             for process_exc in self._process_exception_list:
                 put_response, put_exc = await process_exc(put_response, put_exc)
-            if channel_id in self._channel_queue_dict:
-                self._channel_queue_dict[channel_id].put_nowait(put_exc)
-            elif put_response.msg_id != -1 and resp_future_id in self._resp_future_dict:
-                self._resp_future_dict[resp_future_id].set_exception(put_exc)
+            if correlation_id in self._channel_queue_dict:
+                self._channel_queue_dict[correlation_id].put_nowait(put_exc)
+            elif put_response.msg_id != -1 and correlation_id in self._resp_future_dict:
+                self._resp_future_dict[correlation_id].set_exception(put_exc)
             elif isinstance(put_exc, rap_exc.ServerError):
                 raise put_exc
             else:
@@ -96,12 +97,12 @@ class Transport(object):
         if exc:
             await put_exc_to_receiver(response, exc)
             return
-        elif response.num == Constant.SERVER_ERROR_RESPONSE or status_code in self._exc_status_code_dict:
+        elif response.msg_type == Constant.SERVER_ERROR_RESPONSE or status_code in self._exc_status_code_dict:
             # server error response handle
             exc_class: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(status_code, rap_exc.BaseRapError)
             await put_exc_to_receiver(response, exc_class(response.body))
             return
-        elif response.num == Constant.SERVER_EVENT:
+        elif response.msg_type == Constant.SERVER_EVENT:
             if response.func_name in self._event_handle_dict:
                 event_handle_list: List[Callable[[Response], None]] = self._event_handle_dict[response.func_name]
                 for fn in event_handle_list:
@@ -114,23 +115,23 @@ class Transport(object):
                 event_exc: Exception = ConnectionError(f"recv close conn event, event info:{response.body}")
                 raise event_exc
             elif response.func_name == Constant.PING_EVENT:
-                await self.write_to_conn(Request.from_event(event.PongEvent("")), conn)
+                await self.write_to_conn(Request.from_event(self.server_name, event.PongEvent("")), conn)
                 return
             elif response.func_name == Constant.DECLARE:
                 if not response.body.get("result"):
                     raise rap_exc.AuthError("Declare error")
             else:
                 logging.error(f"recv error event {response}")
-        elif response.num == Constant.CHANNEL_RESPONSE and channel_id:
+        elif response.msg_type == Constant.CHANNEL_RESPONSE:
             # put msg to channel
-            if channel_id not in self._channel_queue_dict:
-                logging.error(f"recv {channel_id} msg, but {channel_id} not create")
+            if correlation_id not in self._channel_queue_dict:
+                logging.error(f"recv msg, but {correlation_id} not create")
             else:
-                self._channel_queue_dict[channel_id].put_nowait(response)
+                self._channel_queue_dict[correlation_id].put_nowait(response)
             return
-        elif response.num == Constant.MSG_RESPONSE and resp_future_id in self._resp_future_dict:
+        elif response.msg_type == Constant.MSG_RESPONSE and correlation_id in self._resp_future_dict:
             # set msg to future_dict's `future`
-            self._resp_future_dict[resp_future_id].set_result(response)
+            self._resp_future_dict[correlation_id].set_result(response)
         else:
             logging.error(f"Can' parse response: {response}, ignore")
             return
@@ -171,17 +172,19 @@ class Transport(object):
         return response, exc
 
     async def declare(self, server_name: str, conn: Connection) -> str:
-        await self.write_to_conn(Request.from_event(event.DeclareEvent({"server_name": server_name})), conn)
+        await self.write_to_conn(
+            Request.from_event(self.server_name, event.DeclareEvent({"server_name": server_name})), conn
+        )
         response: Optional[Response] = await self.read_from_conn(conn)
 
         exc: Exception = ConnectionError("create conn error")
         if not response:
             raise exc
-        if response.num != Constant.SERVER_EVENT:
+        if response.msg_type != Constant.SERVER_EVENT:
             raise exc
-        if response.func_name == Constant.EVENT_CLOSE_CONN:
+        if response.target == Constant.EVENT_CLOSE_CONN:
             raise ConnectionError(f"recv close conn event, event info:{response.body}")
-        elif response.func_name == Constant.DECLARE:
+        elif response.target == Constant.DECLARE:
             if response.body.get("result", False) and "conn_id" in response.body:
                 return response.body["conn_id"]
         raise exc
@@ -194,10 +197,9 @@ class Transport(object):
         exc: Exception = rap_exc.RPCError("request error")
         for conn in conn_list:
             try:
-                resp_future_id: Optional[str] = await self.write_to_conn(request, conn)
-                if not resp_future_id:
-                    raise rap_exc.ProtocolError(f"request error. please check:{request}")
+                resp_future_id: str = f"{conn.sock_tuple}:{request.correlation_id}"
                 self._resp_future_dict[resp_future_id] = asyncio.Future()
+                await self.write_to_conn(request, conn)
                 try:
                     try:
                         return await as_first_completed(
@@ -229,26 +231,21 @@ class Transport(object):
     #######################
     # base write_to_conn&read api #
     #######################
-    async def write_to_conn(self, request: Request, conn: Connection) -> Optional[str]:
+    async def write_to_conn(self, request: Request, conn: Connection) -> str:
         """write_to_conn msg to conn"""
         request.header["host"] = conn.peer_tuple
+        msg_id: int = self._msg_id + 1
+        # Avoid too big numbers
+        self._msg_id = msg_id & self._max_msg_id
 
-        async def _write(_request: Request) -> int:
-            self.before_write_handle(_request)
+        self.before_write_handle(request)
 
-            for process_request in self._process_request_list:
-                _request = await process_request(_request)
-
-            return await conn.write(_request.to_msg())  # type: ignore
-
-        if request.num == Constant.CHANNEL_REQUEST:
-            if "channel_id" not in request.header:
-                raise ChannelError("not found channel id in header")
-            await _write(request)
-        else:
-            msg_id: int = await _write(request)
-            return f"{conn.sock_tuple}:{msg_id}"
-        return None
+        for process_request in self._process_request_list:
+            _request = await process_request(request)
+        await conn.write(
+            (msg_id, request.msg_type, request.correlation_id, request.target, request.header, request.body)
+        )
+        return f"{conn.sock_tuple}:{request.correlation_id}"
 
     ######################
     # one by one request #
@@ -270,15 +267,15 @@ class Transport(object):
         kwarg_param = kwarg_param or {}
         request: Request = Request(
             Constant.MSG_REQUEST,
-            func_name,
+            f"{self.server_name}/{group}/{func_name}",
             {"call_id": call_id, "param": arg_param, "default_param": kwarg_param},
-            group=group,
+            correlation_id=str(uuid.uuid4()),
         )
         if header:
             request.header.update(header)
         response: Response = await self._base_request(request, conn_list)
-        if response.num != Constant.MSG_RESPONSE:
-            raise RPCError(f"request num must:{Constant.MSG_RESPONSE} not {response.num}")
+        if response.msg_type != Constant.MSG_RESPONSE:
+            raise RPCError(f"request num must:{Constant.MSG_RESPONSE} not {response.msg_type}")
         if "exc" in response.body:
             exc_info: str = response.body.get("exc_info", "")
             if response.header.get("user_agent") == Constant.USER_AGENT:
@@ -303,7 +300,8 @@ class Transport(object):
         async def close(_call_id: str) -> None:
             del self._channel_queue_dict[_call_id]
 
-        return Channel(func_name, conn, create, read, write, close, group=group)
+        target: str = f"/{self.server_name}/{group or Constant.DEFAULT_GROUP}/{func_name}"
+        return Channel(target, conn, create, read, write, close)
 
     #############
     # processor #
