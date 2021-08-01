@@ -95,7 +95,7 @@ class TestRegister:
             await rap_client.raw_call(
                 "reload",
                 ["tests.test_register", "new_reload_sum"],
-                kwarg_param={"name": "load", "correlation_id": "registry"},
+                kwarg_param={"name": "load", "group": "registry"},
                 group="registry",
             )
         exec_msg: str = e.value.args[0]

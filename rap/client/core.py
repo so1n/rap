@@ -257,9 +257,7 @@ class BaseClient:
             raise TypeError(f"{func} is not {RapFunc}")
         return func.raw_func
 
-    def register(
-        self, name: str = "", group: Optional[str] = None, enable_type_check: bool = True
-    ) -> Callable:
+    def register(self, name: str = "", group: Optional[str] = None, enable_type_check: bool = True) -> Callable:
         """Using this method to decorate a fake function can help you use it better.
         (such as ide completion, ide reconstruction and type hints)
         and will be automatically registered according to the function type

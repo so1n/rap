@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import Any
 
 import pytest
@@ -111,8 +112,8 @@ class TestTransport:
             (
                 -1,
                 203,
-                "default",
-                "facker",
+                f"{str(int(time.time()))}",
+                "/_event/default",
                 {
                     "status_code": 200,
                     "version": "0.1",
@@ -125,17 +126,15 @@ class TestTransport:
         )
 
     async def test_read_not_found_channel_id(self, rap_server: Server, mocker: MockerFixture) -> None:
-        channel_id: str = "faker_id"
         await self._read_helper(
             mocker,
             (
                 -1,
                 202,
-                "default",
-                "faker",
+                "faker_id",
+                "/default/test_channel",
                 {
                     "channel_life_cycle": "MSG",
-                    "channel_id": channel_id,
                     "version": "0.1",
                     "user_agent": "Python3-0.5.3",
                     "request_id": "57233e1f-b153-4142-b278-29c755394394",
@@ -143,7 +142,7 @@ class TestTransport:
                 },
                 "hi!",
             ),
-            AnyStringWith(f"recv {channel_id} msg, but {channel_id} not create"),
+            AnyStringWith(f"recv channel msg, but channel not create. channel id:"),
         )
 
     async def test_read_not_parse_response(self, rap_server: Server, mocker: MockerFixture) -> None:
@@ -151,9 +150,9 @@ class TestTransport:
             mocker,
             (
                 -1,
-                202,
-                "default",
-                "faker",
+                -1,
+                "faker_id",
+                "/default/test_channel",
                 {
                     "channel_life_cycle": "MSG",
                     "version": "0.1",
@@ -177,8 +176,8 @@ class TestTransport:
                 (
                     -1,
                     202,
-                    "default",
-                    "faker",
+                    f"{str(int(time.time()))}",
+                    "/_event/default",
                     {
                         "version": "0.1",
                         "user_agent": "Python3-0.5.3",
@@ -212,8 +211,8 @@ class TestTransport:
                 (
                     29759,
                     201,
-                    "default",
-                    "raise_msg_exc",
+                    f"{str(int(time.time()))}",
+                    "/_event/default",
                     {
                         "status_code": 200,
                         "version": "0.1",
@@ -230,12 +229,3 @@ class TestTransport:
 
         exec_msg: str = e.value.args[0]
         assert exec_msg == "division by zero"
-
-    async def test_write_channel_msg_not_channel_id(self, rap_server: Server, rap_client: Client) -> None:
-        with pytest.raises(ChannelError) as e:
-            await rap_client.transport.write_to_conn(
-                Request(Constant.CHANNEL_REQUEST, "test", None, "default"), rap_client.get_conn()
-            )
-
-        exec_msg: str = e.value.args[0]
-        assert exec_msg == "not found channel id in header"

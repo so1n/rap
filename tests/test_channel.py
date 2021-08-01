@@ -146,9 +146,9 @@ class TestChannel:
         mocker.patch("rap.client.transport.channel.uuid.uuid4").return_value = 123
         mocker.patch("rap.client.model.Request.to_msg").return_value = (
             Constant.CHANNEL_REQUEST,
-            "default",
-            "test_channel",
-            {"channel_life_cycle": Constant.DECLARE, "channel_id": "123"},
+            "123",
+            "/default/test_channel",
+            {"channel_life_cycle": Constant.DECLARE},
             None,
         )
         with pytest.raises(ChannelError) as e:
@@ -159,8 +159,8 @@ class TestChannel:
         mocker.patch("rap.client.transport.channel.uuid.uuid4").return_value = 234
         mocker.patch("rap.client.model.Request.to_msg").return_value = (
             Constant.CHANNEL_REQUEST,
-            "default",
-            "test_channel",
+            "234",
+            "/default/test_channel",
             {"channel_life_cycle": Constant.MSG, "channel_id": "234"},
             None,
         )
@@ -172,8 +172,8 @@ class TestChannel:
         mocker.patch("rap.client.transport.channel.uuid.uuid4").return_value = 345
         mocker.patch("rap.client.model.Request.to_msg").return_value = (
             Constant.CHANNEL_REQUEST,
-            "default",
-            "test_channel",
+            "345",
+            "/default/test_channel",
             {"channel_life_cycle": Constant.DROP, "channel_id": "345"},
             None,
         )
@@ -185,8 +185,8 @@ class TestChannel:
         mocker.patch("rap.client.transport.channel.uuid.uuid4").return_value = 456
         mocker.patch("rap.client.model.Request.to_msg").return_value = (
             Constant.CHANNEL_REQUEST,
-            "default",
-            "test_channel",
+            "456",
+            "/default/test_channel",
             {"channel_life_cycle": -1, "channel_id": "456"},
             None,
         )

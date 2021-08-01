@@ -53,10 +53,8 @@ class ConsulEndpoint(BaseEndpoint):
                 for key, value in conn_dict.items():
                     if key not in conn_dict:
                         await self.destroy(value["host"], value["port"])
-                    print("del", key)
                     del conn_dict[key]
             for key, value in conn_dict.items():
-                print(key)
                 await self.create(value["host"], value["port"], value["weight"])
 
     async def start(self) -> None:

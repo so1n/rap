@@ -19,12 +19,8 @@ class Request(object):
         return self.msg_type, self.correlation_id, self.target, self.header, self.body
 
     @classmethod
-    def from_event(cls, server_name: str, event: Event) -> "Request":
-        return cls(
-            msg_type=Constant.CLIENT_EVENT,
-            target=f"{server_name}/_event/{event.event_name}",
-            body=event.event_info
-        )
+    def from_event(cls, event: Event) -> "Request":
+        return cls(msg_type=Constant.CLIENT_EVENT, target=f"/_event/{event.event_name}", body=event.event_info)
 
 
 @dataclass()
@@ -41,26 +37,15 @@ class Response(object):
 
     @classmethod
     def from_msg(cls, conn: Connection, msg: BASE_MSG_TYPE) -> "Response":
-        return cls(conn, *msg)
-
-    def _target_handle(self) -> None:
-        if not self._target_dict:
-            server_name, group, func_name = self.target.split("/")
-            self._target_dict = {"server_name": server_name, "group": group, "func_name": func_name}
-
-    @property
-    def server_name(self) -> str:
-        self._target_handle()
-        return self._target_dict["server_name"]
+        resp: "Response" = cls(conn, *msg)
+        _, group, func_name = resp.target.split("/")
+        resp._target_dict = {"group": group, "func_name": func_name}
+        return resp
 
     @property
     def group(self) -> str:
-        self._target_handle()
         return self._target_dict["group"]
 
     @property
     def func_name(self) -> str:
-        self._target_handle()
         return self._target_dict["func_name"]
-
-

@@ -31,8 +31,8 @@ class TracingProcessor(BaseProcessor):
         self._scope.span.set_tag(tags.SPAN_KIND, tags.SPAN_KIND_RPC_SERVER)
         self._scope.span.set_tag("func_name", request.func_name)
         self._scope.span.set_tag("group", request.group)
-        self._scope.span.set_tag("num", request.num)
-        if request.num is Constant.CHANNEL_REQUEST and self._scope:
+        self._scope.span.set_tag("msg_type", request.msg_type)
+        if request.msg_type is Constant.CHANNEL_REQUEST and self._scope:
             self._scope.close()
             self._scope = None
         return request

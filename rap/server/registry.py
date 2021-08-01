@@ -47,7 +47,7 @@ class FuncModel(object):
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "correlation_id": self.group,
+            "group": self.group,
             "func_type": self.func_type,
             "is_gen_func": self.is_gen_func,
             "is_private": self.is_private,
