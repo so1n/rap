@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import uuid
-from typing import Any, Callable, Coroutine, Tuple
+from typing import Any, Callable, Coroutine, Optional, Tuple
 
 from rap.client.model import Request, Response
 from rap.common.channel import BaseChannel
@@ -46,11 +46,12 @@ class Channel(BaseChannel):
 
         def add_done_callback(f: asyncio.Future) -> None:
             if f.cancelled():
-                self.set_fail_finish("channel is close")
-            if f.exception():
-                self.set_fail_finish(str(f.exception()))
+                self.set_exc(ChannelError("channel is close"))
+            f_exc: Optional[BaseException] = f.exception()
+            if f_exc:
+                self.set_exc(f_exc)
             else:
-                self.set_fail_finish("channel is close")
+                self.set_exc(ChannelError("channel is close"))
 
         self._conn.conn_future.add_done_callback(add_done_callback)
 
@@ -78,8 +79,9 @@ class Channel(BaseChannel):
 
         if response.header.get("channel_life_cycle") == Constant.DROP:
             await self._close(self.channel_id)
-            self.set_fail_finish(self._drop_msg)
-            raise ChannelError(self._drop_msg)
+            exc: ChannelError = ChannelError(self._drop_msg)
+            self.set_exc(exc)
+            raise exc
         return response
 
     async def _base_write(self, body: Any, life_cycle: str) -> None:
