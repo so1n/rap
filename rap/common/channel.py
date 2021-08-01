@@ -87,18 +87,17 @@ class BaseChannel(object):
     async def wait_close(self) -> None:
         await self._channel_conn_future
 
+    def set_exc(self, exc: BaseException) -> None:
+        if self._channel_conn_future and not self._channel_conn_future.done():
+            self._channel_conn_future.set_exception(exc)
+            try:
+                self._channel_conn_future.exception()
+            except Exception:
+                pass
+
     def set_success_finish(self) -> None:
         if self._channel_conn_future and not self._channel_conn_future.done():
             self._channel_conn_future.set_result(True)
-
-    def set_fail_finish(self, msg: str = "") -> None:
-        if self._channel_conn_future and not self._channel_conn_future.done():
-            self._channel_conn_future.set_exception(ChannelError(msg))
-            # NOTE: ignore `Future exception was never retrieved` tip
-            try:
-                self._channel_conn_future.exception()
-            except ChannelError:
-                pass
 
     #####################
     # async for support #
