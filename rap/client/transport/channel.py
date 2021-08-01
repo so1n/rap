@@ -43,10 +43,16 @@ class Channel(BaseChannel):
         # init channel data structure
         await self._create(self.channel_id)
         self._channel_conn_future = asyncio.Future()
-        self._conn.conn_future.add_done_callback(
-            lambda f: self.set_fail_finish(str(f.exception())) if f.exception()
-            else self.set_fail_finish("channel is close")
-        )
+
+        def add_done_callback(f: asyncio.Future) -> None:
+            if f.cancelled():
+                self.set_fail_finish("channel is close")
+            if f.exception():
+                self.set_fail_finish(str(f.exception()))
+            else:
+                self.set_fail_finish("channel is close")
+
+        self._conn.conn_future.add_done_callback(add_done_callback)
 
         # init with server
         life_cycle: str = Constant.DECLARE

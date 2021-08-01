@@ -94,7 +94,7 @@ class TestRequestHandle:
     async def test_request_dispatch_not_found(
         self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
-        mocker.patch("rap.client.model.Request.to_msg").return_value = (-1, "default", "", {}, None)
+        mocker.patch("rap.client.model.Request.to_msg").return_value = (-1, "123", "/default/test", {}, None)
         # self.msg_type, msg_id, self.correlation_id, self.target, self.header, self.body
 
         with pytest.raises(ServerError) as e:

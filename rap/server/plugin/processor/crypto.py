@@ -115,7 +115,7 @@ class CryptoProcessor(BaseProcessor):
         if (
             response.header.get("status_code") == 200
             and response.body
-            and response.num != Constant.SERVER_ERROR_RESPONSE
+            and response.msg_type != Constant.SERVER_ERROR_RESPONSE
         ):
             try:
                 crypto: Crypto = response.stats.crypto

@@ -17,7 +17,7 @@ class LimitProcessor(BaseProcessor):
         self._ignore_request_num_set: Set = {Constant.CHANNEL_REQUEST, Constant.CLIENT_EVENT, Constant.CHANNEL_RESPONSE}
 
     async def process_request(self, request: Request) -> Request:
-        if request.num in self._ignore_request_num_set:
+        if request.target in self._ignore_request_num_set:
             return request
 
         for func, rule in self._rule_list:

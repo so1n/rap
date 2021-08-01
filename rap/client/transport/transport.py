@@ -13,7 +13,7 @@ from rap.common import event
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError, RPCError
-from rap.common.types import BASE_MSG_TYPE
+from rap.common.types import BASE_MSG_TYPE, MSG_TYPE
 from rap.common.utils import Constant, as_first_completed
 
 __all__ = ["Transport"]
@@ -115,7 +115,7 @@ class Transport(object):
                 event_exc: Exception = ConnectionError(f"recv close conn event, event info:{response.body}")
                 raise event_exc
             elif response.func_name == Constant.PING_EVENT:
-                await self.write_to_conn(Request.from_event(self.server_name, event.PongEvent("")), conn)
+                await self.write_to_conn(Request.from_event(event.PongEvent("")), conn)
                 return
             elif response.func_name == Constant.DECLARE:
                 if not response.body.get("result"):
@@ -125,7 +125,7 @@ class Transport(object):
         elif response.msg_type == Constant.CHANNEL_RESPONSE:
             # put msg to channel
             if correlation_id not in self._channel_queue_dict:
-                logging.error(f"recv msg, but {correlation_id} not create")
+                logging.error(f"recv channel msg, but channel not create. channel id:{correlation_id}")
             else:
                 self._channel_queue_dict[correlation_id].put_nowait(response)
             return
@@ -172,9 +172,7 @@ class Transport(object):
         return response, exc
 
     async def declare(self, server_name: str, conn: Connection) -> str:
-        await self.write_to_conn(
-            Request.from_event(self.server_name, event.DeclareEvent({"server_name": server_name})), conn
-        )
+        await self.write_to_conn(Request.from_event(event.DeclareEvent({"server_name": server_name})), conn)
         response: Optional[Response] = await self.read_from_conn(conn)
 
         exc: Exception = ConnectionError("create conn error")
@@ -182,9 +180,9 @@ class Transport(object):
             raise exc
         if response.msg_type != Constant.SERVER_EVENT:
             raise exc
-        if response.target == Constant.EVENT_CLOSE_CONN:
+        if response.func_name == Constant.EVENT_CLOSE_CONN:
             raise ConnectionError(f"recv close conn event, event info:{response.body}")
-        elif response.target == Constant.DECLARE:
+        elif response.func_name == Constant.DECLARE:
             if response.body.get("result", False) and "conn_id" in response.body:
                 return response.body["conn_id"]
         raise exc
@@ -242,9 +240,8 @@ class Transport(object):
 
         for process_request in self._process_request_list:
             _request = await process_request(request)
-        await conn.write(
-            (msg_id, request.msg_type, request.correlation_id, request.target, request.header, request.body)
-        )
+
+        await conn.write((msg_id, *request.to_msg()))  # type: ignore
         return f"{conn.sock_tuple}:{request.correlation_id}"
 
     ######################
@@ -286,10 +283,12 @@ class Transport(object):
 
     def channel(self, func_name: str, conn: Connection, group: Optional[str] = None) -> "Channel":
         async def create(_channel_id: str) -> None:
-            self._channel_queue_dict[_channel_id] = asyncio.Queue()
+            self._channel_queue_dict[f"{conn.sock_tuple}:{_channel_id}"] = asyncio.Queue()
 
         async def read(_channel_id: str) -> Response:
-            result: Union[Response, Exception] = await self._channel_queue_dict[_channel_id].get()
+            result: Union[Response, Exception] = await self._channel_queue_dict[
+                f"{conn.sock_tuple}:{_channel_id}"
+            ].get()
             if isinstance(result, Exception):
                 raise result
             return result
@@ -297,10 +296,10 @@ class Transport(object):
         async def write(request: Request) -> None:
             await self.write_to_conn(request, conn)
 
-        async def close(_call_id: str) -> None:
-            del self._channel_queue_dict[_call_id]
+        async def close(_channel_id: str) -> None:
+            del self._channel_queue_dict[f"{conn.sock_tuple}:{_channel_id}"]
 
-        target: str = f"/{self.server_name}/{group or Constant.DEFAULT_GROUP}/{func_name}"
+        target: str = f"/{group or Constant.DEFAULT_GROUP}/{func_name}"
         return Channel(target, conn, create, read, write, close)
 
     #############

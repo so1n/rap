@@ -25,15 +25,7 @@ from rap.common.conn import ServerConnection
 from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent
 from rap.common.exceptions import BaseRapError, ChannelError, ParseError, ProtocolError, RpcRunTimeError, ServerError
 from rap.common.types import is_type
-from rap.common.utils import (
-    Constant,
-    as_first_completed,
-    check_func_type,
-    del_future,
-    get_event_loop,
-    parse_error,
-    response_num_dict,
-)
+from rap.common.utils import Constant, check_func_type, del_future, get_event_loop, parse_error, response_num_dict
 from rap.server.model import Request, Response
 from rap.server.plugin.processor.base import BaseProcessor
 from rap.server.registry import FuncModel
@@ -146,20 +138,19 @@ class Receiver(object):
         self._channel_dict: Dict[str, Channel] = {}
 
     async def dispatch(self, request: Request) -> Optional[Response]:
-        response_num: int = response_num_dict.get(request.num, Constant.SERVER_ERROR_RESPONSE)
+        response_num: int = response_num_dict.get(request.msg_type, Constant.SERVER_ERROR_RESPONSE)
 
         # gen response object
         response: "Response" = Response(
-            num=response_num,
-            group=request.group,
-            func_name=request.func_name,
+            target=request.target,
+            msg_type=response_num,
+            correlation_id=request.correlation_id,
             stats=request.stats,
         )
         response.header.update(request.header)
-        response.header["correlation-id"] = request.msg_id
 
         # check type_id
-        if response.num is Constant.SERVER_ERROR_RESPONSE:
+        if response.msg_type is Constant.SERVER_ERROR_RESPONSE:
             logging.error(f"parse request data: {request} from {self._conn.peer_tuple} error")
             response.set_exception(ServerError("Illegal request"))
             return response
@@ -177,7 +168,7 @@ class Receiver(object):
                 return response
 
         try:
-            dispatch_func: Callable = self.dispatch_func_dict[request.num]
+            dispatch_func: Callable = self.dispatch_func_dict[request.msg_type]
             return await dispatch_func(request, response)
         except BaseRapError as e:
             response.set_exception(e)
@@ -208,10 +199,7 @@ class Receiver(object):
     async def channel_handle(self, request: Request, response: Response) -> Optional[Response]:
         func: Callable = self._app.registry.get_func_model(request, Constant.CHANNEL_TYPE).func
         # declare var
-        channel_id: str = request.header.get("channel_id", None)
-        if channel_id is None:
-            raise ProtocolError("channel request must channel id")
-
+        channel_id: str = request.correlation_id
         life_cycle: str = request.header.get("channel_life_cycle", "error")
         channel: Optional[Channel] = self._channel_dict.get(channel_id, None)
         if life_cycle == Constant.MSG:
@@ -227,9 +215,9 @@ class Receiver(object):
                 header["channel_id"] = channel_id
                 await self.sender(
                     Response(
-                        num=Constant.CHANNEL_RESPONSE,
-                        group=response.group,
-                        func_name=response.func_name,
+                        target=request.target,
+                        msg_type=Constant.CHANNEL_RESPONSE,
+                        correlation_id=channel_id,
                         header=header,
                         body=body,
                     )
@@ -350,7 +338,7 @@ class Receiver(object):
                 try:
                     fn(request)
                 except Exception as e:
-                    logging.exception(f"run event name:{response.func_name} raise error:{e}")
+                    logging.exception(f"run event name:{response.target} raise error:{e}")
 
         if request.func_name == Constant.PONG_EVENT:
             self._keepalive_timestamp = int(time.time())

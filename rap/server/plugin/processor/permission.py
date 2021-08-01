@@ -13,7 +13,7 @@ class PermissionProcessor(BaseProcessor):
 
     async def process_request(self, request: Request) -> Request:
         func_model: FuncModel = self.app.registry.get_func_model(
-            request, Constant.NORMAL_TYPE if request.num == Constant.MSG_REQUEST else Constant.CHANNEL_TYPE
+            request, Constant.NORMAL_TYPE if request.msg_type == Constant.MSG_REQUEST else Constant.CHANNEL_TYPE
         )
 
         if func_model.is_private and request.conn.peer_tuple[0] not in ("::1", "127.0.0.1", "localhost"):
