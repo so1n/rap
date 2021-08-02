@@ -5,7 +5,7 @@ from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
 from rap.common.conn import ServerConnection
 from rap.common.event import CloseConnEvent
-from rap.server.model import ServerEventEnum
+from rap.common.utils import EventEnum
 from rap.server.plugin.middleware.base import BaseConnMiddleware
 from rap.server.sender import Sender
 
@@ -38,8 +38,8 @@ class IpBlockMiddleware(BaseConnMiddleware):
 
         self._allow_ip_list: List[str] = allow_ip_list if allow_ip_list else []
         self._block_ip_list: List[str] = block_ip_list if block_ip_list else []
-        self.server_event_dict: Dict[ServerEventEnum, List["SERVER_EVENT_FN"]] = {
-            ServerEventEnum.before_start: [self.start_event_handle]
+        self.server_event_dict: Dict[EventEnum, List["SERVER_EVENT_FN"]] = {
+            EventEnum.before_start: [self.start_event_handle]
         }
 
     async def start_event_handle(self, app: "Server") -> None:

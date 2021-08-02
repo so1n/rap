@@ -1,14 +1,12 @@
-from typing import Tuple
+from typing import Callable, Dict, List, Tuple
 
 from rap.client.model import Request, Response
+from rap.common.utils import EventEnum
 
 
 class BaseProcessor(object):
-    def start_event_handle(self) -> None:
-        pass
 
-    def stop_event_handle(self) -> None:
-        pass
+    event_dict: Dict["EventEnum", List[Callable]] = {}
 
     async def process_request(self, request: Request) -> Request:
         return request

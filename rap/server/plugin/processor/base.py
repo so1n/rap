@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING, Callable, Dict, List, Optional
 from rap.server.model import Request, Response
 
 if TYPE_CHECKING:
+    from rap.common.utils import EventEnum
     from rap.server.core import Server
-    from rap.server.model import ServerEventEnum
     from rap.server.types import SERVER_EVENT_FN
 
 
@@ -15,7 +15,7 @@ class BaseProcessor(object):
     """
 
     app: "Server"
-    server_event_dict: Dict["ServerEventEnum", List["SERVER_EVENT_FN"]] = {}
+    server_event_dict: Dict["EventEnum", List["SERVER_EVENT_FN"]] = {}
 
     def start_event_handle(self, app: "Server") -> None:
         pass

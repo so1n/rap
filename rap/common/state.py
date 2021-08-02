@@ -151,8 +151,7 @@ class WindowState(object):
 
     def change_state(self, app: Any) -> None:
         if self._is_closed:
-            if not self._loop:
-                self._loop = get_event_loop()
+            self._loop = get_event_loop()
             self._timestamp = self._loop.time()
             self._is_closed = False
             self._loop.call_later(self._interval, self._change_state)

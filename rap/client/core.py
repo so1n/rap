@@ -11,7 +11,7 @@ from rap.client.transport.transport import Transport
 from rap.common import event
 from rap.common.conn import Connection
 from rap.common.types import is_type
-from rap.common.utils import RapFunc, param_handle
+from rap.common.utils import EventEnum, RapFunc, param_handle
 
 __all__ = ["BaseClient", "Client"]
 CHANNEL_F = Callable[[Channel], Any]
@@ -81,6 +81,7 @@ class BaseClient:
         self.transport: Transport = Transport(read_timeout=timeout, keep_alive_time=keep_alive_time)
         self.endpoint: BaseEndpoint = endpoint
         self._processor_list: List[BaseProcessor] = []
+        self._event_dict: Dict[EventEnum, List[Callable]] = {value: [] for value in EventEnum.__members__.values()}
 
         self.endpoint.set_transport(self.transport)
 
@@ -89,15 +90,19 @@ class BaseClient:
     ##################
     async def stop(self) -> None:
         """close client transport"""
+        for handler in self._event_dict[EventEnum.before_end]:
+            handler()
         await self.endpoint.stop()
-        for processor in self._processor_list:
-            processor.stop_event_handle()
+        for handler in self._event_dict[EventEnum.after_end]:
+            handler()
 
     async def start(self) -> None:
         """Create client transport"""
-        for processor in self._processor_list:
-            processor.start_event_handle()
+        for handler in self._event_dict[EventEnum.before_start]:
+            handler()
         await self.endpoint.start()
+        for handler in self._event_dict[EventEnum.after_start]:
+            handler()
 
     def register_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
         self.transport.register_event_handle(event_class, fn)
@@ -106,11 +111,15 @@ class BaseClient:
         self.transport.unregister_event_handle(event_class, fn)
 
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:
-        if self.is_close:
-            self._processor_list.extend(processor_list)
-        else:
+        if not self.is_close:
             for processor in processor_list:
-                processor.start_event_handle()
+                for handler in processor.event_dict.get(EventEnum.before_start, []):
+                    handler()
+                for handler in processor.event_dict.get(EventEnum.after_start, []):
+                    handler()
+        for processor in processor_list:
+            for event_type, handle in processor.event_dict.items():
+                self._event_dict[event_type].extend(handle)
         self.transport.load_processor(processor_list)
 
     #####################

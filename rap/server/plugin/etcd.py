@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Optional
 
 from rap.common.coordinator.etcd import EtcdClient
-from rap.server.model import ServerEventEnum
+from rap.common.utils import EventEnum
 
 if TYPE_CHECKING:
     from rap.server import Server
@@ -29,6 +29,6 @@ def add_etcd_client(
         await etcd_client.deregister(app.server_name, app.host, str(app.port))
         await etcd_client.stop()
 
-    server.register_server_event(ServerEventEnum.after_start, register)
-    server.register_server_event(ServerEventEnum.before_end, deregister)
+    server.register_server_event(EventEnum.after_start, register)
+    server.register_server_event(EventEnum.before_end, deregister)
     return server

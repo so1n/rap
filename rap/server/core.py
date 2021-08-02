@@ -11,9 +11,9 @@ from rap.common.conn import ServerConnection
 from rap.common.exceptions import ServerError
 from rap.common.state import WindowState
 from rap.common.types import BASE_MSG_TYPE, READER_TYPE, WRITER_TYPE
-from rap.common.utils import RapFunc
+from rap.common.utils import EventEnum, RapFunc
 from rap.server.context import context
-from rap.server.model import Request, Response, ServerEventEnum
+from rap.server.model import Request, Response
 from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware
 from rap.server.plugin.processor.base import BaseProcessor
 from rap.server.receiver import Receiver
@@ -66,8 +66,8 @@ class Server(object):
 
         self._middleware_list: List[BaseMiddleware] = []
         self._processor_list: List[BaseProcessor] = []
-        self._server_event_dict: Dict[ServerEventEnum, List[SERVER_EVENT_FN]] = {
-            value: [] for value in ServerEventEnum.__members__.values()
+        self._server_event_dict: Dict[EventEnum, List[SERVER_EVENT_FN]] = {
+            value: [] for value in EventEnum.__members__.values()
         }
         self._request_event_handle_dict: Dict[str, List[Callable[[Request], None]]] = {}
 
@@ -80,9 +80,9 @@ class Server(object):
         self.registry: RegistryManager = RegistryManager()
         self.window_state: Optional[WindowState] = window_state
         if self.window_state and self.window_state.is_closed:
-            self.register_server_event(ServerEventEnum.before_start, self.window_state.change_state)
+            self.register_server_event(EventEnum.before_start, self.window_state.change_state)
 
-    def register_server_event(self, event_type: ServerEventEnum, *event_handle_list: SERVER_EVENT_FN) -> None:
+    def register_server_event(self, event_type: EventEnum, *event_handle_list: SERVER_EVENT_FN) -> None:
         for event_handle in event_handle_list:
             if (event_type, event_handle) not in self._depend_set:
                 self._depend_set.add((event_type, event_handle))
@@ -153,7 +153,7 @@ class Server(object):
     def is_closed(self) -> bool:
         return self._run_event.is_set()
 
-    async def run_event_list(self, event_type: ServerEventEnum, is_raise: bool = False) -> None:
+    async def run_event_list(self, event_type: EventEnum, is_raise: bool = False) -> None:
         event_handle_list: Optional[List[SERVER_EVENT_FN]] = self._server_event_dict.get(event_type)
         if not event_handle_list:
             return
@@ -171,12 +171,12 @@ class Server(object):
     async def create_server(self) -> "Server":
         if not self.is_closed:
             raise RuntimeError("Server status is running...")
-        await self.run_event_list(ServerEventEnum.before_start, is_raise=True)
+        await self.run_event_list(EventEnum.before_start, is_raise=True)
         self._server = await asyncio.start_server(
             self.conn_handle, self.host, self.port, ssl=self._ssl_context, backlog=self._backlog
         )
         logging.info(f"server running on {self.host}:{self.port}. use ssl:{bool(self._ssl_context)}")
-        await self.run_event_list(ServerEventEnum.after_start)
+        await self.run_event_list(EventEnum.after_start)
 
         # fix different loop event
         self._run_event.clear()
@@ -208,7 +208,7 @@ class Server(object):
         if self.is_closed:
             return
 
-        await self.run_event_list(ServerEventEnum.before_end)
+        await self.run_event_list(EventEnum.before_end)
 
         # Notify the client that the server is ready to shut down
         async def send_shutdown_event(_conn: ServerConnection) -> None:
@@ -237,7 +237,7 @@ class Server(object):
             await asyncio.sleep(0.1)
 
         self._run_event.set()
-        await self.run_event_list(ServerEventEnum.after_end, is_raise=True)
+        await self.run_event_list(EventEnum.after_end, is_raise=True)
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE) -> None:
         conn: ServerConnection = ServerConnection(reader, writer, self._timeout)
