@@ -23,8 +23,7 @@ class FuncModel(object):
         doc: Optional[str] = None,
         func_name: Optional[str] = None,
     ) -> None:
-        func_sig = inspect.signature(func)
-
+        self.func_sig = inspect.signature(func)
         self.group: str = group
         self.func_type: str = func_type
         self.func: Callable = func
@@ -32,14 +31,14 @@ class FuncModel(object):
         self.is_private: bool = is_private
         self.doc: str = doc or func.__doc__ or ""
         self.func_name: str = func_name or func.__name__
-        self.return_type: Type = func_sig.return_annotation
+        self.return_type: Type = self.func_sig.return_annotation
         self.arg_list: List[str] = []
         self.kwarg_dict: OrderedDict = OrderedDict()
 
         if self.func_type == Constant.CHANNEL_TYPE and self.is_gen_func:
             raise RegisteredError("Is not a legal function. is channel or gen func?")
 
-        for name, parameter in func_sig.parameters.items():
+        for name, parameter in self.func_sig.parameters.items():
             if parameter.default is parameter.empty:
                 self.arg_list.append(name)
             else:

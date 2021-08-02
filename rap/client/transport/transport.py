@@ -252,7 +252,6 @@ class Transport(object):
         func_name: str,
         conn_list: List[Connection],
         arg_param: Optional[Sequence[Any]] = None,
-        kwarg_param: Optional[Dict[str, Any]] = None,
         call_id: Optional[int] = None,
         group: Optional[str] = None,
         header: Optional[dict] = None,
@@ -261,11 +260,10 @@ class Transport(object):
         group = group or Constant.DEFAULT_GROUP
         call_id = call_id or -1
         arg_param = arg_param or []
-        kwarg_param = kwarg_param or {}
         request: Request = Request(
             Constant.MSG_REQUEST,
             f"{self.server_name}/{group}/{func_name}",
-            {"call_id": call_id, "param": arg_param, "default_param": kwarg_param},
+            {"call_id": call_id, "param": arg_param},
             correlation_id=str(uuid.uuid4()),
         )
         if header:

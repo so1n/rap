@@ -25,7 +25,15 @@ from rap.common.conn import ServerConnection
 from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent
 from rap.common.exceptions import BaseRapError, ChannelError, ParseError, ProtocolError, RpcRunTimeError, ServerError
 from rap.common.types import is_type
-from rap.common.utils import Constant, check_func_type, del_future, get_event_loop, parse_error, response_num_dict
+from rap.common.utils import (
+    Constant,
+    check_func_type,
+    del_future,
+    get_event_loop,
+    param_handle,
+    parse_error,
+    response_num_dict,
+)
 from rap.server.model import Request, Response
 from rap.server.plugin.processor.base import BaseProcessor
 from rap.server.registry import FuncModel
@@ -256,33 +264,18 @@ class Receiver(object):
 
     async def _msg_handle(self, request: Request, call_id: int, func_model: FuncModel) -> Tuple[int, Any]:
         param: list = request.body.get("param", [])
-        kwarg_param: Dict[str, Any] = request.body.get("default_param", {})
-
-        # Check whether the parameter is legal
-        if len(func_model.arg_list) != len(param):
-            raise ParseError(
-                extra_msg=f"{func_model.func_name} takes {len(func_model.arg_list)}"
-                f" positional arguments but {len(param)} were given"
-            )
-        kwarg_param_set: set = set(kwarg_param.keys())
-        fun_kwarg_set: set = set(func_model.kwarg_dict.keys())
-        if not kwarg_param_set.issubset(fun_kwarg_set):
-            raise ParseError(
-                extra_msg=f"{func_model.func_name} can not find default "
-                f"param name:{kwarg_param_set.difference(fun_kwarg_set)}"
-            )
 
         # Check param type
         try:
-            check_func_type(func_model.func, param, kwarg_param)
+            param_handle(func_model.func, param, {})
         except TypeError as e:
             raise ParseError(extra_msg=str(e))
 
         # called func
         if asyncio.iscoroutinefunction(func_model.func):
-            coroutine: Union[Awaitable, Coroutine] = func_model.func(*param, **kwarg_param)
+            coroutine: Union[Awaitable, Coroutine] = func_model.func(*param)
         else:
-            coroutine = get_event_loop().run_in_executor(None, partial(func_model.func, *param, **kwarg_param))
+            coroutine = get_event_loop().run_in_executor(None, partial(func_model.func, *param))
 
         try:
             result = await asyncio.wait_for(coroutine, self._run_timeout)
