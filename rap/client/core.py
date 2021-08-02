@@ -30,6 +30,15 @@ class AsyncIteratorCall:
         header: Optional[dict] = None,
         group: Optional[str] = None,
     ):
+        """
+        name: func name
+        client: rap base client
+        conn: rap tcp conn
+        arg_param: func param
+        kwarg_param: func kwarg param
+        header: request's header
+        group: func group, default value is `default`
+        """
         self._name: str = name
         self._client: "BaseClient" = client
         self._conn: Connection = conn
@@ -68,6 +77,11 @@ class AsyncIteratorCall:
 
 class BaseClient:
     def __init__(self, endpoint: BaseEndpoint, timeout: int = 9, keep_alive_time: int = 1200):
+        """
+        endpoint: rap endpoint
+        timeout: read msg timeout
+        keep_alive_time: keep alive time by transport
+        """
         self.transport: Transport = Transport(read_timeout=timeout, keep_alive_time=keep_alive_time)
         self.endpoint: BaseEndpoint = endpoint
         self._processor_list: List[BaseProcessor] = []
@@ -174,13 +188,16 @@ class BaseClient:
     # client base api #
     ###################
     def get_conn(self) -> Connection:
+        """get random conn from endpoint"""
         return self.endpoint.get_conn()
 
     def get_conn_list(self, cnt: Optional[int] = None) -> List[Connection]:
+        """get conn list from endpoint. default cnt value: half of the currently available conn"""
         return self.endpoint.get_conn_list(cnt)
 
     @property
     def is_close(self) -> bool:
+        """Whether the client is closed"""
         return self.endpoint.is_close
 
     async def raw_call(
@@ -194,9 +211,10 @@ class BaseClient:
         """rpc client base call method
         Note: This method does not support parameter type checking, nor does it support channels;
         name: func name
-        args: python args
+        args: func param
+        kwargs_param: func kwargs param
         header: request's header
-        target: func target, default target value is `default`
+        group: func group, default value is `default`
         """
         conn_list: List[Connection] = self.endpoint.get_conn_list()
         response = await self.transport.request(name, conn_list, arg_param, kwarg_param, group=group, header=header)
@@ -212,9 +230,10 @@ class BaseClient:
     ) -> Any:
         """automatically resolve function names and call raw_call
         func: rpc func
-        args: python args
+        args: func param
+        kwargs_param: func kwargs param
         header: request's header
-        target: func's target, default target value is `default`
+        group: func group, default value is `default`
         """
         return await self.raw_call(func.__name__, arg_param, kwarg_param=kwarg_param, group=group, header=header)
 
@@ -228,9 +247,10 @@ class BaseClient:
     ) -> Any:
         """Python-specific generator call
         func: rap func
-        args: python args
+        args: func param
+        kwargs_param: func kwargs param
         header: request's header
-        target: func's target, default target value is `default`
+        group: func group, default value is `default`
         """
         async for result in AsyncIteratorCall(
             func.__name__, self, self.get_conn(), arg_param, kwarg_param=kwarg_param, header=header, group=group
@@ -240,19 +260,22 @@ class BaseClient:
     def inject(
         self, func: Callable, name: str = "", group: Optional[str] = None, enable_type_check: bool = True
     ) -> None:
+        """Replace the function with `RapFunc` and inject it into the client at the same time"""
         if isinstance(func, RapFunc):
             raise RuntimeError(f"{func} already inject or register")
         new_func: Callable = self.register(name=name, group=group, enable_type_check=enable_type_check)(func)
         sys.modules[func.__module__].__setattr__(func.__name__, new_func)
 
     @staticmethod
-    def recovery(func: RapFunc) -> Any:
+    def recovery(func: RapFunc) -> None:
+        """Restore functions that have been injected"""
         if not isinstance(func, RapFunc):
             raise RuntimeError(f"{func} is not {RapFunc}, which can not recovery")
         sys.modules[func.__module__].__setattr__(func.__name__, func.raw_func)
 
     @staticmethod
     def get_raw_func(func: RapFunc) -> Callable:
+        """Get the original function encapsulated by `RapFunc`"""
         if not isinstance(func, RapFunc):
             raise TypeError(f"{func} is not {RapFunc}")
         return func.raw_func
@@ -262,7 +285,8 @@ class BaseClient:
         (such as ide completion, ide reconstruction and type hints)
         and will be automatically registered according to the function type
 
-        target: func target, default target value is `default`
+        name: func name
+        group: func group, default value is `default`
         """
 
         def wrapper(func: Callable) -> RapFunc:

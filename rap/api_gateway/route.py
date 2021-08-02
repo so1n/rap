@@ -72,8 +72,9 @@ async def websocket_route_func(websocket: WebSocket) -> None:
             receive_future: asyncio.Future = asyncio.ensure_future(receive())
 
             def set_finish(f: asyncio.Future) -> None:
-                if f.exception():
-                    channel.set_fail_finish(str(f.exception()))
+                exc: Optional[BaseException] = f.exception()
+                if exc:
+                    channel.set_exc(exc)
                 else:
                     channel.set_success_finish()
 
