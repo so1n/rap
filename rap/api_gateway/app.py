@@ -13,6 +13,12 @@ def create_app(
     private_filter: Optional[bool] = None,
     group_filter: Optional[Set[str]] = None,
 ) -> Starlette:
+    """
+    prefix: api url prefix
+    rap_client_list: rap client
+    private_filter: Can access the function whose attribute is_private is true
+    group_filter: Which groups can be accessed
+    """
     app: Starlette = Starlette()
     func_info_dict: Dict[str, Dict[str, Any]] = {}
     rap_client_dict: Dict[str, Client] = {rap_client.endpoint.server_name: rap_client for rap_client in rap_client_list}
