@@ -4,6 +4,7 @@ import random
 import string
 import sys
 import time
+from enum import Enum, auto
 from typing import Any, Callable, Coroutine, Dict, List, Sequence, Union
 
 __all__ = [
@@ -184,3 +185,10 @@ def del_future(future: asyncio.Future) -> None:
         future.cancel()
     if future.done():
         future.result()
+
+
+class EventEnum(Enum):
+    before_start = auto()
+    after_start = auto()
+    before_end = auto()
+    after_end = auto()

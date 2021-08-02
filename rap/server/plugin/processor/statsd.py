@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 
 from aio_statsd import StatsdClient  # type: ignore
 
-from rap.common.utils import Constant
-from rap.server.model import Request, Response, ServerEventEnum
+from rap.common.utils import Constant, EventEnum
+from rap.server.model import Request, Response
 from rap.server.plugin.processor.base import BaseProcessor
 
 if TYPE_CHECKING:
@@ -28,8 +28,8 @@ class StatsdProcessor(BaseProcessor):
         self._error_msg_key: str = f"{self._namespace}.msg.error"
         self._request_key: str = f"{self._namespace}.request"
         self._error_request_key: str = f"{self._namespace}.request.error"
-        self.server_event_dict: Dict[ServerEventEnum, List["SERVER_EVENT_FN"]] = {
-            ServerEventEnum.before_start: [self.start_event_handle]
+        self.server_event_dict: Dict[EventEnum, List["SERVER_EVENT_FN"]] = {
+            EventEnum.before_start: [self.start_event_handle]
         }
 
     def start_event_handle(self, app: "Server") -> None:

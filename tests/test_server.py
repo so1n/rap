@@ -6,9 +6,9 @@ from pytest_mock import MockerFixture
 
 from rap.client import Client
 from rap.common.exceptions import RpcRunTimeError, ServerError
+from rap.common.utils import EventEnum
 from rap.server import Server
 from rap.server.context import Context
-from rap.server.model import ServerEventEnum
 from rap.server.plugin.middleware.conn.limit import ConnLimitMiddleware
 from rap.server.plugin.processor import CryptoProcessor as ServerCryptoProcessor
 
@@ -23,7 +23,7 @@ class TestServerEvent:
             pass
 
         rap_server: Server = Server("test")
-        for key, value in ServerEventEnum.__members__.items():
+        for key, value in EventEnum.__members__.items():
             rap_server.register_server_event(value, demo_event)
             assert rap_server._server_event_dict[value][0] == demo_event
 
@@ -31,7 +31,7 @@ class TestServerEvent:
         async def demo_event(app: Server) -> None:
             pass
 
-        for key, value in ServerEventEnum.__members__.items():
+        for key, value in EventEnum.__members__.items():
             rap_server: Server = Server("test")
             rap_server.register_server_event(value, demo_event)
             with pytest.raises(ImportError):

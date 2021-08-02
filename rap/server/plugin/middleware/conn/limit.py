@@ -6,7 +6,7 @@ from aredis import StrictRedis, StrictRedisCluster  # type: ignore
 
 from rap.common.conn import ServerConnection
 from rap.common.event import CloseConnEvent
-from rap.server.model import ServerEventEnum
+from rap.common.utils import EventEnum
 from rap.server.plugin.middleware.base import BaseConnMiddleware
 from rap.server.sender import Sender
 
@@ -25,8 +25,8 @@ class ConnLimitMiddleware(BaseConnMiddleware):
         self._conn_count: int = 0
         self._block_time: int = block_time
         self._release_timestamp: int = int(time.time())
-        self.server_event_dict: Dict[ServerEventEnum, List["SERVER_EVENT_FN"]] = {
-            ServerEventEnum.before_start: [self.start_event_handle]
+        self.server_event_dict: Dict[EventEnum, List["SERVER_EVENT_FN"]] = {
+            EventEnum.before_start: [self.start_event_handle]
         }
 
     def start_event_handle(self, app: "Server") -> None:

@@ -1,6 +1,5 @@
 import logging
 from dataclasses import dataclass, field
-from enum import Enum, auto
 from typing import Any, Optional
 
 from rap.common.conn import ServerConnection
@@ -9,13 +8,6 @@ from rap.common.exceptions import BaseRapError, ServerError
 from rap.common.state import State
 from rap.common.types import BASE_MSG_TYPE, MSG_TYPE
 from rap.common.utils import Constant
-
-
-class ServerEventEnum(Enum):
-    before_start = auto()
-    after_start = auto()
-    before_end = auto()
-    after_end = auto()
 
 
 @dataclass()
