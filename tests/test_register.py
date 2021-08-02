@@ -85,8 +85,7 @@ class TestRegister:
         assert 3 == await reload_sum_num(1, 2)
         await rap_client.raw_call(
             "reload",
-            ["tests.test_register", "new_reload_sum"],
-            kwarg_param={"name": "reload_sum_num"},
+            ["tests.test_register", "new_reload_sum", "reload_sum_num"],
             group="registry",
         )
         assert 4 == await reload_sum_num(1, 2)
@@ -94,17 +93,14 @@ class TestRegister:
         with pytest.raises(RegisteredError) as e:
             await rap_client.raw_call(
                 "reload",
-                ["tests.test_register", "new_reload_sum"],
-                kwarg_param={"name": "load", "group": "registry"},
+                ["tests.test_register", "new_reload_sum", "load", "registry"],
                 group="registry",
             )
         exec_msg: str = e.value.args[0]
         assert exec_msg.endswith("private func can not reload")
 
         with pytest.raises(RegisteredError) as e:
-            await rap_client.raw_call(
-                "reload", ["tests.test_register", "new_reload_sum"], kwarg_param={"name": "load"}, group="registry"
-            )
+            await rap_client.raw_call("reload", ["tests.test_register", "new_reload_sum", "load"], group="registry")
         exec_msg = e.value.args[0]
         assert "not in correlation_id" in exec_msg
 
@@ -142,20 +138,6 @@ class TestRegister:
         with pytest.raises(RuntimeError):
             await demo1(1, 1)
 
-    async def test_register_func_no_enable_check_type(self, rap_server: Server, rap_client: Client) -> None:
-        @rap_client.register(enable_type_check=False)
-        async def demo1(a: int, b: int) -> str:
-            pass
-
-        async def _demo1(a: int, b: int) -> int:
-            return a + b
-
-        rap_server.register(_demo1, name="demo1")
-        with pytest.raises(ParseError) as e:
-            await demo1(1, "1")  # type: ignore
-        exec_msg = e.value.args[0]
-        assert exec_msg == "Parse error. 1 type must: <class 'int'>"
-
     async def test_register_gen_func_check_type_error_in_runtime(self, rap_server: Server, rap_client: Client) -> None:
         @rap_client.register()
         async def demo1(a: int) -> AsyncIterator[str]:
@@ -173,22 +155,3 @@ class TestRegister:
         with pytest.raises(RuntimeError):
             async for i in demo1(10):
                 print(i)
-
-    async def test_register_gen_func_no_enable_check_type(self, rap_server: Server, rap_client: Client) -> None:
-        @rap_client.register(enable_type_check=False)
-        async def demo1(a: int) -> AsyncIterator[str]:
-            yield str(a)
-
-        async def _demo1(a: int) -> AsyncIterator[int]:
-            for i in range(a):
-                yield i
-
-        rap_server.register(_demo1, name="demo1")
-        assert [0] == [i async for i in demo1(1)]
-
-        with pytest.raises(ParseError) as e:
-            async for i in demo1("1"):  # type: ignore
-                print(i)
-
-        exec_msg = e.value.args[0]
-        assert exec_msg == "Parse error. 1 type must: <class 'int'>"

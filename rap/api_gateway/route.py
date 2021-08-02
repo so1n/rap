@@ -110,14 +110,12 @@ async def route_func(request: Request) -> JSONResponse:
         return JSONResponse(check_result)
 
     arg_list: List[Any] = resp_dict.get("arg_list", [])
-    kwarg_list: Dict[str, Any] = resp_dict.get("kwarg_list", {})
-    if not isinstance(arg_list, list) or not isinstance(kwarg_list, dict):
+    if not isinstance(arg_list, list):
         return JSONResponse({"code": 1, "msg": "param error"})
 
     result: Any = await rap_client_dict[server_name].raw_call(
         func_name,
         arg_param=arg_list,
-        kwarg_param=kwarg_list,
         header={key: value for key, value in request.headers.items()},
         group=group,
     )

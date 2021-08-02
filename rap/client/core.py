@@ -11,7 +11,7 @@ from rap.client.transport.transport import Transport
 from rap.common import event
 from rap.common.conn import Connection
 from rap.common.types import is_type
-from rap.common.utils import RapFunc, check_func_type
+from rap.common.utils import RapFunc, param_handle
 
 __all__ = ["BaseClient", "Client"]
 CHANNEL_F = Callable[[Channel], Any]
@@ -26,7 +26,6 @@ class AsyncIteratorCall:
         client: "BaseClient",
         conn: Connection,
         arg_param: Sequence[Any],
-        kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
     ):
@@ -35,7 +34,6 @@ class AsyncIteratorCall:
         client: rap base client
         conn: rap tcp conn
         arg_param: func param
-        kwarg_param: func kwarg param
         header: request's header
         group: func group, default value is `default`
         """
@@ -44,7 +42,6 @@ class AsyncIteratorCall:
         self._conn: Connection = conn
         self._call_id: Optional[int] = None
         self._arg_param: Sequence[Any] = arg_param
-        self._kwarg_param: Optional[Dict[str, Any]] = kwarg_param
         self._header: Optional[dict] = header or {}
         self.group: Optional[str] = group
 
@@ -64,7 +61,6 @@ class AsyncIteratorCall:
             self._name,
             [self._conn],
             arg_param=self._arg_param,
-            kwarg_param=self._kwarg_param,
             call_id=self._call_id,
             header=self._header,
             group=self.group,
@@ -120,58 +116,37 @@ class BaseClient:
     #####################
     # register func api #
     #####################
-    def _async_register(
-        self, func: Callable, group: Optional[str], name: str = "", enable_type_check: bool = True
-    ) -> RapFunc:
+    def _async_register(self, func: Callable, group: Optional[str], name: str = "") -> RapFunc:
         """Decorate normal function"""
         name = name if name else func.__name__
         return_type: Type = inspect.signature(func).return_annotation
 
         @wraps(func)
-        async def type_check_wrapper(*args: Any, **kwargs: Any) -> Any:
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             header: Optional[dict] = kwargs.pop("header", None)
-            check_func_type(func, args, kwargs)
-            result: Any = await self.raw_call(name, args, kwarg_param=kwargs, group=group, header=header)
+            result: Any = await self.raw_call(name, param_handle(func, args, kwargs), group=group, header=header)
             if not is_type(return_type, type(result)):
                 raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
             return result
 
-        @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            header: Optional[dict] = kwargs.pop("header", None)
-            return await self.raw_call(name, args, kwarg_param=kwargs, group=group, header=header)
+        return RapFunc(wrapper, func)
 
-        new_func: Callable = type_check_wrapper if enable_type_check else wrapper
-        return RapFunc(new_func, func)
-
-    def _async_gen_register(
-        self, func: Callable, group: Optional[str], name: str = "", enable_type_check: bool = True
-    ) -> RapFunc:
+    def _async_gen_register(self, func: Callable, group: Optional[str], name: str = "") -> RapFunc:
         """Decoration generator function"""
         name = name if name else func.__name__
         return_type: Type = inspect.signature(func).return_annotation
 
         @wraps(func)
-        async def type_check_wrapper(*args: Any, **kwargs: Any) -> Any:
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             header: Optional[dict] = kwargs.pop("header", None)
-            check_func_type(func, args, kwargs)
             async for result in AsyncIteratorCall(
-                name, self, self.get_conn(), args, kwarg_param=kwargs, group=group, header=header
+                name, self, self.get_conn(), param_handle(func, args, kwargs), group=group, header=header
             ):
                 if not is_type(return_type, type(result)):
                     raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
                 yield result
 
-        @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            header: Optional[dict] = kwargs.pop("header", None)
-            async for result in AsyncIteratorCall(
-                name, self, self.get_conn(), args, kwarg_param=kwargs, group=group, header=header
-            ):
-                yield result
-
-        new_func: Callable = type_check_wrapper if enable_type_check else wrapper
-        return RapFunc(new_func, func)
+        return RapFunc(wrapper, func)
 
     def _async_channel_register(self, func: CHANNEL_F, group: Optional[str], name: str = "") -> RapFunc:
         """Decoration channel function"""
@@ -204,7 +179,6 @@ class BaseClient:
         self,
         name: str,
         arg_param: Optional[Sequence[Any]] = None,
-        kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
     ) -> Any:
@@ -212,12 +186,11 @@ class BaseClient:
         Note: This method does not support parameter type checking, nor does it support channels;
         name: func name
         args: func param
-        kwargs_param: func kwargs param
         header: request's header
         group: func group, default value is `default`
         """
         conn_list: List[Connection] = self.endpoint.get_conn_list()
-        response = await self.transport.request(name, conn_list, arg_param, kwarg_param, group=group, header=header)
+        response = await self.transport.request(name, conn_list, arg_param, group=group, header=header)
         return response.body["result"]
 
     async def call(
@@ -235,7 +208,11 @@ class BaseClient:
         header: request's header
         group: func group, default value is `default`
         """
-        return await self.raw_call(func.__name__, arg_param, kwarg_param=kwarg_param, group=group, header=header)
+        if not kwarg_param:
+            kwarg_param = {}
+        return await self.raw_call(
+            func.__name__, param_handle(func, arg_param, kwarg_param), group=group, header=header
+        )
 
     async def iterator_call(
         self,
@@ -252,18 +229,18 @@ class BaseClient:
         header: request's header
         group: func group, default value is `default`
         """
+        if not kwarg_param:
+            kwarg_param = {}
         async for result in AsyncIteratorCall(
-            func.__name__, self, self.get_conn(), arg_param, kwarg_param=kwarg_param, header=header, group=group
+            func.__name__, self, self.get_conn(), param_handle(func, arg_param, kwarg_param), header=header, group=group
         ):
             yield result
 
-    def inject(
-        self, func: Callable, name: str = "", group: Optional[str] = None, enable_type_check: bool = True
-    ) -> None:
+    def inject(self, func: Callable, name: str = "", group: Optional[str] = None) -> None:
         """Replace the function with `RapFunc` and inject it into the client at the same time"""
         if isinstance(func, RapFunc):
             raise RuntimeError(f"{func} already inject or register")
-        new_func: Callable = self.register(name=name, group=group, enable_type_check=enable_type_check)(func)
+        new_func: Callable = self.register(name=name, group=group)(func)
         sys.modules[func.__module__].__setattr__(func.__name__, new_func)
 
     @staticmethod
@@ -280,7 +257,7 @@ class BaseClient:
             raise TypeError(f"{func} is not {RapFunc}")
         return func.raw_func
 
-    def register(self, name: str = "", group: Optional[str] = None, enable_type_check: bool = True) -> Callable:
+    def register(self, name: str = "", group: Optional[str] = None) -> Callable:
         """Using this method to decorate a fake function can help you use it better.
         (such as ide completion, ide reconstruction and type hints)
         and will be automatically registered according to the function type
@@ -299,9 +276,9 @@ class BaseClient:
             if len(func_arg_parameter) == 1 and func_arg_parameter[0].annotation is Channel:
                 return self._async_channel_register(func, group, name=name)
             if inspect.iscoroutinefunction(func):
-                return self._async_register(func, group, name=name, enable_type_check=enable_type_check)
+                return self._async_register(func, group, name=name)
             elif inspect.isasyncgenfunction(func):
-                return self._async_gen_register(func, group, name=name, enable_type_check=enable_type_check)
+                return self._async_gen_register(func, group, name=name)
             raise TypeError(f"func:{func.__name__} must coroutine function or async gen function")
 
         return wrapper

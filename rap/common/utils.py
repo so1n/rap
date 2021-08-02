@@ -173,6 +173,12 @@ def check_func_type(func: Callable, param_list: Sequence[Any], default_param_dic
                 raise TypeError(f"{default_param_dict[name]} type must: {parameter.annotation}")
 
 
+def param_handle(func: Callable, param_list: Sequence[Any], default_param_dict: Dict[str, Any]) -> Tuple[Any, ...]:
+    new_param_list: Tuple[Any, ...] = inspect.signature(func).bind(*param_list, **default_param_dict).args
+    check_func_type(func, param_list, default_param_dict)
+    return new_param_list
+
+
 def del_future(future: asyncio.Future) -> None:
     if future.cancelled():
         future.cancel()

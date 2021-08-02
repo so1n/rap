@@ -106,7 +106,7 @@ class TestRequestHandle:
     async def test_request_dispatch_func_error(
         self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
-        mocker.patch("rap.server.receiver.check_func_type").side_effect = Exception()
+        mocker.patch("rap.server.receiver.param_handle").side_effect = Exception()
 
         with pytest.raises(RpcRunTimeError) as e:
             await rap_client.raw_call("sync_sum", [1, 2])
