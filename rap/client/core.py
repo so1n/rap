@@ -65,7 +65,7 @@ class AsyncIteratorCall:
             header=self._header,
             group=self.group,
         )
-        if response.header["status_code"] == 301:
+        if response.status_code == 301:
             raise StopAsyncIteration()
         self._call_id = response.body["call_id"]
         return response.body["result"]

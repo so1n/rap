@@ -11,8 +11,12 @@ def _f(*args: Any, **kwargs: Any) -> None:
 
 # msg_type, correlation_id, correlation_id, header, body
 MSG_TYPE = Tuple[int, str, str, dict, Any]
+# msg_type, correlation_id, correlation_id, status_code, header, body
+SERVER_MSG_TYPE = Tuple[int, str, str, int, dict, Any]
 # msg_id, msg_type, correlation_id, correlation_id, header, body
 BASE_MSG_TYPE = Tuple[int, int, str, str, dict, Any]
+# msg_id, msg_type, correlation_id, correlation_id, status_code, header, body
+SERVER_BASE_MSG_TYPE = Tuple[int, int, str, str, int, dict, Any]
 LOOP_TYPE = asyncio.get_event_loop
 READER_TYPE = asyncio.streams.StreamReader
 WRITER_TYPE = asyncio.streams.StreamWriter

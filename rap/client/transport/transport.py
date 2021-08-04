@@ -12,8 +12,8 @@ from rap.client.utils import get_exc_status_code_dict, raise_rap_error
 from rap.common import event
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
-from rap.common.exceptions import ChannelError, RPCError
-from rap.common.types import BASE_MSG_TYPE, MSG_TYPE
+from rap.common.exceptions import RPCError
+from rap.common.types import SERVER_BASE_MSG_TYPE
 from rap.common.utils import Constant, as_first_completed
 
 __all__ = ["Transport"]
@@ -80,7 +80,6 @@ class Transport(object):
             return
 
         correlation_id: str = f"{conn.sock_tuple}:{response.correlation_id}"
-        status_code: int = response.header.get("status_code", 500)
 
         async def put_exc_to_receiver(put_response: Response, put_exc: Exception) -> None:
             for process_exc in self._process_exception_list:
@@ -97,9 +96,11 @@ class Transport(object):
         if exc:
             await put_exc_to_receiver(response, exc)
             return
-        elif response.msg_type == Constant.SERVER_ERROR_RESPONSE or status_code in self._exc_status_code_dict:
+        elif response.msg_type == Constant.SERVER_ERROR_RESPONSE or response.status_code in self._exc_status_code_dict:
             # server error response handle
-            exc_class: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(status_code, rap_exc.BaseRapError)
+            exc_class: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(
+                response.status_code, rap_exc.BaseRapError
+            )
             await put_exc_to_receiver(response, exc_class(response.body))
             return
         elif response.msg_type == Constant.SERVER_EVENT:
@@ -147,7 +148,7 @@ class Transport(object):
     async def _read_from_conn(self, conn: Connection) -> Tuple[Optional[Response], Optional[Exception]]:
         """recv server msg handle"""
         try:
-            response_msg: Optional[BASE_MSG_TYPE] = await conn.read(self._keep_alive_time)
+            response_msg: Optional[SERVER_BASE_MSG_TYPE] = await conn.read(self._keep_alive_time)
             logging.debug(f"recv raw data: %s", response_msg)
         except asyncio.TimeoutError as e:
             logging.error(f"recv response from {conn.connection_info} timeout")

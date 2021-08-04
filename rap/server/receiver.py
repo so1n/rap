@@ -310,7 +310,7 @@ class Receiver(object):
             new_call_id, result = await self._msg_handle(request, call_id, func_model)
         response.body = {"call_id": new_call_id}
         if isinstance(result, StopAsyncIteration) or isinstance(result, StopIteration):
-            response.header["status_code"] = 301
+            response.status_code = 301
         elif isinstance(result, Exception):
             exc, exc_info = parse_error(result)
             response.body["exc_info"] = exc_info  # type: ignore
@@ -322,7 +322,7 @@ class Receiver(object):
                 logging.warning(
                     f"{func_model.func} return type is {func_model.return_type}, but result type is {type(result)}"
                 )
-                response.header["status_code"] = 302
+                response.status_code = 302
         return response
 
     async def event(self, request: Request, response: Response) -> Optional[Response]:

@@ -42,7 +42,7 @@ class TracingProcessor(BaseProcessor):
 
     async def process_response(self, response: Response) -> Response:
         if self._scope:
-            status_code: int = response.header["status_code"]
+            status_code: int = response.status_code
             self._scope.span.set_tag("status_code", status_code)
             self._scope.span.set_tag(tags.ERROR, status_code == 200)
             self._scope.close()

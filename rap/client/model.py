@@ -3,7 +3,7 @@ from typing import Any
 
 from rap.common.conn import Connection
 from rap.common.event import Event
-from rap.common.types import BASE_MSG_TYPE, MSG_TYPE
+from rap.common.types import MSG_TYPE, SERVER_BASE_MSG_TYPE
 from rap.common.utils import Constant
 
 
@@ -30,13 +30,14 @@ class Response(object):
     msg_type: int
     correlation_id: str
     target: str
+    status_code: int
     header: dict
     body: Any
 
     _target_dict: dict = field(default_factory=dict)
 
     @classmethod
-    def from_msg(cls, conn: Connection, msg: BASE_MSG_TYPE) -> "Response":
+    def from_msg(cls, conn: Connection, msg: SERVER_BASE_MSG_TYPE) -> "Response":
         resp: "Response" = cls(conn, *msg)
         _, group, func_name = resp.target.split("/")
         resp._target_dict = {"group": group, "func_name": func_name}
