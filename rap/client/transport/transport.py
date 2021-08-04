@@ -24,19 +24,21 @@ class Transport(object):
 
     def __init__(
         self,
-        read_timeout: int = 9,
-        keep_alive_time: int = 1200,
+        server_name: str,
+        read_timeout: Optional[int] = None,
     ):
-        self.server_name: str = ""
-        self._read_timeout: int = read_timeout
-        self._keep_alive_time: int = keep_alive_time
+        """
+        read_timeout: read msg from future timeout
+        """
+        self.server_name: str = server_name
+        self._read_timeout: int = read_timeout or 9
         self._process_request_list: List = []
         self._process_response_list: List = []
         self._process_exception_list: List = []
 
         self._max_msg_id: int = 65535
         self._msg_id: int = random.randrange(self._max_msg_id)
-        self._exc_status_code_dict = get_exc_status_code_dict()
+        self._exc_status_code_dict: Dict[int, Type[rap_exc.BaseRapError]] = get_exc_status_code_dict()
         self._resp_future_dict: Dict[str, asyncio.Future[Response]] = {}
         self._channel_queue_dict: Dict[str, asyncio.Queue[Union[Response, Exception]]] = {}
 
@@ -47,20 +49,28 @@ class Transport(object):
             if inspect.isclass(event_class) and issubclass(event_class, event.Event) and event_class is not event.Event:
                 self._event_handle_dict[event_class.event_name] = []
 
-    def register_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
-        if event_class not in self._event_handle_dict:
-            raise KeyError(f"{event_class}")
-        if fn in self._event_handle_dict[event_class.event_name]:
-            raise ValueError(f"{fn} already exists {event_class}")
-        self._event_handle_dict[event_class.event_name].append(fn)
+    def register_event_handle(self, event_name: Type[event.Event], fn: Callable[[Response], None]) -> None:
+        """register recv response event callback handle
+        event_name: event name
+        fn: event callback
+        """
+        if event_name not in self._event_handle_dict:
+            raise KeyError(f"{event_name}")
+        if fn in self._event_handle_dict[event_name.event_name]:
+            raise ValueError(f"{fn} already exists {event_name}")
+        self._event_handle_dict[event_name.event_name].append(fn)
 
-    def unregister_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
-        if event_class not in self._event_handle_dict:
-            raise KeyError(f"{event_class}")
-        self._event_handle_dict[event_class.event_name].remove(fn)
+    def unregister_event_handle(self, event_name: Type[event.Event], fn: Callable[[Response], None]) -> None:
+        """unregister recv response event callback handle
+        event_name: event name
+        fn: event callback
+        """
+        if event_name not in self._event_handle_dict:
+            raise KeyError(f"{event_name}")
+        self._event_handle_dict[event_name.event_name].remove(fn)
 
     async def listen(self, conn: Connection) -> None:
-        """listen server msg"""
+        """listen server msg from conn"""
         logging.debug(f"listen:%s start", conn.peer_tuple)
         try:
             while not conn.is_closed():
@@ -74,19 +84,24 @@ class Transport(object):
                 await conn.await_close()
 
     async def _dispatch_resp_from_conn(self, conn: Connection) -> None:
+        """Distribute the response data to different consumers according to different conditions"""
         response, exc = await self._read_from_conn(conn)
         if not response:
+            # not response data, not a legal response
             logging.error(str(exc))
             return
 
         correlation_id: str = f"{conn.sock_tuple}:{response.correlation_id}"
 
         async def put_exc_to_receiver(put_response: Response, put_exc: Exception) -> None:
+            # handler exc by response
             for process_exc in self._process_exception_list:
                 put_response, put_exc = await process_exc(put_response, put_exc)
+
+            # send exc to consumer
             if correlation_id in self._channel_queue_dict:
                 self._channel_queue_dict[correlation_id].put_nowait(put_exc)
-            elif put_response.msg_id != -1 and correlation_id in self._resp_future_dict:
+            elif correlation_id in self._resp_future_dict:
                 self._resp_future_dict[correlation_id].set_exception(put_exc)
             elif isinstance(put_exc, rap_exc.ServerError):
                 raise put_exc
@@ -97,13 +112,14 @@ class Transport(object):
             await put_exc_to_receiver(response, exc)
             return
         elif response.msg_type == Constant.SERVER_ERROR_RESPONSE or response.status_code in self._exc_status_code_dict:
-            # server error response handle
+            # gen and put rap error by response
             exc_class: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(
                 response.status_code, rap_exc.BaseRapError
             )
             await put_exc_to_receiver(response, exc_class(response.body))
             return
         elif response.msg_type == Constant.SERVER_EVENT:
+            # customer event handle
             if response.func_name in self._event_handle_dict:
                 event_handle_list: List[Callable[[Response], None]] = self._event_handle_dict[response.func_name]
                 for fn in event_handle_list:
@@ -117,12 +133,12 @@ class Transport(object):
                 raise event_exc
             elif response.func_name == Constant.PING_EVENT:
                 await self.write_to_conn(Request.from_event(event.PongEvent("")), conn)
-                return
             elif response.func_name == Constant.DECLARE:
                 if not response.body.get("result"):
                     raise rap_exc.AuthError("Declare error")
             else:
                 logging.error(f"recv error event {response}")
+            return
         elif response.msg_type == Constant.CHANNEL_RESPONSE:
             # put msg to channel
             if correlation_id not in self._channel_queue_dict:
@@ -133,11 +149,13 @@ class Transport(object):
         elif response.msg_type == Constant.MSG_RESPONSE and correlation_id in self._resp_future_dict:
             # set msg to future_dict's `future`
             self._resp_future_dict[correlation_id].set_result(response)
+            return
         else:
             logging.error(f"Can' parse response: {response}, ignore")
             return
 
     async def read_from_conn(self, conn: Connection) -> Optional[Response]:
+        """read response from conn, only use in declare lifecycle"""
         if conn.conn_id:
             raise rap_exc.RPCError("conn already declare, can not call read_from_conn")
         response, exc = await self._read_from_conn(conn)
@@ -148,7 +166,7 @@ class Transport(object):
     async def _read_from_conn(self, conn: Connection) -> Tuple[Optional[Response], Optional[Exception]]:
         """recv server msg handle"""
         try:
-            response_msg: Optional[SERVER_BASE_MSG_TYPE] = await conn.read(self._keep_alive_time)
+            response_msg: Optional[SERVER_BASE_MSG_TYPE] = await conn.read()
             logging.debug(f"recv raw data: %s", response_msg)
         except asyncio.TimeoutError as e:
             logging.error(f"recv response from {conn.connection_info} timeout")
@@ -164,6 +182,7 @@ class Transport(object):
             e_msg: str = f"recv wrong response:{response_msg}, ignore error:{e}"
             return None, rap_exc.ProtocolError(e_msg)
 
+        # Legal response, but may be intercepted by the processer
         exc: Optional[Exception] = None
         try:
             for process_response in self._process_response_list:
@@ -172,27 +191,33 @@ class Transport(object):
             exc = e
         return response, exc
 
-    async def declare(self, server_name: str, conn: Connection) -> str:
+    async def declare(self, server_name: str, conn: Connection) -> None:
+        """
+        After conn is initialized, connect to the server and initialize the connection resources.
+        Only include server_name and get conn id two functions, if you need to expand the function,
+          you need to process the request and response of the declared life cycle through the processor
+        """
         await self.write_to_conn(Request.from_event(event.DeclareEvent({"server_name": server_name})), conn)
         response: Optional[Response] = await self.read_from_conn(conn)
 
         exc: Exception = ConnectionError("create conn error")
-        if not response:
+        if not response or response.msg_type != Constant.SERVER_EVENT:
             raise exc
-        if response.msg_type != Constant.SERVER_EVENT:
-            raise exc
-        if response.func_name == Constant.EVENT_CLOSE_CONN:
+        elif response.func_name == Constant.EVENT_CLOSE_CONN:
             raise ConnectionError(f"recv close conn event, event info:{response.body}")
         elif response.func_name == Constant.DECLARE:
             if response.body.get("result", False) and "conn_id" in response.body:
-                return response.body["conn_id"]
+                conn.conn_id = response.body["conn_id"]
         raise exc
 
     ####################################
     # base one by one request response #
     ####################################
     async def _base_request(self, request: Request, conn_list: List[Connection]) -> Response:
-        """gen msg id, send and recv response"""
+        """Send data to the server and get the response from the server.
+        Will try to get the normal data through the conn list and return,
+         if all conn calls fail(response.status_code >= 500), the exception generated by the last conn will be reported.
+        """
         exc: Exception = rap_exc.RPCError("request error")
         for conn in conn_list:
             try:
@@ -211,12 +236,15 @@ class Transport(object):
                     if resp_future_id in self._resp_future_dict:
                         del self._resp_future_dict[resp_future_id]
             except Exception as e:
-                exc = e
+                if isinstance(e, rap_exc.BaseRapError) and e.status_code >= 500:
+                    exc = e
+                else:
+                    raise e
         raise exc
 
     @staticmethod
     def before_write_handle(request: Request) -> None:
-        """check and header"""
+        """check header value"""
 
         def set_header_value(header_key: str, header_value: Any, is_cover: bool = False) -> None:
             """if key not in header, set header value"""
@@ -230,8 +258,8 @@ class Transport(object):
     #######################
     # base write_to_conn&read api #
     #######################
-    async def write_to_conn(self, request: Request, conn: Connection) -> str:
-        """write_to_conn msg to conn"""
+    async def write_to_conn(self, request: Request, conn: Connection) -> None:
+        """gen msg_id and seng msg to conn"""
         request.header["host"] = conn.peer_tuple
         msg_id: int = self._msg_id + 1
         # Avoid too big numbers
@@ -242,8 +270,7 @@ class Transport(object):
         for process_request in self._process_request_list:
             _request = await process_request(request)
 
-        await conn.write((msg_id, *request.to_msg()))  # type: ignore
-        return f"{conn.sock_tuple}:{request.correlation_id}"
+        await conn.write((msg_id, *request.to_msg()))
 
     ######################
     # one by one request #
@@ -257,7 +284,14 @@ class Transport(object):
         group: Optional[str] = None,
         header: Optional[dict] = None,
     ) -> Response:
-        """msg request handle"""
+        """msg request handle
+        func_name: rpc func name
+        conn_list: can write msg conn list
+        arg_param: rpc func param
+        call_id: server gen func next id
+        group: func's group
+        header: request header
+        """
         group = group or Constant.DEFAULT_GROUP
         call_id = call_id or -1
         arg_param = arg_param or []
@@ -277,14 +311,21 @@ class Transport(object):
             if response.header.get("user_agent") == Constant.USER_AGENT:
                 raise_rap_error(response.body["exc"], exc_info)
             else:
-                raise RuntimeError(exc_info)
+                raise rap_exc.RpcRunTimeError(exc_info)
         return response
 
     def channel(self, func_name: str, conn: Connection, group: Optional[str] = None) -> "Channel":
+        """create and init channel
+        func_name: rpc func name
+        conn: channel transport conn
+        group: func's group
+        """
         async def create(_channel_id: str) -> None:
+            """create recv queue"""
             self._channel_queue_dict[f"{conn.sock_tuple}:{_channel_id}"] = asyncio.Queue()
 
         async def read(_channel_id: str) -> Response:
+            """read response|exc from queue"""
             result: Union[Response, Exception] = await self._channel_queue_dict[
                 f"{conn.sock_tuple}:{_channel_id}"
             ].get()
@@ -293,9 +334,11 @@ class Transport(object):
             return result
 
         async def write(request: Request) -> None:
+            """write request to conn"""
             await self.write_to_conn(request, conn)
 
         async def close(_channel_id: str) -> None:
+            """clear channel queue"""
             del self._channel_queue_dict[f"{conn.sock_tuple}:{_channel_id}"]
 
         target: str = f"/{group or Constant.DEFAULT_GROUP}/{func_name}"
@@ -305,6 +348,7 @@ class Transport(object):
     # processor #
     #############
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:
+        """load client processor"""
         for processor in processor_list:
             self._process_request_list.append(processor.process_request)
             self._process_response_list.append(processor.process_response)

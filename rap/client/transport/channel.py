@@ -24,6 +24,14 @@ class Channel(BaseChannel):
         write: Callable[[Request], Coroutine[Any, Any, None]],
         close: Callable[[str], Coroutine[Any, Any, Any]],
     ):
+        """
+        target: rap target
+        conn: channel transport conn
+        create: rap's transport create channel queue func
+        read: rap's transport read response func
+        write: rap's transport write to conn func
+        close: close queue func
+        """
         self.channel_id: str = str(uuid.uuid4())
         self._target: str = target
         self._conn: Connection = conn
@@ -103,7 +111,7 @@ class Channel(BaseChannel):
             raise ChannelError("channel life cycle error")
         return response
 
-    async def read_body(self) -> None:
+    async def read_body(self) -> Any:
         response: Response = await self.read()
         return response.body
 
@@ -119,8 +127,7 @@ class Channel(BaseChannel):
                 pass
             return
 
-        life_cycle: str = Constant.DROP
-        await self._base_write(None, life_cycle)
+        await self._base_write(None, Constant.DROP)
 
         async def wait_drop_response() -> None:
             try:

@@ -55,7 +55,7 @@ class AsyncIteratorCall:
         """
         The server will return the call id of the generator function,
         and the client can continue to get data based on the call id.
-        If no data, the server will return header.status_code = 301 and client must raise StopAsyncIteration Error.
+        If no data, the server will return status_code = 301 and client must raise StopAsyncIteration Error.
         """
         response: Response = await self._client.transport.request(
             self._name,
@@ -72,14 +72,13 @@ class AsyncIteratorCall:
 
 
 class BaseClient:
-    def __init__(self, endpoint: BaseEndpoint, timeout: int = 9, keep_alive_time: int = 1200):
+    def __init__(self, endpoint: BaseEndpoint, timeout: Optional[int] = None):
         """
         endpoint: rap endpoint
-        timeout: read msg timeout
-        keep_alive_time: keep alive time by transport
+        read_timeout: read msg from future timeout
         """
-        self.transport: Transport = Transport(read_timeout=timeout, keep_alive_time=keep_alive_time)
         self.endpoint: BaseEndpoint = endpoint
+        self.transport: Transport = Transport(endpoint.server_name, read_timeout=timeout)
         self._processor_list: List[BaseProcessor] = []
         self._event_dict: Dict[EventEnum, List[Callable]] = {value: [] for value in EventEnum.__members__.values()}
 
@@ -298,19 +297,29 @@ class Client(BaseClient):
         self,
         server_name: str,
         conn_list: List[dict],
-        timeout: int = 9,
-        keep_alive_time: int = 1200,
+        timeout: Optional[int] = None,
+        keep_alive_time: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
         select_conn_method: SelectConnEnum = SelectConnEnum.random,
     ):
+        """
+        server_name: server name
+        conn_list: client conn info
+          include ip, port, weight
+          ip: server ip
+          port: server port
+          weight: select this conn weight
+          e.g.  [{"ip": "localhost", "port": "9000", weight: 10}]
+        timeout: read response from consumer timeout
+        keep_alive_time: read msg from conn timeout
+        """
         super().__init__(
             LocalEndpoint(
                 server_name,
                 conn_list,
                 ssl_crt_path=ssl_crt_path,
-                timeout=timeout,
+                timeout=keep_alive_time,
                 select_conn_method=select_conn_method,
             ),
             timeout,
-            keep_alive_time,
         )
