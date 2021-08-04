@@ -8,16 +8,19 @@ class LocalEndpoint(BaseEndpoint):
         self,
         server_name: str,
         conn_list: List[dict],
-        timeout: int = 9,
+        timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
-        select_conn_method: SelectConnEnum = SelectConnEnum.random,
+        select_conn_method: Optional[SelectConnEnum] = None,
     ):
         """
-        conn_list: [{
-            "ip": "localhost",
-            "port": 9000,
-            "weight": 1,
-        }]
+        server_name: server name
+        conn_list: client conn info
+          include ip, port, weight
+          ip: server ip
+          port: server port
+          weight: select this conn weight
+          e.g.  [{"ip": "localhost", "port": "9000", weight: 10}]
+        timeout: read response from consumer timeout
         """
         self._conn_list: List[dict] = conn_list
         super().__init__(server_name, timeout, ssl_crt_path, select_conn_method)

@@ -17,30 +17,44 @@ class BaseEndpoint(object):
     def __init__(
         self,
         server_name: str,
-        timeout: int = 9,
+        timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
-        select_conn_method: SelectConnEnum = SelectConnEnum.random,
+        select_conn_method: Optional[SelectConnEnum] = None,
     ) -> None:
+        """
+        server_name: server name
+        conn_list: client conn info
+          include ip, port, weight
+          ip: server ip
+          port: server port
+          weight: select this conn weight
+          e.g.  [{"ip": "localhost", "port": "9000", weight: 10}]
+        timeout: read response from consumer timeout
+        """
         self.server_name: str = server_name
         self._transport: Optional[Transport] = None
         self._host_weight_list: List[str] = []
-        self._timeout: int = timeout
+        self._timeout: int = timeout or 1200
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._connected_cnt: int = 0
         self._conn_dict: Dict[str, Connection] = {}
         self._round_robin_index: int = 0
 
-        if select_conn_method == SelectConnEnum.random:
+        if not select_conn_method:
+            setattr(self, self.get_conn.__name__, self._get_random_conn)
+        elif select_conn_method == SelectConnEnum.random:
             setattr(self, self.get_conn.__name__, self._get_random_conn)
         else:
             setattr(self, self.get_conn.__name__, self._get_round_robin_conn)
 
     def set_transport(self, transport: Transport) -> None:
+        """set transport to endpoint"""
         assert isinstance(transport, Transport), TypeError(f"{transport} type must{Transport}")
         self._transport = transport
 
     @property
     def is_close(self) -> bool:
+        """"""
         return self._connected_cnt <= 0
 
     async def create(self, ip: str, port: int, weight: int = 10) -> None:
