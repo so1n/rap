@@ -5,10 +5,13 @@ import string
 import sys
 import time
 from enum import Enum, auto
-from typing import Any, Callable, Coroutine, Dict, List, Sequence, Union
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Sequence, Tuple, Union
+
+from rap.common.types import is_type
 
 __all__ = [
     "Constant",
+    "EventEnum",
     "MISS_OBJECT",
     "RapFunc",
     "as_first_completed",
@@ -21,9 +24,6 @@ __all__ = [
     "response_num_dict",
 ]
 
-from typing import Optional, Tuple
-
-from rap.common.types import is_type
 
 MISS_OBJECT = object()
 _STR_LD = string.ascii_letters + string.digits

@@ -27,14 +27,14 @@ class BaseConnection:
         self.peer_tuple: Tuple[str, int] = ("", -1)
         self.sock_tuple: Tuple[str, int] = ("", -1)
 
-    async def write(self, data: BASE_MSG_TYPE) -> None:
+    async def write(self, data: tuple) -> None:
         if not self._writer or self._is_closed:
             raise ConnectionError("connection has not been created")
         logging.debug("write %s to %s", data, self.peer_tuple)
         self._writer.write(msgpack.packb(data, **self._pack_param))
         await self._writer.drain()
 
-    async def read(self, timeout: Optional[int] = None) -> Optional[BASE_MSG_TYPE]:
+    async def read(self, timeout: Optional[int] = None) -> Any:
         if not self._reader or self._is_closed:
             raise ConnectionError("connection has not been created")
         try:

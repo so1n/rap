@@ -3,14 +3,14 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 from rap.common.conn import ServerConnection
 
 if TYPE_CHECKING:
+    from rap.common.utils import EventEnum
     from rap.server.core import Server
-    from rap.server.model import ServerEventEnum
     from rap.server.types import SERVER_EVENT_FN
 
 
 class BaseMiddleware(object):
     app: "Server"
-    server_event_dict: Dict["ServerEventEnum", List["SERVER_EVENT_FN"]] = {}
+    server_event_dict: Dict["EventEnum", List["SERVER_EVENT_FN"]] = {}
 
     async def __call__(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError

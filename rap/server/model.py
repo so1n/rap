@@ -6,7 +6,7 @@ from rap.common.conn import ServerConnection
 from rap.common.event import Event
 from rap.common.exceptions import BaseRapError, ServerError
 from rap.common.state import State
-from rap.common.types import BASE_MSG_TYPE, MSG_TYPE
+from rap.common.types import BASE_MSG_TYPE, SERVER_MSG_TYPE
 from rap.common.utils import Constant
 
 
@@ -44,7 +44,8 @@ class Response(object):
     target: str
     msg_type: int = Constant.MSG_RESPONSE
     correlation_id: str = ""
-    header: dict = field(default_factory=lambda: {"status_code": 200})
+    status_code: int = 200
+    header: dict = field(default_factory=dict)
     body: Any = None
     stats: "State" = State()
     conn: Optional[ServerConnection] = None
@@ -56,7 +57,7 @@ class Response(object):
             logging.error(exc)
             exc = ServerError(str(exc))
         self.body = str(exc)
-        self.header["status_code"] = exc.status_code
+        self.status_code = exc.status_code
 
     def set_event(self, event: Event) -> None:
         if not isinstance(event, Event):
@@ -82,8 +83,8 @@ class Response(object):
         response.set_event(event)
         return response
 
-    def to_msg(self) -> MSG_TYPE:
-        return self.msg_type, self.correlation_id, self.target, self.header, self.body
+    def to_msg(self) -> SERVER_MSG_TYPE:
+        return self.msg_type, self.correlation_id, self.target, self.status_code, self.header, self.body
 
     def __call__(self, content: Any) -> None:
         if isinstance(content, Exception):

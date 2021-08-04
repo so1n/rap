@@ -28,20 +28,20 @@ class TestServerResponse:
 
         response.set_exception(test_exc)
         assert response.body == str(test_exc)
-        assert response.header["status_code"] == ServerError.status_code
+        assert response.status_code == ServerError.status_code
 
         response = Response(target)
         response.set_exception(test_rpc_exc)
         assert response.body == str(test_rpc_exc)
-        assert response.header["status_code"] == RPCError.status_code
+        assert response.status_code == RPCError.status_code
 
     async def test_from_exc(self) -> None:
         response: Response = Response.from_exc(test_exc)
         assert response.body == str(test_exc)
-        assert response.header["status_code"] == ServerError.status_code
+        assert response.status_code == ServerError.status_code
         response = Response.from_exc(test_rpc_exc)
         assert response.body == str(test_rpc_exc)
-        assert response.header["status_code"] == RPCError.status_code
+        assert response.status_code == RPCError.status_code
 
         with pytest.raises(TypeError):
             Response.from_exc(test_event)  # type: ignore
@@ -87,7 +87,7 @@ class TestServerResponse:
         response = Response(test_target)
         response(test_rpc_exc)
         assert response.body == str(test_rpc_exc)
-        assert response.header["status_code"] == RPCError.status_code
+        assert response.status_code == RPCError.status_code
 
     async def test_response_timeout(self, rap_server: Server, rap_client: Client, mocker: Any) -> None:
         mock_future: asyncio.Future = asyncio.Future()

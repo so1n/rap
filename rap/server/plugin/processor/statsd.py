@@ -53,7 +53,7 @@ class StatsdProcessor(BaseProcessor):
     async def process_response(self, response: Response) -> Response:
         if response.msg_type == Constant.MSG_RESPONSE:
             self._statsd_client.decrement(self._process_msg_key, 1)
-            if response.header["status_code"] >= 400:
+            if response.status_code >= 400:
                 # NOTE: Don't try to get the response body data
                 self._statsd_client.increment(self._error_msg_key, 1)
         elif response.msg_type == Constant.CHANNEL_RESPONSE:

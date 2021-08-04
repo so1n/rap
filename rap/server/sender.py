@@ -36,7 +36,6 @@ class Sender(object):
         set_header_value("version", Constant.VERSION, is_cover=True)
         set_header_value("user_agent", Constant.USER_AGENT, is_cover=True)
         set_header_value("request_id", str(uuid.uuid4()), is_cover=resp.msg_type is Constant.CHANNEL_RESPONSE)
-        set_header_value("status_code", 200)
 
     async def __call__(self, resp: Optional[Response]) -> bool:
         if resp is None:
@@ -51,7 +50,7 @@ class Sender(object):
         msg_id: int = self._msg_id + 1
         # Avoid too big numbers
         self._msg_id = msg_id & self._max_msg_id
-        await self._conn.write((msg_id, resp.msg_type, resp.correlation_id, resp.target, resp.header, resp.body))
+        await self._conn.write((msg_id, *resp.to_msg()))
         if resp.target.endswith(Constant.EVENT_CLOSE_CONN):
             if not self._conn.is_closed():
                 self._conn.close()
