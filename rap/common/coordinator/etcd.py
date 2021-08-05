@@ -89,26 +89,31 @@ class EtcdClient(BaseCoordinator):
     ) -> None:
         """etcd.AioClient not implemented api"""
         key: str = f"{self.namespace}/{server_name}"
-        async for i in self._client.watch_create(key, prefix=True):
-            resp_dict: dict = i._data
-            if "events" in resp_dict:
-                for event in resp_dict["events"]:
-                    event_type = event.get("type", EventEventType.PUT)
-                    if event_type == EventEventType.PUT:
-                        run_callback: List[Callable] = put_callback
-                        etcd_value_dict: ETCD_EVENT_VALUE_DICT_TYPE = {
-                            "key": event["kv"]["key"].decode(),
-                            "value": json.loads(event["kv"]["value"].decode()),
-                        }
-                    elif event_type == EventEventType.DELETE:
-                        run_callback = del_callback
-                        etcd_value_dict = {"key": event["kv"]["key"].decode(), "value": {}}
-                    else:
-                        continue
+        while True:
+            try:
+                async for i in self._client.watch_create(key, prefix=True):
+                    resp_dict: dict = i._data
+                    if "events" in resp_dict:
+                        for event in resp_dict["events"]:
+                            event_type = event.get("type", EventEventType.PUT)
+                            if event_type == EventEventType.PUT:
+                                run_callback: List[Callable] = put_callback
+                                etcd_value_dict: ETCD_EVENT_VALUE_DICT_TYPE = {
+                                    "key": event["kv"]["key"].decode(),
+                                    "value": json.loads(event["kv"]["value"].decode()),
+                                }
+                            elif event_type == EventEventType.DELETE:
+                                run_callback = del_callback
+                                etcd_value_dict = {"key": event["kv"]["key"].decode(), "value": {}}
+                            else:
+                                continue
 
-                    for fn in run_callback:
-                        ret = fn(etcd_value_dict)
-                        if inspect.iscoroutine(ret):
-                            await ret
-            elif "created" in resp_dict:
-                logging.info(f"watch {key} success")
+                            for fn in run_callback:
+                                ret = fn(etcd_value_dict)
+                                if inspect.iscoroutine(ret):
+                                    await ret
+                    elif "created" in resp_dict:
+                        logging.info(f"watch {key} success")
+            except Exception as e:
+                logger.exception(f"watch etcd error:{e}")
+            await asyncio.sleep(0.01)

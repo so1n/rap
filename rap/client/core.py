@@ -298,7 +298,7 @@ class Client(BaseClient):
         server_name: str,
         conn_list: List[dict],
         timeout: Optional[int] = None,
-        keep_alive_time: Optional[int] = None,
+        keep_alive_timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
         select_conn_method: SelectConnEnum = SelectConnEnum.random,
     ):
@@ -311,14 +311,14 @@ class Client(BaseClient):
           weight: select this conn weight
           e.g.  [{"ip": "localhost", "port": "9000", weight: 10}]
         timeout: read response from consumer timeout
-        keep_alive_time: read msg from conn timeout
+        keep_alive_timeout: read msg from conn timeout
         """
         super().__init__(
             LocalEndpoint(
                 server_name,
                 conn_list,
                 ssl_crt_path=ssl_crt_path,
-                timeout=keep_alive_time,
+                timeout=keep_alive_timeout,
                 select_conn_method=select_conn_method,
             ),
             timeout,

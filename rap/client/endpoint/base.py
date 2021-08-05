@@ -39,6 +39,7 @@ class BaseEndpoint(object):
         self._connected_cnt: int = 0
         self._conn_dict: Dict[str, Connection] = {}
         self._round_robin_index: int = 0
+        self._is_close: bool = True
 
         if not select_conn_method:
             setattr(self, self.get_conn.__name__, self._get_random_conn)
@@ -54,12 +55,16 @@ class BaseEndpoint(object):
 
     @property
     def is_close(self) -> bool:
-        """"""
-        return self._connected_cnt <= 0
+        return self._is_close
 
     async def create(self, ip: str, port: int, weight: int = 10) -> None:
+        """create and init conn
+        ip: server ip
+        port: server port
+        weight: select conn weight
+        """
         if not self._transport:
-            raise ConnectionError("conn manager need transport")
+            raise ConnectionError("endpoint need transport")
 
         key: str = f"{ip}:{port}"
         if key in self._conn_dict:
@@ -77,7 +82,7 @@ class BaseEndpoint(object):
                 logging.exception(f"close conn error: {e}")
 
         await conn.connect()
-        conn.conn_id = await self._transport.declare(self.server_name, conn)
+        await self._transport.declare(self.server_name, conn)
         self._connected_cnt += 1
         conn.listen_future = asyncio.ensure_future(self._transport.listen(conn))
         conn.listen_future.add_done_callback(lambda f: _conn_done(f))
@@ -88,20 +93,11 @@ class BaseEndpoint(object):
 
         self._conn_dict[key] = conn
 
-    async def set_weight(self, ip: str, port: int, weight: int) -> None:
-        key: str = f"{ip}:{port}"
-        if key not in self._conn_dict:
-            raise KeyError(f"Not found {key}")
-        if not (1 < weight < 10):
-            raise ValueError(f"probability value must between 0 and 10")
-
-        host_weight_list: List[str] = []
-        for conn in self._conn_dict.values():
-            host_weight_list.extend([key for _ in range(conn.weight)])
-        random.shuffle(host_weight_list)
-        self._host_weight_list = host_weight_list
-
     async def destroy(self, ip: str, port: int) -> None:
+        """destroy conn
+        ip: server ip
+        port: server port
+        """
         key: str = f"{ip}:{port}"
         if key not in self._conn_dict:
             return
@@ -114,20 +110,28 @@ class BaseEndpoint(object):
             del self._conn_dict[key]
 
     async def start(self) -> None:
-        raise NotImplementedError
+        """start endpoint and create&init conn"""
+        self._is_close = False
 
     async def stop(self) -> None:
-        """close all conn and cancel future"""
+        """stop endpoint and close all conn and cancel future"""
         for key, conn in self._conn_dict.copy().items():
             if not conn.is_closed():
                 await conn.await_close()
         self._host_weight_list = []
         self._conn_dict = {}
+        self._is_close = True
 
     def get_conn(self) -> Connection:
+        """get conn by endpoint"""
         pass
 
     def get_conn_list(self, cnt: Optional[int] = None) -> List[Connection]:
+        """get conn list by endpoint
+        cnt: How many conn to get.
+          if the value is empty, it will automatically get 1/3 of the conn from the endpoint,
+          which should not be less than or equal to 0
+        """
         if not cnt:
             cnt = self._connected_cnt // 3
         if cnt <= 0:
@@ -138,10 +142,16 @@ class BaseEndpoint(object):
         return list(conn_set)
 
     def _get_random_conn(self) -> Connection:
+        """random get conn"""
+        if not self._host_weight_list:
+            raise ConnectionError("Endpoint Can not found conn")
         key = random.choice(self._host_weight_list)
         return self._conn_dict[key]
 
     def _get_round_robin_conn(self) -> Connection:
+        """get conn by round robin"""
+        if not self._host_weight_list:
+            raise ConnectionError("Endpoint Can not found conn")
         self._round_robin_index += 1
         index = self._round_robin_index % (len(self._host_weight_list))
         key = self._host_weight_list[index]

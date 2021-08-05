@@ -71,4 +71,3 @@ class CryptoError(BaseRapError):
 class ChannelError(BaseRapError):
     status_code: int = 508
     message: str = "Channel Error"
-

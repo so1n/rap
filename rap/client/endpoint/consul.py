@@ -7,10 +7,12 @@ from rap.common.coordinator.consul import ConsulClient
 
 
 class ConsulEndpoint(BaseEndpoint):
+    """The endpoint will maintain the conn in memory according to the changes in the conn data in consul"""
+
     def __init__(
         self,
         server_name: str,
-        timeout: int = 9,
+        timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
         select_conn_method: SelectConnEnum = SelectConnEnum.random,
         # consul client param
@@ -70,3 +72,4 @@ class ConsulEndpoint(BaseEndpoint):
                     await self.create(value["host"], value["port"], value["weight"])
                     return
         self._watch_future = asyncio.ensure_future(self._watch())
+        await super().start()
