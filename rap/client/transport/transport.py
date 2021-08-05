@@ -227,10 +227,12 @@ class Transport(object):
                 await self.write_to_conn(request, conn)
                 try:
                     try:
-                        return await as_first_completed(
+                        response: Response = await as_first_completed(
                             [asyncio.wait_for(self._resp_future_dict[resp_future_id], self._read_timeout)],
                             not_cancel_future_list=[conn.conn_future],
                         )
+                        response.state = request.state
+                        return response
                     except asyncio.TimeoutError:
                         raise asyncio.TimeoutError(f"msg_id:{resp_future_id} request timeout")
                 finally:

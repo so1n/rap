@@ -3,6 +3,7 @@ from typing import Any
 
 from rap.common.conn import Connection
 from rap.common.event import Event
+from rap.common.state import State
 from rap.common.types import MSG_TYPE, SERVER_BASE_MSG_TYPE
 from rap.common.utils import Constant
 
@@ -14,6 +15,8 @@ class Request(object):
     body: Any
     correlation_id: str = ""
     header: dict = field(default_factory=lambda: dict())
+
+    state: State = State()
 
     def to_msg(self) -> MSG_TYPE:
         return self.msg_type, self.correlation_id, self.target, self.header, self.body
@@ -34,6 +37,7 @@ class Response(object):
     header: dict
     body: Any
 
+    state: State = State()
     _target_dict: dict = field(default_factory=dict)
 
     @classmethod

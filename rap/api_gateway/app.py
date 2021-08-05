@@ -15,7 +15,7 @@ def create_app(
 ) -> Starlette:
     """
     prefix: api url prefix
-    rap_client_list: rap client
+    rap_client_list: rap client list
     private_filter: Can access the function whose attribute is_private is true
     group_filter: Which groups can be accessed
     """
@@ -38,8 +38,7 @@ def create_app(
                 group: str = func_dict["group"]
                 func_name: str = func_dict["func_name"]
                 func_type: str = func_dict["func_type"]
-                key = f"{server_name}:{func_type}:{group}:{func_name}"
-                func_info_dict[key] = func_dict
+                func_info_dict[f"{server_name}:{func_type}:{group}:{func_name}"] = func_dict
 
     @app.on_event("shutdown")
     async def disconnect() -> None:
