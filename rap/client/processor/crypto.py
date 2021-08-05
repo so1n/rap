@@ -32,13 +32,8 @@ class AutoExpireSet(object):
             return True
 
     def _auto_remove(self) -> None:
-        now_timestamp: float = time.time()
         for key in list(self._dict.keys()):
-            if key not in self._dict:
-                continue
-            elif self._dict[key] < now_timestamp:
-                del self._dict[key]
-            else:
+            if key in self:
                 # NOTE: After Python 3.7, the dict is ordered.
                 # Since the inserted data is related to time, the dict here is also ordered by time
                 break
@@ -47,7 +42,16 @@ class AutoExpireSet(object):
 
 
 class CryptoProcessor(BaseProcessor):
+    """Provide symmetric encryption and prevent message replay attacks"""
+
     def __init__(self, crypto_key_id: str, crypto_key: str, nonce_timeout: int = 60, interval: int = 120):
+        """
+        crypto_key_id: crypto_key id, Client and server identify crypto_key by id
+        crypto_key: crypto key, Encrypt and decrypt messages
+        nonce_time: Cache nonce time, each message has a nonce field, and the value of each message is different,
+            which is used to prevent message re-attack.
+        interval: Time interval for clearing the cache
+        """
         self._crypto_id: str = crypto_key_id
         self._crypto_key: str = crypto_key
         self._nonce_timeout: int = nonce_timeout
@@ -56,6 +60,7 @@ class CryptoProcessor(BaseProcessor):
         self._crypto: "Crypto" = Crypto(self._crypto_key)
 
     def _body_handle(self, body: dict) -> None:
+        """Check if the message has timed out or has been received"""
         timestamp: int = body.get("timestamp", 0)
         if (int(time.time()) - timestamp) > 60:
             raise CryptoError("timeout param error")
