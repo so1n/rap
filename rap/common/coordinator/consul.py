@@ -85,20 +85,24 @@ class ConsulClient(BaseCoordinator):
     async def watch(self, server_name: str) -> AsyncGenerator[Dict[str, Dict[str, Any]], Any]:
         index: Optional[str] = None
         while True:
-            resp: Tuple[str, List[Dict[str, Any]]] = await self._client.catalog.service(
-                f"{self.namespace}/{server_name}", index=index, wait=f"{self._ttl}s"
-            )
-            index = resp[0]
-
-            conn_dict: Dict[str, Dict] = {}
-            for item in resp[1]:
-                host: str = item["ServiceAddress"]
-                port: int = item["ServicePort"]
-                kv_resp: Tuple[str, List[Dict[str, Any]]] = await self._client.kv.get(
-                    f"{item['ServiceID']}/{item['ServicePort']}"
+            try:
+                resp: Tuple[str, List[Dict[str, Any]]] = await self._client.catalog.service(
+                    f"{self.namespace}/{server_name}", index=index, wait=f"{self._ttl}s"
                 )
-                result_dict: dict = json.loads(kv_resp[1]["Value"].decode())  # type: ignore
-                result_dict["host"] = host
-                result_dict["port"] = port
-                conn_dict[f"{host}_{port}"] = result_dict
-            yield conn_dict
+                index = resp[0]
+
+                conn_dict: Dict[str, Dict] = {}
+                for item in resp[1]:
+                    host: str = item["ServiceAddress"]
+                    port: int = item["ServicePort"]
+                    kv_resp: Tuple[str, List[Dict[str, Any]]] = await self._client.kv.get(
+                        f"{item['ServiceID']}/{item['ServicePort']}"
+                    )
+                    result_dict: dict = json.loads(kv_resp[1]["Value"].decode())  # type: ignore
+                    result_dict["host"] = host
+                    result_dict["port"] = port
+                    conn_dict[f"{host}_{port}"] = result_dict
+                yield conn_dict
+            except Exception as e:
+                logger.exception(f"watch consul error:{e}")
+            await asyncio.sleep(0.01)

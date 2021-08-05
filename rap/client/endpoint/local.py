@@ -4,6 +4,10 @@ from rap.client.endpoint.base import BaseEndpoint, SelectConnEnum
 
 
 class LocalEndpoint(BaseEndpoint):
+    """
+    This endpoint only supports initializing conn based on parameters, and will not dynamically adjust conn at runtime
+    """
+
     def __init__(
         self,
         server_name: str,
@@ -33,3 +37,4 @@ class LocalEndpoint(BaseEndpoint):
             port: int = conn_dict["port"]
             weight: int = conn_dict.get("weight", 10)
             await self.create(ip, port, weight)
+        await super().start()

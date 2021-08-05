@@ -208,6 +208,7 @@ class Transport(object):
         elif response.func_name == Constant.DECLARE:
             if response.body.get("result", False) and "conn_id" in response.body:
                 conn.conn_id = response.body["conn_id"]
+                return
         raise exc
 
     ####################################
@@ -320,6 +321,7 @@ class Transport(object):
         conn: channel transport conn
         group: func's group
         """
+
         async def create(_channel_id: str) -> None:
             """create recv queue"""
             self._channel_queue_dict[f"{conn.sock_tuple}:{_channel_id}"] = asyncio.Queue()

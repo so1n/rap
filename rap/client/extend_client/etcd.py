@@ -10,7 +10,7 @@ class Client(BaseClient):
         self,
         server_name: str,
         timeout: int = 9,
-        keep_alive_time: int = 1200,
+        keep_alive_timeout: int = 1200,
         ssl_crt_path: Optional[str] = None,
         select_conn_method: SelectConnEnum = SelectConnEnum.random,
         # etcd client param
@@ -25,7 +25,7 @@ class Client(BaseClient):
         super().__init__(
             EtcdEndpoint(
                 server_name,
-                timeout=timeout,
+                timeout=keep_alive_timeout,
                 ssl_crt_path=ssl_crt_path,
                 select_conn_method=select_conn_method,
                 etcd_host=etcd_host,
@@ -37,5 +37,4 @@ class Client(BaseClient):
                 etcd_ca_path=etcd_ca_path,
             ),
             timeout,
-            keep_alive_time,
         )

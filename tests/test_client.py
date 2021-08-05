@@ -5,8 +5,8 @@ from typing import Any
 import pytest
 from pytest_mock import MockerFixture
 
-from rap.client import Client, Request, Response
-from rap.common.exceptions import ChannelError, RPCError
+from rap.client import Client, Response
+from rap.common.exceptions import RPCError, RpcRunTimeError
 from rap.common.utils import Constant
 from rap.server import Server
 
@@ -224,7 +224,7 @@ class TestTransport:
             )
         )
 
-        with pytest.raises(RuntimeError) as e:
+        with pytest.raises(RpcRunTimeError) as e:
             await rap_client.raw_call("sync_sum", [1, 2])
 
         exec_msg: str = e.value.args[0]

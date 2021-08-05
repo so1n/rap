@@ -10,7 +10,7 @@ class Client(BaseClient):
         self,
         server_name: str,
         timeout: int = 9,
-        keep_alive_time: int = 1200,
+        keep_alive_timeout: int = 1200,
         ssl_crt_path: Optional[str] = None,
         select_conn_method: SelectConnEnum = SelectConnEnum.random,
         # consul client param
@@ -28,7 +28,7 @@ class Client(BaseClient):
         super().__init__(
             ConsulEndpoint(
                 server_name,
-                timeout=timeout,
+                timeout=keep_alive_timeout,
                 ssl_crt_path=ssl_crt_path,
                 select_conn_method=select_conn_method,
                 consul_namespace=consul_namespace,
@@ -43,5 +43,4 @@ class Client(BaseClient):
                 consul_cert=consul_cert,
             ),
             timeout,
-            keep_alive_time,
         )
