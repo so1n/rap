@@ -19,7 +19,7 @@ class Request(object):
     target: str
     header: dict
     body: Any
-    stats: "State" = State()
+    stats: "State" = field(default_factory=State)
 
     _target_dict: dict = field(default_factory=dict)
 
@@ -47,7 +47,7 @@ class Response(object):
     status_code: int = 200
     header: dict = field(default_factory=dict)
     body: Any = None
-    stats: "State" = State()
+    stats: "State" = field(default_factory=State)
     conn: Optional[ServerConnection] = None
 
     def set_exception(self, exc: Exception) -> None:

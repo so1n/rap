@@ -16,7 +16,7 @@ class Request(object):
     correlation_id: str = ""
     header: dict = field(default_factory=lambda: dict())
 
-    state: State = State()
+    state: State = field(default_factory=State)
 
     def to_msg(self) -> MSG_TYPE:
         return self.msg_type, self.correlation_id, self.target, self.header, self.body
@@ -37,7 +37,7 @@ class Response(object):
     header: dict
     body: Any
 
-    state: State = State()
+    state: State = field(default_factory=State)
     _target_dict: dict = field(default_factory=dict)
 
     @classmethod
