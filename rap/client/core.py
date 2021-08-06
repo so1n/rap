@@ -9,6 +9,7 @@ from rap.client.processor.base import BaseProcessor
 from rap.client.transport.channel import Channel
 from rap.client.transport.transport import Transport
 from rap.common import event
+from rap.common.cache import Cache
 from rap.common.conn import Connection
 from rap.common.types import is_type
 from rap.common.utils import EventEnum, RapFunc, param_handle
@@ -72,7 +73,7 @@ class AsyncIteratorCall:
 
 
 class BaseClient:
-    def __init__(self, endpoint: BaseEndpoint, timeout: Optional[int] = None):
+    def __init__(self, endpoint: BaseEndpoint, timeout: Optional[int] = None, cache_interval: Optional[float] = None):
         """
         endpoint: rap endpoint
         read_timeout: read msg from future timeout
@@ -80,7 +81,10 @@ class BaseClient:
         self.endpoint: BaseEndpoint = endpoint
         self.transport: Transport = Transport(endpoint.server_name, read_timeout=timeout)
         self._processor_list: List[BaseProcessor] = []
-        self._event_dict: Dict[EventEnum, List[Callable]] = {value: [] for value in EventEnum.__members__.values()}
+        self._event_dict: Dict[EventEnum, List[Callable[["BaseClient"], None]]] = {
+            value: [] for value in EventEnum.__members__.values()
+        }
+        self.cache: Cache = Cache(interval=cache_interval)
 
         self.endpoint.set_transport(self.transport)
 
@@ -90,32 +94,35 @@ class BaseClient:
     async def stop(self) -> None:
         """close client transport"""
         for handler in self._event_dict[EventEnum.before_end]:
-            handler()
+            handler(self)
         await self.endpoint.stop()
         for handler in self._event_dict[EventEnum.after_end]:
-            handler()
+            handler(self)
 
     async def start(self) -> None:
         """Create client transport"""
         for handler in self._event_dict[EventEnum.before_start]:
-            handler()
+            handler(self)
         await self.endpoint.start()
         for handler in self._event_dict[EventEnum.after_start]:
-            handler()
+            handler(self)
 
-    def register_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
+    def register_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
         self.transport.register_event_handle(event_class, fn)
 
-    def unregister_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
+    def unregister_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
         self.transport.unregister_event_handle(event_class, fn)
+
+    def register_client_event_handle(self, event_name: EventEnum, fn: Callable[["BaseClient"], None]) -> None:
+        self._event_dict[event_name].append(fn)
 
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:
         if not self.is_close:
             for processor in processor_list:
                 for handler in processor.event_dict.get(EventEnum.before_start, []):
-                    handler()
+                    handler(self)
                 for handler in processor.event_dict.get(EventEnum.after_start, []):
-                    handler()
+                    handler(self)
         for processor in processor_list:
             for event_type, handle in processor.event_dict.items():
                 self._event_dict[event_type].extend(handle)
@@ -300,6 +307,7 @@ class Client(BaseClient):
         timeout: Optional[int] = None,
         keep_alive_timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
+        cache_interval: Optional[float] = None,
         select_conn_method: SelectConnEnum = SelectConnEnum.random,
     ):
         """
@@ -322,4 +330,5 @@ class Client(BaseClient):
                 select_conn_method=select_conn_method,
             ),
             timeout,
+            cache_interval=cache_interval,
         )
