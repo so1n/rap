@@ -12,6 +12,7 @@ class Client(BaseClient):
         timeout: int = 9,
         keep_alive_timeout: int = 1200,
         ssl_crt_path: Optional[str] = None,
+        cache_interval: Optional[float] = None,
         select_conn_method: SelectConnEnum = SelectConnEnum.random,
         # consul client param
         consul_namespace: str = "rap",
@@ -43,4 +44,5 @@ class Client(BaseClient):
                 consul_cert=consul_cert,
             ),
             timeout,
+            cache_interval=cache_interval,
         )

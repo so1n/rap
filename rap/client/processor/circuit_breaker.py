@@ -1,11 +1,14 @@
 import random
-from typing import Any, Callable, Dict, List, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Tuple
 
 from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
 from rap.common.exceptions import ServerError
 from rap.common.state import WindowState
 from rap.common.utils import Constant, EventEnum
+
+if TYPE_CHECKING:
+    from rap.client.core import BaseClient
 
 
 class BaseCircuitBreakerProcessor(BaseProcessor):
@@ -45,16 +48,16 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
                 self._probability_dict[index] = max(0.0, (total - k * (total - error_cnt)) / (total + 1))
 
         self._window_state.add_priority_callback(upload_probability)
-        self.event_dict: Dict[EventEnum, List[Callable]] = {
+        self.event_dict: Dict[EventEnum, List[Callable[["BaseClient"], None]]] = {
             EventEnum.after_start: [self.start_event_handle],
             EventEnum.before_end: [self.stop_event_handle],
         }
 
-    def start_event_handle(self) -> None:
+    def start_event_handle(self, app: "BaseClient") -> None:
         if self._window_state.is_closed:
-            self._window_state.change_state(None)
+            self._window_state.change_state(app)
 
-    def stop_event_handle(self) -> None:
+    def stop_event_handle(self, app: "BaseClient") -> None:
         if not self._window_state.is_closed:
             self._window_state.close()
 
