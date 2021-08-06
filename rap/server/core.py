@@ -7,6 +7,7 @@ import time
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Type
 
 from rap.common import event
+from rap.common.cache import Cache
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import ServerError
 from rap.common.state import WindowState
@@ -42,6 +43,7 @@ class Server(object):
         middleware_list: List[BaseMiddleware] = None,
         processor_list: List[BaseProcessor] = None,
         window_state: Optional[WindowState] = None,
+        cache_interval: Optional[float] = None
     ):
         self.server_name: str = server_name
         self.host: str = host
@@ -78,6 +80,7 @@ class Server(object):
             self.load_processor(processor_list)
 
         self.registry: RegistryManager = RegistryManager()
+        self.cache: Cache = Cache(interval=cache_interval)
         self.window_state: Optional[WindowState] = window_state
         if self.window_state and self.window_state.is_closed:
             self.register_server_event(EventEnum.before_start, self.window_state.change_state)
@@ -215,7 +218,10 @@ class Server(object):
             # conn may be closed
             if not _conn.is_closed():
                 try:
-                    await Sender(_conn, self._timeout, processor_list=self._processor_list).send_event(
+                    await Sender(
+                        self,  # type: ignore
+                        _conn, self._timeout, processor_list=self._processor_list
+                    ).send_event(
                         event.ShutdownEvent({"close_timeout": self._close_timeout})
                     )
                 except ConnectionError:
@@ -252,7 +258,10 @@ class Server(object):
             self._connected_set.remove(conn)
 
     async def _conn_handle(self, conn: ServerConnection) -> None:
-        sender: Sender = Sender(conn, self._timeout, processor_list=self._processor_list)
+        sender: Sender = Sender(
+            self,  # type: ignore
+            conn, self._timeout, processor_list=self._processor_list
+        )
         receiver: Receiver = Receiver(
             self,  # type: ignore
             conn,
@@ -270,7 +279,10 @@ class Server(object):
                 await sender.send_event(event.CloseConnEvent("request is empty"))
                 return
             try:
-                request: Request = Request.from_msg(_request_msg, conn)
+                request: Request = Request.from_msg(
+                    self,  # type: ignore
+                    _request_msg, conn
+                )
             except Exception as closer_e:
                 logging.error(f"{conn.peer_tuple} send bad msg:{_request_msg}, error:{closer_e}")
                 await sender.send_event(event.CloseConnEvent("protocol error"))

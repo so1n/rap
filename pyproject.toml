@@ -20,6 +20,7 @@ jaeger-client = { version = "^4.4.0", optional = true }
 aio-statsd = { version = "^0.2.6", optional = true }
 etcd3-py = { version = "^0.1.6", optional = true }
 python-consul = { version = "^1.1.0", optional = true}
+typing-extensions = "^3.10.0"
 
 [tool.poetry.dev-dependencies]
 black = "^20.8b1"

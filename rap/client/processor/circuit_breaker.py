@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Tuple
 
 from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
+from rap.client.types import CLIENT_EVENT_FN
 from rap.common.exceptions import ServerError
 from rap.common.state import WindowState
 from rap.common.utils import Constant, EventEnum
@@ -48,7 +49,7 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
                 self._probability_dict[index] = max(0.0, (total - k * (total - error_cnt)) / (total + 1))
 
         self._window_state.add_priority_callback(upload_probability)
-        self.event_dict: Dict[EventEnum, List[Callable[["BaseClient"], None]]] = {
+        self.event_dict: Dict[EventEnum, List[CLIENT_EVENT_FN]] = {
             EventEnum.after_start: [self.start_event_handle],
             EventEnum.before_end: [self.stop_event_handle],
         }

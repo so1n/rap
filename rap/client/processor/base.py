@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Callable, Dict, List, Tuple
 
 from rap.client.model import Request, Response
 from rap.common.utils import EventEnum
+from rap.client.types import CLIENT_EVENT_FN
 
 if TYPE_CHECKING:
     from rap.client.core import BaseClient
@@ -9,7 +10,8 @@ if TYPE_CHECKING:
 
 class BaseProcessor(object):
 
-    event_dict: Dict["EventEnum", List[Callable[["BaseClient"], None]]] = {}
+    app: "BaseClient"
+    event_dict: Dict["EventEnum", List[CLIENT_EVENT_FN]] = {}
 
     async def process_request(self, request: Request) -> Request:
         return request

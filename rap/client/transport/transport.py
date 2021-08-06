@@ -3,7 +3,7 @@ import inspect
 import logging
 import random
 import uuid
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, TYPE_CHECKING, Union
 
 from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
@@ -16,6 +16,9 @@ from rap.common.exceptions import RPCError
 from rap.common.types import SERVER_BASE_MSG_TYPE
 from rap.common.utils import Constant, as_first_completed
 
+
+if TYPE_CHECKING:
+    from rap.client.core import BaseClient
 __all__ = ["Transport"]
 
 
@@ -24,13 +27,13 @@ class Transport(object):
 
     def __init__(
         self,
-        server_name: str,
+        app: "BaseClient",
         read_timeout: Optional[int] = None,
     ):
         """
         read_timeout: read msg from future timeout
         """
-        self.server_name: str = server_name
+        self.app: "BaseClient" = app
         self._read_timeout: int = read_timeout or 9
         self._process_request_list: List = []
         self._process_response_list: List = []
@@ -132,7 +135,7 @@ class Transport(object):
                 event_exc: Exception = ConnectionError(f"recv close conn event, event info:{response.body}")
                 raise event_exc
             elif response.func_name == Constant.PING_EVENT:
-                await self.write_to_conn(Request.from_event(event.PongEvent("")), conn)
+                await self.write_to_conn(Request.from_event(self.app, event.PongEvent("")), conn)
             elif response.func_name == Constant.DECLARE:
                 if not response.body.get("result"):
                     raise rap_exc.AuthError("Declare error")
@@ -197,7 +200,7 @@ class Transport(object):
         Only include server_name and get conn id two functions, if you need to expand the function,
           you need to process the request and response of the declared life cycle through the processor
         """
-        await self.write_to_conn(Request.from_event(event.DeclareEvent({"server_name": server_name})), conn)
+        await self.write_to_conn(Request.from_event(self.app, event.DeclareEvent({"server_name": server_name})), conn)
         response: Optional[Response] = await self.read_from_conn(conn)
 
         exc: Exception = ConnectionError("create conn error")
@@ -299,8 +302,9 @@ class Transport(object):
         call_id = call_id or -1
         arg_param = arg_param or []
         request: Request = Request(
+            self.app,
             Constant.MSG_REQUEST,
-            f"{self.server_name}/{group}/{func_name}",
+            f"{self.app.server_name}/{group}/{func_name}",
             {"call_id": call_id, "param": arg_param},
             correlation_id=str(uuid.uuid4()),
         )
@@ -346,7 +350,7 @@ class Transport(object):
             del self._channel_queue_dict[f"{conn.sock_tuple}:{_channel_id}"]
 
         target: str = f"/{group or Constant.DEFAULT_GROUP}/{func_name}"
-        return Channel(target, conn, create, read, write, close)
+        return Channel(self, target, conn, create, read, write, close)
 
     #############
     # processor #
