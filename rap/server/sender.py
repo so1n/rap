@@ -1,23 +1,27 @@
 import logging
 import random
 import uuid
-from typing import Any, List, Optional
+from typing import Any, List, Optional, TYPE_CHECKING
 
 from rap.common.conn import ServerConnection
 from rap.common.utils import Constant
 from rap.server.model import Event, Response
 from rap.server.plugin.processor.base import BaseProcessor
 
+if TYPE_CHECKING:
+    from rap.server.core import Server
 __all__ = ["Sender"]
 
 
 class Sender(object):
     def __init__(
         self,
+        app: "Server",
         conn: ServerConnection,
         timeout: Optional[int] = None,
         processor_list: Optional[List[BaseProcessor]] = None,
     ):
+        self._app: "Server" = app
         self._max_msg_id: int = 65535
         self._msg_id: int = random.randrange(self._max_msg_id)
         self._conn: ServerConnection = conn
@@ -57,7 +61,7 @@ class Sender(object):
         return True
 
     async def send_event(self, event: Event) -> bool:
-        return await self.__call__(Response.from_event(event))
+        return await self.__call__(Response.from_event(self._app, event))
 
     async def send_exc(self, exc: Exception) -> bool:
-        return await self.__call__(Response.from_exc(exc))
+        return await self.__call__(Response.from_exc(self._app, exc))

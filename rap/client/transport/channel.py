@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import uuid
-from typing import Any, Callable, Coroutine, Optional, Tuple
+from typing import Any, Callable, Coroutine, Optional, Tuple, TYPE_CHECKING
 
 from rap.client.model import Request, Response
 from rap.common.channel import BaseChannel
@@ -9,6 +9,9 @@ from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError
 from rap.common.utils import Constant, as_first_completed
 
+
+if TYPE_CHECKING:
+    from .transport import Transport
 __all__ = ["Channel"]
 
 
@@ -17,6 +20,7 @@ class Channel(BaseChannel):
 
     def __init__(
         self,
+        transport: "Transport",
         target: str,
         conn: Connection,
         create: Callable[[str], Coroutine[Any, Any, Any]],
@@ -33,6 +37,7 @@ class Channel(BaseChannel):
         close: close queue func
         """
         self.channel_id: str = str(uuid.uuid4())
+        self._transport: "Transport" = transport
         self._target: str = target
         self._conn: Connection = conn
         self._create: Callable[[str], Coroutine[Any, Any, Any]] = create
@@ -97,6 +102,7 @@ class Channel(BaseChannel):
         if self.is_close:
             raise ChannelError(f"channel is closed")
         request: Request = Request(
+            self._transport.app,
             Constant.CHANNEL_REQUEST,
             self._target,
             body,

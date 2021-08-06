@@ -27,6 +27,7 @@ class Client(BaseClient):
         consul_cert: Optional[str] = None,
     ):
         super().__init__(
+            server_name,
             ConsulEndpoint(
                 server_name,
                 timeout=keep_alive_timeout,

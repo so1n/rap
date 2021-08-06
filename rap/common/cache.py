@@ -13,7 +13,7 @@ class Cache(object):
     def _add(self, key: str, expire: float, value: Any = MISSING) -> None:
         self._dict[key] = (time.time() + expire, value)
 
-    def get(self, key: str, default: Any = MISSING) -> None:
+    def get(self, key: str, default: Any = MISSING) -> Any:
         if key not in self:
             raise KeyError(key)
         expire, value = self._dict[key]

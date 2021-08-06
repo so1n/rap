@@ -8,6 +8,7 @@ from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.transport.channel import Channel
 from rap.client.transport.transport import Transport
+from rap.client.types import CLIENT_EVENT_FN
 from rap.common import event
 from rap.common.cache import Cache
 from rap.common.conn import Connection
@@ -73,15 +74,22 @@ class AsyncIteratorCall:
 
 
 class BaseClient:
-    def __init__(self, endpoint: BaseEndpoint, timeout: Optional[int] = None, cache_interval: Optional[float] = None):
+    def __init__(
+        self,
+        server_name: str,
+        endpoint: BaseEndpoint,
+        timeout: Optional[int] = None,
+        cache_interval: Optional[float] = None
+    ):
         """
         endpoint: rap endpoint
         read_timeout: read msg from future timeout
         """
+        self.server_name: str = server_name
         self.endpoint: BaseEndpoint = endpoint
-        self.transport: Transport = Transport(endpoint.server_name, read_timeout=timeout)
+        self.transport: Transport = Transport(self, read_timeout=timeout)
         self._processor_list: List[BaseProcessor] = []
-        self._event_dict: Dict[EventEnum, List[Callable[["BaseClient"], None]]] = {
+        self._event_dict: Dict[EventEnum, List[CLIENT_EVENT_FN]] = {
             value: [] for value in EventEnum.__members__.values()
         }
         self.cache: Cache = Cache(interval=cache_interval)
@@ -113,19 +121,20 @@ class BaseClient:
     def unregister_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
         self.transport.unregister_event_handle(event_class, fn)
 
-    def register_client_event_handle(self, event_name: EventEnum, fn: Callable[["BaseClient"], None]) -> None:
+    def register_client_event_handle(self, event_name: EventEnum, fn: CLIENT_EVENT_FN) -> None:
         self._event_dict[event_name].append(fn)
 
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:
+        for processor in processor_list:
+            processor.app = self
+            for event_type, handle in processor.event_dict.items():
+                self._event_dict[event_type].extend(handle)
         if not self.is_close:
             for processor in processor_list:
                 for handler in processor.event_dict.get(EventEnum.before_start, []):
                     handler(self)
                 for handler in processor.event_dict.get(EventEnum.after_start, []):
                     handler(self)
-        for processor in processor_list:
-            for event_type, handle in processor.event_dict.items():
-                self._event_dict[event_type].extend(handle)
         self.transport.load_processor(processor_list)
 
     #####################
@@ -322,6 +331,7 @@ class Client(BaseClient):
         keep_alive_timeout: read msg from conn timeout
         """
         super().__init__(
+            server_name,
             LocalEndpoint(
                 server_name,
                 conn_list,

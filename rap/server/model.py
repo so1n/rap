@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
 from rap.common.conn import ServerConnection
 from rap.common.event import Event
@@ -10,9 +10,17 @@ from rap.common.state import State
 from rap.common.types import BASE_MSG_TYPE, SERVER_MSG_TYPE
 from rap.common.utils import Constant
 
+if TYPE_CHECKING:
+    from rap.server.core import Server
+
+
+class ServerMsgProtocol(BaseMsgProtocol):
+    app: "Server"
+
 
 @dataclass()
-class Request(BaseMsgProtocol):
+class Request(ServerMsgProtocol):
+    app: "Server"
     conn: ServerConnection
     msg_id: int
     msg_type: int
@@ -20,13 +28,13 @@ class Request(BaseMsgProtocol):
     target: str
     header: dict
     body: Any
-    stats: "State" = field(default_factory=State)
+    state: "State" = field(default_factory=State)
 
     _target_dict: dict = field(default_factory=dict)
 
     @classmethod
-    def from_msg(cls, msg: BASE_MSG_TYPE, conn: ServerConnection) -> "Request":
-        request: "Request" = cls(conn, *msg)
+    def from_msg(cls, app: "Server", msg: BASE_MSG_TYPE, conn: ServerConnection) -> "Request":
+        request: "Request" = cls(app, conn, *msg)
         _, group, func_name = request.target.split("/")
         request._target_dict = {"group": group, "func_name": func_name}
         return request
@@ -41,14 +49,15 @@ class Request(BaseMsgProtocol):
 
 
 @dataclass()
-class Response(BaseMsgProtocol):
+class Response(ServerMsgProtocol):
+    app: "Server"
     target: str
     msg_type: int = Constant.MSG_RESPONSE
     correlation_id: str = ""
     status_code: int = 200
     header: dict = field(default_factory=dict)
     body: Any = None
-    stats: "State" = field(default_factory=State)
+    state: "State" = field(default_factory=State)
     conn: Optional[ServerConnection] = None
 
     def set_exception(self, exc: Exception) -> None:
@@ -71,16 +80,16 @@ class Response(BaseMsgProtocol):
         self.body = body
 
     @classmethod
-    def from_exc(cls, exc: Exception) -> "Response":
-        response: Response = cls(f"/_exc/server_error")
+    def from_exc(cls, app: "Server", exc: Exception) -> "Response":
+        response: Response = cls(app, f"/_exc/server_error")
         response.set_exception(exc)
         return response
 
     @classmethod
-    def from_event(cls, event: Event) -> "Response":
+    def from_event(cls, app: "Server", event: Event) -> "Response":
         if not isinstance(event, Event):
             raise TypeError(f"event type:{event} is not {Event}")
-        response: Response = cls(f"/_event/{event.event_name}")
+        response: Response = cls(app, f"/_event/{event.event_name}")
         response.set_event(event)
         return response
 

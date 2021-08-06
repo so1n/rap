@@ -117,14 +117,14 @@ class IpBlockMiddleware(BaseConnMiddleware):
                 is_allow: int = await self._redis.sismember(self.allow_key, ip)
                 if not is_allow:
                     self.block_cnt += 1
-                    await Sender(conn).send_event(CloseConnEvent("not allowed to access"))
+                    await Sender(self.app, conn).send_event(CloseConnEvent("not allowed to access"))
                     await conn.await_close()
                     return
             else:
                 is_block: int = await self._redis.sismember(self.block_key, ip)
                 if is_block:
                     self.block_cnt += 1
-                    await Sender(conn).send_event(CloseConnEvent("not allowed to access"))
+                    await Sender(self.app, conn).send_event(CloseConnEvent("not allowed to access"))
                     await conn.await_close()
                     return
         await self.call_next(conn)

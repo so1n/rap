@@ -24,6 +24,7 @@ class Client(BaseClient):
         etcd_ca_path: Optional[str] = None,
     ):
         super().__init__(
+            server_name,
             EtcdEndpoint(
                 server_name,
                 timeout=keep_alive_timeout,

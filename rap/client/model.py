@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from rap.common.conn import Connection
 from rap.common.event import Event
@@ -9,8 +9,17 @@ from rap.common.types import MSG_TYPE, SERVER_BASE_MSG_TYPE
 from rap.common.utils import Constant
 
 
+if TYPE_CHECKING:
+    from rap.client.core import BaseClient
+
+
+class ClientMsgProtocol(BaseMsgProtocol):
+    app: "BaseClient"
+
+
 @dataclass()
-class Request(BaseMsgProtocol):
+class Request(ClientMsgProtocol):
+    app: "BaseClient"
     msg_type: int
     target: str
     body: Any
@@ -23,8 +32,8 @@ class Request(BaseMsgProtocol):
         return self.msg_type, self.correlation_id, self.target, self.header, self.body
 
     @classmethod
-    def from_event(cls, event: Event) -> "Request":
-        return cls(msg_type=Constant.CLIENT_EVENT, target=f"/_event/{event.event_name}", body=event.event_info)
+    def from_event(cls, app: "BaseClient", event: Event) -> "Request":
+        return cls(app, msg_type=Constant.CLIENT_EVENT, target=f"/_event/{event.event_name}", body=event.event_info)
 
 
 @dataclass()

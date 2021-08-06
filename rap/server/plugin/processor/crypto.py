@@ -104,7 +104,7 @@ class CryptoProcessor(BaseProcessor):
             request.body = request.body["body"]
 
             # set share data
-            request.stats.crypto = crypto
+            request.state.crypto = crypto
 
             return request
         except Exception as e:
@@ -114,7 +114,7 @@ class CryptoProcessor(BaseProcessor):
         """encrypt response body"""
         if response.status_code == 200 and response.body and response.msg_type != Constant.SERVER_ERROR_RESPONSE:
             try:
-                crypto: Crypto = response.stats.crypto
+                crypto: Crypto = response.state.crypto
             except AttributeError:
                 return response
             response.body = {"body": response.body, "timestamp": int(time.time()), "nonce": gen_random_time_id()}

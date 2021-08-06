@@ -151,10 +151,11 @@ class Receiver(object):
 
         # gen response object
         response: "Response" = Response(
+            app=self._app,
             target=request.target,
             msg_type=response_num,
             correlation_id=request.correlation_id,
-            stats=request.stats,
+            state=request.state,
         )
         response.header.update(request.header)
 
@@ -224,6 +225,7 @@ class Receiver(object):
                 header["channel_id"] = channel_id
                 await self.sender(
                     Response(
+                        app=self._app,
                         target=request.target,
                         msg_type=Constant.CHANNEL_RESPONSE,
                         correlation_id=channel_id,
