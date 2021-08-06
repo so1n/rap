@@ -3,13 +3,14 @@ from typing import Any
 
 from rap.common.conn import Connection
 from rap.common.event import Event
+from rap.common.msg import BaseMsgProtocol
 from rap.common.state import State
 from rap.common.types import MSG_TYPE, SERVER_BASE_MSG_TYPE
 from rap.common.utils import Constant
 
 
 @dataclass()
-class Request(object):
+class Request(BaseMsgProtocol):
     msg_type: int
     target: str
     body: Any
@@ -27,7 +28,7 @@ class Request(object):
 
 
 @dataclass()
-class Response(object):
+class Response(BaseMsgProtocol):
     conn: Connection
     msg_id: int
     msg_type: int

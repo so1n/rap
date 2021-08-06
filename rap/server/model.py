@@ -5,13 +5,14 @@ from typing import Any, Optional
 from rap.common.conn import ServerConnection
 from rap.common.event import Event
 from rap.common.exceptions import BaseRapError, ServerError
+from rap.common.msg import BaseMsgProtocol
 from rap.common.state import State
 from rap.common.types import BASE_MSG_TYPE, SERVER_MSG_TYPE
 from rap.common.utils import Constant
 
 
 @dataclass()
-class Request(object):
+class Request(BaseMsgProtocol):
     conn: ServerConnection
     msg_id: int
     msg_type: int
@@ -40,7 +41,7 @@ class Request(object):
 
 
 @dataclass()
-class Response(object):
+class Response(BaseMsgProtocol):
     target: str
     msg_type: int = Constant.MSG_RESPONSE
     correlation_id: str = ""
