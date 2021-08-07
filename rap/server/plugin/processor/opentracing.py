@@ -38,14 +38,14 @@ class TracingProcessor(BaseProcessor):
     async def process_request(self, request: Request) -> Request:
         scope: Scope = self._create_scope(request)
         if request.msg_type is Constant.MSG_REQUEST:
-            self.app.cache.add(request.correlation_id, self._scope_cache_timeout, scope)
+            self.app.cache.add(f"{self.__class__.__name__}:{request.correlation_id}", self._scope_cache_timeout, scope)
         else:
             scope.close()
         return request
 
     async def process_response(self, response: Response) -> Response:
         if response.msg_type is Constant.MSG_RESPONSE:
-            scope: Scope = self.app.cache.get(response.correlation_id)
+            scope: Scope = self.app.cache.get(f"{self.__class__.__name__}:{response.correlation_id}")
             status_code: int = response.status_code
             scope.span.set_tag("status_code", status_code)
             scope.span.set_tag(tags.ERROR, status_code == 200)
