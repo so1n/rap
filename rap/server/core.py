@@ -4,6 +4,7 @@ import signal
 import ssl
 import threading
 import time
+import uuid
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Type
 
 from rap.common import event
@@ -250,6 +251,7 @@ class Server(object):
         conn: ServerConnection = ServerConnection(
             reader, writer, self._timeout, pack_param=self._pack_param, unpack_param=self._unpack_param
         )
+        conn.conn_id = str(uuid.uuid4())
         try:
             self._connected_set.add(conn)
             await self._conn_handle(conn)

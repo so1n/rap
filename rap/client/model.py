@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from rap.common.conn import Connection
 from rap.common.event import Event
@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 class ClientMsgProtocol(BaseMsgProtocol):
     app: "BaseClient"
+    conn: Optional[Connection]
 
 
 @dataclass()
@@ -23,6 +24,7 @@ class Request(ClientMsgProtocol):
     target: str
     body: Any
     correlation_id: str = ""
+    conn: Optional[Connection] = None
     header: dict = field(default_factory=lambda: dict())
 
     state: State = field(default_factory=State)
@@ -37,6 +39,7 @@ class Request(ClientMsgProtocol):
 
 @dataclass()
 class Response(BaseMsgProtocol):
+    app: "BaseClient"
     conn: Connection
     msg_id: int
     msg_type: int
@@ -50,8 +53,8 @@ class Response(BaseMsgProtocol):
     _target_dict: dict = field(default_factory=dict)
 
     @classmethod
-    def from_msg(cls, conn: Connection, msg: SERVER_BASE_MSG_TYPE) -> "Response":
-        resp: "Response" = cls(conn, *msg)
+    def from_msg(cls, app: "BaseClient", conn: Connection, msg: SERVER_BASE_MSG_TYPE) -> "Response":
+        resp: "Response" = cls(app, conn, *msg)
         _, group, func_name = resp.target.split("/")
         resp._target_dict = {"group": group, "func_name": func_name}
         return resp

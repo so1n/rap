@@ -179,7 +179,7 @@ class Transport(object):
 
         # parse response
         try:
-            response: Response = Response.from_msg(conn, response_msg)
+            response: Response = Response.from_msg(self.app, conn, response_msg)
         except Exception as e:
             e_msg: str = f"recv wrong response:{response_msg}, ignore error:{e}"
             return None, rap_exc.ProtocolError(e_msg)
@@ -224,6 +224,7 @@ class Transport(object):
         exc: Exception = rap_exc.RPCError("request error")
         for conn in conn_list:
             try:
+                request.conn = conn
                 resp_future_id: str = f"{conn.sock_tuple}:{request.correlation_id}"
                 self._resp_future_dict[resp_future_id] = asyncio.Future()
                 await self.write_to_conn(request, conn)

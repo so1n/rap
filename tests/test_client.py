@@ -172,6 +172,7 @@ class TestTransport:
         mocker.patch("rap.client.transport.transport.Transport._base_request").return_value = mock_future
         mock_future.set_result(
             Response.from_msg(
+                rap_client,
                 rap_client.get_conn(),
                 (
                     -1,
@@ -207,6 +208,7 @@ class TestTransport:
         mocker.patch("rap.client.transport.transport.Transport._base_request").return_value = mock_future
         mock_future.set_result(
             Response.from_msg(
+                rap_client,
                 rap_client.get_conn(),
                 (
                     29759,
