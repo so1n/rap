@@ -7,13 +7,31 @@ from .utils import get_event_loop
 
 class Cache(object):
     def __init__(self, interval: Optional[float] = None) -> None:
-        self._dict: Dict[str, Tuple[float, Any]] = {}
+        self._dict: Dict[Any, Tuple[float, Any]] = {}
         self._interval: float = interval or 10.0
 
-    def _add(self, key: str, expire: float, value: Any = MISSING) -> None:
+    def _add(self, key: Any, expire: float, value: Any = MISSING) -> None:
         self._dict[key] = (time.time() + expire, value)
 
-    def get(self, key: str, default: Any = MISSING) -> Any:
+    def update_expire(self, key: Any, expire: float) -> bool:
+        if key not in self._dict:
+            return False
+        _, value = self._dict[key]
+        self._dict[key] = (expire, value)
+        return True
+
+    def get_and_update_expire(self, key: Any, expire: float, default: Any = MISSING) -> Any:
+        if key not in self:
+            raise KeyError(key)
+        _, value = self._dict[key]
+        self._dict[key] = (expire, value)
+        if value is MISSING:
+            if default is MISSING:
+                raise KeyError(key)
+            return default
+        return value
+
+    def get(self, key: Any, default: Any = MISSING) -> Any:
         if key not in self:
             raise KeyError(key)
         expire, value = self._dict[key]
@@ -23,13 +41,13 @@ class Cache(object):
             return default
         return value
 
-    def add(self, key: str, expire: float, value: Any = MISSING) -> None:
+    def add(self, key: Any, expire: float, value: Any = MISSING) -> None:
         self._add(key, expire, value)
         if get_event_loop().is_running():
             self._auto_remove()
             setattr(self, self.add.__name__, self._add)
 
-    def __contains__(self, key: str) -> bool:
+    def __contains__(self, key: Any) -> bool:
         if key not in self._dict:
             return False
 

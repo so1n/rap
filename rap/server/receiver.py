@@ -3,7 +3,6 @@ import inspect
 import logging
 import time
 import traceback
-import uuid
 from functools import partial
 from typing import (
     TYPE_CHECKING,
@@ -25,15 +24,7 @@ from rap.common.conn import ServerConnection
 from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent
 from rap.common.exceptions import BaseRapError, ChannelError, ParseError, ProtocolError, RpcRunTimeError, ServerError
 from rap.common.types import is_type
-from rap.common.utils import (
-    Constant,
-    check_func_type,
-    del_future,
-    get_event_loop,
-    param_handle,
-    parse_error,
-    response_num_dict,
-)
+from rap.common.utils import Constant, del_future, get_event_loop, param_handle, parse_error, response_num_dict
 from rap.server.model import Request, Response
 from rap.server.plugin.processor.base import BaseProcessor
 from rap.server.registry import FuncModel
@@ -127,7 +118,6 @@ class Receiver(object):
     ):
         self._app: "Server" = app
         self._conn: ServerConnection = conn
-        self._conn_id: str = str(uuid.uuid4())
         self._run_timeout: int = run_timeout
         self.sender: Sender = sender
         self._ping_sleep_time: int = ping_sleep_time
@@ -343,7 +333,7 @@ class Receiver(object):
             if request.body.get("server_name") != self._app.server_name:
                 response.set_event(CloseConnEvent("error server name"))
             else:
-                response.set_event(DeclareEvent({"result": True, "conn_id": self._conn_id}))
+                response.set_event(DeclareEvent({"result": True, "conn_id": self._conn.conn_id}))
                 self._keepalive_timestamp = int(time.time())
                 self._ping_pong_future = asyncio.ensure_future(self.ping_event())
         elif request.func_name == Constant.DROP:

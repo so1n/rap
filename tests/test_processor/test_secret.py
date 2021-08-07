@@ -64,12 +64,9 @@ class TestServerCryptoProcess:
         exec_msg = e.value.args[0]
         assert exec_msg == "decrypt body error"
 
-    async def test_process_request_timestamp_param_error(
-        self, rap_server: Server, rap_client: Client, mocker: Any
-    ) -> None:
-        redis: StrictRedis = StrictRedis.from_url("redis://localhost")
+    async def test_process_request_timestamp_param_error(self, rap_server: Server, rap_client: Client) -> None:
         rap_client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
-        rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis, timeout=-1)])
+        rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, timeout=-1)])
 
         with pytest.raises(CryptoError) as e:
             await async_sum(1, 2)

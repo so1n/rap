@@ -27,6 +27,7 @@ class BaseConnection:
         self._writer: Optional[WRITER_TYPE] = None
         self._max_msg_id: int = 65535
         self._msg_id: int = random.randrange(self._max_msg_id)
+        self.conn_id: str = ""
 
         self.conn_future: asyncio.Future = asyncio.Future()
         self.peer_tuple: Tuple[str, int] = ("", -1)
@@ -124,7 +125,6 @@ class Connection(BaseConnection):
 
         self.listen_future: asyncio.Future = asyncio.Future()
         self.connection_info: str = f"{host}:{port}"
-        self.conn_id: str = ""
 
         self.listen_future.set_result(True)
 
