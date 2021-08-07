@@ -40,10 +40,12 @@ class Server(object):
         close_timeout: int = 9,
         ssl_crt_path: Optional[str] = None,
         ssl_key_path: Optional[str] = None,
+        pack_param: Optional[dict] = None,
+        unpack_param: Optional[dict] = None,
         middleware_list: List[BaseMiddleware] = None,
         processor_list: List[BaseProcessor] = None,
         window_state: Optional[WindowState] = None,
-        cache_interval: Optional[float] = None
+        cache_interval: Optional[float] = None,
     ):
         self.server_name: str = server_name
         self.host: str = host
@@ -60,6 +62,8 @@ class Server(object):
         self._run_event: asyncio.Event = asyncio.Event()
         self._run_event.set()
 
+        self._pack_param: Optional[dict] = pack_param
+        self._unpack_param: Optional[dict] = unpack_param
         self._ssl_context: Optional[ssl.SSLContext] = None
         if ssl_crt_path and ssl_key_path:
             self._ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
@@ -219,11 +223,8 @@ class Server(object):
             if not _conn.is_closed():
                 try:
                     await Sender(
-                        self,  # type: ignore
-                        _conn, self._timeout, processor_list=self._processor_list
-                    ).send_event(
-                        event.ShutdownEvent({"close_timeout": self._close_timeout})
-                    )
+                        self, _conn, self._timeout, processor_list=self._processor_list  # type: ignore
+                    ).send_event(event.ShutdownEvent({"close_timeout": self._close_timeout}))
                 except ConnectionError:
                     # conn may be closed
                     pass
@@ -246,7 +247,9 @@ class Server(object):
         await self.run_event_list(EventEnum.after_end, is_raise=True)
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE) -> None:
-        conn: ServerConnection = ServerConnection(reader, writer, self._timeout)
+        conn: ServerConnection = ServerConnection(
+            reader, writer, self._timeout, pack_param=self._pack_param, unpack_param=self._unpack_param
+        )
         try:
             self._connected_set.add(conn)
             await self._conn_handle(conn)
@@ -258,10 +261,7 @@ class Server(object):
             self._connected_set.remove(conn)
 
     async def _conn_handle(self, conn: ServerConnection) -> None:
-        sender: Sender = Sender(
-            self,  # type: ignore
-            conn, self._timeout, processor_list=self._processor_list
-        )
+        sender: Sender = Sender(self, conn, self._timeout, processor_list=self._processor_list)  # type: ignore
         receiver: Receiver = Receiver(
             self,  # type: ignore
             conn,
@@ -279,10 +279,7 @@ class Server(object):
                 await sender.send_event(event.CloseConnEvent("request is empty"))
                 return
             try:
-                request: Request = Request.from_msg(
-                    self,  # type: ignore
-                    _request_msg, conn
-                )
+                request: Request = Request.from_msg(self, _request_msg, conn)  # type: ignore
             except Exception as closer_e:
                 logging.error(f"{conn.peer_tuple} send bad msg:{_request_msg}, error:{closer_e}")
                 await sender.send_event(event.CloseConnEvent("protocol error"))

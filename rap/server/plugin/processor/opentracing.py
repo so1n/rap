@@ -8,7 +8,7 @@ from opentracing.propagation import Format  # type: ignore
 from opentracing.scope import Scope  # type: ignore
 
 from rap.common.utils import Constant
-from rap.server.model import ServerMsgProtocol, Request, Response
+from rap.server.model import Request, Response, ServerMsgProtocol
 from rap.server.plugin.processor.base import BaseProcessor
 
 

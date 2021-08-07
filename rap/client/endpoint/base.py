@@ -20,6 +20,8 @@ class BaseEndpoint(object):
         timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
         select_conn_method: Optional[SelectConnEnum] = None,
+        pack_param: Optional[dict] = None,
+        unpack_param: Optional[dict] = None,
     ) -> None:
         """
         server_name: server name
@@ -36,6 +38,9 @@ class BaseEndpoint(object):
         self._host_weight_list: List[str] = []
         self._timeout: int = timeout or 1200
         self._ssl_crt_path: Optional[str] = ssl_crt_path
+        self._pack_param: Optional[dict] = pack_param
+        self._unpack_param: Optional[dict] = unpack_param
+
         self._connected_cnt: int = 0
         self._conn_dict: Dict[str, Connection] = {}
         self._round_robin_index: int = 0
@@ -70,7 +75,15 @@ class BaseEndpoint(object):
         if key in self._conn_dict:
             raise ConnectionError(f"conn:{key} already create")
 
-        conn: Connection = Connection(ip, port, self._timeout, weight, ssl_crt_path=self._ssl_crt_path)
+        conn: Connection = Connection(
+            ip,
+            port,
+            self._timeout,
+            weight,
+            ssl_crt_path=self._ssl_crt_path,
+            pack_param=self._pack_param,
+            unpack_param=self._unpack_param,
+        )
 
         def _conn_done(f: asyncio.Future) -> None:
             try:

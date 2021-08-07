@@ -13,11 +13,16 @@ __all__ = ["Connection", "ServerConnection"]
 
 
 class BaseConnection:
-    def __init__(self, timeout: int, pack_param: Optional[dict] = None):
+    def __init__(self, timeout: int, pack_param: Optional[dict] = None, unpack_param: Optional[dict] = None):
         self._is_closed: bool = True
         self._timeout: int = timeout
-        self._pack_param: dict = pack_param if pack_param else dict()
-        self._unpacker: UNPACKER_TYPE = msgpack.Unpacker(raw=False, use_list=False)
+        self._pack_param: dict = pack_param or {}
+        self._unpack_param: dict = unpack_param or {}
+        if "raw" not in self._unpack_param:
+            self._unpack_param["raw"] = False
+        if "use_list" not in self._unpack_param:
+            self._unpack_param["use_list"] = False
+        self._unpacker: UNPACKER_TYPE = msgpack.Unpacker(**self._unpack_param)
         self._reader: Optional[READER_TYPE] = None
         self._writer: Optional[WRITER_TYPE] = None
         self._max_msg_id: int = 65535
@@ -104,9 +109,10 @@ class Connection(BaseConnection):
         timeout: int,
         weight: int,
         pack_param: Optional[dict] = None,
+        unpack_param: Optional[dict] = None,
         ssl_crt_path: Optional[str] = None,
     ):
-        super().__init__(timeout, pack_param)
+        super().__init__(timeout, pack_param, unpack_param)
         self._host: str = host
         self._port: int = port
         if weight > 10:
@@ -153,8 +159,9 @@ class ServerConnection(BaseConnection):
         writer: WRITER_TYPE,
         timeout: int,
         pack_param: Optional[dict] = None,
+        unpack_param: Optional[dict] = None,
     ):
-        super().__init__(timeout, pack_param)
+        super().__init__(timeout, pack_param, unpack_param)
         self._reader = reader
         self._writer = writer
         self.peer_tuple = self._writer.get_extra_info("peername")

@@ -14,6 +14,8 @@ class LocalEndpoint(BaseEndpoint):
         conn_list: List[dict],
         timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
+        pack_param: Optional[dict] = None,
+        unpack_param: Optional[dict] = None,
         select_conn_method: Optional[SelectConnEnum] = None,
     ):
         """
@@ -27,7 +29,9 @@ class LocalEndpoint(BaseEndpoint):
         timeout: read response from consumer timeout
         """
         self._conn_list: List[dict] = conn_list
-        super().__init__(server_name, timeout, ssl_crt_path, select_conn_method)
+        super().__init__(
+            server_name, timeout, ssl_crt_path, select_conn_method, pack_param=pack_param, unpack_param=unpack_param
+        )
 
     async def start(self) -> None:
         if not self.is_close:

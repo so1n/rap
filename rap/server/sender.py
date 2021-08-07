@@ -1,7 +1,7 @@
 import logging
 import random
 import uuid
-from typing import Any, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from rap.common.conn import ServerConnection
 from rap.common.utils import Constant

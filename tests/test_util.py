@@ -2,8 +2,8 @@ import asyncio
 
 import pytest
 
-from rap.client.processor.crypto import AutoExpireSet
 from rap.client.utils import raise_rap_error
+from rap.common.cache import Cache
 from rap.common.event import Event
 from rap.common.exceptions import RPCError
 from rap.common.state import State
@@ -65,13 +65,13 @@ class TestUtil:
         with pytest.raises(TypeError):
             check_func_type(_demo, (1, "2"), {"c": 3})
 
-    async def test_auto_expire_set(self) -> None:
-        auto_expire_set: AutoExpireSet = AutoExpireSet(1.5)
-        auto_expire_set.add("test1", 0.1)
-        auto_expire_set.add("test2", 1)
-        assert "test1" in auto_expire_set
+    async def test_cache(self) -> None:
+        cache: Cache = Cache(1.5)
+        cache.add("test1", 0.1)
+        cache.add("test2", 1)
+        assert "test1" in cache
         await asyncio.sleep(0.5)
-        assert "test1" not in auto_expire_set
-        assert "test2" in auto_expire_set
+        assert "test1" not in cache
+        assert "test2" in cache
         await asyncio.sleep(1)
-        assert "test2" not in auto_expire_set
+        assert "test2" not in cache

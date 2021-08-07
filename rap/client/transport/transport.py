@@ -3,7 +3,7 @@ import inspect
 import logging
 import random
 import uuid
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
@@ -15,7 +15,6 @@ from rap.common.conn import Connection
 from rap.common.exceptions import RPCError
 from rap.common.types import SERVER_BASE_MSG_TYPE
 from rap.common.utils import Constant, as_first_completed
-
 
 if TYPE_CHECKING:
     from rap.client.core import BaseClient

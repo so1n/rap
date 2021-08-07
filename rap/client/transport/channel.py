@@ -1,14 +1,13 @@
 import asyncio
 import logging
 import uuid
-from typing import Any, Callable, Coroutine, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Optional, Tuple
 
 from rap.client.model import Request, Response
 from rap.common.channel import BaseChannel
 from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError
 from rap.common.utils import Constant, as_first_completed
-
 
 if TYPE_CHECKING:
     from .transport import Transport

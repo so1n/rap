@@ -79,7 +79,7 @@ class BaseClient:
         server_name: str,
         endpoint: BaseEndpoint,
         timeout: Optional[int] = None,
-        cache_interval: Optional[float] = None
+        cache_interval: Optional[float] = None,
     ):
         """
         endpoint: rap endpoint
