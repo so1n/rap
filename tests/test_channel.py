@@ -143,7 +143,7 @@ class TestChannel:
         rap_server.register(test_server_channel, "test_channel")
 
         # test channel already create
-        mocker.patch("rap.client.transport.channel.uuid.uuid4").return_value = 123
+        mocker.patch("rap.client.transport.channel.get_snowflake_id").return_value = 123
         mocker.patch("rap.client.model.Request.to_msg").return_value = (
             Constant.CHANNEL_REQUEST,
             "123",
@@ -156,7 +156,7 @@ class TestChannel:
         exec_msg: str = e.value.args[0]
         assert exec_msg == "channel already create"
 
-        mocker.patch("rap.client.transport.channel.uuid.uuid4").return_value = 234
+        mocker.patch("rap.client.transport.channel.get_snowflake_id").return_value = 234
         mocker.patch("rap.client.model.Request.to_msg").return_value = (
             Constant.CHANNEL_REQUEST,
             "234",
@@ -169,7 +169,7 @@ class TestChannel:
         exec_msg = e.value.args[0]
         assert exec_msg == "channel not create"
 
-        mocker.patch("rap.client.transport.channel.uuid.uuid4").return_value = 345
+        mocker.patch("rap.client.transport.channel.get_snowflake_id").return_value = 345
         mocker.patch("rap.client.model.Request.to_msg").return_value = (
             Constant.CHANNEL_REQUEST,
             "345",
@@ -182,7 +182,7 @@ class TestChannel:
         exec_msg = e.value.args[0]
         assert exec_msg == "channel not create"
 
-        mocker.patch("rap.client.transport.channel.uuid.uuid4").return_value = 456
+        mocker.patch("rap.client.transport.channel.get_snowflake_id").return_value = 456
         mocker.patch("rap.client.model.Request.to_msg").return_value = (
             Constant.CHANNEL_REQUEST,
             "456",
