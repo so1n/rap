@@ -4,9 +4,9 @@ import random
 import ssl
 from typing import Any, Optional, Tuple
 
-import msgpack  # type: ignore
+import msgpack
 
-from rap.common.types import BASE_MSG_TYPE, MSG_TYPE, READER_TYPE, UNPACKER_TYPE, WRITER_TYPE
+from rap.common.types import READER_TYPE, UNPACKER_TYPE, WRITER_TYPE
 from rap.common.utils import Constant
 
 __all__ = ["Connection", "ServerConnection"]
