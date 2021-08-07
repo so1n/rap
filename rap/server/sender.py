@@ -1,9 +1,9 @@
 import logging
 import random
-import uuid
 from typing import TYPE_CHECKING, Any, List, Optional
 
 from rap.common.conn import ServerConnection
+from rap.common.snowflake import get_snowflake_id
 from rap.common.utils import Constant
 from rap.server.model import Event, Response
 from rap.server.plugin.processor.base import BaseProcessor
@@ -39,7 +39,7 @@ class Sender(object):
 
         set_header_value("version", Constant.VERSION, is_cover=True)
         set_header_value("user_agent", Constant.USER_AGENT, is_cover=True)
-        set_header_value("request_id", str(uuid.uuid4()), is_cover=resp.msg_type is Constant.CHANNEL_RESPONSE)
+        set_header_value("request_id", str(get_snowflake_id()), is_cover=resp.msg_type is Constant.CHANNEL_RESPONSE)
 
     async def __call__(self, resp: Optional[Response]) -> bool:
         if resp is None:

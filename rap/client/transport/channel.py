@@ -1,12 +1,12 @@
 import asyncio
 import logging
-import uuid
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Optional, Tuple
 
 from rap.client.model import Request, Response
 from rap.common.channel import BaseChannel
 from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError
+from rap.common.snowflake import get_snowflake_id
 from rap.common.utils import Constant, as_first_completed
 
 if TYPE_CHECKING:
@@ -35,7 +35,7 @@ class Channel(BaseChannel):
         write: rap's transport write to conn func
         close: close queue func
         """
-        self.channel_id: str = str(uuid.uuid4())
+        self.channel_id: str = str(get_snowflake_id())
         self._transport: "Transport" = transport
         self._target: str = target
         self._conn: Connection = conn

@@ -2,7 +2,6 @@ import asyncio
 import inspect
 import logging
 import random
-import uuid
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 from rap.client.model import Request, Response
@@ -13,6 +12,7 @@ from rap.common import event
 from rap.common import exceptions as rap_exc
 from rap.common.conn import Connection
 from rap.common.exceptions import RPCError
+from rap.common.snowflake import get_snowflake_id
 from rap.common.types import SERVER_BASE_MSG_TYPE
 from rap.common.utils import Constant, as_first_completed
 
@@ -259,7 +259,7 @@ class Transport(object):
 
         set_header_value("version", Constant.VERSION, is_cover=True)
         set_header_value("user_agent", Constant.USER_AGENT, is_cover=True)
-        set_header_value("request_id", str(uuid.uuid4()), is_cover=True)
+        set_header_value("request_id", str(get_snowflake_id()), is_cover=True)
 
     #######################
     # base write_to_conn&read api #
@@ -306,7 +306,7 @@ class Transport(object):
             Constant.MSG_REQUEST,
             f"{self.app.server_name}/{group}/{func_name}",
             {"call_id": call_id, "param": arg_param},
-            correlation_id=str(uuid.uuid4()),
+            correlation_id=str(get_snowflake_id()),
         )
         if header:
             request.header.update(header)
@@ -350,7 +350,10 @@ class Transport(object):
             del self._channel_queue_dict[f"{conn.sock_tuple}:{_channel_id}"]
 
         target: str = f"/{group or Constant.DEFAULT_GROUP}/{func_name}"
-        return Channel(self, target, conn, create, read, write, close)
+        return Channel(
+            self,  # type: ignore
+            target, conn, create, read, write, close
+        )
 
     #############
     # processor #

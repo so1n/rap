@@ -1,5 +1,5 @@
 import time
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError, ParseError, RPCError

@@ -1,9 +1,7 @@
-import asyncio
 import time
 from typing import Any
 
 import pytest
-from aredis import StrictRedis  # type: ignore
 from pytest_mock import MockerFixture
 
 from rap.client import Client
@@ -46,23 +44,21 @@ class TestCrypto:
 class TestServerCryptoProcess:
     async def test_process_response_error(self, rap_server: Server, rap_client: Client, mocker: Any) -> None:
         mocker.patch("rap.client.processor.CryptoProcessor._body_handle").side_effect = Exception()
-        redis: StrictRedis = StrictRedis.from_url("redis://localhost")
         rap_client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
-        rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])
+        rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"})])
         with pytest.raises(CryptoError):
             await async_sum(1, 2)
 
     async def test_process_response_handle_error(self, rap_server: Server, rap_client: Client, mocker: Any) -> None:
         mocker.patch("rap.common.crypto.Crypto.decrypt_object").side_effect = Exception()
-        redis: StrictRedis = StrictRedis.from_url("redis://localhost")
         rap_client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
-        rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])
+        rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"})])
 
         with pytest.raises(CryptoError) as e:
             await async_sum(1, 2)
 
         exec_msg = e.value.args[0]
-        assert exec_msg == "decrypt body error"
+        assert exec_msg == "Can't decrypt body."
 
     async def test_process_request_timestamp_param_error(self, rap_server: Server, rap_client: Client) -> None:
         rap_client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
@@ -78,9 +74,8 @@ class TestServerCryptoProcess:
         self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
         mocker.patch("rap.client.processor.crypto.gen_random_time_id").return_value = ""
-        redis: StrictRedis = StrictRedis.from_url("redis://localhost")
         rap_client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
-        rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])
+        rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"})])
 
         with pytest.raises(CryptoError) as e:
             await async_sum(1, 2)
@@ -92,9 +87,8 @@ class TestServerCryptoProcess:
         self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
         mocker.patch("rap.client.processor.crypto.gen_random_time_id").return_value = "mocker"
-        redis: StrictRedis = StrictRedis.from_url("redis://localhost")
         rap_client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
-        rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])
+        rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"})])
 
         with pytest.raises(CryptoError) as e:
             await async_sum(1, 2)
@@ -103,33 +97,14 @@ class TestServerCryptoProcess:
         exec_msg = e.value.args[0]
         assert exec_msg == "Parse error. nonce param error"
 
-    async def test_process_request_redis_error(
-        self, rap_server: Server, rap_client: Client, mocker: MockerFixture
-    ) -> None:
-        future: asyncio.Future = asyncio.Future()
-        mocker.patch("rap.server.plugin.processor.crypto.StrictRedis.exists").return_value = future
-        future.set_exception(Exception("customer exc"))
-
-        redis: StrictRedis = StrictRedis.from_url("redis://localhost")
-        rap_client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
-        rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])
-
-        with pytest.raises(CryptoError) as e:
-            await async_sum(1, 2)
-
-        exec_msg = e.value.args[0]
-        assert exec_msg == "customer exc"
-
     async def test_secret(self, rap_server: Server, rap_client: Client) -> None:
-        redis: StrictRedis = StrictRedis.from_url("redis://localhost")
         rap_client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
-        rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis)])
+        rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"})])
         assert 3 == await async_sum(1, 2)
 
     async def test_secret_middleware_method(self, rap_server: Server, rap_client: Client) -> None:
-        redis: StrictRedis = StrictRedis.from_url("redis://localhost")
         rap_client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
-        middleware: ServerCryptoProcessor = ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, redis)
+        middleware: ServerCryptoProcessor = ServerCryptoProcessor({"test": "keyskeyskeyskeys"})
         rap_server.load_processor([middleware])
         middleware.start_event_handle(rap_server)
 
