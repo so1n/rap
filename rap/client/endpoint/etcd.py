@@ -15,6 +15,8 @@ class EtcdEndpoint(BaseEndpoint):
         server_name: str,
         timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
+        pack_param: Optional[dict] = None,
+        unpack_param: Optional[dict] = None,
         select_conn_method: SelectConnEnum = SelectConnEnum.random,
         # etcd client param
         etcd_host: str = "localhost",
@@ -36,7 +38,9 @@ class EtcdEndpoint(BaseEndpoint):
         )
         self._watch_future: asyncio.Future = asyncio.Future()
         self._watch_future.set_result(True)
-        super().__init__(server_name, timeout, ssl_crt_path, select_conn_method)
+        super().__init__(
+            server_name, timeout, ssl_crt_path, select_conn_method, pack_param=pack_param, unpack_param=unpack_param
+        )
 
     async def stop(self) -> None:
         del_future(self._watch_future)

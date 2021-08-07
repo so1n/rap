@@ -12,7 +12,7 @@ from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError
 from rap.server import Server
 from rap.server.plugin.processor import CryptoProcessor as ServerCryptoProcessor
-from tests.conftest import async_sum  # type: ignore
+from tests.conftest import async_sum, client  # type: ignore
 
 pytestmark = pytest.mark.asyncio
 
@@ -27,6 +27,7 @@ class TestCrypto:
 
     async def test_crypto_body_handle(self) -> None:
         crypto: CryptoProcessor = CryptoProcessor("test", "keyskeyskeyskeys")
+        crypto.app = client
         demo_body_dict: dict = {"nonce": "aaa", "timestamp": int(time.time()) - 70}
         with pytest.raises(CryptoError) as e:
             crypto._body_handle(demo_body_dict)
