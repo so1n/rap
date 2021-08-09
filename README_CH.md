@@ -442,13 +442,13 @@ server.load_middleware(
 from aredis import StrictRedis
 
 from rap.server import Server
-from rap.server.plugin.middleware import IpBlockMiddleware
+from rap.server.plugin.middleware import IpFilterMiddleware
 
 redis: StrictRedis = StrictRedis("redis://localhost")
 server = Server()
 # allow_ip_list: 白名单列表,支持网段ip, 如果填了allow_ip_list, black_ip_list会失效
 # black_ip_list: 黑名单列表,支持网段ip
-server.load_middleware([IpBlockMiddleware(redis, allow_ip_list=['192.168.0.0/31'], block_ip_list=['192.168.0.2'])])
+server.load_middleware([IpFilterMiddleware(redis, allow_ip_list=['192.168.0.0/31'], block_ip_list=['192.168.0.2'])])
 ```
 # 5.高级功能
 **TODO**, 本功能暂未实现

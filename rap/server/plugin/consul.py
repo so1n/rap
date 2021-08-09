@@ -21,6 +21,7 @@ def add_consul_client(
     verify: bool = True,
     cert: Optional[str] = None,
 ) -> "Server":
+    """Tell consul-server its own service status"""
     consul_client: ConsulClient = ConsulClient(
         host=host,
         port=port,

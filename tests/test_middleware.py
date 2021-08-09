@@ -6,7 +6,7 @@ from aredis import StrictRedis  # type: ignore
 
 from rap.client import Client
 from rap.server import Server
-from rap.server.plugin.middleware.conn.block import IpBlockMiddleware
+from rap.server.plugin.middleware.conn.block import IpFilterMiddleware
 from rap.server.plugin.middleware.conn.limit import ConnLimitMiddleware, IpMaxConnMiddleware
 
 pytestmark = pytest.mark.asyncio
@@ -16,7 +16,7 @@ async def mock_func(self: Any) -> None:
     await asyncio.sleep(0)
 
 
-async def clean_cache_ip_before_test(middleware: IpBlockMiddleware) -> None:
+async def clean_cache_ip_before_test(middleware: IpFilterMiddleware) -> None:
     for ip in await middleware._get_allow_ip():
         await middleware._remove_allow_ip(ip)
     for ip in await middleware._get_block_ip():
@@ -89,7 +89,7 @@ class TestIpMaxConnMiddleware:
 class TestIpBlockMiddleware:
     async def test_ip_block_method(self, rap_server: Server) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
-        middleware: IpBlockMiddleware = IpBlockMiddleware(redis)
+        middleware: IpFilterMiddleware = IpFilterMiddleware(redis)
         await clean_cache_ip_before_test(middleware)
 
         rap_server.load_middleware([middleware])
@@ -105,7 +105,7 @@ class TestIpBlockMiddleware:
 
     async def test_ip_block_ip_in_access_list(self, rap_server: Server) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
-        middleware: IpBlockMiddleware = IpBlockMiddleware(
+        middleware: IpFilterMiddleware = IpFilterMiddleware(
             redis, allow_ip_list=["localhost", "::1", "127.0.0.1", "192.168.0.0/31"]
         )
         await clean_cache_ip_before_test(middleware)
@@ -119,7 +119,7 @@ class TestIpBlockMiddleware:
 
     async def test_ip_block_by_allow_ip_access(self, rap_server: Server) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
-        middleware: IpBlockMiddleware = IpBlockMiddleware(redis, allow_ip_list=["127.0.0.2"])
+        middleware: IpFilterMiddleware = IpFilterMiddleware(redis, allow_ip_list=["127.0.0.2"])
         await clean_cache_ip_before_test(middleware)
 
         rap_server.load_middleware([middleware])
@@ -131,7 +131,7 @@ class TestIpBlockMiddleware:
 
     async def test_ip_block_ip_not_in_block_list(self, rap_server: Server) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
-        middleware: IpBlockMiddleware = IpBlockMiddleware(redis, block_ip_list=["127.0.0.2"])
+        middleware: IpFilterMiddleware = IpFilterMiddleware(redis, block_ip_list=["127.0.0.2"])
         await clean_cache_ip_before_test(middleware)
 
         rap_server.load_middleware([middleware])
@@ -143,7 +143,7 @@ class TestIpBlockMiddleware:
 
     async def test_ip_block_by_black_ip_access(self, rap_server: Server) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
-        middleware: IpBlockMiddleware = IpBlockMiddleware(redis, block_ip_list=["localhost", "::1", "127.0.0.1"])
+        middleware: IpFilterMiddleware = IpFilterMiddleware(redis, block_ip_list=["localhost", "::1", "127.0.0.1"])
         await clean_cache_ip_before_test(middleware)
 
         rap_server.load_middleware([middleware])
