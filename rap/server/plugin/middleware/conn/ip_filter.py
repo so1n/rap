@@ -136,6 +136,7 @@ class IpFilterMiddleware(BaseConnMiddleware):
 
 class IpBlockMiddleware(IpFilterMiddleware):
     """Only Block Ip"""
+
     async def dispatch(self, conn: ServerConnection) -> None:
         is_block: int = await self._redis.sismember(self.block_key, conn.peer_tuple[0])
         if is_block:
@@ -148,6 +149,7 @@ class IpBlockMiddleware(IpFilterMiddleware):
 
 class IpAllowMiddleware(IpFilterMiddleware):
     """Only Allow Ip"""
+
     async def dispatch(self, conn: ServerConnection) -> None:
         is_allow: int = await self._redis.sismember(self.allow_key, conn.peer_tuple[0])
         if not is_allow:

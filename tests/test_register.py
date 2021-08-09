@@ -70,7 +70,7 @@ class TestRegister:
         with pytest.raises(RegisteredError) as e:
             registry.register(demo)
         exec_msg: str = e.value.args[0]
-        assert exec_msg == "Already been register"
+        assert exec_msg == "`normal:default:demo` Already register"
 
     async def test_reload_module(self, rap_server: Server, rap_client: Client) -> None:
         @rap_client.register()
@@ -102,7 +102,7 @@ class TestRegister:
         with pytest.raises(RegisteredError) as e:
             await rap_client.raw_call("reload", ["tests.test_register", "new_reload_sum", "load"], group="registry")
         exec_msg = e.value.args[0]
-        assert "not in correlation_id" in exec_msg
+        assert "`normal:default:load` not exists" in exec_msg
 
     async def test_load_error_fun(self, rap_server: Server, rap_client: Client) -> None:
         with pytest.raises(RegisteredError) as e:
@@ -117,7 +117,7 @@ class TestRegister:
         with pytest.raises(RegisteredError) as e:
             rap_server.registry._load("tests.test_register", "new_reload_sum")
         exec_msg: str = e.value.args[0]
-        assert "Already exists in correlation_id " in exec_msg
+        assert "`normal:default:new_reload_sum` already exists" in exec_msg
 
     async def test_register_func_error(self, rap_server: Server, rap_client: Client) -> None:
         def test_func() -> None:

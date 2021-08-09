@@ -194,7 +194,7 @@ class RegistryManager(object):
             func_type: str = self._get_func_type(func)
             func_key: str = self.gen_key(group, name, func_type)
             if func_key not in self.func_dict:
-                raise RegisteredError(f"`{func_key}` already exists")
+                raise RegisteredError(f"`{func_key}` not exists")
 
             func_model: FuncModel = self.func_dict[func_key]
             if func_model.is_private:

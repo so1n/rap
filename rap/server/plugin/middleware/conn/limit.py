@@ -84,8 +84,8 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
         timeout:  Cache expiration time of each ip
         """
         self._redis: Union[StrictRedis, StrictRedisCluster] = redis
-        self._ip_max_conn: int = ip_max_conn or 128
-        self._timeout: int = timeout or 180
+        self._ip_max_conn: int = ip_max_conn if ip_max_conn is not None else 128
+        self._timeout: int = timeout if timeout is not None else 180
         self._key: str = self.__class__.__name__
         if namespace:
             self._key = f"{namespace}:{self._key}"

@@ -1,3 +1,3 @@
 from .base import BaseMiddleware
-from .conn.block import IpBlockMiddleware
+from .conn.ip_filter import IpFilterMiddleware
 from .conn.limit import ConnLimitMiddleware, IpMaxConnMiddleware
