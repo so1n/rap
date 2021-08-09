@@ -6,21 +6,21 @@ import os
 import socket
 import time
 from typing import Dict, Tuple
-from typing_extensions import TypedDict
 
+from typing_extensions import TypedDict
 
 EPOCH_TIMESTAMP: int = 550281600000
 StatsTypedDict = TypedDict(
     "StatsTypedDict",
     {
-        'dc': int,
-        'worker': int,
-        'timestamp': int,
-        'last_timestamp': int,
-        'sequence': int,
-        'sequence_overload': int,
-        'errors': int
-    }
+        "dc": int,
+        "worker": int,
+        "timestamp": int,
+        "last_timestamp": int,
+        "sequence": int,
+        "sequence_overload": int,
+        "errors": int,
+    },
 )
 
 
@@ -28,7 +28,7 @@ class Snowflake(object):
     def __init__(self, dc: int, worker: int):
         self.dc: int = dc
         self.worker: int = worker
-        self.node_id: int = ((self.dc & 0x03) << 8) | (self.worker & 0xff)
+        self.node_id: int = ((self.dc & 0x03) << 8) | (self.worker & 0xFF)
         self.last_timestamp: int = EPOCH_TIMESTAMP
         self.sequence: int = 0
         self.sequence_overload: int = 0
@@ -50,7 +50,7 @@ class Snowflake(object):
 
         if self.sequence > 4095:
             # the sequence is overload, just wait to next sequence
-            logging.warning('The sequence has been overload')
+            logging.warning("The sequence has been overload")
             self.sequence_overload += 1
             time.sleep(0.001)
             return self.get_next_id()
@@ -63,17 +63,17 @@ class Snowflake(object):
     @property
     def stats(self) -> StatsTypedDict:
         return {
-            'dc': self.dc,
-            'worker': self.worker,
-            'timestamp': int(time.time()*1000),  # current timestamp for this worker
-            'last_timestamp': self.last_timestamp,  # the last timestamp that generated ID on
-            'sequence': self.sequence,  # the sequence number for last timestamp
-            'sequence_overload': self.sequence_overload,  # the number of times that the sequence is overflow
-            'errors': self.errors,  # the number of times that clock went backward
+            "dc": self.dc,
+            "worker": self.worker,
+            "timestamp": int(time.time() * 1000),  # current timestamp for this worker
+            "last_timestamp": self.last_timestamp,  # the last timestamp that generated ID on
+            "sequence": self.sequence,  # the sequence number for last timestamp
+            "sequence_overload": self.sequence_overload,  # the number of times that the sequence is overflow
+            "errors": self.errors,  # the number of times that clock went backward
         }
 
 
-_cache: Dict[Tuple[int, int], Snowflake]  = {}
+_cache: Dict[Tuple[int, int], Snowflake] = {}
 
 
 def get_snowflake_id() -> int:

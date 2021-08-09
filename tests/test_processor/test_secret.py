@@ -73,7 +73,7 @@ class TestServerCryptoProcess:
     async def test_process_request_nonce_param_error(
         self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
-        mocker.patch("rap.client.processor.crypto.gen_random_time_id").return_value = ""
+        mocker.patch("rap.client.processor.crypto.get_snowflake_id").return_value = ""
         rap_client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
         rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"})])
 
@@ -86,7 +86,7 @@ class TestServerCryptoProcess:
     async def test_process_request_nonce_repeat_param_error(
         self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
-        mocker.patch("rap.client.processor.crypto.gen_random_time_id").return_value = "mocker"
+        mocker.patch("rap.client.processor.crypto.get_snowflake_id").return_value = "mocker"
         rap_client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
         rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"})])
 

@@ -44,8 +44,8 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
                         _dict[index] = {}
                     _dict[index][type_] = value
             for index, metric_dict in _dict.items():
-                total: int = metric_dict["total"]
-                error_cnt: int = metric_dict["error"]
+                total: int = metric_dict.get("total", 0)
+                error_cnt: int = metric_dict.get("error", 0)
                 self._probability_dict[index] = max(0.0, (total - k * (total - error_cnt)) / (total + 1))
 
         self._window_state.add_priority_callback(upload_probability)
