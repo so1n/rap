@@ -441,12 +441,12 @@ Support restrict single ip or whole segment ip, support both whitelist and black
 
 ```Python
 from rap.server import Server
-from rap.server.plugin.middleware import IpBlockMiddleware
+from rap.server.plugin.middleware import IpFilterMiddleware
 
 server = Server()
 # allow_ip_list: whitelist, support network segment ip, if filled with allow_ip_list, black_ip_list will be invalid 
 # black_ip_list: blacklist, support network segment ip 
-server.load_middleware([IpBlockMiddleware(allow_ip_list=['192.168.0.0/31'], block_ip_list=['192.168.0.2'])])
+server.load_middleware([IpFilterMiddleware(allow_ip_list=['192.168.0.0/31'], block_ip_list=['192.168.0.2'])])
 ```
 # 5.Advanced Features
 **TODO**, This feature is not yet implemented 

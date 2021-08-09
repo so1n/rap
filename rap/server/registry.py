@@ -102,7 +102,7 @@ class RegistryManager(object):
         func: Function that need to be registered
         name: If the function name is not specified, the system will obtain its own name according to the function,
               otherwise it will be replaced by the specified function name
-        correlation_id: Specify the correlation_id to which the function to be registered belongs.
+        group: Specify the correlation_id to which the function to be registered belongs.
                The same function can be registered to different groups.
                The root correlation_id is generally used for system components, and there are restrictions when calling.
         is_private: if True, it can only be accessed through the local cli
@@ -135,11 +135,11 @@ class RegistryManager(object):
 
         func_key: str = self.gen_key(group, name, func_type)
         if func_key in self.func_dict:
-            raise RegisteredError("Already been register")
+            raise RegisteredError(f"`{func_key}` Already register")
         self.func_dict[func_key] = FuncModel(
             group=group, func_type=func_type, func_name=name, func=func, is_private=is_private, doc=doc
         )
-        logging.debug(f"register func:{func_key}")
+        logging.debug(f"register `{func_key}` success")
 
     @staticmethod
     def _load_func(path: str, func_str: str) -> FunctionType:
@@ -169,7 +169,7 @@ class RegistryManager(object):
             func_type: str = self._get_func_type(func)
             func_key: str = self.gen_key(group, name, func_type)
             if func_key in self.func_dict:
-                raise RegisteredError(f"Already exists in correlation_id {group}")
+                raise RegisteredError(f"`{func_key}` already exists")
 
             self.register(func, name, group, is_private, doc)
             return f"load {func_str} from {path} success"
@@ -194,7 +194,7 @@ class RegistryManager(object):
             func_type: str = self._get_func_type(func)
             func_key: str = self.gen_key(group, name, func_type)
             if func_key not in self.func_dict:
-                raise RegisteredError(f"{name} not in correlation_id {group}")
+                raise RegisteredError(f"`{func_key}` already exists")
 
             func_model: FuncModel = self.func_dict[func_key]
             if func_model.is_private:

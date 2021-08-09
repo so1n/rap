@@ -1,11 +1,11 @@
 from typing import Optional
 
-from jaeger_client.span_context import SpanContext  # type: ignore
-from jaeger_client.tracer import Tracer  # type: ignore
-from opentracing import InvalidCarrierException, SpanContextCorruptedException  # type: ignore
-from opentracing.ext import tags  # type: ignore
-from opentracing.propagation import Format  # type: ignore
-from opentracing.scope import Scope  # type: ignore
+from jaeger_client.span_context import SpanContext
+from jaeger_client.tracer import Tracer
+from opentracing import InvalidCarrierException, SpanContextCorruptedException
+from opentracing.ext import tags
+from opentracing.propagation import Format
+from opentracing.scope import Scope
 
 from rap.common.utils import Constant
 from rap.server.model import Request, Response, ServerMsgProtocol

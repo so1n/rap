@@ -18,6 +18,7 @@ def add_etcd_client(
     key_path: Optional[str] = None,
     ca_path: Optional[str] = None,
 ) -> "Server":
+    """Tell etcd-server its own service status"""
     etcd_client: EtcdClient = EtcdClient(
         host=host, port=port, ttl=ttl, namespace=namespace, cert_path=cert_path, key_path=key_path, ca_path=ca_path
     )

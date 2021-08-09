@@ -1,7 +1,7 @@
 import socket
 from typing import TYPE_CHECKING, Dict, List, Optional
 
-from aio_statsd import StatsdClient  # type: ignore
+from aio_statsd import StatsdClient
 
 from rap.common.utils import Constant, EventEnum
 from rap.server.model import Request, Response
@@ -13,7 +13,9 @@ if TYPE_CHECKING:
 
 
 class StatsdProcessor(BaseProcessor):
-    """Note: not test..."""
+    """Note: not test...
+    Provide internal data and send to statsd 
+    """
 
     def __init__(self, statsd_client: StatsdClient, namespace: Optional[str] = None) -> None:
         self._statsd_client: StatsdClient = statsd_client
@@ -35,7 +37,7 @@ class StatsdProcessor(BaseProcessor):
     def start_event_handle(self, app: "Server") -> None:
         def upload_metric(stats_dict: dict) -> None:
             for key, values in stats_dict.items():
-                self._statsd_client.counter(f"{self._namespace}.key", values)
+                self._statsd_client.counter(f"{self._namespace}.{key}", values)
             self._statsd_client.counter(self._channel_online_key, self._channel_online_cnt)
 
         if self.app.window_state:
