@@ -350,10 +350,7 @@ class Transport(object):
             del self._channel_queue_dict[f"{conn.sock_tuple}:{_channel_id}"]
 
         target: str = f"/{group or Constant.DEFAULT_GROUP}/{func_name}"
-        return Channel(
-            self,  # type: ignore
-            target, conn, create, read, write, close
-        )
+        return Channel(self, target, conn, create, read, write, close)  # type: ignore
 
     #############
     # processor #

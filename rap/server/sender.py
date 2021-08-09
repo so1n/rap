@@ -14,6 +14,8 @@ __all__ = ["Sender"]
 
 
 class Sender(object):
+    """"""
+
     def __init__(
         self,
         app: "Server",
@@ -42,6 +44,7 @@ class Sender(object):
         set_header_value("request_id", str(get_snowflake_id()), is_cover=resp.msg_type is Constant.CHANNEL_RESPONSE)
 
     async def __call__(self, resp: Optional[Response]) -> bool:
+        """Send response data to the client"""
         if resp is None:
             return False
 

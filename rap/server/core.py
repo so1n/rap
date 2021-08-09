@@ -48,6 +48,26 @@ class Server(object):
         window_state: Optional[WindowState] = None,
         cache_interval: Optional[float] = None,
     ):
+        """
+        server_name: server name
+        host: listen host
+        port: listen port
+        timeout: send&read msg timeout
+        keep_alive: conn keep_alive time
+        run_timeout: Maximum execution time per call
+        ping_fail_cnt: When ping fails continuously and exceeds this value, conn will be disconnected
+        ping_sleep_time: ping message interval time
+        backlog: server backlog
+        close_timeout: The maximum time to wait for conn to process messages when shutting down the service
+        ssl_crt_path: ssl crt path
+        ssl_key_path: ssl key path
+        pack_param: msgpack.Pack param
+        unpack_param: msgpack.UnPack param
+        middleware_list: Server middleware list
+        processor_list: Server processor list
+        window_state: Server window state
+        cache_interval: Server cache interval seconds to clean up expired data
+        """
         self.server_name: str = server_name
         self.host: str = host
         self.port: int = port
@@ -90,15 +110,23 @@ class Server(object):
         if self.window_state and self.window_state.is_closed:
             self.register_server_event(EventEnum.before_start, self.window_state.change_state)
 
-    def register_server_event(self, event_type: EventEnum, *event_handle_list: SERVER_EVENT_FN) -> None:
+    def register_server_event(self, event: EventEnum, *event_handle_list: SERVER_EVENT_FN) -> None:
+        """register server event handler
+        event: server event
+        event_handle_list: event handler list
+        """
         for event_handle in event_handle_list:
-            if (event_type, event_handle) not in self._depend_set:
-                self._depend_set.add((event_type, event_handle))
-                self._server_event_dict[event_type].append(event_handle)
+            if (event, event_handle) not in self._depend_set:
+                self._depend_set.add((event, event_handle))
+                self._server_event_dict[event].append(event_handle)
             else:
-                raise ImportError(f"even type:{event_type}, handle:{event_handle} already load")
+                raise ImportError(f"even type:{event}, handle:{event_handle} already load")
 
     def register_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Request], None]) -> None:
+        """register request event handler
+        event_class: rap transport protocol event class
+        fn: event handler
+        """
         if event_class not in self._request_event_handle_dict:
             raise KeyError(f"{event_class}")
         if fn in self._request_event_handle_dict[event_class.event_name]:
@@ -106,11 +134,18 @@ class Server(object):
         self._request_event_handle_dict[event_class.event_name].append(fn)
 
     def unregister_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Request], None]) -> None:
+        """register request event handler
+        event_class: rap transport protocol event class
+        fn: event handler
+        """
         if event_class not in self._request_event_handle_dict:
             raise KeyError(f"{event_class}")
         self._request_event_handle_dict[event_class.event_name].remove(fn)
 
     def load_middleware(self, middleware_list: List[BaseMiddleware]) -> None:
+        """load server middleware
+        middleware_list: server middleware list
+        """
         for middleware in middleware_list:
             if middleware not in self._depend_set:
                 self._depend_set.add(middleware)
@@ -130,6 +165,9 @@ class Server(object):
                 self.register_server_event(event_type, *server_event_handle_list)
 
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:
+        """load server processor
+        processor_list server load processor
+        """
         for processor in processor_list:
             if processor not in self._depend_set:
                 self._depend_set.add(processor)
@@ -152,6 +190,15 @@ class Server(object):
         is_private: bool = False,
         doc: Optional[str] = None,
     ) -> None:
+        """Register function with Server
+        func: function
+        name: The real name of the function in the server
+        group: The group of the function
+        is_private: Whether the function is private or not, in general,
+          private functions are only allowed to be called by the local client,
+          but rap does not impose any mandatory restrictions
+        doc: Describe what the function does
+        """
         if isinstance(func, RapFunc):
             func = func.raw_func
 
@@ -159,6 +206,7 @@ class Server(object):
 
     @property
     def is_closed(self) -> bool:
+        """Whether the service is closed"""
         return self._run_event.is_set()
 
     async def run_event_list(self, event_type: EventEnum, is_raise: bool = False) -> None:
@@ -177,6 +225,7 @@ class Server(object):
                     logging.exception(f"server event<{event_type}:{callback}> run error:{e}")
 
     async def create_server(self) -> "Server":
+        """start server"""
         if not self.is_closed:
             raise RuntimeError("Server status is running...")
         await self.run_event_list(EventEnum.before_start, is_raise=True)
@@ -192,6 +241,7 @@ class Server(object):
         return self
 
     async def run_forever(self) -> None:
+        """Start the service and keep running until shutdown is called or received signal `int` or `term`"""
         if self.is_closed:
             await self.create_server()
 
@@ -213,6 +263,10 @@ class Server(object):
         await self._run_event.wait()
 
     async def shutdown(self) -> None:
+        """Notify the client that it is about to close, and the client should not send new messages at this time.
+        The server no longer accepts the establishment of a new conn,
+        and the server officially shuts down after waiting for the established conn to be closed.
+        """
         if self.is_closed:
             return
 
@@ -248,6 +302,7 @@ class Server(object):
         await self.run_event_list(EventEnum.after_end, is_raise=True)
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE) -> None:
+        """Handle initialization and recycling of conn"""
         conn: ServerConnection = ServerConnection(
             reader, writer, self._timeout, pack_param=self._pack_param, unpack_param=self._unpack_param
         )
@@ -263,6 +318,7 @@ class Server(object):
             self._connected_set.remove(conn)
 
     async def _conn_handle(self, conn: ServerConnection) -> None:
+        """Receive or send messages by conn"""
         sender: Sender = Sender(self, conn, self._timeout, processor_list=self._processor_list)  # type: ignore
         receiver: Receiver = Receiver(
             self,  # type: ignore
@@ -304,7 +360,6 @@ class Server(object):
                 future: asyncio.Future = asyncio.ensure_future(recv_msg_handle(request_msg))
                 future.add_done_callback(lambda f: recv_msg_handle_future_set.remove(f))
                 recv_msg_handle_future_set.add(future)
-
             except asyncio.TimeoutError:
                 logging.error(f"recv data from {conn.peer_tuple} timeout. close conn")
                 await sender.send_event(event.CloseConnEvent("keep alive timeout"))

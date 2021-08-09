@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import logging
+import random
 import time
 import traceback
 from functools import partial
@@ -116,6 +117,16 @@ class Receiver(object):
         event_handle_dict: Dict[str, List[Callable[[Request], None]]],
         processor_list: Optional[List[BaseProcessor]] = None,
     ):
+        """Receive and process messages from the client, and execute different logics according to the message type
+        app: server
+        conn: server conn
+        run_timeout: Maximum execution time per call
+        sender: Send response data to the client
+        ping_fail_cnt: When ping fails continuously and exceeds this value, conn will be disconnected
+        ping_sleep_time: ping message interval time
+        event_handle_dict: request event dict
+        processor_list: processor list
+        """
         self._app: "Server" = app
         self._conn: ServerConnection = conn
         self._run_timeout: int = run_timeout
@@ -159,11 +170,9 @@ class Receiver(object):
             try:
                 for processor in self._processor_list:
                     request = await processor.process_request(request)
-            except BaseRapError as e:
-                response.set_exception(e)
-                return response
             except Exception as e:
-                logging.exception(e)
+                if not isinstance(e, BaseRapError):
+                    logging.exception(e)
                 response.set_exception(e)
                 return response
 
@@ -180,8 +189,10 @@ class Receiver(object):
             return response
 
     async def ping_event(self) -> None:
+        """send ping event to conn"""
         ping_interval: float = self._ping_sleep_time * self._ping_fail_cnt
-        ping_interval += min(ping_interval * 0.1, 10)
+        # add jitter time
+        ping_interval += min(ping_interval * 0.1, random.randint(5, 15))
         while not self._conn.is_closed():
             diff_time: int = int(time.time()) - self._keepalive_timestamp
             if diff_time > ping_interval:
@@ -203,6 +214,7 @@ class Receiver(object):
         life_cycle: str = request.header.get("channel_life_cycle", "error")
         channel: Optional[Channel] = self._channel_dict.get(channel_id, None)
         if life_cycle == Constant.MSG:
+            # Messages with a life cycle of `msg` in the channel type account for the highest proportion
             if channel is None:
                 raise ChannelError("channel not create")
             await channel.receive_request(request)
@@ -255,19 +267,20 @@ class Receiver(object):
         return call_id, result
 
     async def _msg_handle(self, request: Request, call_id: int, func_model: FuncModel) -> Tuple[int, Any]:
+        """fun call handle"""
         param: list = request.body.get("param", [])
 
         # Check param type
         try:
-            param_handle(func_model.func, param, {})
+            param_tuple: tuple = param_handle(func_model.func, param, {})
         except TypeError as e:
             raise ParseError(extra_msg=str(e))
 
         # called func
         if asyncio.iscoroutinefunction(func_model.func):
-            coroutine: Union[Awaitable, Coroutine] = func_model.func(*param)
+            coroutine: Union[Awaitable, Coroutine] = func_model.func(*param_tuple)
         else:
-            coroutine = get_event_loop().run_in_executor(None, partial(func_model.func, *param))
+            coroutine = get_event_loop().run_in_executor(None, partial(func_model.func, *param_tuple))
 
         try:
             result = await asyncio.wait_for(coroutine, self._run_timeout)
@@ -276,6 +289,7 @@ class Receiver(object):
         except Exception as e:
             return call_id, e
 
+        # generator fun support
         if inspect.isgenerator(result) or inspect.isasyncgen(result):
             user_agent: str = request.header.get("user_agent", "None")
             if user_agent != Constant.USER_AGENT:
@@ -290,14 +304,18 @@ class Receiver(object):
         return call_id, result
 
     async def msg_handle(self, request: Request, response: Response) -> Optional[Response]:
+        """根据函数类型分发请求，以及会对函数结果进行封装"""
         func_model: FuncModel = self._app.registry.get_func_model(request, Constant.NORMAL_TYPE)
 
         try:
-            call_id: int = request.body["call_id"]
+            call_id: int = request.body.get("call_id", -1)
         except KeyError:
             raise ParseError(extra_msg="body miss params")
-        if call_id in self._generator_dict:
-            new_call_id, result = await self._gen_msg_handle(call_id)
+        if call_id != -1:
+            if call_id in self._generator_dict:
+                new_call_id, result = await self._gen_msg_handle(call_id)
+            else:
+                raise ProtocolError("Error call id")
         else:
             new_call_id, result = await self._msg_handle(request, call_id, func_model)
         response.body = {"call_id": new_call_id}
@@ -318,7 +336,9 @@ class Receiver(object):
         return response
 
     async def event(self, request: Request, response: Response) -> Optional[Response]:
+        """client event request handle"""
         if request.func_name in self._event_handle_dict:
+            """User-defined event handle"""
             event_handle_list: List[Callable[[Request], None]] = self._event_handle_dict[request.func_name]
             for fn in event_handle_list:
                 try:
@@ -326,6 +346,7 @@ class Receiver(object):
                 except Exception as e:
                     logging.exception(f"run event name:{response.target} raise error:{e}")
 
+        # rap event handle
         if request.func_name == Constant.PONG_EVENT:
             self._keepalive_timestamp = int(time.time())
             return None
