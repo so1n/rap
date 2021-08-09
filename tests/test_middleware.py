@@ -6,7 +6,7 @@ from aredis import StrictRedis  # type: ignore
 
 from rap.client import Client
 from rap.server import Server
-from rap.server.plugin.middleware.conn.block import IpFilterMiddleware
+from rap.server.plugin.middleware.conn.ip_filter import IpFilterMiddleware
 from rap.server.plugin.middleware.conn.limit import ConnLimitMiddleware, IpMaxConnMiddleware
 
 pytestmark = pytest.mark.asyncio

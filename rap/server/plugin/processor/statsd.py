@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 class StatsdProcessor(BaseProcessor):
     """Note: not test...
-    Provide internal data and send to statsd 
+    Provide internal data and send to statsd
     """
 
     def __init__(self, statsd_client: StatsdClient, namespace: Optional[str] = None) -> None:

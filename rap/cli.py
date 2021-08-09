@@ -5,6 +5,7 @@ from typing import Dict, List, Tuple, Union
 
 from rap.client import Client
 from rap.client.processor import CryptoProcessor
+from rap.common.utils import Constant
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -17,7 +18,7 @@ if __name__ == "__main__":
 
     parser.add_argument("-n", "--name", help="func name")
     parser.add_argument("-a", "--arg", help="func param", default=tuple())
-    parser.add_argument("-g", "--target", help="func target", default="default")
+    parser.add_argument("-g", "--group", help="func group", default=Constant.DEFAULT_GROUP)
     args, unknown = parser.parse_known_args()
     server_name: str = args.server_name
     server_host: str = args.server_host
