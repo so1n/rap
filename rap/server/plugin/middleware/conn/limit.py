@@ -1,8 +1,8 @@
 import logging
 import time
-from typing import TYPE_CHECKING, Dict, List, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
-from aredis import StrictRedis, StrictRedisCluster  # type: ignore
+from aredis import StrictRedis, StrictRedisCluster
 
 from rap.common.conn import ServerConnection
 from rap.common.event import CloseConnEvent
@@ -74,13 +74,18 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
     def __init__(
         self,
         redis: Union[StrictRedis, StrictRedisCluster],
-        ip_max_conn: int = 128,
-        timeout: int = 180,
-        namespace: str = "",
+        ip_max_conn: Optional[int] = None,
+        timeout: Optional[int] = None,
+        namespace: str = "rap",
     ):
+        """
+        redis: aredis.StrictRedis and aredis.StrictRedisCluster
+        ip_max_conn: Maximum number of connections per ip
+        timeout:  Cache expiration time of each ip
+        """
         self._redis: Union[StrictRedis, StrictRedisCluster] = redis
-        self._ip_max_conn: int = ip_max_conn
-        self._timeout: int = timeout
+        self._ip_max_conn: int = ip_max_conn or 128
+        self._timeout: int = timeout or 180
         self._key: str = self.__class__.__name__
         if namespace:
             self._key = f"{namespace}:{self._key}"
@@ -111,13 +116,14 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
         now_cnt: int = await self._redis.incr(key)
         try:
             if now_cnt > self._ip_max_conn:
-                logging.error(f"Currently exceeding the maximum number of ip conn limit, close {conn.peer_tuple}")
-                await Sender(self.app, conn).send_event(
-                    CloseConnEvent("Currently exceeding the maximum number of ip conn limit")
-                )
+                msg: str = f"Currently exceeding the maximum number of ip conn limit, close {conn.peer_tuple}"
+                logging.error(msg)
+                await Sender(self.app, conn).send_event(CloseConnEvent(msg))
                 await conn.await_close()
             else:
                 await self.call_next(conn)
         finally:
-            await self._redis.decr(key)
-            await self._redis.expire(key, self._timeout)
+            async with await self._redis.pipeline() as pipe:
+                await pipe.decr(key)
+                await pipe.expire(key, self._timeout)
+                await pipe.execute()
