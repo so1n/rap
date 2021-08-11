@@ -1,4 +1,4 @@
-from typing import Awaitable, Callable, Optional, Union
+from typing import Callable, Optional
 
 from rap.server.model import Request
 

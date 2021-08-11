@@ -46,7 +46,7 @@ class BaseConnection:
         try:
             try:
                 data: Any = next(self._unpacker)
-                logging.debug(f"read %s from %s", data, self.peer_tuple)
+                logging.debug("read %s from %s", data, self.peer_tuple)
                 return data
             except StopIteration:
                 pass
@@ -59,7 +59,7 @@ class BaseConnection:
                 self._unpacker.feed(data)
                 try:
                     data = next(self._unpacker)
-                    logging.debug(f"read %s from %s", data, self.peer_tuple)
+                    logging.debug("read %s from %s", data, self.peer_tuple)
                     return data
                 except StopIteration:
                     continue
@@ -134,7 +134,7 @@ class Connection(BaseConnection):
             ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
             ssl_context.check_hostname = False
             ssl_context.load_verify_locations(self._ssl_crt_path)
-            logging.info(f"connection enable ssl")
+            logging.info("connection enable ssl")
 
         self._reader, self._writer = await asyncio.open_connection(self._host, self._port, ssl=ssl_context)
         self.sock_tuple = self._writer.get_extra_info("sockname")

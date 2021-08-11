@@ -350,7 +350,7 @@ class Server(object):
                     response: Optional[Response] = await receiver.dispatch(request)
                     await sender(response)
                 except Exception as closer_e:
-                    logging.exception(f"raw_request handle error e")
+                    logging.exception("raw_request handle error e")
                     await sender.send_exc(ServerError(str(closer_e)))
 
         while not conn.is_closed():
@@ -376,4 +376,4 @@ class Server(object):
         receiver.del_receiver()
         if not conn.is_closed():
             conn.close()
-            logging.debug(f"close connection: %s", conn.peer_tuple)
+            logging.debug("close connection: %s", conn.peer_tuple)

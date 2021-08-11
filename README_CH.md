@@ -1,16 +1,16 @@
 # rap
-rap(par[::-1]) 是一个速度快且支持高级功能的rpc框架 
+rap(par[::-1]) 是一个速度快且支持高级功能的rpc框架
 
 `rap`依赖于`msgpack`和`Python asyncio`以及本身实现的链接复用使得传输速度非常快,同时支持高并发.通过Python的函数和TypeHint实现类似于`Grpc`的`protobuf`.
 
 注意: 目前`rap`的后续版本API变动可能较大
 > rap第一版功能思路来自于 [aiorpc](https://github.com/choleraehyq/aiorpc)
-# 1.安装 
+# 1.安装
 ```Bash
 pip install rap
 ```
 
-# 2.快速上手 
+# 2.快速上手
 
 ## 服务端
 
@@ -26,7 +26,7 @@ def sync_sum(a: int, b: int) -> int:
 
 
 async def async_sum(a: int, b: int) -> int:
-    await asyncio.sleep(1)  # 模拟io处理 
+    await asyncio.sleep(1)  # 模拟io处理
     return a + b
 
 
@@ -74,13 +74,13 @@ def sync_sum(a: int, b: int) -> int:
     pass
 
 
-# 被装饰的函数一定是async def函数 
+# 被装饰的函数一定是async def函数
 @client.register()
 async def sync_sum(a: int, b: int) -> int:
     pass
 
 
-# 被装饰的函数一定是async def函数,由于该函数是生成器语法, 要以yield代替pass 
+# 被装饰的函数一定是async def函数,由于该函数是生成器语法, 要以yield代替pass
 @client.register()
 async def async_gen(a: int) -> AsyncIterator[int]:
     yield
@@ -93,19 +93,19 @@ async def main():
     print(f"call result: {await client.call(sync_sum, 1, 2)}")
     # rap.client的基础调用
     print(f"raw call result: {await client.raw_call('sync_sum', 1, 2)}")
-    
+
     # 通过@client.register注册的函数可以直接使用
     # await async_sum(1,3) 实际上等于 await client.raw_call('async_sum', 1, 2)
     # 建议使用@client.register方法,可以被IDE等工具自别参数类型是否有错
     print(f"decorator result: {await sync_sum(1, 3)}")
     async_gen_result: list = []
-    
+
     # 异步生成器的例子, 默认会打开或者复用rap的当前session(关于session下面会说到)
     async for i in async_gen(10):
         async_gen_result.append(i)
     print(f"async gen result:{async_gen_result}")
 
-    
+
 asyncio.run(main())
 ```
 # 3.功能介绍
@@ -143,7 +143,7 @@ server.register(demo2, group='new-correlation_id')    # 注册并设定要注册
 server.register(demo2, group='root', is_private=True)  # 注册并设定要注册的组,且设置为私有
 ```
 对于客户端, 建议使用`client.register`,不要使用`client.call`, `client.raw_call`.
-`client.register`它采用Python的语法来定义函数名,参数以及参数类型,返回值类型, 
+`client.register`它采用Python的语法来定义函数名,参数以及参数类型,返回值类型,
 可以让调用者像调用普通函数一样去调用,同时因为TypeHint的特性,可以利用现有的工具对函数进行检查.
 注意: 使用`client.register`时, 一定要使用`async def ...`.
 ```Python
@@ -162,7 +162,7 @@ async def demo1(a: int, b: int) -> int: pass
 # 注册async iterator函数, pass替换为yield
 # 由于会进行多次请求,必须保持所有请求都会基于同一个链接进行请求, 所以在启动时会检测是否启动会话,如果启动会自动复用当前的会话, 否则创建会话
 @client.register()
-async def demo_gen(a: int) -> AsyncIterator: yield 
+async def demo_gen(a: int) -> AsyncIterator: yield
 
 
 # 注册普通函数,并且设置名字为demo2-alias
@@ -211,7 +211,7 @@ async def no_param_run():
 
 
 async def param_run(session: "Session"):
-  # 通过参数显式的把session传进去,被rap使用 
+  # 通过参数显式的把session传进去,被rap使用
   print(f"sync result: {await client.call(sync_sum, 1, 2, session=session)}")
   print(f"sync result: {await client.raw_call('sync_sum', 1, 2, session=session)}")
   # 对于@client.register的调用方式有点不友好
@@ -282,7 +282,7 @@ async def echo_response(channel: Channel) -> None:
     await channel.write_to_conn("hi!")
     # 读取响应数据(包括header等数据), 只有读取到数据才会返回, 如果收到关闭channel的信令, 则会退出循环
     async for response in channel.iter_response():
-        response: Response = response  #  IDE 无法检查出该类型.... 
+        response: Response = response  #  IDE 无法检查出该类型....
         print(f"response: {response}")
         await channel.write_to_conn(response.body)
 ```
@@ -339,7 +339,7 @@ server.load_after_stop_event([mock_stop()])
 - 消息中间件: 仅支持普通的函数调用(不支`持Channel`), 类似于`starlette`的中间件使用
   消息中间件可以参考[access.py](https://github.com/so1n/rap/blob/master/rap/server/middleware/msg/access.py)
   消息中间件会传入4个参数:request(当前请求对象), call_id(当前调用id), func(当前调用函数), param(当前参数)以及要求返回call_id和result(函数的执行结果或者是异常对象)
-  
+
 此外中间件还支持`start_event_handle`和`stop_event_handle`方法,分别在`Server`启动和关闭时调用.
 `rap.server`引入中间件方法:
 
@@ -353,7 +353,7 @@ rpc_server.load_middleware([ConnLimitMiddleware()])
 ## 3.7.processor
 `rap`的processor用于处理入站流量和出站流量,其中`process_request`是处理入站流量,`process_response`是处理出站流量.
 
-`rap.client`和`rap.server`的processor的方法是基本一样的, `rap.server`支持`start_event_handle`和`stop_event_handle`方法,分别在`Server`启动和关闭时调用 
+`rap.client`和`rap.server`的processor的方法是基本一样的, `rap.server`支持`start_event_handle`和`stop_event_handle`方法,分别在`Server`启动和关闭时调用
 
 [服务端示例](https://github.com/so1n/rap/blob/master/rap/server/processor/crypto.py)
 
@@ -430,7 +430,7 @@ server.load_middleware(
         # block_timeout: 超过最大链接数后的禁止访问时间
         ConnLimitMiddleware(max_conn=100, block_time=60),
         # ip_max_conn: 每个ip的最大链接数
-        # timeout: 统计周期, 如果超过该时间没有访问,相关IP的统计会被清零 
+        # timeout: 统计周期, 如果超过该时间没有访问,相关IP的统计会被清零
         IpMaxConnMiddleware(redis, ip_max_conn=10, timeout=60),
     ]
 )

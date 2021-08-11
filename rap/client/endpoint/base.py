@@ -99,7 +99,7 @@ class BaseEndpoint(object):
         self._connected_cnt += 1
         conn.listen_future = asyncio.ensure_future(self._transport.listen(conn))
         conn.listen_future.add_done_callback(lambda f: _conn_done(f))
-        logging.debug(f"Connection to %s...", conn.connection_info)
+        logging.debug("Connection to %s...", conn.connection_info)
 
         self._host_weight_list.extend([key for _ in range(weight)])
         random.shuffle(self._host_weight_list)
@@ -137,7 +137,6 @@ class BaseEndpoint(object):
 
     def get_conn(self) -> Connection:
         """get conn by endpoint"""
-        pass
 
     def get_conn_list(self, cnt: Optional[int] = None) -> List[Connection]:
         """get conn list by endpoint

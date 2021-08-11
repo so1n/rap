@@ -1,6 +1,6 @@
 ### 0.5.5[TODO]
  - Feature: add server config
- 
+
 ### 0.5.4[TODO]
  - description: near-continuous availability and a high degree of reliability.
  - Feature: client support HA strategy
@@ -8,7 +8,7 @@
  - Feature: server HA middleware
 
 ### 0.5.3.8[Now]
- - description: 
+ - description:
  - Feature: add channel future
  - Feature: client support inject func
  - Feature: add opentracing processor
@@ -17,7 +17,7 @@
  - Optimize: optimize common and server code
 
 ### 0.5.3.7
- - description: 
+ - description:
  - Feature: add limit processor
  - Feature: Channel support group
  - Feature: func type check
@@ -32,7 +32,7 @@
 
 ### 0.5.3.6
  - Fix: client crypto memory bug
- - Feature: server support register private func   
+ - Feature: server support register private func
  - Feature: client register support alias & group
  - Refactor: server start event&stop event
  - Refactor: protocol's event flag & header column & error response
@@ -55,7 +55,7 @@
  - Feature: add conn sock name and modify client listen future id
  - Refactor: refactor func manager
  - Refactor: refactor server crypto nonce check
- 
+
 ### 0.5.3.3
  - description: support session & channel
  - Feature: add use_session column in header
@@ -74,9 +74,9 @@
  - Refactor: refactor server
  - Refactor: refactor client, support conn mutli server
  - Remove: remove server client_model(one conn one request object)
- 
+
 ### 0.5.3.1
- - description: request interface 
+ - description: request interface
  - Refactor: request_handle&core interface
 
 ### 0.5.3
@@ -86,7 +86,7 @@
  - Feature: server&client add aes middleware
  - Feature: add server.response middleware
  - Feature: middleware add redis support
- - Feature: Ping&Pong, conn keep alive 
+ - Feature: Ping&Pong, conn keep alive
  - Refactor: server.load_middleware
 
 ### 0.5.2.2
@@ -95,11 +95,11 @@
  - Feature: Complete server exception
  - Feature: Complete execution func exception
  - Refactor: log output
- 
+
 ### 0.5.2.1
  - description: hotfix
  - Fix: server conn read recv data bug
- - Fix: crypto error when client reconnect 
+ - Fix: crypto error when client reconnect
  - Fix: When the log level is not debug, the debug information will be calculated
 
 ### 0.5.2
@@ -133,10 +133,10 @@
 ## 0.3
  - Feature: support aes
 
-### 0.2.2 
+### 0.2.2
  - Refactor: modify server iterator design
 
-### 0.2.1 
+### 0.2.1
  - Fix: one start concurrent bug
 
 ## 0.2
@@ -148,4 +148,3 @@
 ## 0.1
  - description: The first version
  - Feature: support python rpc
- 
