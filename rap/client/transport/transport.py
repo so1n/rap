@@ -73,11 +73,11 @@ class Transport(object):
 
     async def listen(self, conn: Connection) -> None:
         """listen server msg from conn"""
-        logging.debug(f"listen:%s start", conn.peer_tuple)
+        logging.debug("listen:%s start", conn.peer_tuple)
         try:
             while not conn.is_closed():
                 await self._dispatch_resp_from_conn(conn)
-        except asyncio.CancelledError as e:
+        except asyncio.CancelledError:
             pass
         except Exception as e:
             conn.set_reader_exc(e)
@@ -169,7 +169,7 @@ class Transport(object):
         """recv server msg handle"""
         try:
             response_msg: Optional[SERVER_BASE_MSG_TYPE] = await conn.read()
-            logging.debug(f"recv raw data: %s", response_msg)
+            logging.debug("recv raw data: %s", response_msg)
         except asyncio.TimeoutError as e:
             logging.error(f"recv response from {conn.connection_info} timeout")
             raise e
@@ -274,7 +274,7 @@ class Transport(object):
         self.before_write_handle(request)
 
         for process_request in self._process_request_list:
-            _request = await process_request(request)
+            await process_request(request)
 
         await conn.write((msg_id, *request.to_msg()))
 

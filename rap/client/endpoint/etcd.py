@@ -76,7 +76,7 @@ class EtcdEndpoint(BaseEndpoint):
                 raise KeyError(f"Can not found key:{etcd_value_dict['key']}")
             await self.destroy(conn_dict["host"], conn_dict["port"])
             if not self._conn_dict:
-                logging.warning(f"client not conn")
+                logging.warning("client not conn")
 
         self._watch_future = asyncio.ensure_future(self.etcd_client.watch(self.server_name, [create], [destroy]))
         await wait_start_future

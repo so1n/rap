@@ -29,7 +29,7 @@ def sync_sum(a: int, b: int) -> int:
 
 
 async def async_sum(a: int, b: int) -> int:
-  await asyncio.sleep(1)  # mock io 
+  await asyncio.sleep(1)  # mock io
   return a + b
 
 
@@ -64,7 +64,7 @@ Note: For `rap.client` there is no distinction between `async def` and `def`, bu
 async def demo(): pass
 ```
 
-example: 
+example:
 ```Python
 import asyncio
 from typing import AsyncIterator
@@ -74,18 +74,18 @@ from rap.client import Client
 client: "Client" = Client()  # init client
 
 
-# Declare a function with no function. The function name, function type and return type must be the same as the server side function (async def does not differ from def) 
+# Declare a function with no function. The function name, function type and return type must be the same as the server side function (async def does not differ from def)
 def sync_sum(a: int, b: int) -> int:
     pass
 
 
-# The decorated function must be an async def function  
+# The decorated function must be an async def function
 @client.register()
 async def sync_sum(a: int, b: int) -> int:
     pass
 
 
-# The decorated function must be the async def function, because the function is a generator syntax, to `yield` instead of `pass` 
+# The decorated function must be the async def function, because the function is a generator syntax, to `yield` instead of `pass`
 @client.register()
 async def async_gen(a: int) -> AsyncIterator:
     yield
@@ -94,23 +94,23 @@ async def async_gen(a: int) -> AsyncIterator:
 async def main():
     client.add_conn("localhost", 9000)
     await client.start()
-    # Call the call method; read the function name and then call `raw_call`. 
+    # Call the call method; read the function name and then call `raw_call`.
     print(f"call result: {await client.call(sync_sum, 1, 2)}")
-    # Basic calls to rap.client 
+    # Basic calls to rap.client
     print(f"raw call result: {await client.raw_call('sync_sum', 1, 2)}")
-    
-    # Functions registered through `@client.register` can be used directly 
+
+    # Functions registered through `@client.register` can be used directly
     # await async_sum(1,3) == await client.raw_call('async_sum', 1, 2)
-    # It is recommended to use the @client.register method, which can be used by tools such as IDE to determine whether the parameter type is wrong 
+    # It is recommended to use the @client.register method, which can be used by tools such as IDE to determine whether the parameter type is wrong
     print(f"decorator result: {await sync_sum(1, 3)}")
     async_gen_result: list = []
-    
-    # Example of an asynchronous generator, which by default opens or reuses the current session of the rap (about the session will be mentioned below) 
+
+    # Example of an asynchronous generator, which by default opens or reuses the current session of the rap (about the session will be mentioned below)
     async for i in async_gen(10):
         async_gen_result.append(i)
     print(f"async gen result:{async_gen_result}")
 
-    
+
 asyncio.run(main())
 ```
 # 3.Function Introduction
@@ -122,7 +122,7 @@ The server comes with a registration library. If there are duplicate registratio
 In addition, you can set `is_private` to True when registering, so that the function can only be called by the local rap.client.
 ```Python
 import asyncio
-from typing import AsyncIterator 
+from typing import AsyncIterator
 
 from rap.server import Server
 
@@ -143,18 +143,18 @@ async def demo_gen(a: int) -> AsyncIterator[int]:
 
 server: Server = Server()
 server.register(demo1)   # register def func
-server.register(demo2)   # register async def func 
+server.register(demo2)   # register async def func
 server.register(demo_gen)  # register async iterator func
-server.register(demo2, name='demo2-alias')   # Register with the value of `name` 
-server.register(demo2, group='new-correlation_id')    # Register and set the groups to be registered 
-server.register(demo2, group='root', is_private=True)  # Register and set the correlation_id to be registered, and set it to private 
+server.register(demo2, name='demo2-alias')   # Register with the value of `name`
+server.register(demo2, group='new-correlation_id')    # Register and set the groups to be registered
+server.register(demo2, group='root', is_private=True)  # Register and set the correlation_id to be registered, and set it to private
 ```
 For clients, it is recommended to use `client.register` instead of `client.call`, `client.raw_call`.
-`client.register` uses Python syntax to define function names, arguments, parameter types, and return value types, 
+`client.register` uses Python syntax to define function names, arguments, parameter types, and return value types,
 It allows the caller to call the function as if it were a normal function, and the function can be checked through tools using the TypeHint feature.
 Note: When using `client.register`, be sure to use `async def ... `.
 ```Python
-from typing import AsyncIterator 
+from typing import AsyncIterator
 from rap.client import Client
 
 client: Client = Client()
@@ -165,18 +165,18 @@ client: Client = Client()
 async def demo1(a: int, b: int) -> int: pass
 
 
-# register async iterator fun, replace `pass` with `yield` 
-# Since `async for` will make multiple requests to the same conn over time, it will check if the session is enabled and automatically reuse the current session if it is enabled, otherwise it will create a new session and use it. 
+# register async iterator fun, replace `pass` with `yield`
+# Since `async for` will make multiple requests to the same conn over time, it will check if the session is enabled and automatically reuse the current session if it is enabled, otherwise it will create a new session and use it.
 @client.register()
-async def demo_gen(a: int) -> AsyncIterator: yield 
+async def demo_gen(a: int) -> AsyncIterator: yield
 
 
-# Register the general function and set the name to demo2-alias 
+# Register the general function and set the name to demo2-alias
 @client.register(name='demo2-alias')
 async def demo2(a: int, b: int) -> int: pass
 
 
-# Register the general function and set the correlation_id to new-correlation_id 
+# Register the general function and set the correlation_id to new-correlation_id
 @client.register(group='new-correlation_id')
 async def demo2(a: int, b: int) -> int: pass
 ```
@@ -209,35 +209,35 @@ async def async_gen(a: int) -> AsyncIterator[int]:
 
 
 async def no_param_run():
-  # The rap internal implementation uses the session implicitly via the `contextvar` module 
+  # The rap internal implementation uses the session implicitly via the `contextvar` module
   print(f"sync result: {await client.call(sync_sum, 1, 2)}")
   print(f"async result: {await async_sum(1, 3)}")
 
-  # The asynchronous generator detects if a session is enabled, and if so, it automatically reuses the current session, otherwise it creates a session 
+  # The asynchronous generator detects if a session is enabled, and if so, it automatically reuses the current session, otherwise it creates a session
   async for i in async_gen(10):
     print(f"async gen result:{i}")
 
 
 async def param_run(session: "Session"):
-  # By explicitly passing the session parameters in 
+  # By explicitly passing the session parameters in
   print(f"sync result: {await client.call(sync_sum, 1, 2, session=session)}")
   print(f"sync result: {await client.raw_call('sync_sum', 1, 2, session=session)}")
-  # May be a bit unfriendly 
+  # May be a bit unfriendly
   print(f"async result: {await async_sum(1, 3, session=session)}")
 
-  # The asynchronous generator detects if a session is enabled, and if so, it automatically reuses the current session, otherwise it creates a session 
+  # The asynchronous generator detects if a session is enabled, and if so, it automatically reuses the current session, otherwise it creates a session
   async for i in async_gen(10):
     print(f"async gen result:{i}")
 
 
 async def execute(session: "Session"):
-  # The best way to call a session explicitly, using a method similar to the mysql cursor 
-  # execute will automatically recognize the type of call 
+  # The best way to call a session explicitly, using a method similar to the mysql cursor
+  # execute will automatically recognize the type of call
   print(f"sync result: {await session.execute(sync_sum, arg_list=[1, 2])}")
   print(f"sync result: {await session.execute('sync_sum', arg_list=[1, 2])}")
   print(f"async result: {await session.execute(async_sum(1, 3))}")
 
-  # The asynchronous generator detects if a session is enabled, and if so, it automatically reuses the current session, otherwise it creates a session 
+  # The asynchronous generator detects if a session is enabled, and if so, it automatically reuses the current session, otherwise it creates a session
   async for i in async_gen(10):
     print(f"async gen result:{i}")
 
@@ -273,13 +273,13 @@ async def async_channel(channel: Channel) -> None:
     cnt: int = 0
     while await channel.loop(cnt < 3):
         cnt += 1
-        print(await channel.read_body())  # read data 
+        print(await channel.read_body())  # read data
 
 
 @client.register()
 async def echo_body(channel: Channel) -> None:
     await channel.write_to_conn("hi!")
-    # Reads data, returns only when data is read, and exits the loop if it receives a signal to close the channel 
+    # Reads data, returns only when data is read, and exits the loop if it receives a signal to close the channel
     async for body in channel.iter_body():
         print(f"body:{body}")
         await channel.write_to_conn(body)
@@ -288,9 +288,9 @@ async def echo_body(channel: Channel) -> None:
 @client.register()
 async def echo_response(channel: Channel) -> None:
     await channel.write_to_conn("hi!")
-    # Read the response data (including header data), and return only if the data is read, or exit the loop if a signal is received to close the channel 
+    # Read the response data (including header data), and return only if the data is read, or exit the loop if a signal is received to close the channel
     async for response in channel.iter_response():
-        response: Response = response  #  help IDE check type.... 
+        response: Response = response  #  help IDE check type....
         print(f"response: {response}")
         await channel.write_to_conn(response.body)
 ```
@@ -299,7 +299,7 @@ async def echo_response(channel: Channel) -> None:
 
 Due to the high degree of encapsulation of the `Python asyncio` module, `rap` can be used very easily with ssl
 ```bash
-# Quickly generate ssl.crt and ssl.key 
+# Quickly generate ssl.crt and ssl.key
 openssl req -newkey rsa:2048 -nodes -keyout rap_ssl.key -x509 -days 365 -out rap_ssl.crt
 ```
 client.py
@@ -341,13 +341,13 @@ server.load_after_stop_event([mock_stop()])
 ```
 ## 3.6.middleware
 `rap` currently supports 2 types of middleware::
-- Conn middleware: Used when creating conn, such as limiting the total number of links, etc... 
+- Conn middleware: Used when creating conn, such as limiting the total number of links, etc...
   reference [block.py](https://github.com/so1n/rap/blob/master/rap/server/middleware/conn/block.py),
-  The `dispatch` method will pass in a conn object, and then determine whether to release it according to the rules (return await self.call_next(conn)) or reject it (await conn.close) 
-- Message middleware: only supports normal function calls (no support for `Channel`), similar to the use of `starlette` middleware 
+  The `dispatch` method will pass in a conn object, and then determine whether to release it according to the rules (return await self.call_next(conn)) or reject it (await conn.close)
+- Message middleware: only supports normal function calls (no support for `Channel`), similar to the use of `starlette` middleware
   reference [access.py](https://github.com/so1n/rap/blob/master/rap/server/middleware/msg/access.py)
-  Message middleware will pass in 4 parameters: request(current request object), call_id(current call id), func(current call function), param(current parameter) and request to return call_id and result(function execution result or exception object) 
-  
+  Message middleware will pass in 4 parameters: request(current request object), call_id(current call id), func(current call function), param(current parameter) and request to return call_id and result(function execution result or exception object)
+
 In addition, the middleware supports `start_event_handle` and `stop_event_handle` methods, which are called when the `Server` starts and shuts down respectively.
 
 example:
@@ -362,7 +362,7 @@ rpc_server.load_middleware([ConnLimitMiddleware()])
 ## 3.7.processor
 The `rap` processor is used to handle inbound and outbound traffic, where `process_request` is for inbound traffic and `process_response` is for outbound traffic.
 
-The methods of `rap.client` and `rap.server` processors are basically the same, `rap.server` supports `start_event_handle` and `stop_event_handle` methods, which are called when `Server` starts and shuts down respectively 
+The methods of `rap.client` and `rap.server` processors are basically the same, `rap.server` supports `start_event_handle` and `stop_event_handle` methods, which are called when `Server` starts and shuts down respectively
 
 [server crypto processor example](https://github.com/so1n/rap/blob/master/rap/server/processor/crypto.py)
 
@@ -399,10 +399,10 @@ from rap.client import Client
 from rap.client.processor import CryptoProcessor
 
 client = Client()
-# The first parameter is the id of the secret key, the server determines which secret key is used for the current request by the id of the secret key 
-# The second parameter is the key of the secret key, currently only support the length of 16 bits of the secret key 
+# The first parameter is the id of the secret key, the server determines which secret key is used for the current request by the id of the secret key
+# The second parameter is the key of the secret key, currently only support the length of 16 bits of the secret key
 # timeout: Requests that exceed the timeout value compared to the current timestamp will be discarded
-# interval: Clear the nonce interval, the shorter the interval, the more frequent the execution, the greater the useless work, the longer the interval, the more likely to occupy memory, the recommended value is the timeout value is 2 times 
+# interval: Clear the nonce interval, the shorter the interval, the more frequent the execution, the greater the useless work, the longer the interval, the more likely to occupy memory, the recommended value is the timeout value is 2 times
 client.load_processor([CryptoProcessor("demo_id", "xxxxxxxxxxxxxxxx", timeout=60, interval=120)])
 ```
 server example:
@@ -414,7 +414,7 @@ from rap.server.plugin.processor import CryptoProcessor
 server = Server()
 # The first parameter is the secret key key-value pair, key is the secret key id, value is the secret key
 # timeout: Requests that exceed the timeout value compared to the current timestamp will be discarded
-# nonce_timeout: The expiration time of nonce, the recommended setting is greater than timeout 
+# nonce_timeout: The expiration time of nonce, the recommended setting is greater than timeout
 server.load_processor([CryptoProcessor({"demo_id": "xxxxxxxxxxxxxxxx"}, timeout=60, nonce_timeout=120)])
 ```
 ## 4.2. Limit the maximum number of conn
@@ -430,7 +430,7 @@ server.load_middleware(
         # max_conn: Current maximum number of conn
         # block_timeout: Access ban time after exceeding the maximum number of conn
         ConnLimitMiddleware(max_conn=100, block_time=60),
-        # ip_max_conn: Maximum number of conn per ip 
+        # ip_max_conn: Maximum number of conn per ip
         # timeout: The maximum statistics time for each ip, after the time no new requests come in, the relevant statistics will be cleared
         IpMaxConnMiddleware(ip_max_conn=10, timeout=60),
     ]
@@ -444,15 +444,15 @@ from rap.server import Server
 from rap.server.plugin.middleware import IpFilterMiddleware
 
 server = Server()
-# allow_ip_list: whitelist, support network segment ip, if filled with allow_ip_list, black_ip_list will be invalid 
-# black_ip_list: blacklist, support network segment ip 
+# allow_ip_list: whitelist, support network segment ip, if filled with allow_ip_list, black_ip_list will be invalid
+# black_ip_list: blacklist, support network segment ip
 server.load_middleware([IpFilterMiddleware(allow_ip_list=['192.168.0.0/31'], block_ip_list=['192.168.0.2'])])
 ```
 # 5.Advanced Features
-**TODO**, This feature is not yet implemented 
+**TODO**, This feature is not yet implemented
 
 # 6.Protocol Design
-**TODO**, Document is being edited 
+**TODO**, Document is being edited
 
 # 7.Introduction to the rap transport
-**TODO**, Document is being edited 
+**TODO**, Document is being edited

@@ -81,7 +81,7 @@ class Response(ServerMsgProtocol):
 
     @classmethod
     def from_exc(cls, app: "Server", exc: Exception) -> "Response":
-        response: Response = cls(app, f"/_exc/server_error")
+        response: Response = cls(app, "/_exc/server_error")
         response.set_exception(exc)
         return response
 

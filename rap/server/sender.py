@@ -53,7 +53,7 @@ class Sender(object):
         if self._processor_list:
             for processor in reversed(self._processor_list):
                 resp = await processor.process_response(resp)
-        logging.debug(f"resp: %s", resp)
+        logging.debug("resp: %s", resp)
         msg_id: int = self._msg_id + 1
         # Avoid too big numbers
         self._msg_id = msg_id & self._max_msg_id

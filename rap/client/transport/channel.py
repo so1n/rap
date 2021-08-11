@@ -79,7 +79,7 @@ class Channel(BaseChannel):
         When a drop message is received or the channel is closed, will raise `ChannelError`
         """
         if self.is_close:
-            raise ChannelError(f"channel is closed")
+            raise ChannelError("channel is closed")
 
         try:
             response: Response = await as_first_completed(
@@ -99,7 +99,7 @@ class Channel(BaseChannel):
     async def _base_write(self, body: Any, life_cycle: str) -> None:
         """base send body to channel"""
         if self.is_close:
-            raise ChannelError(f"channel is closed")
+            raise ChannelError("channel is closed")
         request: Request = Request(
             self._transport.app,
             Constant.CHANNEL_REQUEST,

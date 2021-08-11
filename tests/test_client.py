@@ -142,7 +142,7 @@ class TestTransport:
                 },
                 "hi!",
             ),
-            AnyStringWith(f"recv channel msg, but channel not create. channel id:"),
+            AnyStringWith("recv channel msg, but channel not create. channel id:"),
         )
 
     async def test_read_not_parse_response(self, rap_server: Server, mocker: MockerFixture) -> None:

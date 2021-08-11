@@ -1,9 +1,9 @@
-from typing import Any, AsyncIterator
+from typing import AsyncIterator
 
 import pytest
 
 from rap.client import Client
-from rap.common.exceptions import ParseError, RegisteredError
+from rap.common.exceptions import RegisteredError
 from rap.server import Server
 from rap.server.registry import RegistryManager
 

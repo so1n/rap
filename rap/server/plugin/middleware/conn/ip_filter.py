@@ -29,8 +29,8 @@ class IpFilterMiddleware(BaseConnMiddleware):
         namespace: str = "rap",
     ):
         self._redis: Union[StrictRedis, StrictRedisCluster] = redis
-        self.block_key: str = f"ip_filter_middleware:block_ip"
-        self.allow_key: str = f"ip_filter_middleware:allow_ip"
+        self.block_key: str = "ip_filter_middleware:block_ip"
+        self.allow_key: str = "ip_filter_middleware:allow_ip"
         self.block_cnt: int = 0
         if namespace:
             self.block_key = f"{namespace}:{self.block_key}"

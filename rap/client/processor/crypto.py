@@ -56,7 +56,7 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
                 request.header["crypto_id"] = crypto_id
                 request.body = crypto.encrypt_object(request.body)
             except Exception as e:
-                raise CryptoError(f"Can't decrypt body.") from e
+                raise CryptoError("Can't decrypt body.") from e
         return request
 
     async def process_response(self, response: Response) -> Response:
@@ -89,7 +89,7 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
                 response.body = response.body["body"]
             return response
         except Exception as e:
-            raise CryptoError(f"Can't decrypt body.") from e
+            raise CryptoError("Can't decrypt body.") from e
 
 
 class CryptoProcessor(BaseCryptoProcessor):
@@ -123,4 +123,4 @@ class CryptoProcessor(BaseCryptoProcessor):
                 response.body = response.body["body"]
             return response
         except Exception as e:
-            raise CryptoError(f"Can't decrypt body.") from e
+            raise CryptoError("Can't decrypt body.") from e

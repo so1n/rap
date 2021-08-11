@@ -1,5 +1,5 @@
 import random
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple
 
 from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
