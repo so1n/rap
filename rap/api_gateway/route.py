@@ -16,15 +16,15 @@ def before_check(
 ) -> Optional[dict]:
     key = f"{server_name}:{func_type}:{group}:{func_name}"
     if key not in request.app.state.func_info_dict:
-        return {"code": 1, "msg": "Not Found"}
+        return {"code": 3, "msg": "Not Found"}
 
     if request.app.state.group_filter and group in request.app.state.group_filter:
-        return {"code": 1, "msg": "Not Found"}
+        return {"code": 3, "msg": "Not Found"}
     if (
         request.app.state.private_filter
         and request.app.state.func_info_dict[key]["is_private"] == request.app.state.private_filter
     ):
-        return {"code": 1, "msg": "Not Found"}
+        return {"code": 3, "msg": "Not Found"}
     return None
 
 
@@ -42,7 +42,7 @@ async def websocket_route_func(websocket: WebSocket) -> None:
         return
 
     if server_name not in rap_client_dict:
-        await websocket.send_json({"code": 1, "msg": f"server name error"})
+        await websocket.send_json({"code": 2, "msg": "server name error"})
         await websocket.close()
         return
 
@@ -103,7 +103,7 @@ async def route_func(request: Request) -> JSONResponse:
     except KeyError as e:
         return JSONResponse({"code": 1, "msg": f"param error:{e}"})
     if server_name not in rap_client_dict:
-        return JSONResponse({"code": 1, "msg": f"server name error"})
+        return JSONResponse({"code": 2, "msg": "server name error"})
 
     check_result: Optional[dict] = before_check(server_name, group, func_name, "normal", request)
     if check_result:
