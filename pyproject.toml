@@ -33,6 +33,9 @@ coverage = "^5.4"
 uvicorn = "^0.13.4"
 httpx = "^0.18.1"
 websockets = "^9.0.2"
+pre-commit = "^2.14.0"
+autoflake = "^1.4"
+flake8 = "^3.9.2"
 
 [tool.poetry.extras]
 crypto = ["pycrypto"]
