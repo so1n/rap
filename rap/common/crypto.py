@@ -1,5 +1,5 @@
 try:
-    import ujson as _json
+    import ujson as _json  # type: ignore
 except ModuleNotFoundError:
     import json as _json  # type: ignore
 
