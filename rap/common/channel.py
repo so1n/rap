@@ -31,6 +31,8 @@ class AsyncIterBody(AsyncIterResponse):
 
 
 class BaseChannel(object):
+    """Common method of rap client and server channel"""
+
     _channel_conn_future: asyncio.Future
 
     async def loop(self, flag: bool = True) -> bool:

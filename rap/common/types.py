@@ -99,6 +99,7 @@ def is_json_type(_type: Type) -> bool:
 
 
 def is_type(source_type: Type, target_type: Type) -> bool:
+    """Determine whether the two types are consistent"""
     parse_source_type: Union[List[Type], Type] = parse_typing(source_type)
     if not isinstance(parse_source_type, list):
         parse_source_type = [parse_source_type]

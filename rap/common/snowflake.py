@@ -25,6 +25,8 @@ StatsTypedDict = TypedDict(
 
 
 class Snowflake(object):
+    """Simple snowflake id implementation"""
+
     def __init__(self, dc: int, worker: int):
         self.dc: int = dc
         self.worker: int = worker

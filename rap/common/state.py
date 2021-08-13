@@ -32,6 +32,8 @@ class State(object):
 
 
 class WindowState(object):
+    """Collect data using time sliding window principle"""
+
     def __init__(
         self,
         interval: int = 1,

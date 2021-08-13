@@ -12,7 +12,6 @@ from rap.common.types import is_type
 __all__ = [
     "Constant",
     "EventEnum",
-    "MISS_OBJECT",
     "RapFunc",
     "as_first_completed",
     "check_func_type",
@@ -26,7 +25,6 @@ __all__ = [
 ]
 
 
-MISS_OBJECT = object()
 _STR_LD = string.ascii_letters + string.digits
 
 
@@ -97,6 +95,7 @@ class RapFunc(object):
 
 
 def _get_event_loop() -> Callable[[], asyncio.AbstractEventLoop]:
+    """get event loop in runtime"""
     if sys.version_info >= (3, 7):
         return asyncio.get_running_loop
 
@@ -107,15 +106,18 @@ get_event_loop = _get_event_loop()
 
 
 def gen_random_time_id(length: int = 8, time_length: int = 10) -> str:
+    """Simply generate ordered id"""
     return str(int(time.time()))[-time_length:] + "".join(random.choice(_STR_LD) for _ in range(length))
 
 
 def parse_error(exception: Exception) -> Tuple[str, str]:
+    """parse python exc and return exc name and info"""
     return type(exception).__name__, str(exception)
 
 
 def gen_new_param_coro(coro: Coroutine, new_param_dict: Dict[str, Any]) -> Coroutine:
     """
+    Return a new coro according to the parameters
     >>> async def demo(a: int, b: int) -> int:
     ...     return a + b
     >>> value1: int = asyncio.run(demo(1, 3))
@@ -138,6 +140,9 @@ async def as_first_completed(
     future_list: List[Union[Coroutine, asyncio.Future]],
     not_cancel_future_list: Optional[List[Union[Coroutine, asyncio.Future]]] = None,
 ) -> Any:
+    """Wait for multiple coroutines to process data, until one of the coroutines returns data,
+    and the remaining coroutines are cancelled
+    """
     not_cancel_future_list = not_cancel_future_list if not_cancel_future_list else []
     future_list.extend(not_cancel_future_list)
 
@@ -164,6 +169,7 @@ response_num_dict: Dict[int, int] = {
 
 
 def check_func_type(func: Callable, param_list: Sequence[Any], default_param_dict: Dict[str, Any]) -> None:
+    """Check whether the input parameter type is consistent with the function parameter type"""
     func_sig: inspect.Signature = inspect.signature(func)
     for index, parameter_tuple in enumerate(func_sig.parameters.items()):
         name, parameter = parameter_tuple
@@ -176,12 +182,14 @@ def check_func_type(func: Callable, param_list: Sequence[Any], default_param_dic
 
 
 def param_handle(func: Callable, param_list: Sequence[Any], default_param_dict: Dict[str, Any]) -> Tuple[Any, ...]:
+    """Check whether the parameter is legal and whether the parameter type is correct"""
     new_param_list: Tuple[Any, ...] = inspect.signature(func).bind(*param_list, **default_param_dict).args
     check_func_type(func, param_list, default_param_dict)
     return new_param_list
 
 
 def del_future(future: asyncio.Future) -> None:
+    """Cancel the running future and read the result"""
     if future.cancelled():
         future.cancel()
     if future.done():

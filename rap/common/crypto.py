@@ -10,6 +10,8 @@ from Crypto.Cipher import AES
 
 
 class Crypto(object):
+    """Use aes encryption"""
+
     def __init__(self, key: str):
         if len(key) != 16:
             raise ValueError(f"The length of the key must be 16, key content:{key}")

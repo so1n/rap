@@ -6,6 +6,8 @@ from .utils import get_event_loop
 
 
 class Cache(object):
+    """Dict with expiration time function"""
+
     def __init__(self, interval: Optional[float] = None) -> None:
         self._dict: Dict[Any, Tuple[float, Any]] = {}
         self._interval: float = interval or 10.0

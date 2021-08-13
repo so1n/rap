@@ -13,6 +13,8 @@ __all__ = ["Connection", "ServerConnection"]
 
 
 class BaseConnection:
+    """rap transmission function, including serialization and deserialization of transmitted data"""
+
     def __init__(self, timeout: int, pack_param: Optional[dict] = None, unpack_param: Optional[dict] = None):
         self._is_closed: bool = True
         self._timeout: int = timeout
@@ -103,6 +105,8 @@ class BaseConnection:
 
 
 class Connection(BaseConnection):
+    """rap client connection"""
+
     def __init__(
         self,
         host: str,
@@ -153,6 +157,8 @@ class Connection(BaseConnection):
 
 
 class ServerConnection(BaseConnection):
+    """rap server connection"""
+
     def __init__(
         self,
         reader: READER_TYPE,
