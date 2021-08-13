@@ -12,7 +12,9 @@ if TYPE_CHECKING:
     from rap.server.types import SERVER_EVENT_FN
 
 
-class CryptoProcessor(BaseProcessor):
+class BaseCryptoProcessor(BaseProcessor):
+    """Provide symmetric encryption and prevent message replay attacks"""
+
     def __init__(
         self,
         secret_dict: Dict[str, str],
@@ -78,10 +80,8 @@ class CryptoProcessor(BaseProcessor):
         """modify crypto nonce timeout param"""
         self._nonce_timeout = timeout
 
-    async def process_request(self, request: Request) -> Request:
+    async def decrypt_request(self, request: Request) -> Request:
         """decrypt request body"""
-        if type(request.body) is not bytes:
-            return request
         crypto_id: str = request.header.get("crypto_id", None)
         crypto: Optional[Crypto] = self.get_crypto_by_key_id(crypto_id)
         # check crypto
@@ -113,20 +113,36 @@ class CryptoProcessor(BaseProcessor):
         except Exception as e:
             raise CryptoError(str(e)) from e
 
-    async def process_response(self, response: Response) -> Response:
+    async def encrypt_response(self, response: Response) -> Response:
         """encrypt response body"""
-        if response.msg_type in (Constant.MSG_RESPONSE, Constant.CHANNEL_RESPONSE):
-            crypto_id: str = response.header.get("crypto_id", None)
-            crypto: Optional[Crypto] = self.get_crypto_by_key_id(crypto_id)
-            if not crypto:
-                return response
-            response.body = crypto.encrypt_object(
-                {"body": response.body, "timestamp": int(time.time()), "nonce": gen_random_time_id()}
-            )
+        crypto_id: str = response.header.get("crypto_id", None)
+        crypto: Optional[Crypto] = self.get_crypto_by_key_id(crypto_id)
+        if not crypto:
+            return response
+        response.body = crypto.encrypt_object(
+            {"body": response.body, "timestamp": int(time.time()), "nonce": gen_random_time_id()}
+        )
         return response
 
 
-class AutoCryptoProcessor(CryptoProcessor):
+class CryptoProcessor(BaseCryptoProcessor):
+    async def process_request(self, request: Request) -> Request:
+        if request.msg_type in (Constant.MSG_REQUEST, Constant.CHANNEL_REQUEST):
+            return request
+        return await self.decrypt_request(request)
+
+    async def process_response(self, response: Response) -> Response:
+        if response.msg_type in (Constant.MSG_RESPONSE, Constant.CHANNEL_RESPONSE):
+            return await self.encrypt_response(response)
+        return response
+
+
+class AutoCryptoProcessor(BaseCryptoProcessor):
+    """
+    Provide symmetric encryption and prevent message replay attacks;
+    The auto-negotiation key of this mode is in plain text, which may be attacked
+    """
+
     async def process_request(self, request: Request) -> Request:
         if request.msg_type == Constant.CLIENT_EVENT and request.target.endswith(Constant.DECLARE):
             check_id: str = request.body.get("check_id", "")
@@ -141,7 +157,7 @@ class AutoCryptoProcessor(CryptoProcessor):
 
             return request
         else:
-            return await super().process_request(request)
+            return await super().decrypt_request(request)
 
     async def process_response(self, response: Response) -> Response:
         if response.msg_type == Constant.SERVER_EVENT and response.target.endswith(Constant.DECLARE):
@@ -161,4 +177,4 @@ class AutoCryptoProcessor(CryptoProcessor):
             }
             return response
         else:
-            return await super().process_response(response)
+            return await super().encrypt_response(response)

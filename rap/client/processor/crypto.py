@@ -28,6 +28,11 @@ class BaseCryptoProcessor(BaseProcessor):
 
 
 class AutoCryptoProcessor(BaseCryptoProcessor):
+    """
+    Provide symmetric encryption and prevent message replay attacks;
+    The auto-negotiation key of this mode is in plain text, which may be attacked
+    """
+
     def __init__(self, nonce_timeout: Optional[int] = None):
         """
         nonce_time: Cache nonce time, each message has a nonce field, and the value of each message is different,
