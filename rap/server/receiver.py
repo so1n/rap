@@ -23,7 +23,15 @@ from typing import (
 from rap.common.channel import BaseChannel
 from rap.common.conn import ServerConnection
 from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent
-from rap.common.exceptions import BaseRapError, ChannelError, ParseError, ProtocolError, RpcRunTimeError, ServerError
+from rap.common.exceptions import (
+    BaseRapError,
+    ChannelError,
+    FuncNotFoundError,
+    ParseError,
+    ProtocolError,
+    RpcRunTimeError,
+    ServerError,
+)
 from rap.common.types import is_type
 from rap.common.utils import Constant, del_future, get_event_loop, param_handle, parse_error, response_num_dict
 from rap.server.model import Request, Response
@@ -115,6 +123,7 @@ class Receiver(object):
         ping_fail_cnt: int,
         ping_sleep_time: int,
         event_handle_dict: Dict[str, List[Callable[[Request], None]]],
+        call_func_permission_fn: Optional[Callable[[Request], Awaitable[FuncModel]]] = None,
         processor_list: Optional[List[BaseProcessor]] = None,
     ):
         """Receive and process messages from the client, and execute different logics according to the message type
@@ -125,6 +134,7 @@ class Receiver(object):
         ping_fail_cnt: When ping fails continuously and exceeds this value, conn will be disconnected
         ping_sleep_time: ping message interval time
         event_handle_dict: request event dict
+        call_func_permission_fn: Check the permission to call the function
         processor_list: processor list
         """
         self._app: "Server" = app
@@ -135,6 +145,9 @@ class Receiver(object):
         self._ping_fail_cnt: int = ping_fail_cnt
         self._processor_list: Optional[List[BaseProcessor]] = processor_list
         self._event_handle_dict: Dict[str, List[Callable[[Request], None]]] = event_handle_dict
+        self._call_func_permission_fn: Callable[[Request], Awaitable[FuncModel]] = (
+            call_func_permission_fn if call_func_permission_fn else self._default_call_fun_permission_fn
+        )
 
         self.dispatch_func_dict: Dict[int, Callable] = {
             Constant.CLIENT_EVENT: self.event,
@@ -146,6 +159,15 @@ class Receiver(object):
         self._keepalive_timestamp: int = int(time.time())
         self._generator_dict: Dict[int, Union[Generator, AsyncGenerator]] = {}
         self._channel_dict: Dict[str, Channel] = {}
+
+    async def _default_call_fun_permission_fn(self, request: Request) -> FuncModel:
+        func_model: FuncModel = self._app.registry.get_func_model(
+            request, Constant.NORMAL_TYPE if request.msg_type == Constant.MSG_REQUEST else Constant.CHANNEL_TYPE
+        )
+
+        if func_model.is_private and request.conn.peer_tuple[0] not in ("::1", "127.0.0.1", "localhost"):
+            raise FuncNotFoundError(f"No permission to call:`{request.func_name}`")
+        return func_model
 
     async def dispatch(self, request: Request) -> Optional[Response]:
         response_num: int = response_num_dict.get(request.msg_type, Constant.SERVER_ERROR_RESPONSE)
@@ -208,7 +230,7 @@ class Receiver(object):
                     logging.debug(f"{self._conn} ping event exit.. error:{e}")
 
     async def channel_handle(self, request: Request, response: Response) -> Optional[Response]:
-        func: Callable = self._app.registry.get_func_model(request, Constant.CHANNEL_TYPE).func
+        func: Callable = (await self._call_func_permission_fn(request)).func
         # declare var
         channel_id: str = request.correlation_id
         life_cycle: str = request.header.get("channel_life_cycle", "error")
@@ -305,7 +327,7 @@ class Receiver(object):
 
     async def msg_handle(self, request: Request, response: Response) -> Optional[Response]:
         """根据函数类型分发请求，以及会对函数结果进行封装"""
-        func_model: FuncModel = self._app.registry.get_func_model(request, Constant.NORMAL_TYPE)
+        func_model: FuncModel = await self._call_func_permission_fn(request)
 
         try:
             call_id: int = request.body.get("call_id", -1)

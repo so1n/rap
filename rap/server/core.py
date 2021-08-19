@@ -4,7 +4,7 @@ import signal
 import ssl
 import threading
 import time
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Type
+from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Set, Type
 
 from rap.common import event
 from rap.common.cache import Cache
@@ -19,7 +19,7 @@ from rap.server.model import Request, Response
 from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware
 from rap.server.plugin.processor.base import BaseProcessor
 from rap.server.receiver import Receiver
-from rap.server.registry import RegistryManager
+from rap.server.registry import FuncModel, RegistryManager
 from rap.server.sender import Sender
 from rap.server.types import SERVER_EVENT_FN
 
@@ -45,6 +45,7 @@ class Server(object):
         unpack_param: Optional[dict] = None,
         middleware_list: List[BaseMiddleware] = None,
         processor_list: List[BaseProcessor] = None,
+        call_func_permission_fn: Optional[Callable[[Request], Awaitable[FuncModel]]] = None,
         window_state: Optional[WindowState] = None,
         cache_interval: Optional[float] = None,
     ):
@@ -65,6 +66,7 @@ class Server(object):
         unpack_param: msgpack.UnPack param
         middleware_list: Server middleware list
         processor_list: Server processor list
+        call_func_permission_fn: Check the permission to call the function
         window_state: Server window state
         cache_interval: Server cache interval seconds to clean up expired data
         """
@@ -104,6 +106,7 @@ class Server(object):
         if processor_list:
             self.load_processor(processor_list)
 
+        self._call_func_permission_fn: Optional[Callable[[Request], Awaitable[FuncModel]]] = call_func_permission_fn
         self.registry: RegistryManager = RegistryManager()
         self.cache: Cache = Cache(interval=cache_interval)
         self.window_state: Optional[WindowState] = window_state
@@ -329,6 +332,7 @@ class Server(object):
             self._ping_sleep_time,
             self._request_event_handle_dict,
             processor_list=self._processor_list,
+            call_func_permission_fn=self._call_func_permission_fn,
         )
         recv_msg_handle_future_set: Set[asyncio.Future] = set()
 
