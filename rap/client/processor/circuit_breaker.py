@@ -56,7 +56,7 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
 
     def start_event_handle(self, app: "BaseClient") -> None:
         if self._window_state.is_closed:
-            self._window_state.change_state(app)
+            self._window_state.change_state()
 
     def stop_event_handle(self, app: "BaseClient") -> None:
         if not self._window_state.is_closed:

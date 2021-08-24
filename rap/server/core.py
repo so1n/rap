@@ -109,9 +109,9 @@ class Server(object):
         self._call_func_permission_fn: Optional[Callable[[Request], Awaitable[FuncModel]]] = call_func_permission_fn
         self.registry: RegistryManager = RegistryManager()
         self.cache: Cache = Cache(interval=cache_interval)
-        self.window_state: Optional[WindowState] = window_state
-        if self.window_state and self.window_state.is_closed:
-            self.register_server_event(EventEnum.before_start, self.window_state.change_state)
+        self.window_state: WindowState = window_state or WindowState(interval=60)
+        if self.window_state is not None and self.window_state.is_closed:
+            self.register_server_event(EventEnum.before_start, lambda _app: self.window_state.change_state())
 
     def register_server_event(self, event: EventEnum, *event_handle_list: SERVER_EVENT_FN) -> None:
         """register server event handler
