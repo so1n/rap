@@ -5,6 +5,7 @@ from functools import partial
 from threading import Lock
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple
 
+from rap.common.cache import Cache
 from rap.common.utils import get_event_loop
 
 
@@ -60,14 +61,15 @@ class WindowStatistics(object):
         self,
         interval: Optional[int] = None,
         max_interval: Optional[int] = None,
+        metric_cache: Optional[Cache] = None,
         callback_interval: Optional[int] = None,
-        _callback_set: Optional[Set[Callable[[dict], None]]] = None,
+        callback_set: Optional[Set[Callable[[dict], None]]] = None,
         callback_priority_set: Optional[Set[Callable[[dict], None]]] = None,
         callback_wait_cnt: int = 3,
     ) -> None:
         """
         :param interval: Interval for switching statistics buckets
-        :param _callback_set: The callback set when the bucket is switched,
+        :param callback_set: The callback set when the bucket is switched,
             the parameter of the callback is the data of the available bucket.
             Data can be obtained through this callback
         :param callback_priority_set: The callback set when the bucket is switched,
@@ -80,23 +82,24 @@ class WindowStatistics(object):
         self._interval: int = interval or 1
         self._max_interval: int = max_interval or 60
         self._callback_interval: int = callback_interval or self._max_interval // 2
-        self._callback_set: Set[Callable] = _callback_set or set()
+        self._callback_set: Set[Callable] = callback_set or set()
         self._callback_priority_set: Set[Callable] = callback_priority_set or set()
         self._callback_wait_cnt: int = callback_wait_cnt
         self._bucket_len: int = (self._max_interval // self._interval) + 5
         self._bucket_list: List[dict] = [{"cnt": 0} for _ in range(self._bucket_len)]
-        self._metric_dict: Dict[Any, Metric] = {}
+        self._metric_cache: Cache = metric_cache or Cache(self._max_interval)
         self._start_timestamp: int = int(time.time() * 1000)
         self._loop_timestamp: float = time.time()
 
         self._is_closed: bool = True
+        self.statistics_dict: dict = {}
         self._look: Lock = Lock()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._change_callback_future: Optional[asyncio.Future] = None
         self._change_callback_future_run_timestamp: float = time.time()
 
-    def registry_metric(self, key: Any, metric: Metric) -> None:
-        self._metric_dict[key] = metric
+    def registry_metric(self, key: Any, metric: Metric, expire: float) -> None:
+        self._metric_cache.add(key, expire, metric)
         if isinstance(metric, Gauge):
             get_value_fn: Callable = partial(self._get_gauge_value, key)
             set_value_fn: Callable = partial(self._set_gauge_value, key)
@@ -110,9 +113,10 @@ class WindowStatistics(object):
         setattr(metric, metric.set_value.__name__, set_value_fn)
 
     def drop_metric(self, key: Any) -> None:
-        metric: Metric = self._metric_dict.pop(key)
-        setattr(metric, metric.get_value.__name__, getattr(metric, "_temp_get_value"))
-        setattr(metric, metric.set_value.__name__, getattr(metric, "_temp_set_value"))
+        metric: Optional[Metric] = self._metric_cache.pop(key)
+        if metric:
+            setattr(metric, metric.get_value.__name__, getattr(metric, "_temp_get_value"))
+            setattr(metric, metric.set_value.__name__, getattr(metric, "_temp_set_value"))
 
     @property
     def is_closed(self) -> bool:
@@ -142,8 +146,7 @@ class WindowStatistics(object):
                 bucket[key] += value
 
     def set_value(self, key: Any, value: float) -> None:
-        assert key in self._metric_dict
-        if isinstance(self._metric_dict[key], Gauge):
+        if isinstance(self._metric_cache.get(key), Gauge):
             self._set_gauge_value(key, value)
         else:
             self._set_count_value(key, value)
@@ -166,9 +169,8 @@ class WindowStatistics(object):
         return value
 
     def get_value(self, key: Any, diff: int = 0) -> float:
-        assert key in self._metric_dict
         assert diff <= self._max_interval
-        if isinstance(self._metric_dict[key], Gauge):
+        if isinstance(self._metric_cache.get(key), Gauge):
             return self._get_gauge_value(key)
         else:
             return self._get_count_value(key)
@@ -179,9 +181,9 @@ class WindowStatistics(object):
     def _run_callback(self) -> asyncio.Future:
         loop: asyncio.AbstractEventLoop = self._loop  # type: ignore
 
-        statistics_dict: dict = {}
-        for key, metric in self._metric_dict.items():
-            statistics_dict[key] = metric.get_value()
+        self.statistics_dict = {}
+        for key, metric in self._metric_cache.items():
+            self.statistics_dict[key] = metric.get_value()
 
         async def _safe_run_callback(fn: Callable, dict_param: Dict) -> None:
             if asyncio.iscoroutinefunction(fn):
@@ -195,9 +197,9 @@ class WindowStatistics(object):
 
         async def _real_run_callback() -> None:
             # change callback is serial execution, no need to use lock
-            await asyncio.gather(*[_safe_run_callback(fn, statistics_dict) for fn in self._callback_priority_set])
+            await asyncio.gather(*[_safe_run_callback(fn, self.statistics_dict) for fn in self._callback_priority_set])
             # change callback dict is read only
-            copy_dict: dict = statistics_dict.copy()
+            copy_dict: dict = self.statistics_dict.copy()
             await asyncio.gather(*[_safe_run_callback(fn, copy_dict) for fn in self._callback_set])
 
         return asyncio.ensure_future(_real_run_callback())

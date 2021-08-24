@@ -1,6 +1,6 @@
 import time
 from dataclasses import MISSING
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Generator, Optional, Tuple
 
 from .utils import get_event_loop
 
@@ -49,13 +49,20 @@ class Cache(object):
             self._auto_remove()
             setattr(self, self.add.__name__, self._add)
 
+    def pop(self, key: Any) -> Any:
+        return self._dict.pop(key, None)
+
+    def items(self) -> Generator[Tuple[Any, Any], None, None]:
+        for key in self._dict.keys():
+            yield key, self._dict[key][1]
+
     def __contains__(self, key: Any) -> bool:
         if key not in self._dict:
             return False
 
         expire, value = self._dict[key]
         if expire < time.time():
-            del self._dict[key]
+            self.pop(key)
             return False
         else:
             return True
@@ -66,5 +73,6 @@ class Cache(object):
                 # NOTE: After Python 3.7, the dict is ordered.
                 # Since the inserted data is related to time, the dict here is also ordered by time
                 break
+            self.pop(key)
 
         get_event_loop().call_later(self._interval, self._auto_remove)
