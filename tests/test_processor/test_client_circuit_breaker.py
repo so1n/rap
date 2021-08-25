@@ -4,9 +4,12 @@ import pytest
 from aredis import StrictRedis  # type: ignore
 
 from rap.client import Client
-from rap.client.processor.circuit_breaker import FuncCircuitBreakerProcessor, HostCircuitBreakerProcessor
+from rap.client.processor.circuit_breaker import (
+    CircuitBreakerExc,
+    FuncCircuitBreakerProcessor,
+    HostCircuitBreakerProcessor,
+)
 from rap.common.collect_statistics import WindowStatistics
-from rap.common.exceptions import ServerError
 from rap.server import Server
 from tests.conftest import async_sum  # type: ignore
 
@@ -27,9 +30,9 @@ class TestCircuitBreaker:
                 await rap_client.raw_call("not_found_func")
             except Exception:
                 pass
-        await asyncio.sleep(1)
+        await asyncio.sleep(1.2)
 
-        with pytest.raises(ServerError) as e:
+        with pytest.raises(CircuitBreakerExc) as e:
             await rap_client.raw_call("not_found_func")
 
         exec_msg: str = e.value.args[0]
@@ -48,9 +51,9 @@ class TestCircuitBreaker:
                 await rap_client.raw_call("not_found_func")
             except Exception:
                 pass
-        await asyncio.sleep(1)
+        await asyncio.sleep(1.2)
 
-        with pytest.raises(ServerError) as e:
+        with pytest.raises(CircuitBreakerExc) as e:
             await rap_client.raw_call("not_found_func")
 
         exec_msg: str = e.value.args[0]

@@ -5,11 +5,14 @@ from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common.collect_statistics import WindowStatistics
-from rap.common.exceptions import ServerError
 from rap.common.utils import Constant, EventEnum
 
 if TYPE_CHECKING:
     from rap.client.core import BaseClient
+
+
+class CircuitBreakerExc(Exception):
+    pass
 
 
 class BaseCircuitBreakerProcessor(BaseProcessor):
@@ -21,25 +24,31 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
         self,
         k: float = 2.0,  # google sre default
         enable_cnt: int = 100,
+        expire: int = 120,
+        interval: int = 60,
+        prefix: str = "circuit_breaker",
         window_statistics: Optional[WindowStatistics] = None,
     ):
         """
-        interval: sliding window interval
-        k: google ste circuit breaker default k
-        enable_cnt: Set to enable when the total number of requests is greater than a certain value
+        :param interval: sliding window interval
+        :param k: google ste circuit breaker default k
+        :param expire: metric expire time
+        :param interval: metric data change interval
+        :param prefix: metric key prefix
+        :param enable_cnt: Set to enable when the total number of requests is greater than a certain value
         """
-        self._prefix: str = "circuit_breaker"
+        self._prefix: str = prefix
         self._enable_cnt: int = enable_cnt
+        self._expire: int = expire
+        self._interval: int = interval
         self._window_statistics: WindowStatistics = window_statistics or WindowStatistics()
         self._probability_dict: Dict[str, float] = {}
 
         def upload_probability(stats_dict: Dict[Any, int]) -> None:
             _dict: Dict[str, Dict[str, int]] = {}
             for key, value in stats_dict.items():
-                if isinstance(key, tuple) and len(key) == 3:
-                    prefix, index, type_ = key
-                    if prefix != self._prefix:
-                        continue
+                if key.startswith(self._prefix):
+                    _, index, type_ = key.split("|")
                     if index not in _dict:
                         _dict[index] = {}
                     _dict[index][type_] = value
@@ -63,45 +72,47 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
         if not self._window_statistics.is_closed:
             self._window_statistics.close()
 
-    def get_request_index(self, request: Request) -> str:
+    def get_index_from_request(self, request: Request) -> str:
         raise NotImplementedError
 
-    def get_response_index(self, response: Response) -> str:
+    def get_index_from_response(self, response: Response) -> str:
         raise NotImplementedError
 
     async def process_request(self, request: Request) -> Request:
         if request.msg_type == Constant.CLIENT_EVENT:
             # do not process event
             return request
-        index: str = self.get_request_index(request)
-        total: int = self._window_statistics.statistics_dict.get((self._prefix, index, "total"), 0)  # type: ignore
+        index: str = self.get_index_from_request(request)
+        total_key: str = f"{self._prefix}|{index}|total"
+        total: int = self._window_statistics.statistics_dict.get(total_key, 0)  # type: ignore
         if total >= self._enable_cnt:
             if random.randint(0, 100) < self._probability_dict.get(index, 0.0) * 100:
                 raise self.exc
 
-        self._window_statistics.set_gauge_value((self._prefix, index, "total"), 65, 60)
+        self._window_statistics.set_gauge_value(total_key, self._expire, self._interval)
         return request
 
     async def process_exc(self, response: Response, exc: Exception) -> Tuple[Response, Exception]:
-        self._window_statistics.set_gauge_value((self._prefix, self.get_response_index(response), "error"), 65, 60)
+        error_key: str = f"{self._prefix}|{self.get_index_from_response(response)}|error"
+        self._window_statistics.set_gauge_value(error_key, self._expire, self._interval)
         return response, exc
 
 
 class HostCircuitBreakerProcessor(BaseCircuitBreakerProcessor):
-    exc: Exception = ServerError("Service Unavailable")
+    exc: Exception = CircuitBreakerExc("Service Unavailable")
 
-    def get_request_index(self, request: Request) -> str:
+    def get_index_from_request(self, request: Request) -> str:
         return request.header["host"][0]
 
-    def get_response_index(self, response: Response) -> str:
+    def get_index_from_response(self, response: Response) -> str:
         return response.conn.peer_tuple[0]
 
 
 class FuncCircuitBreakerProcessor(BaseCircuitBreakerProcessor):
-    exc: Exception = ServerError("Service's func Unavailable")
+    exc: Exception = CircuitBreakerExc("Service's func Unavailable")
 
-    def get_request_index(self, request: Request) -> str:
+    def get_index_from_request(self, request: Request) -> str:
         return request.target
 
-    def get_response_index(self, response: Response) -> str:
+    def get_index_from_response(self, response: Response) -> str:
         return response.target
