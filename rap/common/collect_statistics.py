@@ -3,7 +3,7 @@ import logging
 import time
 from functools import partial
 from threading import Lock
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple
+from typing import Awaitable, Callable, Dict, List, Optional, Set, Tuple
 
 from rap.common.cache import Cache
 from rap.common.utils import get_event_loop
@@ -14,8 +14,8 @@ from rap.common.utils import get_event_loop
 ###########
 # design like prometheus, url:https://prometheus.io/docs/concepts/metric_types/"
 class Metric(object):
-    def __init__(self, name: Any):
-        self.name: Any = name
+    def __init__(self, name: str):
+        self.name: str = name
         self.diff: int = 0
 
     def set_value(self, value: float) -> None:
@@ -59,16 +59,21 @@ class WindowStatistics(object):
 
     def __init__(
         self,
+        # window interval param
         interval: Optional[int] = None,
         max_interval: Optional[int] = None,
-        metric_cache: Optional[Cache] = None,
+        # callback param
         callback_interval: Optional[int] = None,
         callback_set: Optional[Set[Callable[[dict], None]]] = None,
         callback_priority_set: Optional[Set[Callable[[dict], None]]] = None,
         callback_wait_cnt: int = 3,
+        metric_cache: Optional[Cache] = None,
     ) -> None:
         """
-        :param interval: Interval for switching statistics buckets
+        :param interval: Minimum statistical period, default 1
+        :param max_interval: Maximum statistical period, default 60
+
+        :param callback_interval: call callback interval, default max_interval // 2
         :param callback_set: The callback set when the bucket is switched,
             the parameter of the callback is the data of the available bucket.
             Data can be obtained through this callback
@@ -86,21 +91,25 @@ class WindowStatistics(object):
         self._callback_priority_set: Set[Callable] = callback_priority_set or set()
         self._callback_wait_cnt: int = callback_wait_cnt
         self._bucket_len: int = (self._max_interval // self._interval) + 5
-        self._bucket_list: List[dict] = [{"cnt": -1} for _ in range(self._bucket_len)]
-        self._metric_cache: Cache = metric_cache or Cache(self._max_interval)
+        self._bucket_list: List[Dict[str, float]] = [{"cnt": -1} for _ in range(self._bucket_len)]
+        self._metric_cache: Cache = metric_cache or Cache(self._max_interval + 5)
         self._start_timestamp: int = int(time.time())
         self._loop_timestamp: float = time.time()
 
         self._is_closed: bool = True
-        self.statistics_dict: dict = {}
         self._look: Lock = Lock()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._change_callback_future: Optional[asyncio.Future] = None
         self._change_callback_future_run_timestamp: float = time.time()
 
-    def registry_metric(self, key: Any, metric: Metric, expire: float) -> None:
+        self.statistics_dict: Dict[str, float] = {}
+
+    def registry_metric(self, key: str, metric: Metric, expire: float) -> Metric:
         if key in self._metric_cache:
-            return
+            if self._metric_cache.get(key, None) is metric:
+                return metric
+            else:
+                raise ValueError("different metric")
         self._metric_cache.add(key, expire, metric)
         if isinstance(metric, Gauge):
             assert metric.diff <= self._max_interval
@@ -114,8 +123,9 @@ class WindowStatistics(object):
         setattr(metric, "_temp_set_value", metric.set_value)
         setattr(metric, metric.get_value.__name__, get_value_fn)
         setattr(metric, metric.set_value.__name__, set_value_fn)
+        return metric
 
-    def drop_metric(self, key: Any) -> None:
+    def drop_metric(self, key: str) -> None:
         metric: Optional[Metric] = self._metric_cache.pop(key)
         if metric:
             setattr(metric, metric.get_value.__name__, getattr(metric, "_temp_get_value"))
@@ -131,7 +141,7 @@ class WindowStatistics(object):
         diff: int = now_timestamp - self._start_timestamp
         return divmod(diff, self._bucket_len)
 
-    def _set_gauge_value(self, key: Any, value: float = 1) -> None:
+    def _set_gauge_value(self, key: str, value: float = 1) -> None:
         cnt, index = self._get_now_info()
         bucket: dict = self._bucket_list[index]
         with self._look:
@@ -141,24 +151,24 @@ class WindowStatistics(object):
             else:
                 bucket[key] += value
 
-    def set_gauge_value(self, key: Any, expire: float, diff: int = 1, value: float = 1) -> None:
+    def set_gauge_value(self, key: str, expire: float, diff: int = 1, value: float = 1) -> None:
         if key not in self._metric_cache:
             self.registry_metric(key, Gauge(key, diff=diff), expire)
         self._set_gauge_value(key, value)
 
-    def _set_count_value(self, key: Any, value: float) -> None:
+    def _set_count_value(self, key: str, value: float) -> None:
         cnt, index = self._get_now_info()
         bucket: dict = self._bucket_list[index]
         with self._look:
             bucket["cnt"] = cnt
             bucket[key] = value
 
-    def set_count_value(self, key: Any, expire: float, value: float = 1) -> None:
+    def set_count_value(self, key: str, expire: float, value: float = 1) -> None:
         if key not in self._metric_cache:
             self.registry_metric(key, Counter(key), expire)
         self._set_gauge_value(key, value)
 
-    def get_count_value(self, key: Any) -> float:
+    def get_count_value(self, key: str) -> float:
         assert key in self._metric_cache
         cnt, index = self._get_now_info()
         bucket: dict = self._bucket_list[index - 1]
@@ -166,7 +176,7 @@ class WindowStatistics(object):
             raise KeyError(key)
         return bucket.get(key, 0.0)
 
-    def get_gauge_value(self, key: Any, diff: int = 0) -> float:
+    def get_gauge_value(self, key: str, diff: int = 0) -> float:
         assert key in self._metric_cache
         assert diff <= self._max_interval
         cnt, index = self._get_now_info()
