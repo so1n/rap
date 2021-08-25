@@ -96,8 +96,8 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
             state_dict[f"{key}:conn_cnt"] = int(await self._redis.get(key))
             state_dict[f"{key}:max_limit_cnt"] = self._ip_max_conn
 
-        if self.app.window_state:
-            self.app.window_state.add_priority_callback(_add_data_to_state)
+        if self.app.window_statistics:
+            self.app.window_statistics.add_priority_callback(_add_data_to_state)
         self.register(self.modify_max_ip_max_conn)
         self.register(self.modify_ip_max_timeout)
         self.register(self.get_info)

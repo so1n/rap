@@ -128,8 +128,8 @@ class BaseCryptoProcessor(BaseProcessor):
 class CryptoProcessor(BaseCryptoProcessor):
     async def process_request(self, request: Request) -> Request:
         if request.msg_type in (Constant.MSG_REQUEST, Constant.CHANNEL_REQUEST):
-            return request
-        return await self.decrypt_request(request)
+            return await self.decrypt_request(request)
+        return request
 
     async def process_response(self, response: Response) -> Response:
         if response.msg_type in (Constant.MSG_RESPONSE, Constant.CHANNEL_RESPONSE):

@@ -8,10 +8,10 @@ from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Se
 
 from rap.common import event
 from rap.common.cache import Cache
+from rap.common.collect_statistics import WindowStatistics
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import ServerError
 from rap.common.snowflake import get_snowflake_id
-from rap.common.state import WindowState
 from rap.common.types import BASE_MSG_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utils import EventEnum, RapFunc
 from rap.server.context import context
@@ -46,7 +46,7 @@ class Server(object):
         middleware_list: List[BaseMiddleware] = None,
         processor_list: List[BaseProcessor] = None,
         call_func_permission_fn: Optional[Callable[[Request], Awaitable[FuncModel]]] = None,
-        window_state: Optional[WindowState] = None,
+        window_statistics: Optional[WindowStatistics] = None,
         cache_interval: Optional[float] = None,
     ):
         """
@@ -67,7 +67,7 @@ class Server(object):
         middleware_list: Server middleware list
         processor_list: Server processor list
         call_func_permission_fn: Check the permission to call the function
-        window_state: Server window state
+        window_statistics: Server window state
         cache_interval: Server cache interval seconds to clean up expired data
         """
         self.server_name: str = server_name
@@ -109,9 +109,9 @@ class Server(object):
         self._call_func_permission_fn: Optional[Callable[[Request], Awaitable[FuncModel]]] = call_func_permission_fn
         self.registry: RegistryManager = RegistryManager()
         self.cache: Cache = Cache(interval=cache_interval)
-        self.window_state: WindowState = window_state or WindowState(interval=60)
-        if self.window_state is not None and self.window_state.is_closed:
-            self.register_server_event(EventEnum.before_start, lambda _app: self.window_state.change_state())
+        self.window_statistics: WindowStatistics = window_statistics or WindowStatistics(interval=60)
+        if self.window_statistics is not None and self.window_statistics.is_closed:
+            self.register_server_event(EventEnum.before_start, lambda _app: self.window_statistics.change_state())
 
     def register_server_event(self, event: EventEnum, *event_handle_list: SERVER_EVENT_FN) -> None:
         """register server event handler

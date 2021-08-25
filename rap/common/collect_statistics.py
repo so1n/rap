@@ -14,8 +14,8 @@ from rap.common.utils import get_event_loop
 ###########
 # design like prometheus, url:https://prometheus.io/docs/concepts/metric_types/"
 class Metric(object):
-    def __init__(self, name: str):
-        self.name: str = name
+    def __init__(self, name: Any):
+        self.name: Any = name
         self.diff: int = 0
 
     def set_value(self, value: float) -> None:
@@ -86,9 +86,9 @@ class WindowStatistics(object):
         self._callback_priority_set: Set[Callable] = callback_priority_set or set()
         self._callback_wait_cnt: int = callback_wait_cnt
         self._bucket_len: int = (self._max_interval // self._interval) + 5
-        self._bucket_list: List[dict] = [{"cnt": 0} for _ in range(self._bucket_len)]
+        self._bucket_list: List[dict] = [{"cnt": -1} for _ in range(self._bucket_len)]
         self._metric_cache: Cache = metric_cache or Cache(self._max_interval)
-        self._start_timestamp: int = int(time.time() * 1000)
+        self._start_timestamp: int = int(time.time())
         self._loop_timestamp: float = time.time()
 
         self._is_closed: bool = True
@@ -99,12 +99,15 @@ class WindowStatistics(object):
         self._change_callback_future_run_timestamp: float = time.time()
 
     def registry_metric(self, key: Any, metric: Metric, expire: float) -> None:
+        if key in self._metric_cache:
+            return
         self._metric_cache.add(key, expire, metric)
         if isinstance(metric, Gauge):
-            get_value_fn: Callable = partial(self._get_gauge_value, key)
+            assert metric.diff <= self._max_interval
+            get_value_fn: Callable = partial(self.get_gauge_value, key, diff=metric.diff)
             set_value_fn: Callable = partial(self._set_gauge_value, key)
         else:
-            get_value_fn = partial(self._get_count_value, key, diff=metric.diff)
+            get_value_fn = partial(self.get_count_value, key)
             set_value_fn = partial(self._set_count_value, key)
 
         setattr(metric, "_temp_get_value", metric.get_value)
@@ -124,41 +127,48 @@ class WindowStatistics(object):
 
     def _get_now_info(self) -> Tuple[int, int]:
         """return now timestamp's (Quotient, remainder)"""
-        now_timestamp: int = int(time.time() * 1000)
+        now_timestamp: int = int(time.time())
         diff: int = now_timestamp - self._start_timestamp
         return divmod(diff, self._bucket_len)
 
-    def _set_gauge_value(self, key: Any, value: float) -> None:
+    def _set_gauge_value(self, key: Any, value: float = 1) -> None:
         cnt, index = self._get_now_info()
         bucket: dict = self._bucket_list[index]
         with self._look:
             bucket["cnt"] = cnt
-            bucket[key] = value
+            if key not in bucket:
+                bucket[key] = value
+            else:
+                bucket[key] += value
+
+    def set_gauge_value(self, key: Any, expire: float, diff: int = 1, value: float = 1) -> None:
+        if key not in self._metric_cache:
+            self.registry_metric(key, Gauge(key, diff=diff), expire)
+        self._set_gauge_value(key, value)
 
     def _set_count_value(self, key: Any, value: float) -> None:
         cnt, index = self._get_now_info()
         bucket: dict = self._bucket_list[index]
         with self._look:
             bucket["cnt"] = cnt
-            if key not in self._bucket_list:
-                bucket[key] = value
-            else:
-                bucket[key] += value
+            bucket[key] = value
 
-    def set_value(self, key: Any, value: float) -> None:
-        if isinstance(self._metric_cache.get(key), Gauge):
-            self._set_gauge_value(key, value)
-        else:
-            self._set_count_value(key, value)
+    def set_count_value(self, key: Any, expire: float, value: float = 1) -> None:
+        if key not in self._metric_cache:
+            self.registry_metric(key, Counter(key), expire)
+        self._set_gauge_value(key, value)
 
-    def _get_gauge_value(self, key: Any) -> float:
+    def get_count_value(self, key: Any) -> float:
+        assert key in self._metric_cache
         cnt, index = self._get_now_info()
         bucket: dict = self._bucket_list[index - 1]
         if bucket["cnt"] != cnt:
             raise KeyError(key)
         return bucket.get(key, 0.0)
 
-    def _get_count_value(self, key: Any, diff: int = 0) -> float:
+    def get_gauge_value(self, key: Any, diff: int = 0) -> float:
+        assert key in self._metric_cache
+        assert diff <= self._max_interval
         cnt, index = self._get_now_info()
         value: float = 0.0
         for i in range(diff):
@@ -167,13 +177,6 @@ class WindowStatistics(object):
                 break
             value += bucket.get(key, 0.0)
         return value
-
-    def get_value(self, key: Any, diff: int = 0) -> float:
-        assert diff <= self._max_interval
-        if isinstance(self._metric_cache.get(key), Gauge):
-            return self._get_gauge_value(key)
-        else:
-            return self._get_count_value(key)
 
     def _update_change_callback_future_run_timestamp(self) -> None:
         self._change_callback_future_run_timestamp = self._loop.time()  # type: ignore
@@ -210,17 +213,16 @@ class WindowStatistics(object):
         loop: asyncio.AbstractEventLoop = self._loop  # type: ignore
         self._loop_timestamp = loop.time()
         logging.debug("%s run once at loop time: %s" % (self.__class__.__name__, self._start_timestamp))
-
         # call callback
         if self._callback_set or self._callback_priority_set:
             if self._change_callback_future and not self._change_callback_future.done():
                 # The callback is still executing
                 if (
-                    self._change_callback_future_run_timestamp + self._interval * self._callback_wait_cnt
+                    self._change_callback_future_run_timestamp + self._callback_interval * self._callback_wait_cnt
                     < self._start_timestamp
                 ):
                     # the running time does not exceed the maximum allowable number of cycles
-                    loop.call_at(self._start_timestamp + self._interval, self._change_state)
+                    loop.call_at(self._start_timestamp + self._callback_interval, self._change_state)
                     return
                 elif not self._change_callback_future.cancelled():
                     logging.warning("Callback collection execution timeout...cancel")
@@ -228,26 +230,18 @@ class WindowStatistics(object):
 
             self._change_callback_future = self._run_callback()
             self._change_callback_future.add_done_callback(lambda f: self._update_change_callback_future_run_timestamp)
-        loop.call_at(self._start_timestamp + self._interval, self._change_state)
-
-    def _check_run(self) -> None:
-        if not self.is_closed:
-            raise RuntimeError(f"Operation failed, {self.__class__.__name__} is running.")
+        loop.call_at(self._start_timestamp + self._callback_interval, self._change_state)
 
     def add_callback(self, fn: Callable) -> None:
-        self._check_run()
         self._callback_set.add(fn)
 
     def remove_callback(self, fn: Callable) -> None:
-        self._check_run()
         self._callback_set.remove(fn)
 
     def add_priority_callback(self, fn: Callable) -> None:
-        self._check_run()
         self._callback_priority_set.add(fn)
 
     def remove_priority_callback(self, fn: Callable) -> None:
-        self._check_run()
         self._callback_priority_set.remove(fn)
 
     def close(self) -> None:
@@ -259,6 +253,6 @@ class WindowStatistics(object):
             self._loop_timestamp = self._loop.time()
             self._change_callback_future_run_timestamp = self._loop.time()
             self._is_closed = False
-            self._loop.call_later(self._interval, self._change_state)
+            self._loop.call_later(self._callback_interval, self._change_state)
         else:
             raise RuntimeError(f"{self.__class__.__name__} already run")

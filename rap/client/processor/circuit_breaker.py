@@ -1,11 +1,11 @@
 import random
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.types import CLIENT_EVENT_FN
+from rap.common.collect_statistics import WindowStatistics
 from rap.common.exceptions import ServerError
-from rap.common.state import WindowState
 from rap.common.utils import Constant, EventEnum
 
 if TYPE_CHECKING:
@@ -19,9 +19,9 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
 
     def __init__(
         self,
-        interval: int = 2 * 60,
         k: float = 2.0,  # google sre default
         enable_cnt: int = 100,
+        window_statistics: Optional[WindowStatistics] = None,
     ):
         """
         interval: sliding window interval
@@ -30,7 +30,7 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
         """
         self._prefix: str = "circuit_breaker"
         self._enable_cnt: int = enable_cnt
-        self._window_state: WindowState = WindowState(interval=interval)
+        self._window_statistics: WindowStatistics = window_statistics or WindowStatistics()
         self._probability_dict: Dict[str, float] = {}
 
         def upload_probability(stats_dict: Dict[Any, int]) -> None:
@@ -48,19 +48,20 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
                 error_cnt: int = metric_dict.get("error", 0)
                 self._probability_dict[index] = max(0.0, (total - k * (total - error_cnt)) / (total + 1))
 
-        self._window_state.add_priority_callback(upload_probability)
+        self._window_statistics.add_priority_callback(upload_probability)
         self.event_dict: Dict[EventEnum, List[CLIENT_EVENT_FN]] = {
             EventEnum.after_start: [self.start_event_handle],
             EventEnum.before_end: [self.stop_event_handle],
         }
 
     def start_event_handle(self, app: "BaseClient") -> None:
-        if self._window_state.is_closed:
-            self._window_state.change_state()
+        self._window_statistics._metric_cache = app.cache
+        if self._window_statistics.is_closed:
+            self._window_statistics.change_state()
 
     def stop_event_handle(self, app: "BaseClient") -> None:
-        if not self._window_state.is_closed:
-            self._window_state.close()
+        if not self._window_statistics.is_closed:
+            self._window_statistics.close()
 
     def get_request_index(self, request: Request) -> str:
         raise NotImplementedError
@@ -73,16 +74,16 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
             # do not process event
             return request
         index: str = self.get_request_index(request)
-        total: int = self._window_state.get_value((self._prefix, index, "total"), 0)  # type: ignore
-        if total > self._enable_cnt:
+        total: int = self._window_statistics.statistics_dict.get((self._prefix, index, "total"), 0)  # type: ignore
+        if total >= self._enable_cnt:
             if random.randint(0, 100) < self._probability_dict.get(index, 0.0) * 100:
                 raise self.exc
 
-        self._window_state.increment((self._prefix, index, "total"))
+        self._window_statistics.set_gauge_value((self._prefix, index, "total"), 65, 60)
         return request
 
     async def process_exc(self, response: Response, exc: Exception) -> Tuple[Response, Exception]:
-        self._window_state.increment((self._prefix, self.get_response_index(response), "error"))
+        self._window_statistics.set_gauge_value((self._prefix, self.get_response_index(response), "error"), 65, 60)
         return response, exc
 
 

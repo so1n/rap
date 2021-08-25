@@ -25,7 +25,7 @@ class TestServerEvent:
         rap_server: Server = Server("test")
         for key, value in EventEnum.__members__.items():
             rap_server.register_server_event(value, demo_event)
-            assert rap_server._server_event_dict[value][0] == demo_event
+            assert rap_server._server_event_dict[value][-1] == demo_event
 
     def test_repeat_error_event(self) -> None:
         async def demo_event(app: Server) -> None:

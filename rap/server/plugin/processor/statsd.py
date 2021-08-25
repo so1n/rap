@@ -40,8 +40,8 @@ class StatsdProcessor(BaseProcessor):
                 self._statsd_client.counter(f"{self._namespace}.{key}", values)
             self._statsd_client.counter(self._channel_online_key, self._channel_online_cnt)
 
-        if self.app.window_state:
-            self.app.window_state.add_callback(upload_metric)
+        if self.app.window_statistics:
+            self.app.window_statistics.add_callback(upload_metric)
 
     async def process_request(self, request: Request) -> Request:
         self._statsd_client.increment(self._request_key, 1)

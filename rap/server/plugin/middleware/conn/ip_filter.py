@@ -46,8 +46,8 @@ class IpFilterMiddleware(BaseConnMiddleware):
         async def _add_data_to_state(state_dict: dict) -> None:
             state_dict[f"{self.__class__.__name__}:block_cnt"] = self.block_cnt
 
-        if self.app.window_state:
-            self.app.window_state.add_priority_callback(_add_data_to_state)
+        if self.app.window_statistics:
+            self.app.window_statistics.add_priority_callback(_add_data_to_state)
 
         self.register(self._add_allow_ip)
         self.register(self._add_block_ip)

@@ -116,4 +116,4 @@ class TestApiGateWay:
                     "arg_list": [1, 2],
                 },
             )
-            assert {"code": 1, "msg": "Not Found"} == resp.json()
+            assert {"code": 3, "msg": "Not Found"} == resp.json()
