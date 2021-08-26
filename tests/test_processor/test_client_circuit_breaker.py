@@ -21,7 +21,7 @@ class TestCircuitBreaker:
         rap_client.load_processor(
             [
                 HostCircuitBreakerProcessor(
-                    enable_cnt=1, window_statistics=WindowStatistics(interval=1, callback_interval=1)
+                    enable_cnt=1, window_statistics=WindowStatistics(interval=1, statistics_interval=1)
                 )
             ]
         )
@@ -42,7 +42,7 @@ class TestCircuitBreaker:
         rap_client.load_processor(
             [
                 FuncCircuitBreakerProcessor(
-                    enable_cnt=1, window_statistics=WindowStatistics(interval=1, callback_interval=1)
+                    enable_cnt=1, window_statistics=WindowStatistics(interval=1, statistics_interval=1)
                 )
             ]
         )

@@ -66,7 +66,7 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
     def start_event_handle(self, app: "BaseClient") -> None:
         self._window_statistics._metric_cache = app.cache
         if self._window_statistics.is_closed:
-            self._window_statistics.change_state()
+            self._window_statistics.statistics_data()
 
     def stop_event_handle(self, app: "BaseClient") -> None:
         if not self._window_statistics.is_closed:

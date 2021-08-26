@@ -111,7 +111,7 @@ class Server(object):
         self.cache: Cache = Cache(interval=cache_interval)
         self.window_statistics: WindowStatistics = window_statistics or WindowStatistics(interval=60)
         if self.window_statistics is not None and self.window_statistics.is_closed:
-            self.register_server_event(EventEnum.before_start, lambda _app: self.window_statistics.change_state())
+            self.register_server_event(EventEnum.before_start, lambda _app: self.window_statistics.statistics_data())
 
     def register_server_event(self, event: EventEnum, *event_handle_list: SERVER_EVENT_FN) -> None:
         """register server event handler
