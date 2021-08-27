@@ -5,6 +5,7 @@ from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common.collect_statistics import WindowStatistics
+from rap.common.exceptions import BaseRapError
 from rap.common.utils import Constant, EventEnum
 
 if TYPE_CHECKING:
@@ -23,9 +24,8 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
     def __init__(
         self,
         k: float = 2.0,  # google sre default
-        enable_cnt: int = 100,
-        expire: int = 120,
-        interval: int = 60,
+        expire: int = 180,
+        interval: int = 120,  # google sre default
         prefix: str = "circuit_breaker",
         window_statistics: Optional[WindowStatistics] = None,
     ):
@@ -35,10 +35,8 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
         :param expire: metric expire time
         :param interval: metric data change interval
         :param prefix: metric key prefix
-        :param enable_cnt: Set to enable when the total number of requests is greater than a certain value
         """
         self._prefix: str = prefix
-        self._enable_cnt: int = enable_cnt
         self._expire: int = expire
         self._interval: int = interval
         self._window_statistics: WindowStatistics = window_statistics or WindowStatistics()
@@ -84,17 +82,18 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
             return request
         index: str = self.get_index_from_request(request)
         total_key: str = f"{self._prefix}|{index}|total"
-        total: int = self._window_statistics.statistics_dict.get(total_key, 0)  # type: ignore
-        if total >= self._enable_cnt:
-            if random.randint(0, 100) < self._probability_dict.get(index, 0.0) * 100:
-                raise self.exc
-
         self._window_statistics.set_gauge_value(total_key, self._expire, self._interval)
+        if random.randint(0, 100) < self._probability_dict.get(index, 0.0) * 100:
+            error_key: str = f"{self._prefix}|{index}|error"
+            self._window_statistics.set_gauge_value(error_key, self._expire, self._interval)
+            raise self.exc
+
         return request
 
     async def process_exc(self, response: Response, exc: Exception) -> Tuple[Response, Exception]:
-        error_key: str = f"{self._prefix}|{self.get_index_from_response(response)}|error"
-        self._window_statistics.set_gauge_value(error_key, self._expire, self._interval)
+        if not (isinstance(exc, BaseRapError) and exc.status_code < 500):
+            error_key: str = f"{self._prefix}|{self.get_index_from_response(response)}|error"
+            self._window_statistics.set_gauge_value(error_key, self._expire, self._interval)
         return response, exc
 
 
