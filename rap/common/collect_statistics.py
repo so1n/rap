@@ -140,7 +140,8 @@ class WindowStatistics(object):
                 raise ValueError("different metric")
         self._metric_cache.add(key, expire, metric)
         if isinstance(metric, Gauge):
-            assert metric.diff <= self._max_interval
+            if not metric.diff <= self._max_interval:
+                raise ValueError(f"metric.{metric.name}.diff > {self._max_interval}")
             get_value_fn: Callable = partial(self.get_gauge_value, metric.name, diff=metric.diff)
             set_value_fn: Callable = partial(self._set_gauge_value, metric.name)
         else:

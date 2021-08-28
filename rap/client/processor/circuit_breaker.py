@@ -5,7 +5,6 @@ from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common.collect_statistics import WindowStatistics
-from rap.common.exceptions import BaseRapError
 from rap.common.utils import Constant, EventEnum
 
 if TYPE_CHECKING:
@@ -39,7 +38,12 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
         self._prefix: str = prefix
         self._expire: int = expire
         self._interval: int = interval
-        self._window_statistics: WindowStatistics = window_statistics or WindowStatistics()
+        self._window_statistics: WindowStatistics = window_statistics or WindowStatistics(max_interval=interval)
+        if self._window_statistics._max_interval < interval:
+            raise ValueError(
+                f"interval value:{interval} must <= "
+                f"{self._window_statistics.__class__.__name__}._max_interval:{self._window_statistics._max_interval}"
+            )
         self._probability_dict: Dict[str, float] = {}
 
         def upload_probability(stats_dict: Dict[Any, int]) -> None:
@@ -91,9 +95,8 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
         return request
 
     async def process_exc(self, response: Response, exc: Exception) -> Tuple[Response, Exception]:
-        if not (isinstance(exc, BaseRapError) and exc.status_code < 500):
-            error_key: str = f"{self._prefix}|{self.get_index_from_response(response)}|error"
-            self._window_statistics.set_gauge_value(error_key, self._expire, self._interval)
+        error_key: str = f"{self._prefix}|{self.get_index_from_response(response)}|error"
+        self._window_statistics.set_gauge_value(error_key, self._expire, self._interval)
         return response, exc
 
 
