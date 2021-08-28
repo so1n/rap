@@ -51,7 +51,7 @@ class TestTransport:
         mock_future.set_exception(asyncio.TimeoutError())
 
         with pytest.raises(asyncio.TimeoutError):
-            await rap_client.raw_call("sync_sum", [1, 2])
+            await rap_client.raw_invoke("sync_sum", [1, 2])
 
     async def test_write_timeout(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
         mock_future: asyncio.Future = asyncio.Future()
@@ -59,7 +59,7 @@ class TestTransport:
         mock_future.set_exception(asyncio.TimeoutError())
 
         with pytest.raises(asyncio.TimeoutError):
-            await rap_client.raw_call("sync_sum", [1, 2])
+            await rap_client.raw_invoke("sync_sum", [1, 2])
 
     async def test_write_raise_exc(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
         mock_future: asyncio.Future = asyncio.Future()
@@ -67,7 +67,7 @@ class TestTransport:
         mock_future.set_exception(Exception("demo"))
 
         with pytest.raises(Exception) as e:
-            await rap_client.raw_call("sync_sum", [1, 2])
+            await rap_client.raw_invoke("sync_sum", [1, 2])
 
         exec_msg: str = e.value.args[0]
         assert exec_msg == "demo"
@@ -78,7 +78,7 @@ class TestTransport:
         mock_future.set_exception(asyncio.TimeoutError())
 
         with pytest.raises(asyncio.TimeoutError) as e:
-            await rap_client.raw_call("sync_sum", [1, 2])
+            await rap_client.raw_invoke("sync_sum", [1, 2])
 
         exec_msg: str = e.value.args[0]
         assert exec_msg.endswith("request timeout")
@@ -89,7 +89,7 @@ class TestTransport:
         mock_future.set_result(None)
 
         with pytest.raises(ConnectionError) as e:
-            await rap_client.raw_call("sync_sum", [1, 2])
+            await rap_client.raw_invoke("sync_sum", [1, 2])
 
         exec_msg: str = e.value.args[0]
         assert exec_msg == "Connection has been closed"
@@ -191,7 +191,7 @@ class TestTransport:
         )
 
         with pytest.raises(RPCError) as e:
-            await rap_client.raw_call("sync_sum", [1, 2])
+            await rap_client.raw_invoke("sync_sum", [1, 2])
 
         exec_msg: str = e.value.args[0]
         assert exec_msg == f"request num must:{Constant.MSG_RESPONSE} not 202"
@@ -227,7 +227,7 @@ class TestTransport:
         )
 
         with pytest.raises(RpcRunTimeError) as e:
-            await rap_client.raw_call("sync_sum", [1, 2])
+            await rap_client.raw_invoke("sync_sum", [1, 2])
 
         exec_msg: str = e.value.args[0]
         assert exec_msg == "division by zero"

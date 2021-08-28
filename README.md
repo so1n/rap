@@ -57,7 +57,7 @@ except KeyboardInterrupt:
 ```
 
 ## Client
-The client supports to call the service by `raw_call` and `call` methods, but this can not fully use the functions of TypeHint, it is recommended to use `@client.register` to register the function and then call it.
+The client supports to invoke the service by `raw_invoke` and `invoke` methods, but this can not fully use the functions of TypeHint, it is recommended to use `@client.register` to register the function and then invoke it.
 
 Note: For `rap.client` there is no distinction between `async def` and `def`, but functions registered with `@client.register` can be used directly by the user, so functions decorated with `@client.register` should be similar to:
 ```Python
@@ -65,6 +65,7 @@ async def demo(): pass
 ```
 
 example:
+
 ```Python
 import asyncio
 from typing import AsyncIterator
@@ -76,39 +77,39 @@ client: "Client" = Client()  # init client
 
 # Declare a function with no function. The function name, function type and return type must be the same as the server side function (async def does not differ from def)
 def sync_sum(a: int, b: int) -> int:
-    pass
+  pass
 
 
 # The decorated function must be an async def function
 @client.register()
 async def sync_sum(a: int, b: int) -> int:
-    pass
+  pass
 
 
 # The decorated function must be the async def function, because the function is a generator syntax, to `yield` instead of `pass`
 @client.register()
 async def async_gen(a: int) -> AsyncIterator:
-    yield
+  yield
 
 
 async def main():
-    client.add_conn("localhost", 9000)
-    await client.start()
-    # Call the call method; read the function name and then call `raw_call`.
-    print(f"call result: {await client.call(sync_sum, 1, 2)}")
-    # Basic calls to rap.client
-    print(f"raw call result: {await client.raw_call('sync_sum', 1, 2)}")
+  client.add_conn("localhost", 9000)
+  await client.start()
+  # Call the invoke method; read the function name and then invoke `raw_invoke`.
+  print(f"invoke result: {await client.invoke(sync_sum, 1, 2)}")
+  # Basic calls to rap.client
+  print(f"raw invoke result: {await client.raw_invoke('sync_sum', 1, 2)}")
 
-    # Functions registered through `@client.register` can be used directly
-    # await async_sum(1,3) == await client.raw_call('async_sum', 1, 2)
-    # It is recommended to use the @client.register method, which can be used by tools such as IDE to determine whether the parameter type is wrong
-    print(f"decorator result: {await sync_sum(1, 3)}")
-    async_gen_result: list = []
+  # Functions registered through `@client.register` can be used directly
+  # await async_sum(1,3) == await client.raw_invoke('async_sum', 1, 2)
+  # It is recommended to use the @client.register method, which can be used by tools such as IDE to determine whether the parameter type is wrong
+  print(f"decorator result: {await sync_sum(1, 3)}")
+  async_gen_result: list = []
 
-    # Example of an asynchronous generator, which by default opens or reuses the current session of the rap (about the session will be mentioned below)
-    async for i in async_gen(10):
-        async_gen_result.append(i)
-    print(f"async gen result:{async_gen_result}")
+  # Example of an asynchronous generator, which by default opens or reuses the current session of the rap (about the session will be mentioned below)
+  async for i in async_gen(10):
+    async_gen_result.append(i)
+  print(f"async gen result:{async_gen_result}")
 
 
 asyncio.run(main())
@@ -149,9 +150,9 @@ server.register(demo2, name='demo2-alias')   # Register with the value of `name`
 server.register(demo2, group='new-correlation_id')    # Register and set the groups to be registered
 server.register(demo2, group='root', is_private=True)  # Register and set the correlation_id to be registered, and set it to private
 ```
-For clients, it is recommended to use `client.register` instead of `client.call`, `client.raw_call`.
+For clients, it is recommended to use `client.register` instead of `client.invoke`, `client.raw_invoke`.
 `client.register` uses Python syntax to define function names, arguments, parameter types, and return value types,
-It allows the caller to call the function as if it were a normal function, and the function can be checked through tools using the TypeHint feature.
+It allows the caller to invoke the function as if it were a normal function, and the function can be checked through tools using the TypeHint feature.
 Note: When using `client.register`, be sure to use `async def ... `.
 ```Python
 from typing import AsyncIterator
@@ -210,7 +211,7 @@ async def async_gen(a: int) -> AsyncIterator[int]:
 
 async def no_param_run():
   # The rap internal implementation uses the session implicitly via the `contextvar` module
-  print(f"sync result: {await client.call(sync_sum, 1, 2)}")
+  print(f"sync result: {await client.invoke(sync_sum, 1, 2)}")
   print(f"async result: {await async_sum(1, 3)}")
 
   # The asynchronous generator detects if a session is enabled, and if so, it automatically reuses the current session, otherwise it creates a session
@@ -220,8 +221,8 @@ async def no_param_run():
 
 async def param_run(session: "Session"):
   # By explicitly passing the session parameters in
-  print(f"sync result: {await client.call(sync_sum, 1, 2, session=session)}")
-  print(f"sync result: {await client.raw_call('sync_sum', 1, 2, session=session)}")
+  print(f"sync result: {await client.invoke(sync_sum, 1, 2, session=session)}")
+  print(f"sync result: {await client.raw_invoke('sync_sum', 1, 2, session=session)}")
   # May be a bit unfriendly
   print(f"async result: {await async_sum(1, 3, session=session)}")
 
@@ -231,8 +232,8 @@ async def param_run(session: "Session"):
 
 
 async def execute(session: "Session"):
-  # The best way to call a session explicitly, using a method similar to the mysql cursor
-  # execute will automatically recognize the type of call
+  # The best way to invoke a session explicitly, using a method similar to the mysql cursor
+  # execute will automatically recognize the type of invoke
   print(f"sync result: {await session.execute(sync_sum, arg_list=[1, 2])}")
   print(f"sync result: {await session.execute('sync_sum', arg_list=[1, 2])}")
   print(f"async result: {await session.execute(async_sum(1, 3))}")
@@ -243,14 +244,14 @@ async def execute(session: "Session"):
 
 
 async def run_once():
-    client.add_conn("localhost", 9000)
-    await client.start()
-    # init session
-    async with client.session as s:
-        await no_param_run()
-        await param_run(s)
-        await execute(s)
-    await client.stop()
+  client.add_conn("localhost", 9000)
+  await client.start()
+  # init session
+  async with client.session as s:
+    await no_param_run()
+    await param_run(s)
+    await execute(s)
+  await client.stop()
 ```
 ## 3.3.channel
 [example](https://github.com/so1n/rap/tree/master/example/channel)
@@ -346,7 +347,7 @@ server.load_after_stop_event([mock_stop()])
   The `dispatch` method will pass in a conn object, and then determine whether to release it according to the rules (return await self.call_next(conn)) or reject it (await conn.close)
 - Message middleware: only supports normal function calls (no support for `Channel`), similar to the use of `starlette` middleware
   reference [access.py](https://github.com/so1n/rap/blob/master/rap/server/middleware/msg/access.py)
-  Message middleware will pass in 4 parameters: request(current request object), call_id(current call id), func(current call function), param(current parameter) and request to return call_id and result(function execution result or exception object)
+  Message middleware will pass in 4 parameters: request(current request object), call_id(current invoke id), func(current invoke function), param(current parameter) and request to return call_id and result(function execution result or exception object)
 
 In addition, the middleware supports `start_event_handle` and `stop_event_handle` methods, which are called when the `Server` starts and shuts down respectively.
 

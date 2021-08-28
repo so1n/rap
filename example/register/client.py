@@ -31,12 +31,12 @@ async def async_gen(a: int) -> AsyncIterator[int]:
 async def main() -> None:
     await client.start()
     # client auto use func name
-    print(f"call result: {await client.call(sync_sum, [1, 2])}")
-    # call function according to protocol
-    print(f"raw call result: {await client.raw_call('sync_sum', [1, 2])}")
+    print(f"invoke result: {await client.invoke(sync_sum, [1, 2])}")
+    # invoke function according to protocol
+    print(f"raw invoke result: {await client.raw_invoke('sync_sum', [1, 2])}")
     # use decorator, client will auto register `sync_sum` func,
-    # when you call the decorated function,
-    # the action(await sync_sum(1, 3)) is like await client.raw_call('sync_sum', 1, 3)
+    # when you invoke the decorated function,
+    # the action(await sync_sum(1, 3)) is like await client.raw_invoke('sync_sum', 1, 3)
     print(f"decorator result: {await alias_sync_sum(1, 3)}")
     print(f"decorator result: {await default_param(1)}")
     async_gen_result: list = []

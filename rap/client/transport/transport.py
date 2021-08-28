@@ -159,7 +159,7 @@ class Transport(object):
     async def read_from_conn(self, conn: Connection) -> Optional[Response]:
         """read response from conn, only use in declare lifecycle"""
         if conn.conn_id:
-            raise rap_exc.RPCError("conn already declare, can not call read_from_conn")
+            raise rap_exc.RPCError("conn already declare, can not invoke read_from_conn")
         response, exc = await self._read_from_conn(conn)
         if exc:
             raise exc

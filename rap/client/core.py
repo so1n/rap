@@ -56,8 +56,8 @@ class AsyncIteratorCall:
 
     async def __anext__(self) -> Any:
         """
-        The server will return the call id of the generator function,
-        and the client can continue to get data based on the call id.
+        The server will return the invoke id of the generator function,
+        and the client can continue to get data based on the invoke id.
         If no data, the server will return status_code = 301 and client must raise StopAsyncIteration Error.
         """
         response: Response = await self._client.transport.request(
@@ -159,7 +159,7 @@ class BaseClient:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             header: Optional[dict] = kwargs.pop("header", None)
-            result: Any = await self.raw_call(name, param_handle(func, args, kwargs), group=group, header=header)
+            result: Any = await self.raw_invoke(name, param_handle(func, args, kwargs), group=group, header=header)
             if not is_type(return_type, type(result)):
                 raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
             return result
@@ -210,15 +210,15 @@ class BaseClient:
         """Whether the client is closed"""
         return self.endpoint.is_close
 
-    async def raw_call(
+    async def raw_invoke(
         self,
         name: str,
         arg_param: Optional[Sequence[Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
     ) -> Any:
-        """rpc client base call method
-        Note: This method does not support parameter type checking, nor does it support channels;
+        """rpc client base invoke method
+        Note: This method does not support parameter type checking, not support channels;
         name: func name
         args: func param
         header: request's header
@@ -228,28 +228,30 @@ class BaseClient:
         response = await self.transport.request(name, conn_list, arg_param, group=group, header=header)
         return response.body["result"]
 
-    async def call(
+    async def invoke(
         self,
         func: Callable,
-        arg_param: Sequence[Any],
+        arg_param: Sequence[Any] = None,
         kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
     ) -> Any:
-        """automatically resolve function names and call raw_call
+        """automatically resolve function names and call raw_invoke
         func: rpc func
         args: func param
         kwargs_param: func kwargs param
         header: request's header
         group: func group, default value is `default`
         """
+        if not arg_param:
+            arg_param = ()
         if not kwarg_param:
             kwarg_param = {}
-        return await self.raw_call(
+        return await self.raw_invoke(
             func.__name__, param_handle(func, arg_param, kwarg_param), group=group, header=header
         )
 
-    async def iterator_call(
+    async def iterator_invoke(
         self,
         func: Callable,
         arg_param: Sequence[Any],
@@ -257,7 +259,7 @@ class BaseClient:
         header: Optional[dict] = None,
         group: Optional[str] = None,
     ) -> Any:
-        """Python-specific generator call
+        """Python-specific generator invoke
         func: rap func
         args: func param
         kwargs_param: func kwargs param
@@ -271,12 +273,13 @@ class BaseClient:
         ):
             yield result
 
-    def inject(self, func: Callable, name: str = "", group: Optional[str] = None) -> None:
+    def inject(self, func: Callable, name: str = "", group: Optional[str] = None) -> RapFunc:
         """Replace the function with `RapFunc` and inject it into the client at the same time"""
         if isinstance(func, RapFunc):
             raise RuntimeError(f"{func} already inject or register")
-        new_func: Callable = self.register(name=name, group=group)(func)
+        new_func: RapFunc = self.register(name=name, group=group)(func)
         sys.modules[func.__module__].__setattr__(func.__name__, new_func)
+        return new_func
 
     @staticmethod
     def recovery(func: RapFunc) -> None:

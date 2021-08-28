@@ -27,13 +27,13 @@ class TestCircuitBreaker:
         )
         for _ in range(10):
             try:
-                await rap_client.raw_call("not_found_func")
+                await rap_client.raw_invoke("not_found_func")
             except Exception:
                 pass
         await asyncio.sleep(1.2)
 
         with pytest.raises(CircuitBreakerExc) as e:
-            await rap_client.raw_call("not_found_func")
+            await rap_client.raw_invoke("not_found_func")
 
         exec_msg: str = e.value.args[0]
         assert exec_msg == "Service Unavailable"
@@ -48,13 +48,13 @@ class TestCircuitBreaker:
         )
         for _ in range(10):
             try:
-                await rap_client.raw_call("not_found_func")
+                await rap_client.raw_invoke("not_found_func")
             except Exception:
                 pass
         await asyncio.sleep(1.2)
 
         with pytest.raises(CircuitBreakerExc) as e:
-            await rap_client.raw_call("not_found_func")
+            await rap_client.raw_invoke("not_found_func")
 
         exec_msg: str = e.value.args[0]
         assert exec_msg == "Service's func Unavailable"

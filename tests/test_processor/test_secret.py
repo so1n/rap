@@ -108,12 +108,12 @@ class TestServerCryptoProcess:
         rap_server.load_processor([middleware])
         middleware.start_event_handle(rap_server)
 
-        await rap_client.raw_call("modify_crypto_timeout", [10], group=middleware.__class__.__name__)
+        await rap_client.raw_invoke("modify_crypto_timeout", [10], group=middleware.__class__.__name__)
         assert middleware._timeout == 10
-        await rap_client.raw_call("modify_crypto_nonce_timeout", [11], group=middleware.__class__.__name__)
+        await rap_client.raw_invoke("modify_crypto_nonce_timeout", [11], group=middleware.__class__.__name__)
         assert middleware._nonce_timeout == 11
-        assert ["test"] == await rap_client.raw_call("get_crypto_key_id_list", group=middleware.__class__.__name__)
-        await rap_client.raw_call(
+        assert ["test"] == await rap_client.raw_invoke("get_crypto_key_id_list", group=middleware.__class__.__name__)
+        await rap_client.raw_invoke(
             "load_aes_key_dict", [{"test1": "1234567890123456"}], group=middleware.__class__.__name__
         )
-        await rap_client.raw_call("remove_aes", ["test1"], group=middleware.__class__.__name__)
+        await rap_client.raw_invoke("remove_aes", ["test1"], group=middleware.__class__.__name__)

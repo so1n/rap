@@ -68,12 +68,12 @@ class TestServerConnHandle:
         future.set_exception(Exception())
         mocker.patch("rap.server.receiver.Receiver.dispatch").return_value = future
         with pytest.raises(ServerError):
-            await rap_client.raw_call("sync_sum", [1, 2])
+            await rap_client.raw_invoke("sync_sum", [1, 2])
 
     async def test_receive_error_msg(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
         mocker.patch("rap.server.model.Request.from_msg").side_effect = Exception()
         with pytest.raises(ConnectionError) as e:
-            await rap_client.raw_call("sync_sum", [1, 2])
+            await rap_client.raw_invoke("sync_sum", [1, 2])
 
         exec_msg = e.value.args[0]
         assert exec_msg == "recv close conn event, event info:protocol error"
@@ -84,7 +84,7 @@ class TestServerConnHandle:
         mock_future.set_exception(asyncio.TimeoutError())
 
         with pytest.raises(ConnectionError) as e:
-            await rap_client.raw_call("sync_sum", [1, 2])
+            await rap_client.raw_invoke("sync_sum", [1, 2])
 
         exec_msg = e.value.args[0]
         assert exec_msg == "recv close conn event, event info:keep alive timeout"
@@ -98,7 +98,7 @@ class TestRequestHandle:
         # self.msg_type, msg_id, self.correlation_id, self.target, self.header, self.body
 
         with pytest.raises(ServerError) as e:
-            await rap_client.raw_call("sync_sum", [1, 2])
+            await rap_client.raw_invoke("sync_sum", [1, 2])
 
         exec_msg = e.value.args[0]
         assert exec_msg == "Illegal request"
@@ -109,7 +109,7 @@ class TestRequestHandle:
         mocker.patch("rap.server.receiver.param_handle").side_effect = Exception()
 
         with pytest.raises(RpcRunTimeError) as e:
-            await rap_client.raw_call("sync_sum", [1, 2])
+            await rap_client.raw_invoke("sync_sum", [1, 2])
 
         exec_msg = e.value.args[0]
         assert exec_msg == "Rpc run time error"

@@ -24,8 +24,8 @@ async def async_gen(a: int) -> AsyncIterator[int]:
 
 async def main() -> None:
     await client.start()
-    print(f"sync result: {await client.call(sync_sum, [1, 2])}")
-    print(f"sync result: {await client.raw_call('sync_sum', [1, 2])}")
+    print(f"sync result: {await client.invoke(sync_sum, [1, 2])}")
+    print(f"sync result: {await client.raw_invoke('sync_sum', [1, 2])}")
 
     print(f"async result: {await async_sum(1, 3)}")
     async for i in async_gen(10):
