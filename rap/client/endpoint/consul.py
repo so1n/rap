@@ -43,9 +43,8 @@ class ConsulEndpoint(BaseEndpoint):
         )
         self._watch_future: asyncio.Future = asyncio.Future()
         self._watch_future.set_result(True)
-        super().__init__(
-            server_name, timeout, ssl_crt_path, select_conn_method, pack_param=pack_param, unpack_param=unpack_param
-        )
+        super().__init__(timeout, ssl_crt_path, select_conn_method, pack_param=pack_param, unpack_param=unpack_param)
+        self.server_name: str = server_name
 
     async def stop(self) -> None:
         await super().stop()

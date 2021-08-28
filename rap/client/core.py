@@ -11,6 +11,7 @@ from rap.client.transport.transport import Transport
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common import event
 from rap.common.cache import Cache
+from rap.common.collect_statistics import WindowStatistics
 from rap.common.conn import Connection
 from rap.common.types import is_type
 from rap.common.utils import EventEnum, RapFunc, param_handle
@@ -80,10 +81,17 @@ class BaseClient:
         endpoint: BaseEndpoint,
         timeout: Optional[int] = None,
         cache_interval: Optional[float] = None,
+        ws_min_interval: Optional[int] = None,
+        ws_max_interval: Optional[int] = None,
+        ws_statistics_interval: Optional[int] = None,
     ):
         """
-        endpoint: rap endpoint
-        read_timeout: read msg from future timeout
+        :param endpoint: rap endpoint
+        :param timeout: read msg from future timeout
+        :param cache_interval: Cache auto scan expire key interval
+        :param ws_min_interval: WindowStatistics time per window
+        :param ws_max_interval: WindowStatistics Window capacity
+        :param ws_statistics_interval: WindowStatistics Statistical data interval from window
         """
         self.server_name: str = server_name
         self.endpoint: BaseEndpoint = endpoint
@@ -93,6 +101,9 @@ class BaseClient:
             value: [] for value in EventEnum.__members__.values()
         }
         self.cache: Cache = Cache(interval=cache_interval)
+        self.window_statistics: WindowStatistics = WindowStatistics(
+            interval=ws_min_interval, max_interval=ws_max_interval, statistics_interval=ws_statistics_interval
+        )
 
         self.endpoint.set_transport(self.transport)
 
@@ -102,18 +113,18 @@ class BaseClient:
     async def stop(self) -> None:
         """close client transport"""
         for handler in self._event_dict[EventEnum.before_end]:
-            handler(self)
+            handler(self)  # type: ignore
         await self.endpoint.stop()
         for handler in self._event_dict[EventEnum.after_end]:
-            handler(self)
+            handler(self)  # type: ignore
 
     async def start(self) -> None:
         """Create client transport"""
         for handler in self._event_dict[EventEnum.before_start]:
-            handler(self)
+            handler(self)  # type: ignore
         await self.endpoint.start()
         for handler in self._event_dict[EventEnum.after_start]:
-            handler(self)
+            handler(self)  # type: ignore
 
     def register_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
         self.transport.register_event_handle(event_class, fn)
@@ -126,15 +137,15 @@ class BaseClient:
 
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:
         for processor in processor_list:
-            processor.app = self
+            processor.app = self  # type: ignore
             for event_type, handle in processor.event_dict.items():
                 self._event_dict[event_type].extend(handle)
         if not self.is_close:
             for processor in processor_list:
                 for handler in processor.event_dict.get(EventEnum.before_start, []):
-                    handler(self)
+                    handler(self)  # type: ignore
                 for handler in processor.event_dict.get(EventEnum.after_start, []):
-                    handler(self)
+                    handler(self)  # type: ignore
         self.transport.load_processor(processor_list)
 
     #####################
@@ -317,6 +328,9 @@ class Client(BaseClient):
         keep_alive_timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
         cache_interval: Optional[float] = None,
+        ws_min_interval: Optional[int] = None,
+        ws_max_interval: Optional[int] = None,
+        ws_statistics_interval: Optional[int] = None,
         select_conn_method: SelectConnEnum = SelectConnEnum.random,
     ):
         """
@@ -330,15 +344,20 @@ class Client(BaseClient):
         timeout: read response from consumer timeout
         keep_alive_timeout: read msg from conn timeout
         """
+        local_endpoint: LocalEndpoint = LocalEndpoint(
+            conn_list,
+            ssl_crt_path=ssl_crt_path,
+            timeout=keep_alive_timeout,
+            pack_param=None,
+            unpack_param=None,
+            select_conn_method=select_conn_method,
+        )
         super().__init__(
             server_name,
-            LocalEndpoint(
-                server_name,
-                conn_list,
-                ssl_crt_path=ssl_crt_path,
-                timeout=keep_alive_timeout,
-                select_conn_method=select_conn_method,
-            ),
+            local_endpoint,
             timeout,
             cache_interval=cache_interval,
+            ws_min_interval=ws_min_interval,
+            ws_max_interval=ws_max_interval,
+            ws_statistics_interval=ws_statistics_interval,
         )

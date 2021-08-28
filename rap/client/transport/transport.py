@@ -193,13 +193,15 @@ class Transport(object):
             exc = e
         return response, exc
 
-    async def declare(self, server_name: str, conn: Connection) -> None:
+    async def declare(self, conn: Connection) -> None:
         """
         After conn is initialized, connect to the server and initialize the connection resources.
         Only include server_name and get conn id two functions, if you need to expand the function,
           you need to process the request and response of the declared life cycle through the processor
         """
-        await self.write_to_conn(Request.from_event(self.app, event.DeclareEvent({"server_name": server_name})), conn)
+        await self.write_to_conn(
+            Request.from_event(self.app, event.DeclareEvent({"server_name": self.app.server_name})), conn
+        )
         response: Optional[Response] = await self.read_from_conn(conn)
 
         exc: Exception = ConnectionError("create conn error")

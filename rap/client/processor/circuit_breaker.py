@@ -19,6 +19,7 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
     """The simplest circuit breaker based on the idea of google sre document"""
 
     exc: Exception = NotImplementedError()
+    _window_statistics: WindowStatistics
 
     def __init__(
         self,
@@ -38,12 +39,9 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
         self._prefix: str = prefix
         self._expire: int = expire
         self._interval: int = interval
-        self._window_statistics: WindowStatistics = window_statistics or WindowStatistics(max_interval=interval)
-        if self._window_statistics._max_interval < interval:
-            raise ValueError(
-                f"interval value:{interval} must <= "
-                f"{self._window_statistics.__class__.__name__}._max_interval:{self._window_statistics._max_interval}"
-            )
+        if window_statistics:
+            self._window_statistics = window_statistics
+
         self._probability_dict: Dict[str, float] = {}
 
         def upload_probability(stats_dict: Dict[Any, int]) -> None:
@@ -66,7 +64,13 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
         }
 
     def start_event_handle(self, app: "BaseClient") -> None:
-        self._window_statistics._metric_cache = app.cache
+        if not getattr(self, "_window_statistics", None):
+            self._window_statistics = app.window_statistics
+        if self._window_statistics._max_interval < self._interval:
+            raise ValueError(
+                f"interval value:{self._interval} must <= "
+                f"{self._window_statistics.__class__.__name__}._max_interval:{self._window_statistics._max_interval}"
+            )
         if self._window_statistics.is_closed:
             self._window_statistics.statistics_data()
 

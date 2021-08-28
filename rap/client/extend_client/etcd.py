@@ -13,6 +13,9 @@ class Client(BaseClient):
         keep_alive_timeout: int = 1200,
         ssl_crt_path: Optional[str] = None,
         cache_interval: Optional[float] = None,
+        ws_min_interval: Optional[int] = None,
+        ws_max_interval: Optional[int] = None,
+        ws_statistics_interval: Optional[int] = None,
         select_conn_method: SelectConnEnum = SelectConnEnum.random,
         # etcd client param
         etcd_host: str = "localhost",
@@ -40,4 +43,7 @@ class Client(BaseClient):
             ),
             timeout,
             cache_interval=cache_interval,
+            ws_min_interval=ws_min_interval,
+            ws_max_interval=ws_max_interval,
+            ws_statistics_interval=ws_statistics_interval,
         )

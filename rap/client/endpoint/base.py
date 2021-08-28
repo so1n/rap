@@ -16,7 +16,6 @@ class SelectConnEnum(Enum):
 class BaseEndpoint(object):
     def __init__(
         self,
-        server_name: str,
         timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
         select_conn_method: Optional[SelectConnEnum] = None,
@@ -24,7 +23,6 @@ class BaseEndpoint(object):
         unpack_param: Optional[dict] = None,
     ) -> None:
         """
-        server_name: server name
         conn_list: client conn info
           include ip, port, weight
           ip: server ip
@@ -33,7 +31,6 @@ class BaseEndpoint(object):
           e.g.  [{"ip": "localhost", "port": "9000", weight: 10}]
         timeout: read response from consumer timeout
         """
-        self.server_name: str = server_name
         self._transport: Optional[Transport] = None
         self._host_weight_list: List[str] = []
         self._timeout: int = timeout or 1200
@@ -95,7 +92,7 @@ class BaseEndpoint(object):
                 logging.exception(f"close conn error: {e}")
 
         await conn.connect()
-        await self._transport.declare(self.server_name, conn)
+        await self._transport.declare(conn)
         self._connected_cnt += 1
         conn.listen_future = asyncio.ensure_future(self._transport.listen(conn))
         conn.listen_future.add_done_callback(lambda f: _conn_done(f))

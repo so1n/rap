@@ -91,7 +91,7 @@ class WindowStatistics(object):
         :param interval: Minimum statistical period, default 1
         :param max_interval: Maximum statistical period(counter expire timestamp = max_interval + 5), default 60
 
-        :param statistics_interval: call callback interval, default max_interval // 2
+        :param statistics_interval: call callback interval, default min(max_interval // 3, 10)
         :param statistics_callback_set: The callback set when the bucket is switched,
             the parameter of the callback is the data of the available bucket.
             Data can be obtained through this callback
@@ -109,7 +109,7 @@ class WindowStatistics(object):
         """
         self._interval: int = interval or 1
         self._max_interval: int = max_interval or 60
-        self._statistics_interval: int = statistics_interval or self._max_interval // 2
+        self._statistics_interval: int = statistics_interval or min((self._max_interval - self._interval) // 3, 10)
         self._statistics_callback_set: Set[Callable] = statistics_callback_set or set()
         self._statistics_callback_priority_set: Set[Callable] = statistics_callback_priority_set or set()
         self._statistics_callback_wait_cnt: int = statistics_callback_wait_cnt
