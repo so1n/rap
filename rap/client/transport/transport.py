@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import logging
 import random
+import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 from rap.client.model import Request, Response
@@ -71,6 +72,32 @@ class Transport(object):
             raise KeyError(f"{event_name}")
         self._event_handle_dict[event_name.event_name].remove(fn)
 
+    async def ping_event(
+        self,
+        conn: Connection,
+        ping_sleep_time: Optional[int] = None,
+        ping_fail_cnt: Optional[int] = 3,
+        wait_server_recover: bool = False,
+    ) -> None:
+        if not ping_sleep_time:
+            ping_sleep_time = 30
+        if not ping_fail_cnt:
+            ping_fail_cnt = 3
+        while True:
+            diff_time: int = int(time.time()) - conn.last_ping_timestamp
+            priority: int = min(diff_time // ping_sleep_time, ping_fail_cnt)
+            conn.priority = priority
+            logging.debug("conn:%s priority:%s RTT:%s", conn.peer_tuple, priority, conn.RTT)
+            if priority == ping_fail_cnt and not wait_server_recover:
+                logging.error(f"ping {conn.sock_tuple} timeout... exit")
+                return
+            else:
+                try:
+                    await self.write_to_conn(Request.from_event(self.app, event.PingEvent({"time": time.time()})), conn)
+                except Exception as e:
+                    logging.debug(f"{conn} ping event exit.. error:{e}")
+            await asyncio.sleep(ping_sleep_time)
+
     async def listen(self, conn: Connection) -> None:
         """listen server msg from conn"""
         logging.debug("listen:%s start", conn.peer_tuple)
@@ -135,6 +162,9 @@ class Transport(object):
                 raise event_exc
             elif response.func_name == Constant.PING_EVENT:
                 await self.write_to_conn(Request.from_event(self.app, event.PongEvent("")), conn)
+            elif response.func_name == Constant.PONG_EVENT:
+                conn.last_ping_timestamp = int(time.time())
+                conn.RTT = time.time() - response.body["time"]
             elif response.func_name == Constant.DECLARE:
                 if not response.body.get("result"):
                     raise rap_exc.AuthError("Declare error")

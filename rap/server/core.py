@@ -275,6 +275,11 @@ class Server(object):
 
         await self.run_event_list(EventEnum.before_end)
 
+        # Stop accepting new connections.
+        if self._server:
+            self._server.close()
+            await self._server.wait_closed()
+
         # Notify the client that the server is ready to shut down
         async def send_shutdown_event(_conn: ServerConnection) -> None:
             # conn may be closed
@@ -289,11 +294,6 @@ class Server(object):
 
         task_list: List[Coroutine] = [send_shutdown_event(conn) for conn in self._connected_set if not conn.is_closed()]
         await asyncio.gather(*task_list)
-
-        # Stop accepting new connections.
-        if self._server:
-            self._server.close()
-            await self._server.wait_closed()
 
         # until connections close
         logging.info("Waiting for connections to close. (CTRL+C to force quit)")

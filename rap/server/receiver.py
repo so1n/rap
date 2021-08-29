@@ -22,7 +22,7 @@ from typing import (
 
 from rap.common.channel import BaseChannel
 from rap.common.conn import ServerConnection
-from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent
+from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent, PongEvent
 from rap.common.exceptions import (
     BaseRapError,
     ChannelError,
@@ -372,6 +372,8 @@ class Receiver(object):
         if request.func_name == Constant.PONG_EVENT:
             self._keepalive_timestamp = int(time.time())
             return None
+        elif request.func_name == Constant.PING_EVENT:
+            response.set_event(PongEvent({"time": request.body["time"]}))
         elif request.func_name == Constant.DECLARE:
             if request.body.get("server_name") != self._app.server_name:
                 response.set_event(CloseConnEvent("error server name"))

@@ -16,6 +16,9 @@ class LocalEndpoint(BaseEndpoint):
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
         select_conn_method: Optional[SelectConnEnum] = None,
+        ping_sleep_time: Optional[int] = None,
+        ping_fail_cnt: Optional[int] = None,
+        wait_server_recover: bool = True,
     ):
         """
         server_name: server name
@@ -28,7 +31,16 @@ class LocalEndpoint(BaseEndpoint):
         timeout: read response from consumer timeout
         """
         self._conn_list: List[dict] = conn_list
-        super().__init__(timeout, ssl_crt_path, select_conn_method, pack_param=pack_param, unpack_param=unpack_param)
+        super().__init__(
+            timeout,
+            ssl_crt_path,
+            select_conn_method,
+            pack_param=pack_param,
+            unpack_param=unpack_param,
+            ping_fail_cnt=ping_fail_cnt,
+            ping_sleep_time=ping_sleep_time,
+            wait_server_recover=wait_server_recover,
+        )
 
     async def start(self) -> None:
         if not self.is_close:

@@ -21,6 +21,9 @@ class BaseEndpoint(object):
         select_conn_method: Optional[SelectConnEnum] = None,
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
+        ping_sleep_time: Optional[int] = None,
+        ping_fail_cnt: Optional[int] = None,
+        wait_server_recover: bool = True,
     ) -> None:
         """
         conn_list: client conn info
@@ -37,6 +40,10 @@ class BaseEndpoint(object):
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._pack_param: Optional[dict] = pack_param
         self._unpack_param: Optional[dict] = unpack_param
+
+        self._ping_sleep_time: Optional[int] = ping_sleep_time
+        self._ping_fail_cnt: Optional[int] = ping_fail_cnt
+        self._wait_server_recover: bool = wait_server_recover
 
         self._connected_cnt: int = 0
         self._conn_dict: Dict[str, Connection] = {}
@@ -96,6 +103,16 @@ class BaseEndpoint(object):
         self._connected_cnt += 1
         conn.listen_future = asyncio.ensure_future(self._transport.listen(conn))
         conn.listen_future.add_done_callback(lambda f: _conn_done(f))
+        conn.ping_future = asyncio.ensure_future(
+            self._transport.ping_event(
+                conn,
+                ping_sleep_time=self._ping_sleep_time,
+                ping_fail_cnt=self._ping_fail_cnt,
+                wait_server_recover=self._wait_server_recover,
+            )
+        )
+        if not self._wait_server_recover:
+            conn.ping_future.add_done_callback(lambda f: conn.close())
         logging.debug("Connection to %s...", conn.connection_info)
 
         self._host_weight_list.extend([key for _ in range(weight)])

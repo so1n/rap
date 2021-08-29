@@ -2,12 +2,14 @@ import asyncio
 import logging
 import random
 import ssl
+import time
 from typing import Any, Optional, Tuple
 
 import msgpack
 
+from rap.common.state import State
 from rap.common.types import READER_TYPE, UNPACKER_TYPE, WRITER_TYPE
-from rap.common.utils import Constant
+from rap.common.utils import Constant, del_future
 
 __all__ = ["Connection", "ServerConnection"]
 
@@ -30,6 +32,7 @@ class BaseConnection:
         self._max_msg_id: int = 65535
         self._msg_id: int = random.randrange(self._max_msg_id)
         self.conn_id: str = ""
+        self.state: State = State()
 
         self.conn_future: asyncio.Future = asyncio.Future()
         self.peer_tuple: Tuple[str, int] = ("", -1)
@@ -126,11 +129,16 @@ class Connection(BaseConnection):
             weight = 0
         self.weight: int = weight
         self._ssl_crt_path: Optional[str] = ssl_crt_path
-
-        self.listen_future: asyncio.Future = asyncio.Future()
         self.connection_info: str = f"{host}:{port}"
 
+        self.listen_future: asyncio.Future = asyncio.Future()
         self.listen_future.set_result(True)
+
+        self.ping_future: asyncio.Future = asyncio.Future()
+        self.priority: int = 0
+        self.last_ping_timestamp: int = int(time.time())
+        self.RTT: float = 0.0
+        self.ping_future.set_result(True)
 
     async def connect(self) -> None:
         ssl_context: Optional[ssl.SSLContext] = None
@@ -149,11 +157,10 @@ class Connection(BaseConnection):
     def is_closed(self) -> bool:
         return super(Connection, self).is_closed() or self.listen_future.done()
 
-    async def await_close(self) -> None:
-        if not self.listen_future.cancelled():
-            self.listen_future.cancel()
-        if not super(Connection, self).is_closed():
-            await super(Connection, self).await_close()
+    def close(self) -> None:
+        del_future(self.listen_future)
+        del_future(self.ping_future)
+        super(Connection, self).close()
 
 
 class ServerConnection(BaseConnection):
