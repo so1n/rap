@@ -53,20 +53,21 @@ async def websocket_route_func(websocket: WebSocket) -> None:
 
     rap_client: Client = rap_client_dict[server_name]
     try:
-        async with rap_client.transport.channel(func_name, rap_client.get_conn(), group) as channel:
-            await websocket.send_json({"code": 0, "data": "accept"})
+        async with rap_client.endpoint.picker() as conn:
+            async with rap_client.transport.channel(func_name, conn, group) as channel:
+                await websocket.send_json({"code": 0, "data": "accept"})
 
-            async def send() -> None:
-                while True:
-                    await websocket.send_json({"code": 0, "data": await channel.read_body()})
-
-            async def receive() -> None:
-                try:
+                async def send() -> None:
                     while True:
-                        await channel.write(await websocket.receive_text())
-                except WebSocketDisconnect:
-                    websocket.application_state = WebSocketState.DISCONNECTED
-                    logging.info("receive client close event, close websocket and rap channel")
+                        await websocket.send_json({"code": 0, "data": await channel.read_body()})
+
+                async def receive() -> None:
+                    try:
+                        while True:
+                            await channel.write(await websocket.receive_text())
+                    except WebSocketDisconnect:
+                        websocket.application_state = WebSocketState.DISCONNECTED
+                        logging.info("receive client close event, close websocket and rap channel")
 
             send_future: asyncio.Future = asyncio.ensure_future(send())
             receive_future: asyncio.Future = asyncio.ensure_future(receive())

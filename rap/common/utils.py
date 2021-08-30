@@ -196,6 +196,16 @@ def del_future(future: asyncio.Future) -> None:
         future.result()
 
 
+class Semaphore(asyncio.Semaphore):
+    def __init__(self, value: int = 1, *, loop: asyncio.AbstractEventLoop = None):
+        self.raw_value: int = value
+        super(Semaphore, self).__init__(value, loop=loop)
+
+    @property
+    def value(self) -> int:
+        return self._value
+
+
 class EventEnum(Enum):
     before_start = auto()
     after_start = auto()

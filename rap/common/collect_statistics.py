@@ -35,6 +35,9 @@ class Metric(object):
     def get_value(self) -> float:
         raise RuntimeError("Not Implemented")
 
+    def get_statistics_value(self) -> float:
+        raise RuntimeError("Not Implemented")
+
 
 class Counter(Metric):
     """
@@ -47,7 +50,10 @@ class Counter(Metric):
     prefix: str = "counter"
 
     def increment(self, value: float = 1.0) -> None:
-        self.set_value(self.get_value() + value, is_cover=False)
+        self.set_value(value, is_cover=False)
+
+    def decrement(self, value: float = 1.0) -> None:
+        self.set_value(-value, is_cover=False)
 
 
 class Gauge(Metric):
@@ -131,7 +137,9 @@ class WindowStatistics(object):
     ##########
     # Metric #
     ##########
-    def registry_metric(self, metric: Metric, expire: float) -> None:
+    def registry_metric(self, metric: Metric, expire: Optional[float] = None) -> None:
+        if not expire:
+            expire = self._max_interval
         key: str = metric.metric_cache_name
         if key in self._metric_cache:
             cache_value: Optional[Metric] = self._metric_cache.get(key, None)
@@ -150,18 +158,24 @@ class WindowStatistics(object):
 
         setattr(metric, "_temp_get_value", metric.get_value)
         setattr(metric, "_temp_set_value", metric.set_value)
+        setattr(metric, "_temp_get_statistics_value", metric.get_statistics_value)
         setattr(metric, metric.get_value.__name__, get_value_fn)
         setattr(metric, metric.set_value.__name__, set_value_fn)
+        setattr(metric, metric.get_statistics_value.__name__, partial(self.get_statistics_value, metric.name))
 
     def drop_metric(self, key: str) -> None:
         metric: Optional[Metric] = self._metric_cache.pop(key)
         if metric:
+            setattr(metric, metric.get_statistics_value.__name__, getattr(metric, "_temp_get_statistics_value"))
             setattr(metric, metric.get_value.__name__, getattr(metric, "_temp_get_value"))
             setattr(metric, metric.set_value.__name__, getattr(metric, "_temp_set_value"))
 
     ################
     # gauge metric #
     ################
+    def get_statistics_value(self, key: str) -> float:
+        return self.statistics_dict.get(key, 0.0)
+
     def _get_now_info(self) -> Tuple[int, int]:
         """return now timestamp's (Quotient, remainder)"""
         now_timestamp: int = int(time.time())

@@ -9,7 +9,7 @@ import msgpack
 
 from rap.common.state import State
 from rap.common.types import READER_TYPE, UNPACKER_TYPE, WRITER_TYPE
-from rap.common.utils import Constant, del_future
+from rap.common.utils import Constant, Semaphore, del_future
 
 __all__ = ["Connection", "ServerConnection"]
 
@@ -133,6 +133,7 @@ class Connection(BaseConnection):
 
         self.listen_future: asyncio.Future = asyncio.Future()
         self.listen_future.set_result(True)
+        self.semaphore: Semaphore = Semaphore()
 
         self.ping_future: asyncio.Future = asyncio.Future()
         self.priority: int = 0

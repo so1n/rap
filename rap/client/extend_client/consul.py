@@ -1,7 +1,7 @@
 from typing import Optional
 
 from rap.client.core import BaseClient
-from rap.client.endpoint import SelectConnEnum
+from rap.client.endpoint import PickConnEnum
 from rap.client.endpoint.consul import ConsulEndpoint
 
 
@@ -16,7 +16,7 @@ class Client(BaseClient):
         ws_min_interval: Optional[int] = None,
         ws_max_interval: Optional[int] = None,
         ws_statistics_interval: Optional[int] = None,
-        select_conn_method: SelectConnEnum = SelectConnEnum.random,
+        select_conn_method: PickConnEnum = PickConnEnum.random,
         ping_sleep_time: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
         wait_server_recover: bool = True,
@@ -38,7 +38,7 @@ class Client(BaseClient):
                 server_name,
                 timeout=keep_alive_timeout,
                 ssl_crt_path=ssl_crt_path,
-                select_conn_method=select_conn_method,
+                pick_conn_method=select_conn_method,
                 ping_fail_cnt=ping_fail_cnt,
                 ping_sleep_time=ping_sleep_time,
                 wait_server_recover=wait_server_recover,

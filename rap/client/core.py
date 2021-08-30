@@ -3,7 +3,7 @@ import sys
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Sequence, Type
 
-from rap.client.endpoint import BaseEndpoint, LocalEndpoint, SelectConnEnum
+from rap.client.endpoint import BaseEndpoint, LocalEndpoint, PickConnEnum
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.transport.channel import Channel
@@ -35,7 +35,6 @@ class AsyncIteratorCall:
         """
         name: func name
         client: rap base client
-        conn: rap tcp conn
         arg_param: func param
         header: request's header
         group: func group, default value is `default`
@@ -62,7 +61,7 @@ class AsyncIteratorCall:
         """
         response: Response = await self._client.transport.request(
             self._name,
-            [self._conn],
+            self._conn,
             arg_param=self._arg_param,
             call_id=self._call_id,
             header=self._header,
@@ -174,12 +173,13 @@ class BaseClient:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             header: Optional[dict] = kwargs.pop("header", None)
-            async for result in AsyncIteratorCall(
-                name, self, self.get_conn(), param_handle(func, args, kwargs), group=group, header=header
-            ):
-                if not is_type(return_type, type(result)):
-                    raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
-                yield result
+            async with self.endpoint.picker() as conn:
+                async for result in AsyncIteratorCall(
+                    name, self, conn, param_handle(func, args, kwargs), group=group, header=header
+                ):
+                    if not is_type(return_type, type(result)):
+                        raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
+                    yield result
 
         return RapFunc(wrapper, func)
 
@@ -189,22 +189,15 @@ class BaseClient:
 
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            async with self.transport.channel(name, self.get_conn(), group) as channel:
-                return await func(channel)
+            async with self.endpoint.picker() as conn:
+                async with self.transport.channel(name, conn, group) as channel:
+                    return await func(channel)
 
         return RapFunc(wrapper, func)
 
     ###################
     # client base api #
     ###################
-    def get_conn(self) -> Connection:
-        """get random conn from endpoint"""
-        return self.endpoint.get_conn()
-
-    def get_conn_list(self, cnt: Optional[int] = None) -> List[Connection]:
-        """get conn list from endpoint. default cnt value: half of the currently available conn"""
-        return self.endpoint.get_conn_list(cnt)
-
     @property
     def is_close(self) -> bool:
         """Whether the client is closed"""
@@ -224,8 +217,8 @@ class BaseClient:
         header: request's header
         group: func group, default value is `default`
         """
-        conn_list: List[Connection] = self.endpoint.get_conn_list()
-        response = await self.transport.request(name, conn_list, arg_param, group=group, header=header)
+        async with self.endpoint.picker() as conn:
+            response = await self.transport.request(name, conn, arg_param, group=group, header=header)
         return response.body["result"]
 
     async def invoke(
@@ -268,10 +261,12 @@ class BaseClient:
         """
         if not kwarg_param:
             kwarg_param = {}
-        async for result in AsyncIteratorCall(
-            func.__name__, self, self.get_conn(), param_handle(func, arg_param, kwarg_param), header=header, group=group
-        ):
-            yield result
+
+        async with self.endpoint.picker() as conn:
+            async for result in AsyncIteratorCall(
+                func.__name__, self, conn, param_handle(func, arg_param, kwarg_param), header=header, group=group
+            ):
+                yield result
 
     def inject(self, func: Callable, name: str = "", group: Optional[str] = None) -> RapFunc:
         """Replace the function with `RapFunc` and inject it into the client at the same time"""
@@ -334,7 +329,7 @@ class Client(BaseClient):
         ws_min_interval: Optional[int] = None,
         ws_max_interval: Optional[int] = None,
         ws_statistics_interval: Optional[int] = None,
-        select_conn_method: SelectConnEnum = SelectConnEnum.random,
+        select_conn_method: PickConnEnum = PickConnEnum.random,
         ping_sleep_time: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
         wait_server_recover: bool = True,
@@ -356,7 +351,7 @@ class Client(BaseClient):
             timeout=keep_alive_timeout,
             pack_param=None,
             unpack_param=None,
-            select_conn_method=select_conn_method,
+            pick_conn_method=select_conn_method,
             ping_fail_cnt=ping_fail_cnt,
             ping_sleep_time=ping_sleep_time,
             wait_server_recover=wait_server_recover,

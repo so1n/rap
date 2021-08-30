@@ -2,15 +2,29 @@ import asyncio
 import logging
 import random
 from enum import Enum, auto
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from rap.client.transport.transport import Transport
 from rap.common.conn import Connection
 
 
-class SelectConnEnum(Enum):
+class PickConnEnum(Enum):
     random = auto()
     round_robin = auto()
+    faster = auto()
+
+
+class Picker(object):
+    def __init__(self, conn: Connection):
+        self._conn: Connection = conn
+
+    async def __aenter__(self) -> Connection:
+        await self._conn.semaphore.acquire()
+        return self._conn
+
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self._conn.semaphore.release()
+        return None
 
 
 class BaseEndpoint(object):
@@ -18,7 +32,7 @@ class BaseEndpoint(object):
         self,
         timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
-        select_conn_method: Optional[SelectConnEnum] = None,
+        pick_conn_method: Optional[PickConnEnum] = None,
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
         ping_sleep_time: Optional[int] = None,
@@ -50,12 +64,14 @@ class BaseEndpoint(object):
         self._round_robin_index: int = 0
         self._is_close: bool = True
 
-        if not select_conn_method:
-            setattr(self, self.get_conn.__name__, self._get_random_conn)
-        elif select_conn_method == SelectConnEnum.random:
-            setattr(self, self.get_conn.__name__, self._get_random_conn)
-        else:
-            setattr(self, self.get_conn.__name__, self._get_round_robin_conn)
+        setattr(self, self._pick_conn.__name__, self._random_pick_conn)
+        if pick_conn_method:
+            if pick_conn_method == PickConnEnum.random:
+                setattr(self, self._pick_conn.__name__, self._random_pick_conn)
+            elif pick_conn_method == PickConnEnum.round_robin:
+                setattr(self, self._pick_conn.__name__, self._round_robin_pick_conn)
+            elif pick_conn_method == PickConnEnum.faster:
+                setattr(self, self._pick_conn.__name__, self._pick_faster_conn)
 
     def set_transport(self, transport: Transport) -> None:
         """set transport to endpoint"""
@@ -149,11 +165,8 @@ class BaseEndpoint(object):
         self._conn_dict = {}
         self._is_close = True
 
-    def get_conn(self) -> Connection:
-        """get conn by endpoint"""
-
-    def get_conn_list(self, cnt: Optional[int] = None) -> List[Connection]:
-        """get conn list by endpoint
+    def picker(self, cnt: Optional[int] = None) -> Picker:
+        """get conn by endpoint
         cnt: How many conn to get.
           if the value is empty, it will automatically get 1/3 of the conn from the endpoint,
           which should not be less than or equal to 0
@@ -162,26 +175,43 @@ class BaseEndpoint(object):
             cnt = self._connected_cnt // 3
         if cnt <= 0:
             cnt = 1
-        conn_set: Set[Connection] = set()
-        while len(conn_set) < cnt:
-            conn_set.add(self.get_conn())
-        return list(conn_set)
 
-    def _get_random_conn(self) -> Connection:
+        return Picker(sorted(self._pick_conn(cnt), key=lambda c: c.priority)[0])
+
+    def _pick_conn(self, cnt: int) -> List[Connection]:
+        pass
+
+    def _random_pick_conn(self, cnt: int) -> List[Connection]:
         """random get conn"""
         if not self._host_weight_list:
             raise ConnectionError("Endpoint Can not found conn")
-        key = random.choice(self._host_weight_list)
-        return self._conn_dict[key]
 
-    def _get_round_robin_conn(self) -> Connection:
+        cnt = min(cnt, len(self._conn_dict))
+        conn_set: Set[Connection] = set()
+        while len(conn_set) < cnt:
+            key: str = random.choice(self._host_weight_list)
+            conn_set.add(self._conn_dict[key])
+
+        return list(conn_set)
+
+    def _round_robin_pick_conn(self, cnt: int) -> List[Connection]:
         """get conn by round robin"""
         if not self._host_weight_list:
             raise ConnectionError("Endpoint Can not found conn")
-        self._round_robin_index += 1
-        index = self._round_robin_index % (len(self._host_weight_list))
-        key = self._host_weight_list[index]
-        return self._conn_dict[key]
+
+        conn_list: List[Connection] = []
+        for _ in range(cnt):
+            self._round_robin_index += 1
+            index = self._round_robin_index % (len(self._host_weight_list))
+            key = self._host_weight_list[index]
+            conn_list.append(self._conn_dict[key])
+        return conn_list
+
+    def _pick_faster_conn(self, cnt: int) -> List[Connection]:
+        return sorted([i for i in self._conn_dict.values()], key=lambda c: c.RTT)[:cnt]
+
+    def _best_available_pick(self) -> List[Connection]:
+        pass
 
     def __len__(self) -> int:
         return self._connected_cnt

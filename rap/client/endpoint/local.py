@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from rap.client.endpoint.base import BaseEndpoint, SelectConnEnum
+from rap.client.endpoint.base import BaseEndpoint, PickConnEnum
 
 
 class LocalEndpoint(BaseEndpoint):
@@ -15,7 +15,7 @@ class LocalEndpoint(BaseEndpoint):
         ssl_crt_path: Optional[str] = None,
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
-        select_conn_method: Optional[SelectConnEnum] = None,
+        pick_conn_method: Optional[PickConnEnum] = None,
         ping_sleep_time: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
         wait_server_recover: bool = True,
@@ -34,7 +34,7 @@ class LocalEndpoint(BaseEndpoint):
         super().__init__(
             timeout,
             ssl_crt_path,
-            select_conn_method,
+            pick_conn_method,
             pack_param=pack_param,
             unpack_param=unpack_param,
             ping_fail_cnt=ping_fail_cnt,

@@ -170,31 +170,32 @@ class TestTransport:
     ) -> None:
         mock_future: asyncio.Future = asyncio.Future()
         mocker.patch("rap.client.transport.transport.Transport._base_request").return_value = mock_future
-        mock_future.set_result(
-            Response.from_msg(
-                rap_client,
-                rap_client.get_conn(),
-                (
-                    -1,
-                    202,
-                    f"{str(int(time.time()))}",
-                    "/_event/default",
-                    200,
-                    {
-                        "version": "0.1",
-                        "user_agent": "Python3-0.5.3",
-                        "request_id": "57233e1f-b153-4142-b278-29c755394394",
-                    },
-                    "hi!",
-                ),
+        async with rap_client.endpoint.picker() as conn:
+            mock_future.set_result(
+                Response.from_msg(
+                    rap_client,
+                    conn,
+                    (
+                        -1,
+                        202,
+                        f"{str(int(time.time()))}",
+                        "/_event/default",
+                        200,
+                        {
+                            "version": "0.1",
+                            "user_agent": "Python3-0.5.3",
+                            "request_id": "57233e1f-b153-4142-b278-29c755394394",
+                        },
+                        "hi!",
+                    ),
+                )
             )
-        )
 
-        with pytest.raises(RPCError) as e:
-            await rap_client.raw_invoke("sync_sum", [1, 2])
+            with pytest.raises(RPCError) as e:
+                await rap_client.raw_invoke("sync_sum", [1, 2])
 
-        exec_msg: str = e.value.args[0]
-        assert exec_msg == f"request num must:{Constant.MSG_RESPONSE} not 202"
+            exec_msg: str = e.value.args[0]
+            assert exec_msg == f"request num must:{Constant.MSG_RESPONSE} not 202"
 
     async def test_request_receive_not_python_server_exc_response(
         self, rap_server: Server, rap_client: Client, mocker: MockerFixture
@@ -206,28 +207,29 @@ class TestTransport:
 
         mock_future: asyncio.Future = asyncio.Future()
         mocker.patch("rap.client.transport.transport.Transport._base_request").return_value = mock_future
-        mock_future.set_result(
-            Response.from_msg(
-                rap_client,
-                rap_client.get_conn(),
-                (
-                    29759,
-                    201,
-                    f"{str(int(time.time()))}",
-                    "/_event/default",
-                    200,
-                    {
-                        "version": "0.1",
-                        "request_id": "fe41e811-3cd0-45e7-b83a-738759cb0ad8",
-                        "host": ("127.0.0.1", 59022),
-                    },
-                    {"call_id": -1, "exc_info": "division by zero", "exc": "ZeroDivisionError"},
-                ),
+        async with rap_client.endpoint.picker() as conn:
+            mock_future.set_result(
+                Response.from_msg(
+                    rap_client,
+                    conn,
+                    (
+                        29759,
+                        201,
+                        f"{str(int(time.time()))}",
+                        "/_event/default",
+                        200,
+                        {
+                            "version": "0.1",
+                            "request_id": "fe41e811-3cd0-45e7-b83a-738759cb0ad8",
+                            "host": ("127.0.0.1", 59022),
+                        },
+                        {"call_id": -1, "exc_info": "division by zero", "exc": "ZeroDivisionError"},
+                    ),
+                )
             )
-        )
 
-        with pytest.raises(RpcRunTimeError) as e:
-            await rap_client.raw_invoke("sync_sum", [1, 2])
+            with pytest.raises(RpcRunTimeError) as e:
+                await rap_client.raw_invoke("sync_sum", [1, 2])
 
-        exec_msg: str = e.value.args[0]
-        assert exec_msg == "division by zero"
+            exec_msg: str = e.value.args[0]
+            assert exec_msg == "division by zero"
