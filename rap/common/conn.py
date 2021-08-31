@@ -119,6 +119,7 @@ class Connection(BaseConnection):
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
         ssl_crt_path: Optional[str] = None,
+        max_conn_inflight: Optional[int] = None,
     ):
         super().__init__(timeout, pack_param, unpack_param)
         self._host: str = host
@@ -133,7 +134,7 @@ class Connection(BaseConnection):
 
         self.listen_future: asyncio.Future = asyncio.Future()
         self.listen_future.set_result(True)
-        self.semaphore: Semaphore = Semaphore()
+        self.semaphore: Semaphore = Semaphore(max_conn_inflight or 100)
 
         self.ping_future: asyncio.Future = asyncio.Future()
         self.priority: int = 0

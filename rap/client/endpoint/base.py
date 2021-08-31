@@ -38,6 +38,7 @@ class BaseEndpoint(object):
         ping_sleep_time: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
         wait_server_recover: bool = True,
+        max_conn_inflight: Optional[int] = None,
     ) -> None:
         """
         conn_list: client conn info
@@ -63,6 +64,7 @@ class BaseEndpoint(object):
         self._conn_dict: Dict[str, Connection] = {}
         self._round_robin_index: int = 0
         self._is_close: bool = True
+        self._max_conn_inflight: Optional[int] = max_conn_inflight
 
         setattr(self, self._pick_conn.__name__, self._random_pick_conn)
         if pick_conn_method:
@@ -103,6 +105,7 @@ class BaseEndpoint(object):
             ssl_crt_path=self._ssl_crt_path,
             pack_param=self._pack_param,
             unpack_param=self._unpack_param,
+            max_conn_inflight=self._max_conn_inflight,
         )
 
         def _conn_done(f: asyncio.Future) -> None:

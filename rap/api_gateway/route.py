@@ -69,23 +69,23 @@ async def websocket_route_func(websocket: WebSocket) -> None:
                         websocket.application_state = WebSocketState.DISCONNECTED
                         logging.info("receive client close event, close websocket and rap channel")
 
-            send_future: asyncio.Future = asyncio.ensure_future(send())
-            receive_future: asyncio.Future = asyncio.ensure_future(receive())
+                send_future: asyncio.Future = asyncio.ensure_future(send())
+                receive_future: asyncio.Future = asyncio.ensure_future(receive())
 
-            def set_finish(f: asyncio.Future) -> None:
-                exc: Optional[BaseException] = f.exception()
-                if exc:
-                    channel.set_exc(exc)
-                else:
-                    channel.set_success_finish()
+                def set_finish(f: asyncio.Future) -> None:
+                    exc: Optional[BaseException] = f.exception()
+                    if exc:
+                        channel.set_exc(exc)
+                    else:
+                        channel.set_success_finish()
 
-            receive_future.add_done_callback(lambda f: set_finish(f))
-            try:
-                await channel.wait_close()
-            except ChannelError:
-                pass
-            del_future(send_future)
-            del_future(receive_future)
+                receive_future.add_done_callback(lambda f: set_finish(f))
+                try:
+                    await channel.wait_close()
+                except ChannelError:
+                    pass
+                del_future(send_future)
+                del_future(receive_future)
     except WebSocketDisconnect:
         pass
     finally:
