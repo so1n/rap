@@ -74,7 +74,7 @@ class Channel(BaseChannel):
         if response.header.get("channel_life_cycle") != life_cycle:
             raise ChannelError("channel life cycle error")
 
-    async def _base_read(self) -> Response:
+    async def _base_read(self, timeout: Optional[int] = None) -> Response:
         """base read response msg from channel conn
         When a drop message is received or the channel is closed, will raise `ChannelError`
         """
@@ -82,10 +82,16 @@ class Channel(BaseChannel):
             raise ChannelError("channel is closed")
 
         try:
-            response: Response = await as_first_completed(
-                [self._read(self.channel_id)],
-                not_cancel_future_list=[self._channel_conn_future],
-            )
+            if timeout:
+                response: Response = await as_first_completed(
+                    [asyncio.wait_for(self._read(self.channel_id), timeout=timeout)],
+                    not_cancel_future_list=[self._channel_conn_future],
+                )
+            else:
+                response = await as_first_completed(
+                    [self._read(self.channel_id)],
+                    not_cancel_future_list=[self._channel_conn_future],
+                )
         except Exception as e:
             raise e
 
@@ -96,7 +102,7 @@ class Channel(BaseChannel):
             raise exc
         return response
 
-    async def _base_write(self, body: Any, life_cycle: str) -> None:
+    async def _base_write(self, body: Any, life_cycle: str, timeout: Optional[int] = None) -> None:
         """base send body to channel"""
         if self.is_close:
             raise ChannelError("channel is closed")
@@ -108,20 +114,29 @@ class Channel(BaseChannel):
             correlation_id=self.channel_id,
             header={"channel_life_cycle": life_cycle, "channel_id": self.channel_id},
         )
-        await self._write(request)
+        if timeout:
+            await asyncio.wait_for(self._write(request), timeout)
+        else:
+            await self._write(request)
 
-    async def read(self) -> Response:
-        response: Response = await self._base_read()
+    async def read(self, timeout: Optional[int] = None) -> Response:
+        response: Response = await self._base_read(timeout=timeout)
         if response.header.get("channel_life_cycle") != Constant.MSG:
             raise ChannelError("channel life cycle error")
         return response
 
-    async def read_body(self) -> Any:
-        response: Response = await self.read()
+    async def read_body(self, timeout: Optional[int] = None) -> Any:
+        response: Response = await self.read(timeout=timeout)
         return response.body
 
-    async def write(self, body: Any) -> None:
-        await self._base_write(body, Constant.MSG)
+    async def write(self, body: Any, timeout: Optional[int] = None) -> None:
+        """
+        :param body: send body
+        :param timeout: wait write timeout
+            In general, the write method is very fast,
+            but in extreme cases conn has accumulated some requests and needs to wait
+        """
+        await self._base_write(body, Constant.MSG, timeout=timeout)
 
     async def close(self) -> None:
         """Actively send a close message and close the channel"""

@@ -160,8 +160,8 @@ class Connection(BaseConnection):
         return super(Connection, self).is_closed() or self.listen_future.done()
 
     def close(self) -> None:
-        del_future(self.listen_future)
         del_future(self.ping_future)
+        del_future(self.listen_future)
         super(Connection, self).close()
 
 

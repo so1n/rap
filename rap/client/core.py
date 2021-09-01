@@ -31,13 +31,15 @@ class AsyncIteratorCall:
         arg_param: Sequence[Any],
         header: Optional[dict] = None,
         group: Optional[str] = None,
+        timeout: Optional[int] = None,
     ):
         """
-        name: func name
-        client: rap base client
-        arg_param: func param
-        header: request's header
-        group: func group, default value is `default`
+        :param name: func name
+        :param client: rap base client
+        :param arg_param: rpc func param
+        :param group: func's group, default value is `default`
+        :param header: request header
+        :param timeout: request timeout
         """
         self._name: str = name
         self._client: "BaseClient" = client
@@ -46,6 +48,7 @@ class AsyncIteratorCall:
         self._arg_param: Sequence[Any] = arg_param
         self._header: Optional[dict] = header or {}
         self.group: Optional[str] = group
+        self._timeout: Optional[int] = timeout
 
     #####################
     # async for support #
@@ -66,6 +69,7 @@ class AsyncIteratorCall:
             call_id=self._call_id,
             header=self._header,
             group=self.group,
+            timeout=self._timeout,
         )
         if response.status_code == 301:
             raise StopAsyncIteration()
@@ -78,7 +82,6 @@ class BaseClient:
         self,
         server_name: str,
         endpoint: BaseEndpoint,
-        timeout: Optional[int] = None,
         cache_interval: Optional[float] = None,
         ws_min_interval: Optional[int] = None,
         ws_max_interval: Optional[int] = None,
@@ -86,7 +89,6 @@ class BaseClient:
     ):
         """
         :param endpoint: rap endpoint
-        :param timeout: read msg from future timeout
         :param cache_interval: Cache auto scan expire key interval
         :param ws_min_interval: WindowStatistics time per window
         :param ws_max_interval: WindowStatistics Window capacity
@@ -94,7 +96,7 @@ class BaseClient:
         """
         self.server_name: str = server_name
         self.endpoint: BaseEndpoint = endpoint
-        self.transport: Transport = Transport(self, read_timeout=timeout)
+        self.transport: Transport = Transport(self)  # type: ignore
         self._processor_list: List[BaseProcessor] = []
         self._event_dict: Dict[EventEnum, List[CLIENT_EVENT_FN]] = {
             value: [] for value in EventEnum.__members__.values()
@@ -158,7 +160,10 @@ class BaseClient:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             header: Optional[dict] = kwargs.pop("header", None)
-            result: Any = await self.raw_invoke(name, param_handle(func, args, kwargs), group=group, header=header)
+            timeout: Optional[int] = kwargs.pop("timeout", None)
+            result: Any = await self.raw_invoke(
+                name, param_handle(func, args, kwargs), group=group, header=header, timeout=timeout
+            )
             if not is_type(return_type, type(result)):
                 raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
             return result
@@ -173,9 +178,10 @@ class BaseClient:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             header: Optional[dict] = kwargs.pop("header", None)
+            timeout: Optional[int] = kwargs.pop("timeout", None)
             async with self.endpoint.picker() as conn:
                 async for result in AsyncIteratorCall(
-                    name, self, conn, param_handle(func, args, kwargs), group=group, header=header
+                    name, self, conn, param_handle(func, args, kwargs), group=group, header=header, timeout=timeout
                 ):
                     if not is_type(return_type, type(result)):
                         raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
@@ -209,16 +215,18 @@ class BaseClient:
         arg_param: Optional[Sequence[Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
+        timeout: Optional[int] = None,
     ) -> Any:
         """rpc client base invoke method
         Note: This method does not support parameter type checking, not support channels;
-        name: func name
-        args: func param
-        header: request's header
-        group: func group, default value is `default`
+        :param name: rpc func name
+        :param arg_param: rpc func param
+        :param group: func's group
+        :param header: request header
+        :param timeout: request timeout
         """
         async with self.endpoint.picker() as conn:
-            response = await self.transport.request(name, conn, arg_param, group=group, header=header)
+            response = await self.transport.request(name, conn, arg_param, group=group, header=header, timeout=timeout)
         return response.body["result"]
 
     async def invoke(
@@ -228,20 +236,22 @@ class BaseClient:
         kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
+        timeout: Optional[int] = None,
     ) -> Any:
         """automatically resolve function names and call raw_invoke
-        func: rpc func
-        args: func param
-        kwargs_param: func kwargs param
-        header: request's header
-        group: func group, default value is `default`
+        :param func: python func
+        :param arg_param: rpc func param
+        :param kwarg_param: func kwargs param
+        :param group: func's group, default value is `default`
+        :param header: request header
+        :param timeout: request timeout
         """
         if not arg_param:
             arg_param = ()
         if not kwarg_param:
             kwarg_param = {}
         return await self.raw_invoke(
-            func.__name__, param_handle(func, arg_param, kwarg_param), group=group, header=header
+            func.__name__, param_handle(func, arg_param, kwarg_param), group=group, header=header, timeout=timeout
         )
 
     async def iterator_invoke(
@@ -251,20 +261,28 @@ class BaseClient:
         kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
+        timeout: Optional[int] = None,
     ) -> Any:
         """Python-specific generator invoke
-        func: rap func
-        args: func param
-        kwargs_param: func kwargs param
-        header: request's header
-        group: func group, default value is `default`
+        :param func: python func
+        :param arg_param: rpc func param
+        :param kwarg_param: func kwargs param
+        :param group: func's group, default value is `default`
+        :param header: request header
+        :param timeout: request timeout
         """
         if not kwarg_param:
             kwarg_param = {}
 
         async with self.endpoint.picker() as conn:
             async for result in AsyncIteratorCall(
-                func.__name__, self, conn, param_handle(func, arg_param, kwarg_param), header=header, group=group
+                func.__name__,
+                self,
+                conn,
+                param_handle(func, arg_param, kwarg_param),
+                header=header,
+                group=group,
+                timeout=timeout,
             ):
                 yield result
 
@@ -322,7 +340,6 @@ class Client(BaseClient):
         self,
         server_name: str,
         conn_list: List[dict],
-        timeout: Optional[int] = None,
         keep_alive_timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
         cache_interval: Optional[float] = None,
@@ -342,7 +359,6 @@ class Client(BaseClient):
           port: server port
           weight: select this conn weight
           e.g.  [{"ip": "localhost", "port": "9000", weight: 10}]
-        timeout: read response from consumer timeout
         keep_alive_timeout: read msg from conn timeout
         """
         local_endpoint: LocalEndpoint = LocalEndpoint(
@@ -359,7 +375,6 @@ class Client(BaseClient):
         super().__init__(
             server_name,
             local_endpoint,
-            timeout,
             cache_interval=cache_interval,
             ws_min_interval=ws_min_interval,
             ws_max_interval=ws_max_interval,

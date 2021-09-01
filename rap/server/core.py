@@ -57,7 +57,7 @@ class Server(object):
         keep_alive: conn keep_alive time
         run_timeout: Maximum execution time per call
         ping_fail_cnt: When ping fails continuously and exceeds this value, conn will be disconnected
-        ping_sleep_time: ping message interval time
+        ping_interval: ping message interval time
         backlog: server backlog
         close_timeout: The maximum time to wait for conn to process messages when shutting down the service
         ssl_crt_path: ssl crt path

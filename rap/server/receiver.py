@@ -132,7 +132,7 @@ class Receiver(object):
         run_timeout: Maximum execution time per call
         sender: Send response data to the client
         ping_fail_cnt: When ping fails continuously and exceeds this value, conn will be disconnected
-        ping_sleep_time: ping message interval time
+        ping_interval: ping message interval time
         event_handle_dict: request event dict
         call_func_permission_fn: Check the permission to call the function
         processor_list: processor list

@@ -128,7 +128,7 @@ class BaseEndpoint(object):
         conn.ping_future = asyncio.ensure_future(
             self._transport.ping_event(
                 conn,
-                ping_sleep_time=self._ping_sleep_time,
+                ping_interval=self._ping_sleep_time,
                 ping_fail_cnt=self._ping_fail_cnt,
                 wait_server_recover=self._wait_server_recover,
             )

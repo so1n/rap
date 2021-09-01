@@ -9,7 +9,6 @@ class Client(BaseClient):
     def __init__(
         self,
         server_name: str,
-        timeout: int = 9,
         keep_alive_timeout: int = 1200,
         ssl_crt_path: Optional[str] = None,
         cache_interval: Optional[float] = None,
@@ -47,7 +46,6 @@ class Client(BaseClient):
                 etcd_key_path=etcd_key_path,
                 etcd_ca_path=etcd_ca_path,
             ),
-            timeout,
             cache_interval=cache_interval,
             ws_min_interval=ws_min_interval,
             ws_max_interval=ws_max_interval,
