@@ -137,7 +137,7 @@ class Connection(BaseConnection):
         self.semaphore: Semaphore = Semaphore(max_conn_inflight or 100)
 
         self.ping_future: asyncio.Future = asyncio.Future()
-        self.priority: int = 0
+        self.available: bool = False
         self.last_ping_timestamp: int = int(time.time())
         self.RTT: float = 0.0
         self.ping_future.set_result(True)

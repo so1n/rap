@@ -76,19 +76,21 @@ class Transport(object):
         self,
         conn: Connection,
         ping_sleep_time: Optional[int] = None,
-        ping_fail_cnt: Optional[int] = 3,
+        ping_fail_cnt: Optional[int] = None,
         wait_server_recover: bool = False,
     ) -> None:
         if not ping_sleep_time:
             ping_sleep_time = 30
         if not ping_fail_cnt:
             ping_fail_cnt = 3
+
+        ping_fail_interval: int = ping_sleep_time * ping_fail_cnt
         while True:
             diff_time: int = int(time.time()) - conn.last_ping_timestamp
-            priority: int = ping_fail_cnt - min(diff_time // ping_sleep_time, ping_fail_cnt)
-            conn.priority = priority
-            logging.debug("conn:%s priority:%s RTT:%s", conn.peer_tuple, priority, conn.RTT)
-            if priority == ping_fail_cnt and not wait_server_recover:
+            available: bool = diff_time < ping_fail_interval
+            conn.available = available
+            logging.debug("conn:%s available:%s RTT:%s", conn.peer_tuple, available, conn.RTT)
+            if not available and not wait_server_recover:
                 logging.error(f"ping {conn.sock_tuple} timeout... exit")
                 return
             else:

@@ -38,7 +38,6 @@ class BaseEndpoint(object):
         ping_sleep_time: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
         wait_server_recover: bool = True,
-        max_conn_inflight: Optional[int] = None,
     ) -> None:
         """
         conn_list: client conn info
@@ -64,7 +63,6 @@ class BaseEndpoint(object):
         self._conn_dict: Dict[str, Connection] = {}
         self._round_robin_index: int = 0
         self._is_close: bool = True
-        self._max_conn_inflight: Optional[int] = max_conn_inflight
 
         setattr(self, self._pick_conn.__name__, self._random_pick_conn)
         if pick_conn_method:
@@ -77,6 +75,7 @@ class BaseEndpoint(object):
 
     def set_transport(self, transport: Transport) -> None:
         """set transport to endpoint"""
+        assert not self._transport, ValueError("transport already exists")
         assert isinstance(transport, Transport), TypeError(f"{transport} type must{Transport}")
         self._transport = transport
 
@@ -84,7 +83,7 @@ class BaseEndpoint(object):
     def is_close(self) -> bool:
         return self._is_close
 
-    async def create(self, ip: str, port: int, weight: int = 10) -> None:
+    async def create(self, ip: str, port: int, weight: int = 10, max_conn_inflight: int = 100) -> None:
         """create and init conn
         ip: server ip
         port: server port
@@ -105,7 +104,7 @@ class BaseEndpoint(object):
             ssl_crt_path=self._ssl_crt_path,
             pack_param=self._pack_param,
             unpack_param=self._unpack_param,
-            max_conn_inflight=self._max_conn_inflight,
+            max_conn_inflight=max_conn_inflight,
         )
 
         def _conn_done(f: asyncio.Future) -> None:
@@ -115,11 +114,15 @@ class BaseEndpoint(object):
                     self._host_weight_list.remove(key)
                 self._connected_cnt -= 1
             except Exception as e:
-                logging.exception(f"close conn error: {e}")
+                msg: str = f"close conn error: {e}"
+                if f.exception():
+                    msg += f", conn done exc:{f.exception()}"
+                logging.exception(msg)
 
         await conn.connect()
         await self._transport.declare(conn)
         self._connected_cnt += 1
+        conn.available = True
         conn.listen_future = asyncio.ensure_future(self._transport.listen(conn))
         conn.listen_future.add_done_callback(lambda f: _conn_done(f))
         conn.ping_future = asyncio.ensure_future(
@@ -179,7 +182,10 @@ class BaseEndpoint(object):
         if cnt <= 0:
             cnt = 1
 
-        return Picker(sorted(self._pick_conn(cnt), key=lambda c: c.priority)[0])
+        conn_list: List[Connection] = self._pick_conn(cnt)
+        if not conn_list:
+            raise ValueError("Can not found available conn")
+        return Picker(sorted(conn_list, key=lambda c: c.semaphore.value, reverse=True)[0])
 
     def _pick_conn(self, cnt: int) -> List[Connection]:
         pass
@@ -195,7 +201,7 @@ class BaseEndpoint(object):
             key: str = random.choice(self._host_weight_list)
             conn_set.add(self._conn_dict[key])
 
-        return list(conn_set)
+        return list([i for i in conn_set if i.available])
 
     def _round_robin_pick_conn(self, cnt: int) -> List[Connection]:
         """get conn by round robin"""
@@ -207,7 +213,9 @@ class BaseEndpoint(object):
             self._round_robin_index += 1
             index = self._round_robin_index % (len(self._host_weight_list))
             key = self._host_weight_list[index]
-            conn_list.append(self._conn_dict[key])
+            conn: Connection = self._conn_dict[key]
+            if conn.available:
+                conn_list.append(conn)
         return conn_list
 
     def _pick_faster_conn(self, cnt: int) -> List[Connection]:
