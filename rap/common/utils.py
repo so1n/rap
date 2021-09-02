@@ -203,7 +203,7 @@ class Semaphore(asyncio.Semaphore):
 
     @property
     def value(self) -> int:
-        return self._value
+        return self._value  # type: ignore
 
 
 class EventEnum(Enum):

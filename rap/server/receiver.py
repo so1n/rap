@@ -20,6 +20,8 @@ from typing import (
     Union,
 )
 
+import psutil
+
 from rap.common.channel import BaseChannel
 from rap.common.conn import ServerConnection
 from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent, PongEvent
@@ -43,6 +45,7 @@ if TYPE_CHECKING:
     from rap.server.core import Server
 
 __all__ = ["Channel", "Receiver"]
+psutil.cpu_percent()
 
 
 class Channel(BaseChannel):
@@ -373,7 +376,7 @@ class Receiver(object):
             self._keepalive_timestamp = int(time.time())
             return None
         elif request.func_name == Constant.PING_EVENT:
-            response.set_event(PongEvent({"time": request.body["time"]}))
+            response.set_event(PongEvent({"time": request.body["time"], "server_cpu_percent": psutil.cpu_percent()}))
         elif request.func_name == Constant.DECLARE:
             if request.body.get("server_name") != self._app.server_name:
                 response.set_event(CloseConnEvent("error server name"))

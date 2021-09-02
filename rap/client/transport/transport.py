@@ -72,7 +72,7 @@ class Transport(object):
         conn: Connection,
         ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
-        wait_server_recover: bool = False,
+        wait_server_recover: bool = True,
     ) -> None:
         """client ping-pong handler, check conn is available
         :param conn: rap client conn
@@ -81,7 +81,7 @@ class Transport(object):
         :param wait_server_recover: If False, ping failure will close conn
         """
         if not ping_interval:
-            ping_interval = 30
+            ping_interval = 10
         if not ping_fail_cnt:
             ping_fail_cnt = 3
 
@@ -169,6 +169,7 @@ class Transport(object):
             elif response.func_name == Constant.PONG_EVENT:
                 conn.last_ping_timestamp = int(time.time())
                 conn.RTT = time.time() - response.body["time"]
+                conn.server_cpu = response.body["server_cpu_percent"]
             elif response.func_name == Constant.DECLARE:
                 if not response.body.get("result"):
                     raise rap_exc.AuthError("Declare error")

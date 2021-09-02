@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import random
+import time
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Set
 
@@ -15,8 +16,31 @@ class PickConnEnum(Enum):
 
 
 class Picker(object):
-    def __init__(self, conn: Connection):
-        self._conn: Connection = conn
+    """refer to `Kratos`"""
+
+    _decay_time: float = 600.0
+
+    def __init__(self, conn_list: List[Connection]):
+        self._conn: Connection = self._pick(conn_list)
+        self._start_time: float = time.time()
+
+    @staticmethod
+    def _pick(conn_list: List[Connection]) -> Connection:
+        """pick by score"""
+        pick_conn: Optional[Connection] = None
+        conn_len: int = len(conn_list)
+        if conn_len == 1:
+            pick_conn = conn_list[0]
+        elif conn_len > 1:
+            score: float = float("inf")
+            for conn in conn_list:
+                _score: float = (conn.server_cpu * conn.last_pick_duration * conn.semaphore.value) / (conn.weight)
+                if _score < score:
+                    score = _score
+                    pick_conn = conn
+        if not pick_conn:
+            raise ValueError("Can not found available conn")
+        return pick_conn
 
     async def __aenter__(self) -> Connection:
         await self._conn.semaphore.acquire()
@@ -49,7 +73,6 @@ class BaseEndpoint(object):
         timeout: read response from consumer timeout
         """
         self._transport: Optional[Transport] = None
-        self._host_weight_list: List[str] = []
         self._timeout: int = timeout or 1200
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._pack_param: Optional[dict] = pack_param
@@ -111,7 +134,6 @@ class BaseEndpoint(object):
             try:
                 if key in self._conn_dict:
                     del self._conn_dict[key]
-                    self._host_weight_list.remove(key)
                 self._connected_cnt -= 1
             except Exception as e:
                 msg: str = f"close conn error: {e}"
@@ -137,9 +159,6 @@ class BaseEndpoint(object):
             conn.ping_future.add_done_callback(lambda f: conn.close())
         logging.debug("Connection to %s...", conn.connection_info)
 
-        self._host_weight_list.extend([key for _ in range(weight)])
-        random.shuffle(self._host_weight_list)
-
         self._conn_dict[key] = conn
 
     async def destroy(self, ip: str, port: int) -> None:
@@ -154,7 +173,6 @@ class BaseEndpoint(object):
         if not self.is_close:
             await self._conn_dict[key].await_close()
 
-        self._host_weight_list = [i for i in self._host_weight_list if i != key]
         if key in self._conn_dict:
             del self._conn_dict[key]
 
@@ -167,13 +185,12 @@ class BaseEndpoint(object):
         for key, conn in self._conn_dict.copy().items():
             if not conn.is_closed():
                 await conn.await_close()
-        self._host_weight_list = []
         self._conn_dict = {}
         self._is_close = True
 
     def picker(self, cnt: Optional[int] = None) -> Picker:
         """get conn by endpoint
-        cnt: How many conn to get.
+        :param cnt: How many conn to get.
           if the value is empty, it will automatically get 1/3 of the conn from the endpoint,
           which should not be less than or equal to 0
         """
@@ -183,46 +200,40 @@ class BaseEndpoint(object):
             cnt = 1
 
         conn_list: List[Connection] = self._pick_conn(cnt)
-        if not conn_list:
-            raise ValueError("Can not found available conn")
-        return Picker(sorted(conn_list, key=lambda c: c.semaphore.value, reverse=True)[0])
+        return Picker(conn_list)
 
     def _pick_conn(self, cnt: int) -> List[Connection]:
         pass
 
     def _random_pick_conn(self, cnt: int) -> List[Connection]:
         """random get conn"""
-        if not self._host_weight_list:
-            raise ConnectionError("Endpoint Can not found conn")
-
         cnt = min(cnt, len(self._conn_dict))
+        key_list: List[str] = list(self._conn_dict.keys())
+        if not key_list:
+            raise ConnectionError("Endpoint Can not found conn")
         conn_set: Set[Connection] = set()
         while len(conn_set) < cnt:
-            key: str = random.choice(self._host_weight_list)
+            key: str = random.choice(key_list)
             conn_set.add(self._conn_dict[key])
 
         return list([i for i in conn_set if i.available])
 
     def _round_robin_pick_conn(self, cnt: int) -> List[Connection]:
         """get conn by round robin"""
-        if not self._host_weight_list:
-            raise ConnectionError("Endpoint Can not found conn")
-
         conn_list: List[Connection] = []
+        key_list: List[str] = list(self._conn_dict.keys())
+        if not key_list:
+            raise ConnectionError("Endpoint Can not found conn")
         for _ in range(cnt):
             self._round_robin_index += 1
-            index = self._round_robin_index % (len(self._host_weight_list))
-            key = self._host_weight_list[index]
-            conn: Connection = self._conn_dict[key]
+            index = self._round_robin_index % (len(self._conn_dict))
+            conn: Connection = self._conn_dict[key_list[index]]
             if conn.available:
                 conn_list.append(conn)
         return conn_list
 
     def _pick_faster_conn(self, cnt: int) -> List[Connection]:
         return sorted([i for i in self._conn_dict.values()], key=lambda c: c.RTT)[:cnt]
-
-    def _best_available_pick(self) -> List[Connection]:
-        pass
 
     def __len__(self) -> int:
         return self._connected_cnt
