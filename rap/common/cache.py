@@ -1,3 +1,4 @@
+import asyncio
 import time
 from dataclasses import MISSING
 from typing import Any, Dict, Generator, Optional, Tuple
@@ -9,6 +10,9 @@ class Cache(object):
     """Dict with expiration time function"""
 
     def __init__(self, interval: Optional[float] = None) -> None:
+        """
+        :param interval: Scan all keys interval
+        """
         self._dict: Dict[Any, Tuple[float, Any]] = {}
         self._interval: float = interval or 10.0
 
@@ -68,11 +72,12 @@ class Cache(object):
             return True
 
     def _auto_remove(self) -> None:
-        for key in list(self._dict.keys()):
-            if key in self:
+        for index, key in enumerate(list(self._dict.keys())):
+            if index % 100 == 0:
+                get_event_loop().call_soon(self._auto_remove)
+            if key not in self:
                 # NOTE: After Python 3.7, the dict is ordered.
                 # Since the inserted data is related to time, the dict here is also ordered by time
                 break
-            self.pop(key)
 
         get_event_loop().call_later(self._interval, self._auto_remove)

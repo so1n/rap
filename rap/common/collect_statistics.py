@@ -126,8 +126,6 @@ class WindowStatistics(object):
         self._start_timestamp: int = int(time.time())
         self._loop_timestamp: float = 0.0
         self._is_closed: bool = True
-        self._gauge_look: Lock = Lock()
-        self._counter_look: Lock = Lock()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._statistics_callback_future: Optional[asyncio.Future] = None
         self._statistics_callback_future_run_timestamp: float = time.time()
@@ -185,12 +183,11 @@ class WindowStatistics(object):
     def _set_gauge_value(self, key: str, value: float = 1) -> None:
         cnt, index = self._get_now_info()
         bucket: dict = self._gauge_bucket_list[index]
-        with self._gauge_look:
-            bucket["cnt"] = cnt
-            if key not in bucket:
-                bucket[key] = value
-            else:
-                bucket[key] += value
+        bucket["cnt"] = cnt
+        if key not in bucket:
+            bucket[key] = value
+        else:
+            bucket[key] += value
 
     def set_gauge_value(self, key: str, expire: float, diff: int = 1, value: float = 1) -> None:
         cache_key: str = Gauge.gen_metric_cache_name(key)
@@ -216,12 +213,11 @@ class WindowStatistics(object):
     ################
     def _set_counter_value(self, key: str, value: float, is_cover: bool = True) -> None:
         assert value > 0, "counter value must > 0"
-        with self._counter_look:
-            key = f"statistics:{key}"
-            if is_cover:
-                self._metric_cache.add(key, self._max_interval + 5, value)
-            else:
-                self._metric_cache.add(key, self._max_interval + 5, self.get_counter_value(key) + value)
+        key = f"statistics:{key}"
+        if is_cover:
+            self._metric_cache.add(key, self._max_interval + 5, value)
+        else:
+            self._metric_cache.add(key, self._max_interval + 5, self.get_counter_value(key) + value)
 
     def set_counter_value(self, key: str, expire: float, value: float = 1, is_cover: bool = True) -> None:
         cache_key: str = Gauge.gen_metric_cache_name(key)
@@ -325,3 +321,37 @@ class WindowStatistics(object):
     @property
     def is_closed(self) -> bool:
         return self._is_closed
+
+
+class ThreadWindowStatistics(WindowStatistics):
+    def __init__(
+        self,
+        # window interval param
+        interval: Optional[int] = None,
+        max_interval: Optional[int] = None,
+        # callback param
+        statistics_interval: Optional[int] = None,
+        statistics_callback_set: Optional[Set[Callable[[dict], None]]] = None,
+        statistics_callback_priority_set: Optional[Set[Callable[[dict], None]]] = None,
+        statistics_callback_wait_cnt: int = 3,
+        metric_cache: Optional[Cache] = None,
+    ) -> None:
+        super().__init__(
+            interval=interval,
+            max_interval=max_interval,
+            statistics_interval=statistics_interval,
+            statistics_callback_set=statistics_callback_set,
+            statistics_callback_priority_set=statistics_callback_priority_set,
+            statistics_callback_wait_cnt=statistics_callback_wait_cnt,
+            metric_cache=metric_cache,
+        )
+        self._gauge_look: Lock = Lock()
+        self._counter_look: Lock = Lock()
+
+    def _set_counter_value(self, key: str, value: float, is_cover: bool = True) -> None:
+        with self._counter_look:
+            super()._set_counter_value(key, value, is_cover)
+
+    def _set_gauge_value(self, key: str, value: float = 1) -> None:
+        with self._gauge_look:
+            super(ThreadWindowStatistics, self)._set_gauge_value(key, value)
