@@ -18,7 +18,8 @@ class EtcdEndpoint(BaseEndpoint):
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
         pick_conn_method: PickConnEnum = PickConnEnum.random,
-        ping_sleep_time: Optional[int] = None,
+        min_ping_interval: Optional[int] = None,
+        max_ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
         wait_server_recover: bool = True,
         # etcd client param
@@ -48,7 +49,8 @@ class EtcdEndpoint(BaseEndpoint):
             pack_param=pack_param,
             unpack_param=unpack_param,
             ping_fail_cnt=ping_fail_cnt,
-            ping_sleep_time=ping_sleep_time,
+            min_ping_interval=min_ping_interval,
+            max_ping_interval=max_ping_interval,
             wait_server_recover=wait_server_recover,
         )
         self.server_name: str = server_name

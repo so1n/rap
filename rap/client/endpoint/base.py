@@ -3,6 +3,7 @@ import logging
 import random
 import time
 from enum import Enum, auto
+from functools import reduce
 from typing import Any, Dict, List, Optional, Set
 
 from rap.client.transport.transport import Transport
@@ -18,8 +19,6 @@ class PickConnEnum(Enum):
 class Picker(object):
     """refer to `Kratos`"""
 
-    _decay_time: float = 600.0
-
     def __init__(self, conn_list: List[Connection]):
         self._conn: Connection = self._pick(conn_list)
         self._start_time: float = time.time()
@@ -34,7 +33,8 @@ class Picker(object):
         elif conn_len > 1:
             score: float = float("inf")
             for conn in conn_list:
-                _score: float = (conn.server_cpu * conn.last_pick_duration * conn.semaphore.value) / (conn.weight)
+                conn_ping_dict_sum: float = reduce(lambda x, y: x * y, conn.ping_dict.values())
+                _score: float = conn.weight / (conn.rtt * conn.semaphore.value * conn_ping_dict_sum)
                 if _score < score:
                     score = _score
                     pick_conn = conn
@@ -59,7 +59,8 @@ class BaseEndpoint(object):
         pick_conn_method: Optional[PickConnEnum] = None,
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
-        ping_sleep_time: Optional[int] = None,
+        min_ping_interval: Optional[int] = None,
+        max_ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
         wait_server_recover: bool = True,
     ) -> None:
@@ -71,6 +72,10 @@ class BaseEndpoint(object):
           weight: select this conn weight
           e.g.  [{"ip": "localhost", "port": "9000", weight: 10}]
         timeout: read response from consumer timeout
+        :param min_ping_interval: send client ping min interval, default 1
+        :param max_ping_interval: send client ping max interval, default 3
+        :param ping_fail_cnt: How many times ping fails to judge as unavailable, default 3
+        :param wait_server_recover: If False, ping failure will close conn
         """
         self._transport: Optional[Transport] = None
         self._timeout: int = timeout or 1200
@@ -78,8 +83,9 @@ class BaseEndpoint(object):
         self._pack_param: Optional[dict] = pack_param
         self._unpack_param: Optional[dict] = unpack_param
 
-        self._ping_sleep_time: Optional[int] = ping_sleep_time
-        self._ping_fail_cnt: Optional[int] = ping_fail_cnt
+        self._min_ping_interval: int = min_ping_interval or 1
+        self._max_ping_interval: int = max_ping_interval or 3
+        self._ping_fail_cnt: int = ping_fail_cnt or 3
         self._wait_server_recover: bool = wait_server_recover
 
         self._connected_cnt: int = 0
@@ -150,7 +156,8 @@ class BaseEndpoint(object):
         conn.ping_future = asyncio.ensure_future(
             self._transport.ping_event(
                 conn,
-                ping_interval=self._ping_sleep_time,
+                min_ping_interval=self._min_ping_interval,
+                max_ping_interval=self._max_ping_interval,
                 ping_fail_cnt=self._ping_fail_cnt,
                 wait_server_recover=self._wait_server_recover,
             )
@@ -233,7 +240,7 @@ class BaseEndpoint(object):
         return conn_list
 
     def _pick_faster_conn(self, cnt: int) -> List[Connection]:
-        return sorted([i for i in self._conn_dict.values()], key=lambda c: c.RTT)[:cnt]
+        return sorted([i for i in self._conn_dict.values()], key=lambda c: c.rtt)[:cnt]
 
     def __len__(self) -> int:
         return self._connected_cnt

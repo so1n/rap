@@ -140,14 +140,9 @@ class Connection(BaseConnection):
         self.ping_future: asyncio.Future = asyncio.Future()
         self.ping_future.set_result(True)
         self.available: bool = False
-        self.last_ping_timestamp: int = int(time.time())
-        self.RTT: float = 0.0
-        self.server_cpu: float = 1.0
-
-        # p2c
-        self.last_pick_duration: float = 0.0
-        self.last_latency: float = 0.0
-        self.last_pick_end_time: float = time.time()
+        self.last_ping_timestamp: float = time.time()
+        self.rtt: float = 0.0
+        self.ping_dict: dict = {}
 
     async def connect(self) -> None:
         ssl_context: Optional[ssl.SSLContext] = None

@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import logging
+import math
 import random
 import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
@@ -24,6 +25,8 @@ __all__ = ["Transport"]
 
 class Transport(object):
     """base client transport, encapsulation of custom transport protocol"""
+
+    _decay_time: float = 600.0
 
     def __init__(
         self,
@@ -70,27 +73,18 @@ class Transport(object):
     async def ping_event(
         self,
         conn: Connection,
-        ping_interval: Optional[int] = None,
-        ping_fail_cnt: Optional[int] = None,
+        min_ping_interval: int,
+        max_ping_interval: int,
+        ping_fail_cnt: int,
         wait_server_recover: bool = True,
     ) -> None:
-        """client ping-pong handler, check conn is available
-        :param conn: rap client conn
-        :param ping_interval: send client ping interval, default 30
-        :param ping_fail_cnt: How many times ping fails to judge as unavailable, default 3
-        :param wait_server_recover: If False, ping failure will close conn
-        """
-        if not ping_interval:
-            ping_interval = 10
-        if not ping_fail_cnt:
-            ping_fail_cnt = 3
-
-        ping_fail_interval: int = ping_interval * ping_fail_cnt
+        """client ping-pong handler, check conn is available"""
+        ping_fail_interval: int = int(max_ping_interval * ping_fail_cnt)
         while True:
-            diff_time: int = int(time.time()) - conn.last_ping_timestamp
+            diff_time: float = time.time() - conn.last_ping_timestamp
             available: bool = diff_time < ping_fail_interval
             conn.available = available
-            logging.debug("conn:%s available:%s RTT:%s", conn.peer_tuple, available, conn.RTT)
+            logging.debug("conn:%s available:%s rtt:%s", conn.peer_tuple, available, conn.rtt)
             if not available and not wait_server_recover:
                 logging.error(f"ping {conn.sock_tuple} timeout... exit")
                 return
@@ -100,7 +94,9 @@ class Transport(object):
                 except Exception as e:
                     logging.debug(f"{conn} ping event exit.. error:{e}")
 
-            await asyncio.wait_for(asyncio.shield(conn.listen_future), timeout=ping_interval)
+            await asyncio.wait_for(
+                asyncio.shield(conn.listen_future), timeout=random.randint(min_ping_interval, max_ping_interval)
+            )
 
     async def listen(self, conn: Connection) -> None:
         """listen server msg from conn"""
@@ -116,6 +112,7 @@ class Transport(object):
             if not conn.is_closed():
                 await conn.await_close()
 
+    # flake8: noqa: C901
     async def _dispatch_resp_from_conn(self, conn: Connection) -> None:
         """Distribute the response data to different consumers according to different conditions"""
         response, exc = await self._read_from_conn(conn)
@@ -167,9 +164,32 @@ class Transport(object):
             elif response.func_name == Constant.PING_EVENT:
                 await self.write_to_conn(Request.from_event(self.app, event.PongEvent("")), conn)
             elif response.func_name == Constant.PONG_EVENT:
-                conn.last_ping_timestamp = int(time.time())
-                conn.RTT = time.time() - response.body["time"]
-                conn.server_cpu = response.body["server_cpu_percent"]
+                # declare
+                now_time: float = time.time()
+                old_last_ping_timestamp: float = conn.last_ping_timestamp
+                old_rtt: float = conn.rtt
+                old_ping_dict: dict = conn.ping_dict.copy()
+                start_time: float = response.body["time"]
+
+                # ewma
+                td: float = now_time - old_last_ping_timestamp
+                w: float = math.exp(-td / self._decay_time)
+                rtt: float = now_time - start_time
+                if rtt < 0:
+                    rtt = 0
+                if old_rtt <= 0:
+                    w = 0
+
+                # calculate
+                for key in ["request_in_progress", "channel_in_progress", "recent_error_cnt", "server_cpu_percent"]:
+                    if key not in response.body:
+                        conn.ping_dict.pop(key, None)
+                    elif key not in old_ping_dict:
+                        conn.ping_dict[key] = response.body[key]
+                    else:
+                        conn.ping_dict[key] = old_ping_dict[key] * w + response.body[key] * (1 - w)
+                conn.rtt = old_rtt * w + rtt * (1 - w)
+                conn.last_ping_timestamp = now_time
             elif response.func_name == Constant.DECLARE:
                 if not response.body.get("result"):
                     raise rap_exc.AuthError("Declare error")

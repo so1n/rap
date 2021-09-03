@@ -1,5 +1,7 @@
 from typing import TYPE_CHECKING, Dict, List, Optional
 
+import psutil
+
 from rap.common.collect_statistics import Counter, Gauge
 from rap.common.utils import Constant, EventEnum
 from rap.server.model import Request, Response
@@ -8,6 +10,9 @@ from rap.server.plugin.processor.base import BaseProcessor
 if TYPE_CHECKING:
     from rap.server.core import Server
     from rap.server.types import SERVER_EVENT_FN
+
+
+psutil.cpu_percent()
 
 
 class ClientPintProcessor(BaseProcessor):
@@ -45,9 +50,10 @@ class ClientPintProcessor(BaseProcessor):
         if response.target.endswith(Constant.PONG_EVENT):
             response.body.update(
                 {
-                    "request_online": self.request_online_counter.get_value(),
-                    "channel_online": self.channel_online_cnt_counter.get_value(),
-                    "error_cnt": self.error_cnt_gauge.get_value(),
+                    "request_in_progress": self.request_online_counter.get_value(),
+                    "channel_in_progress": self.channel_online_cnt_counter.get_value(),
+                    "recent_error_cnt": self.error_cnt_gauge.get_value(),
+                    "server_cpu_percent": psutil.cpu_percent(),
                 }
             )
         return response

@@ -347,7 +347,8 @@ class Client(BaseClient):
         ws_max_interval: Optional[int] = None,
         ws_statistics_interval: Optional[int] = None,
         select_conn_method: PickConnEnum = PickConnEnum.random,
-        ping_sleep_time: Optional[int] = None,
+        min_ping_interval: Optional[int] = None,
+        max_ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
         wait_server_recover: bool = True,
     ):
@@ -369,7 +370,8 @@ class Client(BaseClient):
             unpack_param=None,
             pick_conn_method=select_conn_method,
             ping_fail_cnt=ping_fail_cnt,
-            ping_sleep_time=ping_sleep_time,
+            min_ping_interval=min_ping_interval,
+            max_ping_interval=max_ping_interval,
             wait_server_recover=wait_server_recover,
         )
         super().__init__(
