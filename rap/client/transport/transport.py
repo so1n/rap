@@ -94,9 +94,12 @@ class Transport(object):
                 except Exception as e:
                     logging.debug(f"{conn} ping event exit.. error:{e}")
 
-            await asyncio.wait_for(
-                asyncio.shield(conn.listen_future), timeout=random.randint(min_ping_interval, max_ping_interval)
-            )
+            try:
+                await asyncio.wait_for(
+                    asyncio.shield(conn.listen_future), timeout=random.randint(min_ping_interval, max_ping_interval)
+                )
+            except asyncio.TimeoutError:
+                pass
 
     async def listen(self, conn: Connection) -> None:
         """listen server msg from conn"""
