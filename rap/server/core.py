@@ -300,7 +300,6 @@ class Server(object):
         close_timestamp: int = int(time.time()) + self._close_timeout
         while self._connected_set and close_timestamp > int(time.time()):
             await asyncio.sleep(0.1)
-
         self._run_event.set()
         await self.run_event_list(EventEnum.after_end, is_raise=True)
 

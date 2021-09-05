@@ -131,6 +131,7 @@ class Connection(BaseConnection):
         self.weight: int = weight
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self.connection_info: str = f"{host}:{port}"
+        self.score: float = 0.0
 
         self.listen_future: asyncio.Future = asyncio.Future()
         self.listen_future.set_result(True)

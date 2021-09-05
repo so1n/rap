@@ -190,7 +190,7 @@ def param_handle(func: Callable, param_list: Sequence[Any], default_param_dict: 
 
 def del_future(future: asyncio.Future) -> None:
     """Cancel the running future and read the result"""
-    if future.cancelled():
+    if not future.cancelled():
         future.cancel()
     if future.done():
         future.result()

@@ -227,7 +227,7 @@ class Receiver(object):
                 except asyncio.TimeoutError:
                     pass
                 except Exception as e:
-                    logging.debug(f"{self._conn} ping event exit.. error:{e}")
+                    logging.debug(f"{self._conn} ping event exit.. error:<{e.__class__.__name__}>[{e}]")
 
     async def channel_handle(self, request: Request, response: Response) -> Optional[Response]:
         func: Callable = (await self._call_func_permission_fn(request)).func

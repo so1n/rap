@@ -59,9 +59,11 @@ class Channel(BaseChannel):
         def add_done_callback(f: asyncio.Future) -> None:
             if f.cancelled():
                 self.set_exc(ChannelError("channel is close"))
-            f_exc: Optional[BaseException] = f.exception()
-            if f_exc:
-                self.set_exc(f_exc)
+            try:
+                f.exception()
+            except Exception as e:
+                print(e)
+                self.set_exc(e)
             else:
                 self.set_exc(ChannelError("channel is close"))
 
@@ -112,7 +114,7 @@ class Channel(BaseChannel):
             self._target,
             body,
             correlation_id=self.channel_id,
-            header={"channel_life_cycle": life_cycle, "channel_id": self.channel_id},
+            header={"channel_life_cycle": life_cycle},
         )
         if timeout:
             await asyncio.wait_for(self._write(request), timeout)

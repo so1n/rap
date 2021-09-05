@@ -3,7 +3,6 @@ import logging
 import random
 import time
 from enum import Enum, auto
-from functools import reduce
 from typing import Any, Dict, List, Optional, Set
 
 from rap.client.transport.transport import Transport
@@ -31,11 +30,11 @@ class Picker(object):
         if conn_len == 1:
             pick_conn = conn_list[0]
         elif conn_len > 1:
-            score: float = float("inf")
+            score: float = 0.0
             for conn in conn_list:
-                conn_ping_dict_sum: float = reduce(lambda x, y: x * y, conn.ping_dict.values())
-                _score: float = conn.weight / (conn.rtt * conn.semaphore.value * conn_ping_dict_sum)
-                if _score < score:
+                _score: float = conn.score / conn.semaphore.value
+                logging.debug("conn:%s available:%s rtt:%s score:%s", conn.peer_tuple, conn.available, conn.rtt, _score)
+                if _score > score:
                     score = _score
                     pick_conn = conn
         if not pick_conn:
@@ -202,7 +201,10 @@ class BaseEndpoint(object):
           which should not be less than or equal to 0
         """
         if not cnt:
-            cnt = self._connected_cnt // 3
+            if self._connected_cnt <= 3:
+                cnt = self._connected_cnt
+            else:
+                cnt = self._connected_cnt // 3
         if cnt <= 0:
             cnt = 1
 

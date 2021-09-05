@@ -183,16 +183,20 @@ class Transport(object):
                 if old_rtt <= 0:
                     w = 0
 
+                ping_dict_score: float = 1.0
                 # calculate
                 for key in ["request_in_progress", "channel_in_progress", "recent_error_cnt", "server_cpu_percent"]:
                     if key not in response.body:
                         conn.ping_dict.pop(key, None)
+                        continue
                     elif key not in old_ping_dict:
                         conn.ping_dict[key] = response.body[key]
                     else:
                         conn.ping_dict[key] = old_ping_dict[key] * w + response.body[key] * (1 - w)
+                    ping_dict_score = ping_dict_score * conn.ping_dict[key]
                 conn.rtt = old_rtt * w + rtt * (1 - w)
                 conn.last_ping_timestamp = now_time
+                conn.score = conn.weight / (conn.rtt * ping_dict_score)
             elif response.func_name == Constant.DECLARE:
                 if not response.body.get("result"):
                     raise rap_exc.AuthError("Declare error")
