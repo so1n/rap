@@ -11,6 +11,7 @@ from rap.common.cache import Cache
 from rap.common.collect_statistics import WindowStatistics
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import ServerError
+from rap.common.signal_broadcast import add_signal_handler, remove_signal_handler
 from rap.common.snowflake import get_snowflake_id
 from rap.common.types import BASE_MSG_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utils import EventEnum, RapFunc
@@ -253,17 +254,13 @@ class Server(object):
             asyncio.ensure_future(self.shutdown())
 
         if threading.current_thread() is not threading.main_thread():
-            logging.error("Signals can only be listened to from the main thread.")
+            raise RuntimeError("Signals can only be listened to from the main thread.")
         else:
-            try:
-                # only use in unix
-                loop = asyncio.get_event_loop()
-                for sig in [signal.SIGINT, signal.SIGTERM]:
-                    loop.add_signal_handler(sig, _shutdown, sig, None)
-            except NotImplementedError:
-                for sig in [signal.SIGINT, signal.SIGTERM]:
-                    signal.signal(sig, _shutdown)
-        await self._run_event.wait()
+            for sig in [signal.SIGINT, signal.SIGTERM]:
+                add_signal_handler(sig, _shutdown)
+            await self._run_event.wait()
+            for sig in [signal.SIGINT, signal.SIGTERM]:
+                remove_signal_handler(sig, _shutdown)
 
     async def shutdown(self) -> None:
         """Notify the client that it is about to close, and the client should not send new messages at this time.
@@ -296,7 +293,7 @@ class Server(object):
         await asyncio.gather(*task_list)
 
         # until connections close
-        logging.info("Waiting for connections to close. (CTRL+C to force quit)")
+        logging.info(f"{self} Waiting for connections to close. (CTRL+C to force quit)")
         close_timestamp: int = int(time.time()) + self._close_timeout
         while self._connected_set and close_timestamp > int(time.time()):
             await asyncio.sleep(0.1)
