@@ -1,3 +1,4 @@
+import logging
 import time
 from dataclasses import MISSING
 from typing import Any, Dict, Generator, Optional, Tuple
@@ -12,6 +13,7 @@ class Cache(object):
         """
         :param interval: Scan all keys interval
         """
+        self._idling_times: int = 1
         self._dict: Dict[Any, Tuple[float, Any]] = {}
         self._interval: float = interval or 10.0
 
@@ -71,12 +73,24 @@ class Cache(object):
             return True
 
     def _auto_remove(self) -> None:
-        for index, key in enumerate(list(self._dict.keys())):
-            if index % 100 == 0:
-                get_event_loop().call_soon(self._auto_remove)
-            if key not in self:
-                # NOTE: After Python 3.7, the dict is ordered.
-                # Since the inserted data is related to time, the dict here is also ordered by time
-                break
+        key_list: list = list(self._dict.keys())
+        index: int = 0
+        if not key_list:
+            self._idling_times += 1
+        else:
+            self._idling_times = 1
+            for index, key in enumerate(key_list):
+                if index > 100 and index % 100 == 0:
+                    self._idling_times = 0
+                    break
+                if key in self:
+                    # NOTE: After Python 3.7, the dict is ordered.
+                    # Since the inserted data is related to time, the dict here is also ordered by time
+                    break
 
-        get_event_loop().call_later(self._interval, self._auto_remove)
+        next_call_interval: float = self._idling_times * self._interval
+        logging.debug(
+            f"{self.__class__.__name__} auto remove key length:{len(key_list)}, clean cnt:{index},"
+            f"until the next call:{next_call_interval}"
+        )
+        get_event_loop().call_later(next_call_interval, self._auto_remove)
