@@ -248,11 +248,17 @@ class Transport(object):
 
         # Legal response, but may be intercepted by the processer
         exc: Optional[Exception] = None
+        if response.status_code >= 400:
+            exc_class: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(
+                response.status_code, rap_exc.BaseRapError
+            )
+            exc = exc_class(response.body)
         try:
             for process_response in self._process_response_list:
                 response = await process_response(response)
         except Exception as e:
             exc = e
+
         return response, exc
 
     async def declare(self, conn: Connection) -> None:

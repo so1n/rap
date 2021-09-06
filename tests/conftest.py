@@ -1,9 +1,11 @@
 import asyncio
-from typing import Any, AsyncGenerator, AsyncIterator, Iterator
+from contextlib import asynccontextmanager
+from typing import Any, AsyncGenerator, AsyncIterator, Iterator, List
 
 import pytest
 
 from rap.client import Client
+from rap.client.processor.base import BaseProcessor
 from rap.server import Server
 
 
@@ -81,6 +83,18 @@ async def rap_server() -> AsyncGenerator[Server, None]:
 async def rap_client() -> AsyncGenerator[Client, None]:
     client.transport._process_request_list = []
     client.transport._process_response_list = []
+    await client.start()
+    try:
+        yield client
+    finally:
+        await client.stop()
+
+
+@asynccontextmanager
+async def process_client(process_list: List[BaseProcessor]) -> AsyncGenerator[Client, None]:
+    client.transport._process_request_list = []
+    client.transport._process_response_list = []
+    client.load_processor(process_list)
     await client.start()
     try:
         yield client

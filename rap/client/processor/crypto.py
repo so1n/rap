@@ -1,10 +1,11 @@
+import logging
 import time
-from typing import Optional, Tuple
+from typing import Optional
 
 from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
 from rap.common.crypto import Crypto
-from rap.common.exceptions import CryptoError, RPCError
+from rap.common.exceptions import CryptoError
 from rap.common.snowflake import get_snowflake_id
 from rap.common.utils import Constant, gen_random_time_id
 
@@ -38,57 +39,37 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
         nonce_time: Cache nonce time, each message has a nonce field, and the value of each message is different,
             which is used to prevent message re-attack.
         """
-        self._nonce_timeout: int = nonce_timeout or 60
+        self._nonce_timeout: int = nonce_timeout or BaseCryptoProcessor._nonce_timeout
 
     async def process_request(self, request: Request) -> Request:
-        key: str = f"{self.__class__.__name__}:{request.header['host']}"
+        assert request.conn is not None, "Not found conn from request"
         if request.msg_type == Constant.CLIENT_EVENT and request.target.endswith(Constant.DECLARE):
-            check_id: str = str(get_snowflake_id())
+            crypto_key: str = gen_random_time_id(length=6, time_length=10)
             crypto_id: str = str(get_snowflake_id())
+            check_id: str = str(get_snowflake_id())
             request.body["crypto_id"] = crypto_id
-            request.body["crypto_key"] = gen_random_time_id(length=6, time_length=10)
+            request.body["crypto_key"] = crypto_key
             request.body["check_id"] = check_id
-            request.app.cache.add(key, 60, (crypto_id, check_id))
+            request.conn.state.crypto = Crypto(crypto_key)
+            self.app.cache.add(crypto_id, 10, check_id)
         elif request.msg_type in (Constant.MSG_REQUEST, Constant.CHANNEL_REQUEST):
             try:
-                if not request.conn:
-                    raise RPCError("Not found conn from request")
-                crypto_id = getattr(request.conn, "_crypto_id", "")
-                crypto: Optional[Crypto] = getattr(request.conn, "_crypto", None)
-                if not crypto_id or not crypto:
-                    raise CryptoError(f"conn:{request.conn} not support crypto")
+                crypto: Crypto = request.conn.state.crypto
                 request.body = {"body": request.body, "timestamp": int(time.time()), "nonce": get_snowflake_id()}
-                request.header["crypto_id"] = crypto_id
                 request.body = crypto.encrypt_object(request.body)
             except Exception as e:
-                raise CryptoError("Can't decrypt body.") from e
+                raise CryptoError("Can't encrypt body.") from e
         return request
 
     async def process_response(self, response: Response) -> Response:
-        key: str = f"{self.__class__.__name__}:{response.conn.sock_tuple[0]}"
+        crypto: Crypto = response.conn.state.crypto
         try:
             if response.msg_type == Constant.SERVER_EVENT and response.target.endswith(Constant.DECLARE):
-                result: Optional[Tuple[str, str]] = response.app.cache.get_and_update_expire(key, 60 * 5)
-                if not result:
-                    raise CryptoError(f"{response.header['host']} not create crypto")
-                _crypto_id, _check_id = result
-                crypto_id: str = response.body.get("crypto_id", "")
-                crypto_key: str = response.body.get("crypto_key", "")
-                check_body: bytes = response.body.get("check_body", b"")
-                if not crypto_id or not crypto_key or not check_body:
-                    raise CryptoError("crypto param error")
-
-                crypto: Crypto = Crypto(crypto_key)
-                if crypto_id != crypto.decrypt_object(check_body) or crypto_id != _crypto_id:
-                    raise CryptoError("crypto check error")
-                setattr(response.conn, "_crypto_id", crypto_id)
-                setattr(response.conn, "_crypto", crypto)
-                return response
-            if type(response.body) is bytes:
-                crypto_id = getattr(response.conn, "_crypto_id", "")
-                crypto = getattr(response.conn, "_crypto", None)
-                if not crypto_id or not crypto:
-                    raise CryptoError(f"conn:{response.conn} not support crypto")
+                if crypto.decrypt_object(response.body["check_id"]) != self.app.cache.get(
+                    response.body["crypto_id"], ""
+                ):
+                    raise CryptoError("Check body error")
+            elif response.msg_type in (Constant.MSG_RESPONSE, Constant.CHANNEL_RESPONSE) and response.status_code < 400:
                 response.body = crypto.decrypt_object(response.body)
                 self._body_handle(response.body)
                 response.body = response.body["body"]
@@ -114,18 +95,24 @@ class CryptoProcessor(BaseCryptoProcessor):
         self._crypto: "Crypto" = Crypto(self._crypto_key)
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type in (Constant.MSG_REQUEST, Constant.CHANNEL_REQUEST):
+        if request.msg_type == Constant.CLIENT_EVENT and request.target.endswith(Constant.DECLARE):
+            # Tell the server that the key will be used for encrypted communication
+            request.body["crypto_id"] = self._crypto_id
+            request.body["check_body"] = self._crypto.encrypt_object(self._crypto_id)
+        elif request.msg_type in (Constant.MSG_REQUEST, Constant.CHANNEL_REQUEST):
             request.body = {"body": request.body, "timestamp": int(time.time()), "nonce": get_snowflake_id()}
-            request.header["crypto_id"] = self._crypto_id
             request.body = self._crypto.encrypt_object(request.body)
         return request
 
     async def process_response(self, response: Response) -> Response:
-        try:
-            if type(response.body) is bytes:
+        if response.msg_type in (Constant.MSG_RESPONSE, Constant.CHANNEL_RESPONSE) and response.status_code < 400:
+            try:
+                if type(response.body) is not bytes:
+                    raise TypeError("Response body type error, can not decrypt")
                 response.body = self._crypto.decrypt_object(response.body)
                 self._body_handle(response.body)
                 response.body = response.body["body"]
-            return response
-        except Exception as e:
-            raise CryptoError("Can't decrypt body.") from e
+            except Exception as e:
+                logging.exception(f"decrypt error:{e}")
+                raise CryptoError("Can't decrypt body.") from e
+        return response

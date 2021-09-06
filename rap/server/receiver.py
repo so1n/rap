@@ -87,17 +87,17 @@ class Channel(BaseChannel):
             raise ChannelError(f"channel{self.channel_id} is close")
         await self._write(body, {"channel_life_cycle": Constant.MSG})
 
-    async def read(self) -> Response:
+    async def read(self) -> Request:
         if self.is_close:
             raise ChannelError(f"channel{self.channel_id} is close")
-        result: Union[Response, Exception] = await self._queue.get()
+        result: Union[Request, Exception] = await self._queue.get()
         if isinstance(result, Exception):
             raise result
         return result
 
     async def read_body(self) -> Any:
-        response: Response = await self.read()
-        return response.body
+        request: Request = await self.read()
+        return request.body
 
     async def close(self) -> None:
         if self.is_close:
@@ -207,6 +207,7 @@ class Receiver(object):
         except Exception as e:
             logging.debug(e)
             logging.debug(traceback.format_exc())
+            print(e, traceback.format_exc())
             response.set_exception(RpcRunTimeError())
             return response
 
@@ -224,10 +225,10 @@ class Receiver(object):
                 await self.sender.send_event(PingEvent(""))
                 try:
                     await asyncio.wait_for(asyncio.shield(self._conn.conn_future), timeout=self._ping_sleep_time)
-                except asyncio.TimeoutError:
+                except (asyncio.TimeoutError, asyncio.CancelledError):
                     pass
                 except Exception as e:
-                    logging.debug(f"{self._conn} ping event exit.. error:<{e.__class__.__name__}>[{e}]")
+                    logging.exception(f"{self._conn} ping event exit.. error:<{e.__class__.__name__}>[{e}]")
 
     async def channel_handle(self, request: Request, response: Response) -> Optional[Response]:
         func: Callable = (await self._call_func_permission_fn(request)).func

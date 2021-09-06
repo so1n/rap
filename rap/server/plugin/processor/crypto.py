@@ -1,8 +1,8 @@
 import time
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from rap.common.crypto import Crypto
-from rap.common.exceptions import CryptoError, ParseError, RPCError
+from rap.common.exceptions import CryptoError, ParseError
 from rap.common.utils import Constant, EventEnum, gen_random_time_id
 from rap.server.model import Request, Response
 from rap.server.plugin.processor.base import BaseProcessor
@@ -82,59 +82,67 @@ class BaseCryptoProcessor(BaseProcessor):
 
     async def decrypt_request(self, request: Request) -> Request:
         """decrypt request body"""
-        crypto_id: str = request.header.get("crypto_id", None)
-        crypto: Optional[Crypto] = self.get_crypto_by_key_id(crypto_id)
-        # check crypto
-        if crypto is None:
-            raise CryptoError("crypto id error")
-        try:
-            request.body = crypto.decrypt_object(request.body)
-        except Exception as e:
-            raise CryptoError("decrypt body error") from e
+        if request.msg_type in (Constant.MSG_REQUEST, Constant.MSG_REQUEST):
+            crypto: Optional[Crypto] = request.conn.state.get_value("crypto", None)
+            if crypto:
+                try:
+                    request.body = crypto.decrypt_object(request.body)
+                except Exception as e:
+                    raise CryptoError("decrypt body error") from e
 
-        try:
-            timestamp: int = request.body.get("timestamp", 0)
-            if (int(time.time()) - timestamp) > self._timeout:
-                raise ParseError(extra_msg="timeout param error")
-            nonce: str = request.body.get("nonce", "")
-            if not nonce:
-                raise ParseError(extra_msg="nonce param error")
-            nonce = f"{self._nonce_key}:{nonce}"
-            if nonce in self.app.cache:
-                raise ParseError(extra_msg="nonce param error")
-            else:
-                self.app.cache.add(nonce, self._nonce_timeout)
-            request.body = request.body["body"]
+                try:
+                    timestamp: int = request.body.get("timestamp", 0)
+                    if (int(time.time()) - timestamp) > self._timeout:
+                        raise ParseError(extra_msg="timeout param error")
+                    nonce: str = request.body.get("nonce", "")
+                    if not nonce:
+                        raise ParseError(extra_msg="nonce param error")
+                    nonce = f"{self._nonce_key}:{nonce}"
+                    if nonce in self.app.cache:
+                        raise ParseError(extra_msg="nonce param error")
+                    else:
+                        self.app.cache.add(nonce, self._nonce_timeout)
+                    request.body = request.body["body"]
 
-            # set share data
-            request.state.crypto = crypto
+                    # set share data
+                    request.state.crypto = crypto
 
-            return request
-        except Exception as e:
-            raise CryptoError(str(e)) from e
+                except Exception as e:
+                    raise CryptoError(str(e)) from e
+        return request
 
-    async def encrypt_response(self, response: Response) -> Response:
+    @staticmethod
+    async def encrypt_response(response: Response) -> Response:
         """encrypt response body"""
-        crypto_id: str = response.header.get("crypto_id", None)
-        crypto: Optional[Crypto] = self.get_crypto_by_key_id(crypto_id)
-        if not crypto:
-            return response
-        response.body = crypto.encrypt_object(
-            {"body": response.body, "timestamp": int(time.time()), "nonce": gen_random_time_id()}
-        )
+        if response.msg_type in (Constant.MSG_RESPONSE, Constant.CHANNEL_RESPONSE) and response.status_code <= 400:
+            assert response.conn is not None
+            crypto: Optional[Crypto] = response.conn.state.get_value("crypto", None)
+            if not crypto:
+                return response
+            response.body = crypto.encrypt_object(
+                {"body": response.body, "timestamp": int(time.time()), "nonce": gen_random_time_id()}
+            )
         return response
 
 
 class CryptoProcessor(BaseCryptoProcessor):
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type in (Constant.MSG_REQUEST, Constant.CHANNEL_REQUEST):
-            return await self.decrypt_request(request)
-        return request
+        if request.msg_type == Constant.CLIENT_EVENT and request.target.endswith(Constant.DECLARE):
+            crypto_id: str = request.body.get("crypto_id", "")
+            if crypto_id:
+                crypto: Optional[Crypto] = self.get_crypto_by_key_id(crypto_id)
+                if not crypto:
+                    raise CryptoError(f"Can not found crypto_id:{crypto_id}")
+                try:
+                    if crypto_id != crypto.decrypt_object(request.body["check_body"]):
+                        raise CryptoError()
+                except Exception:
+                    raise CryptoError("key error")
+                request.conn.state.crypto = crypto
+        return await self.decrypt_request(request)
 
     async def process_response(self, response: Response) -> Response:
-        if response.msg_type in (Constant.MSG_RESPONSE, Constant.CHANNEL_RESPONSE):
-            return await self.encrypt_response(response)
-        return response
+        return await self.encrypt_response(response)
 
 
 class AutoCryptoProcessor(BaseCryptoProcessor):
@@ -144,37 +152,30 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
     """
 
     async def process_request(self, request: Request) -> Request:
+        assert request.conn is not None, "Not found conn from request"
         if request.msg_type == Constant.CLIENT_EVENT and request.target.endswith(Constant.DECLARE):
-            check_id: str = request.body.get("check_id", "")
+            check_id: bytes = request.body.get("check_id", b"")
             crypto_id: str = request.body.get("crypto_id", "")
             crypto_key: str = request.body.get("crypto_key", "")
             if not crypto_id or not crypto_key or not check_id:
                 raise CryptoError("crypto param error")
-            if not self.get_crypto_by_key_id(crypto_id):
-                self.load_aes_key_dict({crypto_id: crypto_key})
-                request.conn.conn_future.add_done_callback(lambda f: self.del_crypto_by_key_id(crypto_id))
-            request.app.cache.add(f"auto_crypto:{request.conn.conn_id}:init", 60, (crypto_id, crypto_key, check_id))
-
+            request.conn.state.crypto = Crypto(crypto_key)
+            try:
+                request.conn.state.crypto.decrypt_object(check_id)
+            except Exception:
+                raise CryptoError("crypto check error")
+            request.app.cache.add(f"auto_crypto:{request.conn.conn_id}:init", 60, check_id)
             return request
         else:
             return await super().decrypt_request(request)
 
     async def process_response(self, response: Response) -> Response:
+        assert response.conn is not None, "Not found conn from response"
         if response.msg_type == Constant.SERVER_EVENT and response.target.endswith(Constant.DECLARE):
-            if not response.conn:
-                raise RPCError(f"Not found conn from:{response}")
-            result: Optional[Tuple[str, str, str]] = response.app.cache.get(f"auto_crypto:{response.conn.conn_id}:init")
-            if not result:
-                raise CryptoError("crypto id error")
-            crypto_id, crypto_key, check_id = result
-            crypto: Optional[Crypto] = self.get_crypto_by_key_id(crypto_id)
-            if crypto is None:
-                raise CryptoError("crypto id error")
-            response.body = {
-                "crypto_id": crypto_id,
-                "crypto_key": crypto_key,
-                "check_body": crypto.encrypt_object(check_id),
-            }
+            check_id: str = response.app.cache.get(f"auto_crypto:{response.conn.conn_id}:init", "")
+            if not check_id:
+                raise CryptoError("check id error")
+            response.body["check_body"] = response.conn.state.crypto.encrypt_object(check_id)
             return response
         else:
             return await super().encrypt_response(response)

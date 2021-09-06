@@ -1,3 +1,4 @@
+from dataclasses import MISSING
 from typing import Any, Dict, Optional
 
 
@@ -23,3 +24,11 @@ class State(object):
 
     def __delattr__(self, key: Any) -> None:
         del self._state[key]
+
+    def get_value(self, key: Any, default_value: Any = MISSING) -> Any:
+        try:
+            return self._state[key]
+        except KeyError:
+            if default_value is MISSING:
+                raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{key}'")
+            return default_value
