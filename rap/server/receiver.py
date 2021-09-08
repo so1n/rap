@@ -385,6 +385,7 @@ class Receiver(object):
         elif request.func_name == Constant.DROP:
             self.del_receiver()
             response.set_event(DropEvent("success"))
+        response.correlation_id = request.correlation_id
         return response
 
     def del_receiver(self) -> None:

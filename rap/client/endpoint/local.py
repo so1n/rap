@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Optional
 
 from rap.client.endpoint.base import BaseEndpoint, PickConnEnum
@@ -47,9 +48,12 @@ class LocalEndpoint(BaseEndpoint):
     async def start(self) -> None:
         if not self.is_close:
             raise ConnectionError(f"{self.__class__.__name__} is running")
-        for conn_dict in self._conn_list:
-            ip: str = conn_dict["ip"]
-            port: int = conn_dict["port"]
-            weight: int = conn_dict.get("weight", 10)
-            await self.create(ip, port, weight)
-        await super().start()
+        if not self._conn_list:
+            raise ValueError("Can not found conn config")
+        await asyncio.gather(
+            *[
+                self.create(conn_dict["ip"], conn_dict["port"], conn_dict.get("weight", 10))
+                for conn_dict in self._conn_list
+            ]
+        )
+        await self._start()

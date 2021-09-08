@@ -29,7 +29,7 @@ async def echo_body(channel: Channel) -> None:
         cnt += 1
         if cnt > 10:
             break
-        await channel.write(body)
+        await channel.write(f"pong! {cnt}")
 
 
 async def echo_response(channel: Channel) -> None:

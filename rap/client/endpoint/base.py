@@ -88,7 +88,7 @@ class BaseEndpoint(object):
         self._wait_server_recover: bool = wait_server_recover
 
         self._connected_cnt: int = 0
-        self._conn_dict: Dict[str, Connection] = {}
+        self._conn_dict: Dict[tuple, Connection] = {}
         self._round_robin_index: int = 0
         self._is_close: bool = True
 
@@ -101,9 +101,52 @@ class BaseEndpoint(object):
             elif pick_conn_method == PickConnEnum.faster:
                 setattr(self, self._pick_conn.__name__, self._pick_faster_conn)
 
+    async def _listen_conn(self, conn: Connection) -> None:
+        """listen server msg from conn"""
+        if not self._transport:
+            raise ConnectionError("endpoint need transport")
+        logging.debug("listen:%s start", conn.peer_tuple)
+        try:
+            while not conn.is_closed():
+                await self._transport.dispatch_resp_from_conn(conn)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            conn.set_reader_exc(e)
+            logging.exception(f"listen {conn.connection_info} error:{e}")
+            if not conn.is_closed():
+                await conn.await_close()
+
+    async def _ping_event(self, conn: Connection) -> None:
+        """client ping-pong handler, check conn is available"""
+        if not self._transport:
+            raise ConnectionError("endpoint need transport")
+        ping_fail_interval: int = int(self._max_ping_interval * self._ping_fail_cnt)
+        while True:
+            diff_time: float = time.time() - conn.last_ping_timestamp
+            available: bool = diff_time < ping_fail_interval
+            conn.available = available
+            logging.debug("conn:%s available:%s rtt:%s", conn.peer_tuple, available, conn.rtt)
+            if not available and not self._wait_server_recover:
+                logging.error(f"ping {conn.sock_tuple} timeout... exit")
+                return
+            else:
+                try:
+                    await self._transport.ping(conn)
+                except Exception as e:
+                    logging.debug(f"{conn} ping event exit.. error:{e}")
+
+            try:
+                await asyncio.wait_for(
+                    asyncio.shield(conn.listen_future),
+                    timeout=random.randint(self._min_ping_interval, self._max_ping_interval),
+                )
+            except asyncio.TimeoutError:
+                pass
+
     def set_transport(self, transport: Transport) -> None:
         """set transport to endpoint"""
-        assert not self._transport, ValueError("transport already exists")
+        assert self._transport is None, ValueError("transport already exists")
         assert isinstance(transport, Transport), TypeError(f"{transport} type must{Transport}")
         self._transport = transport
 
@@ -120,7 +163,7 @@ class BaseEndpoint(object):
         if not self._transport:
             raise ConnectionError("endpoint need transport")
 
-        key: str = f"{ip}:{port}"
+        key: tuple = (ip, port)
         if key in self._conn_dict:
             raise ConnectionError(f"conn:{key} already create")
 
@@ -137,8 +180,7 @@ class BaseEndpoint(object):
 
         def _conn_done(f: asyncio.Future) -> None:
             try:
-                if key in self._conn_dict:
-                    del self._conn_dict[key]
+                self._conn_dict.pop(key, None)
                 self._connected_cnt -= 1
             except Exception as e:
                 msg: str = f"close conn error: {e}"
@@ -147,50 +189,44 @@ class BaseEndpoint(object):
                 logging.exception(msg)
 
         await conn.connect()
-        await self._transport.declare(conn)
         self._connected_cnt += 1
         conn.available = True
-        conn.listen_future = asyncio.ensure_future(self._transport.listen(conn))
+        conn.listen_future = asyncio.ensure_future(self._listen_conn(conn))
         conn.listen_future.add_done_callback(lambda f: _conn_done(f))
-        conn.ping_future = asyncio.ensure_future(
-            self._transport.ping_event(
-                conn,
-                min_ping_interval=self._min_ping_interval,
-                max_ping_interval=self._max_ping_interval,
-                ping_fail_cnt=self._ping_fail_cnt,
-                wait_server_recover=self._wait_server_recover,
-            )
-        )
+        conn.ping_future = asyncio.ensure_future(self._ping_event(conn))
         if not self._wait_server_recover:
             conn.ping_future.add_done_callback(lambda f: conn.close())
         logging.debug("Connection to %s...", conn.connection_info)
-
         self._conn_dict[key] = conn
+
+        await self._transport.declare(conn)
 
     async def destroy(self, ip: str, port: int) -> None:
         """destroy conn
         ip: server ip
         port: server port
         """
-        key: str = f"{ip}:{port}"
-        if key not in self._conn_dict:
+        key: tuple = (ip, port)
+
+        conn: Optional[Connection] = self._conn_dict.get(key, None)
+        if not conn:
             return
+        if not conn.is_closed():
+            await conn.await_close()
+        self._conn_dict.pop(key, None)
 
-        if not self.is_close:
-            await self._conn_dict[key].await_close()
-
-        if key in self._conn_dict:
-            del self._conn_dict[key]
+    async def _start(self) -> None:
+        self._is_close = False
 
     async def start(self) -> None:
         """start endpoint and create&init conn"""
-        self._is_close = False
+        raise NotImplementedError
 
     async def stop(self) -> None:
         """stop endpoint and close all conn and cancel future"""
         for key, conn in self._conn_dict.copy().items():
-            if not conn.is_closed():
-                await conn.await_close()
+            await self.destroy(*key)
+
         self._conn_dict = {}
         self._is_close = True
 
@@ -217,12 +253,12 @@ class BaseEndpoint(object):
     def _random_pick_conn(self, cnt: int) -> List[Connection]:
         """random get conn"""
         cnt = min(cnt, len(self._conn_dict))
-        key_list: List[str] = list(self._conn_dict.keys())
+        key_list: List[tuple] = list(self._conn_dict.keys())
         if not key_list:
             raise ConnectionError("Endpoint Can not found conn")
         conn_set: Set[Connection] = set()
         while len(conn_set) < cnt:
-            key: str = random.choice(key_list)
+            key: tuple = random.choice(key_list)
             conn_set.add(self._conn_dict[key])
 
         return list([i for i in conn_set if i.available])
@@ -230,7 +266,7 @@ class BaseEndpoint(object):
     def _round_robin_pick_conn(self, cnt: int) -> List[Connection]:
         """get conn by round robin"""
         conn_list: List[Connection] = []
-        key_list: List[str] = list(self._conn_dict.keys())
+        key_list: List[tuple] = list(self._conn_dict.keys())
         if not key_list:
             raise ConnectionError("Endpoint Can not found conn")
         for _ in range(cnt):

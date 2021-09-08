@@ -70,55 +70,29 @@ class Transport(object):
             raise KeyError(f"{event_name}")
         self._event_handle_dict[event_name.event_name].remove(fn)
 
-    async def ping_event(
-        self,
-        conn: Connection,
-        min_ping_interval: int,
-        max_ping_interval: int,
-        ping_fail_cnt: int,
-        wait_server_recover: bool = True,
-    ) -> None:
-        """client ping-pong handler, check conn is available"""
-        ping_fail_interval: int = int(max_ping_interval * ping_fail_cnt)
-        while True:
-            diff_time: float = time.time() - conn.last_ping_timestamp
-            available: bool = diff_time < ping_fail_interval
-            conn.available = available
-            logging.debug("conn:%s available:%s rtt:%s", conn.peer_tuple, available, conn.rtt)
-            if not available and not wait_server_recover:
-                logging.error(f"ping {conn.sock_tuple} timeout... exit")
-                return
-            else:
-                try:
-                    await self.write_to_conn(Request.from_event(self.app, event.PingEvent({"time": time.time()})), conn)
-                except Exception as e:
-                    logging.debug(f"{conn} ping event exit.. error:{e}")
+    async def _put_exc_to_receiver(self, response: Response, put_exc: Exception, correlation_id: str) -> None:
+        """handler exc by response
+        :param response: server response
+        :param put_exc: get response exc
+        :param correlation_id: consumer correlation id
+        """
+        for process_exc in self._process_exception_list:
+            response, put_exc = await process_exc(response, put_exc)
 
-            try:
-                await asyncio.wait_for(
-                    asyncio.shield(conn.listen_future), timeout=random.randint(min_ping_interval, max_ping_interval)
-                )
-            except asyncio.TimeoutError:
-                pass
-
-    async def listen(self, conn: Connection) -> None:
-        """listen server msg from conn"""
-        logging.debug("listen:%s start", conn.peer_tuple)
-        try:
-            while not conn.is_closed():
-                await self._dispatch_resp_from_conn(conn)
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            conn.set_reader_exc(e)
-            logging.exception(f"listen {conn.connection_info} error:{e}")
-            if not conn.is_closed():
-                await conn.await_close()
+        # send exc to consumer
+        if correlation_id in self._channel_queue_dict:
+            self._channel_queue_dict[correlation_id].put_nowait(put_exc)
+        elif correlation_id in self._resp_future_dict:
+            self._resp_future_dict[correlation_id].set_exception(put_exc)
+        elif isinstance(put_exc, rap_exc.ServerError):
+            raise put_exc
+        else:
+            logging.error(f"recv error msg:{response}, ignore")
 
     # flake8: noqa: C901
-    async def _dispatch_resp_from_conn(self, conn: Connection) -> None:
+    async def dispatch_resp_from_conn(self, conn: Connection) -> None:
         """Distribute the response data to different consumers according to different conditions"""
-        response, exc = await self._read_from_conn(conn)
+        response, exc = await self._get_response_from_conn(conn)
         if not response:
             # not response data, not a legal response
             logging.error(str(exc))
@@ -126,31 +100,14 @@ class Transport(object):
 
         correlation_id: str = f"{conn.sock_tuple}:{response.correlation_id}"
 
-        async def put_exc_to_receiver(put_response: Response, put_exc: Exception) -> None:
-            # handler exc by response
-            for process_exc in self._process_exception_list:
-                put_response, put_exc = await process_exc(put_response, put_exc)
-
-            # send exc to consumer
-            if correlation_id in self._channel_queue_dict:
-                self._channel_queue_dict[correlation_id].put_nowait(put_exc)
-            elif correlation_id in self._resp_future_dict:
-                self._resp_future_dict[correlation_id].set_exception(put_exc)
-            elif isinstance(put_exc, rap_exc.ServerError):
-                raise put_exc
-            else:
-                logging.error(f"recv error msg:{response}, ignore")
-
         if exc:
-            await put_exc_to_receiver(response, exc)
-            return
+            await self._put_exc_to_receiver(response, exc, correlation_id)
         elif response.msg_type == Constant.SERVER_ERROR_RESPONSE or response.status_code in self._exc_status_code_dict:
             # gen and put rap error by response
             exc_class: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(
                 response.status_code, rap_exc.BaseRapError
             )
-            await put_exc_to_receiver(response, exc_class(response.body))
-            return
+            await self._put_exc_to_receiver(response, exc_class(response.body), correlation_id)
         elif response.msg_type == Constant.SERVER_EVENT:
             # customer event handle
             if response.func_name in self._event_handle_dict:
@@ -162,73 +119,29 @@ class Transport(object):
                         logging.exception(f"run event name:{response.func_name} raise error:{e}")
             # server event msg handle
             if response.func_name == Constant.EVENT_CLOSE_CONN:
-                event_exc: Exception = ConnectionError(f"recv close conn event, event info:{response.body}")
-                raise event_exc
+                logging.error(f"recv close conn event, event info:{response.body}")
+                conn.available = False
+            elif response.func_name in (Constant.DECLARE, Constant.PONG_EVENT):
+                self._resp_future_dict[correlation_id].set_result(response)
             elif response.func_name == Constant.PING_EVENT:
                 await self.write_to_conn(Request.from_event(self.app, event.PongEvent("")), conn)
-            elif response.func_name == Constant.PONG_EVENT:
-                # declare
-                now_time: float = time.time()
-                old_last_ping_timestamp: float = conn.last_ping_timestamp
-                old_rtt: float = conn.rtt
-                old_ping_dict: dict = conn.ping_dict.copy()
-                start_time: float = response.body["time"]
-
-                # ewma
-                td: float = now_time - old_last_ping_timestamp
-                w: float = math.exp(-td / self._decay_time)
-                rtt: float = now_time - start_time
-                if rtt < 0:
-                    rtt = 0
-                if old_rtt <= 0:
-                    w = 0
-
-                ping_dict_score: float = 1.0
-                # calculate
-                for key in ["request_in_progress", "channel_in_progress", "recent_error_cnt", "server_cpu_percent"]:
-                    if key not in response.body:
-                        conn.ping_dict.pop(key, None)
-                        continue
-                    elif key not in old_ping_dict:
-                        conn.ping_dict[key] = response.body[key]
-                    else:
-                        conn.ping_dict[key] = old_ping_dict[key] * w + response.body[key] * (1 - w)
-                    ping_dict_score = ping_dict_score * conn.ping_dict[key]
-                conn.rtt = old_rtt * w + rtt * (1 - w)
-                conn.last_ping_timestamp = now_time
-                conn.score = conn.weight / (conn.rtt * ping_dict_score)
-            elif response.func_name == Constant.DECLARE:
-                if not response.body.get("result"):
-                    raise rap_exc.AuthError("Declare error")
             else:
-                logging.error(f"recv error event {response}")
-            return
+                logging.error(f"recv not support event {response}")
         elif response.msg_type == Constant.CHANNEL_RESPONSE:
             # put msg to channel
             if correlation_id not in self._channel_queue_dict:
                 logging.error(f"recv channel msg, but channel not create. channel id:{correlation_id}")
             else:
                 self._channel_queue_dict[correlation_id].put_nowait(response)
-            return
         elif response.msg_type == Constant.MSG_RESPONSE and correlation_id in self._resp_future_dict:
             # set msg to future_dict's `future`
             self._resp_future_dict[correlation_id].set_result(response)
-            return
         else:
             logging.error(f"Can' parse response: {response}, ignore")
-            return
+        return
 
-    async def read_from_conn(self, conn: Connection) -> Optional[Response]:
-        """read response from conn, only use in declare lifecycle"""
-        if conn.conn_id:
-            raise rap_exc.RPCError("conn already declare, can not invoke read_from_conn")
-        response, exc = await self._read_from_conn(conn)
-        if exc:
-            raise exc
-        return response
-
-    async def _read_from_conn(self, conn: Connection) -> Tuple[Optional[Response], Optional[Exception]]:
-        """recv server msg handle"""
+    async def _get_response_from_conn(self, conn: Connection) -> Tuple[Optional[Response], Optional[Exception]]:
+        """recv server msg and gen response handle"""
         try:
             response_msg: Optional[SERVER_BASE_MSG_TYPE] = await conn.read()
             logging.debug("recv raw data: %s", response_msg)
@@ -246,13 +159,8 @@ class Transport(object):
             e_msg: str = f"recv wrong response:{response_msg}, ignore error:{e}"
             return None, rap_exc.ProtocolError(e_msg)
 
-        # Legal response, but may be intercepted by the processer
+        # Legal response, but may be intercepted by the processor
         exc: Optional[Exception] = None
-        if response.status_code >= 400:
-            exc_class: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(
-                response.status_code, rap_exc.BaseRapError
-            )
-            exc = exc_class(response.body)
         try:
             for process_response in self._process_response_list:
                 response = await process_response(response)
@@ -267,31 +175,67 @@ class Transport(object):
         Only include server_name and get conn id two functions, if you need to expand the function,
           you need to process the request and response of the declared life cycle through the processor
         """
-        await self.write_to_conn(
+        response: Response = await self._base_request(
             Request.from_event(self.app, event.DeclareEvent({"server_name": self.app.server_name})), conn
         )
-        response: Optional[Response] = await self.read_from_conn(conn)
 
-        exc: Exception = ConnectionError("create conn error")
-        if not response or response.msg_type != Constant.SERVER_EVENT:
+        exc: Exception = ConnectionError("conn declare error")
+        if response.msg_type != Constant.SERVER_EVENT:
             raise exc
-        elif response.func_name == Constant.EVENT_CLOSE_CONN:
-            raise ConnectionError(f"recv close conn event, event info:{response.body}")
         elif response.func_name == Constant.DECLARE:
             if response.body.get("result", False) and "conn_id" in response.body:
                 conn.conn_id = response.body["conn_id"]
                 return
         raise exc
 
+    async def ping(self, conn: Connection) -> None:
+        response: Response = await self._base_request(
+            Request.from_event(self.app, event.PingEvent({"time": time.time()})), conn
+        )
+        # declare
+        now_time: float = time.time()
+        old_last_ping_timestamp: float = conn.last_ping_timestamp
+        old_rtt: float = conn.rtt
+        old_ping_dict: dict = conn.ping_dict.copy()
+        start_time: float = response.body["time"]
+
+        # ewma
+        td: float = now_time - old_last_ping_timestamp
+        w: float = math.exp(-td / self._decay_time)
+        rtt: float = now_time - start_time
+        if rtt < 0:
+            rtt = 0
+        if old_rtt <= 0:
+            w = 0
+
+        ping_dict_score: float = 1.0
+        # calculate
+        for key in ["request_in_progress", "channel_in_progress", "recent_error_cnt", "server_cpu_percent"]:
+            if key not in response.body:
+                conn.ping_dict.pop(key, None)
+                continue
+            elif key not in old_ping_dict:
+                conn.ping_dict[key] = response.body[key]
+            else:
+                conn.ping_dict[key] = old_ping_dict[key] * w + response.body[key] * (1 - w)
+            ping_dict_score = ping_dict_score * conn.ping_dict[key]
+        conn.rtt = old_rtt * w + rtt * (1 - w)
+        conn.last_ping_timestamp = now_time
+        conn.score = conn.weight / (conn.rtt * ping_dict_score)
+
     ####################################
     # base one by one request response #
     ####################################
     async def _base_request(self, request: Request, conn: Connection, timeout: Optional[int] = 9) -> Response:
         """Send data to the server and get the response from the server.
-        Will try to get the normal data through the conn list and return,
-         if all conn calls fail(response.status_code >= 500), the exception generated by the last conn will be reported.
+        :param request: client request obj
+        :param conn: client conn
+        :param timeout: recv response timeout
+
+        :return: return server response
         """
-        request.conn = conn
+        if not request.correlation_id:
+            request.correlation_id = str(get_snowflake_id())
         resp_future_id: str = f"{conn.sock_tuple}:{request.correlation_id}"
         self._resp_future_dict[resp_future_id] = asyncio.Future()
         await self.write_to_conn(request, conn)
@@ -327,6 +271,7 @@ class Transport(object):
     #######################
     async def write_to_conn(self, request: Request, conn: Connection) -> None:
         """gen msg_id and seng msg to conn"""
+        request.conn = conn
         request.header["host"] = conn.peer_tuple
         msg_id: int = self._msg_id + 1
         # Avoid too big numbers
@@ -375,7 +320,7 @@ class Transport(object):
             request.header.update(header)
         response: Response = await self._base_request(request, conn, timeout=timeout)
         if response.msg_type != Constant.MSG_RESPONSE:
-            raise RPCError(f"request num must:{Constant.MSG_RESPONSE} not {response.msg_type}")
+            raise RPCError(f"response num must:{Constant.MSG_RESPONSE} not {response.msg_type}")
         if "exc" in response.body:
             exc_info: str = response.body.get("exc_info", "")
             if response.header.get("user_agent") == Constant.USER_AGENT:
@@ -386,9 +331,9 @@ class Transport(object):
 
     def channel(self, func_name: str, conn: Connection, group: Optional[str] = None) -> "Channel":
         """create and init channel
-        func_name: rpc func name
-        conn: channel transport conn
-        group: func's group
+        :param func_name: rpc func name
+        :param conn: channel transport conn
+        :param group: func's group
         """
 
         async def create(_channel_id: str) -> None:
@@ -396,7 +341,7 @@ class Transport(object):
             self._channel_queue_dict[f"{conn.sock_tuple}:{_channel_id}"] = asyncio.Queue()
 
         async def read(_channel_id: str) -> Response:
-            """read response|exc from queue"""
+            """read response or exc from queue"""
             result: Union[Response, Exception] = await self._channel_queue_dict[
                 f"{conn.sock_tuple}:{_channel_id}"
             ].get()
@@ -424,3 +369,9 @@ class Transport(object):
             self._process_request_list.append(processor.process_request)
             self._process_response_list.append(processor.process_response)
             self._process_exception_list.append(processor.process_exc)
+
+    def remove_processor(self, processor_list: List[BaseProcessor]) -> None:
+        for processor in processor_list:
+            self._process_request_list.remove(processor.process_request)
+            self._process_response_list.remove(processor.process_response)
+            self._process_exception_list.remove(processor.process_exc)

@@ -82,7 +82,7 @@ class BaseCryptoProcessor(BaseProcessor):
 
     async def decrypt_request(self, request: Request) -> Request:
         """decrypt request body"""
-        if request.msg_type in (Constant.MSG_REQUEST, Constant.MSG_REQUEST):
+        if request.msg_type in (Constant.MSG_REQUEST, Constant.CHANNEL_REQUEST):
             crypto: Optional[Crypto] = request.conn.state.get_value("crypto", None)
             if crypto:
                 try:
@@ -164,7 +164,7 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
                 request.conn.state.crypto.decrypt_object(check_id)
             except Exception:
                 raise CryptoError("crypto check error")
-            request.app.cache.add(f"auto_crypto:{request.conn.conn_id}:init", 60, check_id)
+            request.app.cache.add(f"auto_crypto:{request.conn.conn_id}:init", 3, check_id)
             return request
         else:
             return await super().decrypt_request(request)

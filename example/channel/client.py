@@ -22,10 +22,11 @@ async def async_channel(channel: Channel) -> None:
 
 @client.register()
 async def echo_body(channel: Channel) -> None:
-    await channel.write("hi!")
+    cnt: int = 0
+    await channel.write(f"ping! {cnt}")
     async for body in channel.iter_body():
-        print(f"body:{body}")
-        await channel.write(body)
+        cnt += 1
+        await channel.write(f"ping! {cnt}")
 
 
 @client.register()

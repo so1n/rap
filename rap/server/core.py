@@ -290,6 +290,8 @@ class Server(object):
                     pass
 
         task_list: List[Coroutine] = [send_shutdown_event(conn) for conn in self._connected_set if not conn.is_closed()]
+        if task_list:
+            logging.info("send shutdown event to client")
         await asyncio.gather(*task_list)
 
         # until connections close
