@@ -199,7 +199,7 @@ class Transport(object):
             nonlocal rtt
             response: Response = await self._base_request(Request.from_event(self.app, event.PingEvent({})), conn)
             rtt += time.time() - start_time
-            mos += response.body["mos"]
+            mos += response.body.get("mos", 10)
 
         await asyncio.gather(*[_ping() for i in range(3)])
         mos = mos // 3
