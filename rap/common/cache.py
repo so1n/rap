@@ -1,6 +1,7 @@
 import logging
 import time
 from dataclasses import MISSING
+from threading import Lock
 from typing import Any, Dict, Generator, Optional, Tuple
 
 from .utils import get_event_loop
@@ -13,42 +14,49 @@ class Cache(object):
         """
         :param interval: Scan all keys interval
         """
+        self._no_expire_value: int = -1
         self._idling_times: int = 1
         self._dict: Dict[Any, Tuple[float, Any]] = {}
         self._interval: float = interval or 10.0
 
-    def _add(self, key: Any, expire: float, value: Any = MISSING) -> None:
-        self._dict[key] = (time.time() + expire, value)
+    def _add(self, key: Any, expire: float, value: Any = None) -> None:
+        if expire == self._no_expire_value:
+            self._dict[key] = (self._no_expire_value, value)
+        else:
+            self._dict[key] = (time.time() + expire, value)
 
     def update_expire(self, key: Any, expire: float) -> bool:
         if key not in self._dict:
             return False
         _, value = self._dict[key]
-        self._dict[key] = (expire, value)
+        self._add(key, expire, value)
         return True
 
-    def get_and_update_expire(self, key: Any, expire: float, default: Any = MISSING) -> Any:
-        if key not in self:
-            raise KeyError(key)
-        _, value = self._dict[key]
-        self._dict[key] = (expire, value)
-        if value is MISSING:
+    def _get(self, key: Any, default: Any = MISSING) -> Tuple[float, Any]:
+        try:
+            expire, value = self._dict[key]
+        except KeyError:
             if default is MISSING:
                 raise KeyError(key)
             return default
+        return expire, value
+
+    def get_and_update_expire(self, key: Any, expire: float, default: Any = MISSING) -> Any:
+        _, value = self._get(key, default)
+        if value is not MISSING:
+            self._dict[key] = (expire, value)
         return value
 
     def get(self, key: Any, default: Any = MISSING) -> Any:
-        if key not in self:
-            raise KeyError(key)
-        expire, value = self._dict[key]
-        if value is MISSING:
-            if default is MISSING:
-                raise KeyError(key)
-            return default
+        _, value = self._get(key, default)
         return value
 
-    def add(self, key: Any, expire: float, value: Any = MISSING) -> None:
+    def add(self, key: Any, expire: float, value: Any = None) -> None:
+        """
+        :param key: cache key
+        :param expire: key expire(seconds), if expire == -1, key not expire
+        :param value: cache value, if value is None, cache like set
+        """
         self._add(key, expire, value)
         if get_event_loop().is_running():
             self._auto_remove()
@@ -66,7 +74,9 @@ class Cache(object):
             return False
 
         expire, value = self._dict[key]
-        if expire < time.time():
+        if expire == self._no_expire_value:
+            return True
+        elif expire < time.time():
             self.pop(key)
             return False
         else:
@@ -94,3 +104,24 @@ class Cache(object):
             f"until the next call:{next_call_interval}"
         )
         get_event_loop().call_later(next_call_interval, self._auto_remove)
+
+
+class ThreadCache(Cache):
+    def __init__(self, interval: Optional[float] = None) -> None:
+        self._look: Lock = Lock()
+        super(ThreadCache, self).__init__(interval=interval)
+
+    def update_expire(self, key: Any, expire: float) -> bool:
+        if key not in self._dict:
+            return False
+        with self._look:
+            _, value = self._dict[key]
+            self._add(key, expire, value)
+        return True
+
+    def get_and_update_expire(self, key: Any, expire: float, default: Any = MISSING) -> Any:
+        with self._look:
+            _, value = self._get(key, default)
+            if value is not MISSING:
+                self._dict[key] = (expire, value)
+            return value
