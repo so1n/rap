@@ -136,14 +136,14 @@ class WindowStatistics(object):
     # Metric #
     ##########
     def registry_metric(self, metric: Metric, expire: Optional[float] = None) -> None:
-        if not expire:
-            expire = self._max_interval
         key: str = metric.metric_cache_name
         if key in self._metric_cache:
             cache_value: Optional[Metric] = self._metric_cache.get(key, None)
-            print(key, cache_value, metric)
             if cache_value and cache_value is not metric:
                 raise ValueError("different metric")
+
+        if not expire:
+            expire = -1
         self._metric_cache.add(key, expire, metric)
         if isinstance(metric, Gauge):
             if not metric.diff <= self._max_interval:

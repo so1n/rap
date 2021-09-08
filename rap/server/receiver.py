@@ -374,7 +374,7 @@ class Receiver(object):
             self._keepalive_timestamp = int(time.time())
             return None
         elif request.func_name == Constant.PING_EVENT:
-            response.set_event(PongEvent({"time": request.body["time"]}))
+            response.set_event(PongEvent({}))
         elif request.func_name == Constant.DECLARE:
             if request.body.get("server_name") != self._app.server_name:
                 response.set_event(CloseConnEvent("error server name"))

@@ -119,6 +119,7 @@ class Transport(object):
                         logging.exception(f"run event name:{response.func_name} raise error:{e}")
             # server event msg handle
             if response.func_name == Constant.EVENT_CLOSE_CONN:
+                # server want to close...do not send data
                 logging.error(f"recv close conn event, event info:{response.body}")
                 conn.available = False
             elif response.func_name in (Constant.DECLARE, Constant.PONG_EVENT):
@@ -189,39 +190,40 @@ class Transport(object):
         raise exc
 
     async def ping(self, conn: Connection) -> None:
-        response: Response = await self._base_request(
-            Request.from_event(self.app, event.PingEvent({"time": time.time()})), conn
-        )
+        start_time: float = time.time()
+        mos: int = 5
+        rtt: float = 0
+
+        async def _ping() -> None:
+            nonlocal mos
+            nonlocal rtt
+            response: Response = await self._base_request(Request.from_event(self.app, event.PingEvent({})), conn)
+            rtt += time.time() - start_time
+            mos += response.body["mos"]
+
+        await asyncio.gather(*[_ping() for i in range(3)])
+        mos = mos // 3
+        rtt = rtt / 3
+
         # declare
         now_time: float = time.time()
         old_last_ping_timestamp: float = conn.last_ping_timestamp
         old_rtt: float = conn.rtt
-        old_ping_dict: dict = conn.ping_dict.copy()
-        start_time: float = response.body["time"]
+        old_mos: int = conn.mos
 
         # ewma
         td: float = now_time - old_last_ping_timestamp
         w: float = math.exp(-td / self._decay_time)
-        rtt: float = now_time - start_time
+
         if rtt < 0:
             rtt = 0
         if old_rtt <= 0:
             w = 0
 
-        ping_dict_score: float = 1.0
-        # calculate
-        for key in ["request_in_progress", "channel_in_progress", "recent_error_cnt", "server_cpu_percent"]:
-            if key not in response.body:
-                conn.ping_dict.pop(key, None)
-                continue
-            elif key not in old_ping_dict:
-                conn.ping_dict[key] = response.body[key]
-            else:
-                conn.ping_dict[key] = old_ping_dict[key] * w + response.body[key] * (1 - w)
-            ping_dict_score = ping_dict_score * conn.ping_dict[key]
         conn.rtt = old_rtt * w + rtt * (1 - w)
+        conn.mos = int(old_mos * w + mos * (1 - w))
         conn.last_ping_timestamp = now_time
-        conn.score = conn.weight / (conn.rtt * ping_dict_score)
+        conn.score = (conn.weight * mos) / conn.rtt
 
     ####################################
     # base one by one request response #

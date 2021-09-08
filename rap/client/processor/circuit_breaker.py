@@ -36,6 +36,7 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
         :param interval: metric data change interval
         :param prefix: metric key prefix
         """
+        self._k: float = k
         self._prefix: str = prefix
         self._expire: int = expire
         self._interval: int = interval
@@ -44,20 +45,6 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
 
         self._probability_dict: Dict[str, float] = {}
 
-        def upload_probability(stats_dict: Dict[Any, int]) -> None:
-            _dict: Dict[str, Dict[str, int]] = {}
-            for key, value in stats_dict.items():
-                if key.startswith(self._prefix):
-                    _, index, type_ = key.split("|")
-                    if index not in _dict:
-                        _dict[index] = {}
-                    _dict[index][type_] = value
-            for index, metric_dict in _dict.items():
-                total: int = metric_dict.get("total", 0)
-                error_cnt: int = metric_dict.get("error", 0)
-                self._probability_dict[index] = max(0.0, (total - k * (total - error_cnt)) / (total + 1))
-
-        self._window_statistics.add_priority_callback(upload_probability)
         self.event_dict: Dict[EventEnum, List[CLIENT_EVENT_FN]] = {
             EventEnum.after_start: [self.start_event_handle],
             EventEnum.before_end: [self.stop_event_handle],
@@ -71,6 +58,21 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
                 f"interval value:{self._interval} must <= "
                 f"{self._window_statistics.__class__.__name__}._max_interval:{self._window_statistics._max_interval}"
             )
+
+        def upload_probability(stats_dict: Dict[Any, int]) -> None:
+            _dict: Dict[str, Dict[str, int]] = {}
+            for key, value in stats_dict.items():
+                if key.startswith(self._prefix):
+                    _, index, type_ = key.split("|")
+                    if index not in _dict:
+                        _dict[index] = {}
+                    _dict[index][type_] = value
+            for index, metric_dict in _dict.items():
+                total: int = metric_dict.get("total", 0)
+                error_cnt: int = metric_dict.get("error", 0)
+                self._probability_dict[index] = max(0.0, (total - self._k * (total - error_cnt)) / (total + 1))
+
+        self._window_statistics.add_priority_callback(upload_probability)
         if self._window_statistics.is_closed:
             self._window_statistics.statistics_data()
 
