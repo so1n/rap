@@ -170,17 +170,22 @@ class Transport(object):
 
         return response, exc
 
-    async def declare(self, conn: Connection) -> None:
+    async def declare(self, conn: Connection, timeout: Optional[int] = None) -> None:
         """
         After conn is initialized, connect to the server and initialize the connection resources.
         Only include server_name and get conn id two functions, if you need to expand the function,
           you need to process the request and response of the declared life cycle through the processor
         """
-        response: Response = await self._base_request(
-            Request.from_event(self.app, event.DeclareEvent({"server_name": self.app.server_name})), conn
-        )
+        try:
+            response: Response = await self._base_request(
+                Request.from_event(self.app, event.DeclareEvent({"server_name": self.app.server_name})),
+                conn,
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            raise asyncio.TimeoutError(f"conn:{conn} declare timeout")
 
-        exc: Exception = ConnectionError("conn declare error")
+        exc: Exception = ConnectionError(f"conn:{conn} declare error")
         if response.msg_type != Constant.SERVER_EVENT:
             raise exc
         elif response.func_name == Constant.DECLARE:
@@ -189,7 +194,7 @@ class Transport(object):
                 return
         raise exc
 
-    async def ping(self, conn: Connection) -> None:
+    async def ping(self, conn: Connection, timeout: int) -> None:
         start_time: float = time.time()
         mos: int = 5
         rtt: float = 0
@@ -197,11 +202,13 @@ class Transport(object):
         async def _ping() -> None:
             nonlocal mos
             nonlocal rtt
-            response: Response = await self._base_request(Request.from_event(self.app, event.PingEvent({})), conn)
+            response: Response = await self._base_request(
+                Request.from_event(self.app, event.PingEvent({})), conn, timeout=timeout * 2
+            )
             rtt += time.time() - start_time
             mos += response.body.get("mos", 10)
 
-        await asyncio.gather(*[_ping() for i in range(3)])
+        await asyncio.wait_for(asyncio.gather(*[_ping() for _ in range(3)]), timeout=timeout)
         mos = mos // 3
         rtt = rtt / 3
 
@@ -228,7 +235,7 @@ class Transport(object):
     ####################################
     # base one by one request response #
     ####################################
-    async def _base_request(self, request: Request, conn: Connection, timeout: Optional[int] = 9) -> Response:
+    async def _base_request(self, request: Request, conn: Connection, timeout: Optional[int] = None) -> Response:
         """Send data to the server and get the response from the server.
         :param request: client request obj
         :param conn: client conn
@@ -236,6 +243,8 @@ class Transport(object):
 
         :return: return server response
         """
+        if not timeout:
+            timeout = 9
         if not request.correlation_id:
             request.correlation_id = str(get_snowflake_id())
         resp_future_id: str = f"{conn.sock_tuple}:{request.correlation_id}"

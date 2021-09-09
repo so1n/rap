@@ -78,24 +78,23 @@ class AsyncIteratorCall:
 
 
 class BaseClient:
+    endpoint: BaseEndpoint
+
     def __init__(
         self,
         server_name: str,
-        endpoint: BaseEndpoint,
         cache_interval: Optional[float] = None,
         ws_min_interval: Optional[int] = None,
         ws_max_interval: Optional[int] = None,
         ws_statistics_interval: Optional[int] = None,
     ):
         """
-        :param endpoint: rap endpoint
         :param cache_interval: Cache auto scan expire key interval
         :param ws_min_interval: WindowStatistics time per window
         :param ws_max_interval: WindowStatistics Window capacity
         :param ws_statistics_interval: WindowStatistics Statistical data interval from window
         """
         self.server_name: str = server_name
-        self.endpoint: BaseEndpoint = endpoint
         self.transport: Transport = Transport(self)  # type: ignore
         self._processor_list: List[BaseProcessor] = []
         self._event_dict: Dict[EventEnum, List[CLIENT_EVENT_FN]] = {
@@ -105,8 +104,6 @@ class BaseClient:
         self.window_statistics: WindowStatistics = WindowStatistics(
             interval=ws_min_interval, max_interval=ws_max_interval, statistics_interval=ws_statistics_interval
         )
-
-        self.endpoint.set_transport(self.transport)
 
     ##################
     # start& close #
@@ -291,7 +288,10 @@ class BaseClient:
         if isinstance(func, RapFunc):
             raise RuntimeError(f"{func} already inject or register")
         new_func: RapFunc = self.register(name=name, group=group)(func)
-        sys.modules[func.__module__].__setattr__(func.__name__, new_func)
+        func_module: str = getattr(func, "__module__")
+        if not func_module:
+            raise AttributeError(f"{type(func)} object has no attribute '__module__'")
+        sys.modules[func_module].__setattr__(func.__name__, new_func)
         return new_func
 
     @staticmethod
@@ -362,8 +362,17 @@ class Client(BaseClient):
           e.g.  [{"ip": "localhost", "port": "9000", weight: 10}]
         keep_alive_timeout: read msg from conn timeout
         """
-        local_endpoint: LocalEndpoint = LocalEndpoint(
+
+        super().__init__(
+            server_name,
+            cache_interval=cache_interval,
+            ws_min_interval=ws_min_interval,
+            ws_max_interval=ws_max_interval,
+            ws_statistics_interval=ws_statistics_interval,
+        )
+        self.endpoint = LocalEndpoint(
             conn_list,
+            self.transport,
             ssl_crt_path=ssl_crt_path,
             timeout=keep_alive_timeout,
             pack_param=None,
@@ -373,12 +382,4 @@ class Client(BaseClient):
             min_ping_interval=min_ping_interval,
             max_ping_interval=max_ping_interval,
             wait_server_recover=wait_server_recover,
-        )
-        super().__init__(
-            server_name,
-            local_endpoint,
-            cache_interval=cache_interval,
-            ws_min_interval=ws_min_interval,
-            ws_max_interval=ws_max_interval,
-            ws_statistics_interval=ws_statistics_interval,
         )

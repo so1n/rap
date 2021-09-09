@@ -53,7 +53,9 @@ class Picker(object):
 class BaseEndpoint(object):
     def __init__(
         self,
+        transport: Transport,
         timeout: Optional[int] = None,
+        declare_timeout: int = 9,
         ssl_crt_path: Optional[str] = None,
         pick_conn_method: Optional[PickConnEnum] = None,
         pack_param: Optional[dict] = None,
@@ -76,8 +78,9 @@ class BaseEndpoint(object):
         :param ping_fail_cnt: How many times ping fails to judge as unavailable, default 3
         :param wait_server_recover: If False, ping failure will close conn
         """
-        self._transport: Optional[Transport] = None
+        self._transport: Transport = transport
         self._timeout: int = timeout or 1200
+        self._declare_timeout: int = declare_timeout
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._pack_param: Optional[dict] = pack_param
         self._unpack_param: Optional[dict] = unpack_param
@@ -103,8 +106,6 @@ class BaseEndpoint(object):
 
     async def _listen_conn(self, conn: Connection) -> None:
         """listen server msg from conn"""
-        if not self._transport:
-            raise ConnectionError("endpoint need transport")
         logging.debug("listen:%s start", conn.peer_tuple)
         try:
             while not conn.is_closed():
@@ -119,36 +120,31 @@ class BaseEndpoint(object):
 
     async def _ping_event(self, conn: Connection) -> None:
         """client ping-pong handler, check conn is available"""
-        if not self._transport:
-            raise ConnectionError("endpoint need transport")
         ping_fail_interval: int = int(self._max_ping_interval * self._ping_fail_cnt)
         while True:
-            diff_time: float = time.time() - conn.last_ping_timestamp
+            now_time: float = time.time()
+            diff_time: float = now_time - conn.last_ping_timestamp
             available: bool = diff_time < ping_fail_interval
             conn.available = available
             logging.debug("conn:%s available:%s rtt:%s", conn.peer_tuple, available, conn.rtt)
             if not available and not self._wait_server_recover:
                 logging.error(f"ping {conn.sock_tuple} timeout... exit")
                 return
-            else:
-                try:
-                    await self._transport.ping(conn)
-                except Exception as e:
-                    logging.debug(f"{conn} ping event exit.. error:{e}")
 
+            next_ping_interval: int = random.randint(self._min_ping_interval, self._max_ping_interval)
             try:
-                await asyncio.wait_for(
-                    asyncio.shield(conn.listen_future),
-                    timeout=random.randint(self._min_ping_interval, self._max_ping_interval),
-                )
-            except asyncio.TimeoutError:
+                await self._transport.ping(conn, next_ping_interval)
+            except asyncio.CancelledError:
                 pass
+            except Exception as e:
+                logging.debug(f"{conn} ping event error:{e}")
 
-    def set_transport(self, transport: Transport) -> None:
-        """set transport to endpoint"""
-        assert self._transport is None, ValueError("transport already exists")
-        assert isinstance(transport, Transport), TypeError(f"{transport} type must{Transport}")
-        self._transport = transport
+            sleep_time: float = next_ping_interval - (time.time() - now_time)
+            if sleep_time > 0:
+                try:
+                    await asyncio.wait_for(asyncio.shield(conn.listen_future), timeout=sleep_time)
+                except asyncio.TimeoutError:
+                    pass
 
     @property
     def is_close(self) -> bool:
@@ -160,8 +156,6 @@ class BaseEndpoint(object):
         port: server port
         weight: select conn weight
         """
-        if not self._transport:
-            raise ConnectionError("endpoint need transport")
 
         key: tuple = (ip, port)
         if key in self._conn_dict:
@@ -182,24 +176,27 @@ class BaseEndpoint(object):
             try:
                 self._conn_dict.pop(key, None)
                 self._connected_cnt -= 1
-            except Exception as e:
-                msg: str = f"close conn error: {e}"
+            except Exception as _e:
+                msg: str = f"close conn error: {_e}"
                 if f.exception():
                     msg += f", conn done exc:{f.exception()}"
                 logging.exception(msg)
 
         await conn.connect()
+        logging.debug("Connection to %s...", conn.connection_info)
         self._connected_cnt += 1
         conn.available = True
         conn.listen_future = asyncio.ensure_future(self._listen_conn(conn))
         conn.listen_future.add_done_callback(lambda f: _conn_done(f))
+        try:
+            await self._transport.declare(conn, timeout=self._declare_timeout)
+        except Exception as e:
+            await self.destroy(ip, port)
+            raise e
         conn.ping_future = asyncio.ensure_future(self._ping_event(conn))
         if not self._wait_server_recover:
             conn.ping_future.add_done_callback(lambda f: conn.close())
-        logging.debug("Connection to %s...", conn.connection_info)
         self._conn_dict[key] = conn
-
-        await self._transport.declare(conn)
 
     async def destroy(self, ip: str, port: int) -> None:
         """destroy conn
@@ -255,7 +252,7 @@ class BaseEndpoint(object):
         cnt = min(cnt, len(self._conn_dict))
         key_list: List[tuple] = list(self._conn_dict.keys())
         if not key_list:
-            raise ConnectionError("Endpoint Can not found conn")
+            raise ConnectionError("Endpoint Can not found available conn")
         conn_set: Set[Connection] = set()
         while len(conn_set) < cnt:
             key: tuple = random.choice(key_list)
@@ -268,7 +265,7 @@ class BaseEndpoint(object):
         conn_list: List[Connection] = []
         key_list: List[tuple] = list(self._conn_dict.keys())
         if not key_list:
-            raise ConnectionError("Endpoint Can not found conn")
+            raise ConnectionError("Endpoint Can not found available conn")
         for _ in range(cnt):
             self._round_robin_index += 1
             index = self._round_robin_index % (len(self._conn_dict))

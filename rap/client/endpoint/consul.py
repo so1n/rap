@@ -3,6 +3,7 @@ import logging
 from typing import Optional
 
 from rap.client.endpoint.base import BaseEndpoint, PickConnEnum
+from rap.client.transport.transport import Transport
 from rap.common.coordinator.consul import ConsulClient
 
 
@@ -12,6 +13,7 @@ class ConsulEndpoint(BaseEndpoint):
     def __init__(
         self,
         server_name: str,
+        transport: Transport,
         timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
         pack_param: Optional[dict] = None,
@@ -48,9 +50,10 @@ class ConsulEndpoint(BaseEndpoint):
         self._watch_future: asyncio.Future = asyncio.Future()
         self._watch_future.set_result(True)
         super().__init__(
-            timeout,
-            ssl_crt_path,
-            pick_conn_method,
+            transport,
+            timeout=timeout,
+            ssl_crt_path=ssl_crt_path,
+            pick_conn_method=pick_conn_method,
             pack_param=pack_param,
             unpack_param=unpack_param,
             ping_fail_cnt=ping_fail_cnt,

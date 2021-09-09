@@ -2,6 +2,7 @@ import asyncio
 from typing import List, Optional
 
 from rap.client.endpoint.base import BaseEndpoint, PickConnEnum
+from rap.client.transport.transport import Transport
 
 
 class LocalEndpoint(BaseEndpoint):
@@ -12,6 +13,7 @@ class LocalEndpoint(BaseEndpoint):
     def __init__(
         self,
         conn_list: List[dict],
+        transport: Transport,
         timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
         pack_param: Optional[dict] = None,
@@ -34,9 +36,10 @@ class LocalEndpoint(BaseEndpoint):
         """
         self._conn_list: List[dict] = conn_list
         super().__init__(
-            timeout,
-            ssl_crt_path,
-            pick_conn_method,
+            transport,
+            timeout=timeout,
+            ssl_crt_path=ssl_crt_path,
+            pick_conn_method=pick_conn_method,
             pack_param=pack_param,
             unpack_param=unpack_param,
             ping_fail_cnt=ping_fail_cnt,

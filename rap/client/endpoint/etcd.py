@@ -3,6 +3,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from rap.client.endpoint.base import BaseEndpoint, PickConnEnum
+from rap.client.transport.transport import Transport
 from rap.common.coordinator.etcd import ETCD_EVENT_VALUE_DICT_TYPE, EtcdClient
 from rap.common.utils import del_future
 
@@ -13,6 +14,7 @@ class EtcdEndpoint(BaseEndpoint):
     def __init__(
         self,
         server_name: str,
+        transport: Transport,
         timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
         pack_param: Optional[dict] = None,
@@ -43,9 +45,10 @@ class EtcdEndpoint(BaseEndpoint):
         self._watch_future: asyncio.Future = asyncio.Future()
         self._watch_future.set_result(True)
         super().__init__(
-            timeout,
-            ssl_crt_path,
-            pick_conn_method,
+            transport,
+            timeout=timeout,
+            ssl_crt_path=ssl_crt_path,
+            pick_conn_method=pick_conn_method,
             pack_param=pack_param,
             unpack_param=unpack_param,
             ping_fail_cnt=ping_fail_cnt,
