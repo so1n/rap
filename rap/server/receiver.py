@@ -20,6 +20,7 @@ from typing import (
     Union,
 )
 
+from rap.common.asyncio_helper import del_future
 from rap.common.channel import BaseChannel
 from rap.common.conn import ServerConnection
 from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent, PongEvent
@@ -33,7 +34,7 @@ from rap.common.exceptions import (
     ServerError,
 )
 from rap.common.types import is_type
-from rap.common.utils import Constant, del_future, get_event_loop, param_handle, parse_error, response_num_dict
+from rap.common.utils import Constant, get_event_loop, param_handle, parse_error, response_num_dict
 from rap.server.model import Request, Response
 from rap.server.plugin.processor.base import BaseProcessor
 from rap.server.registry import FuncModel
@@ -224,9 +225,7 @@ class Receiver(object):
             else:
                 await self.sender.send_event(PingEvent(""))
                 try:
-                    await asyncio.wait_for(asyncio.shield(self._conn.conn_future), timeout=self._ping_sleep_time)
-                except (asyncio.TimeoutError, asyncio.CancelledError):
-                    pass
+                    await self._conn.sleep_and_listen(self._ping_sleep_time)
                 except Exception as e:
                     logging.exception(f"{self._conn} ping event exit.. error:<{e.__class__.__name__}>[{e}]")
 
@@ -289,7 +288,7 @@ class Receiver(object):
             result = e
         return call_id, result
 
-    async def _msg_handle(self, request: Request, call_id: int, func_model: FuncModel) -> Tuple[int, Any]:
+    async def _msg_handle(self, request: Request, call_id: int, func_model: FuncModel) -> Tuple[int, Exception]:
         """fun call handle"""
         param: list = request.body.get("param", [])
 

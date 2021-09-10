@@ -3,11 +3,12 @@ import asyncio
 import pytest
 
 from rap.client.utils import raise_rap_error
+from rap.common.asyncio_helper import gen_new_param_coro
 from rap.common.cache import Cache
 from rap.common.event import Event
 from rap.common.exceptions import RPCError
 from rap.common.state import State
-from rap.common.utils import check_func_type, gen_new_param_coro
+from rap.common.utils import check_func_type
 
 pytestmark = pytest.mark.asyncio
 

@@ -7,8 +7,8 @@ from starlette.responses import JSONResponse
 from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 
 from rap.client import Client
+from rap.common.asyncio_helper import del_future
 from rap.common.exceptions import ChannelError
-from rap.common.utils import del_future
 
 
 def before_check(

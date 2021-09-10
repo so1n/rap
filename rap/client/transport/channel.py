@@ -7,7 +7,9 @@ from rap.common.channel import BaseChannel
 from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError
 from rap.common.snowflake import get_snowflake_id
-from rap.common.utils import Constant, as_first_completed
+from rap.common.utils import Constant
+
+from ...common.asyncio_helper import as_first_completed
 
 if TYPE_CHECKING:
     from .transport import Transport

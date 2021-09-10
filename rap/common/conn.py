@@ -7,9 +7,10 @@ from typing import Any, Optional, Tuple
 
 import msgpack
 
+from rap.common.asyncio_helper import Semaphore, del_future, done_future
 from rap.common.state import State
 from rap.common.types import READER_TYPE, UNPACKER_TYPE, WRITER_TYPE
-from rap.common.utils import Constant, Semaphore, del_future
+from rap.common.utils import Constant
 
 __all__ = ["Connection", "ServerConnection"]
 
@@ -37,6 +38,15 @@ class BaseConnection:
         self.conn_future: asyncio.Future = asyncio.Future()
         self.peer_tuple: Tuple[str, int] = ("", -1)
         self.sock_tuple: Tuple[str, int] = ("", -1)
+
+    async def sleep_and_listen(self, delay: float) -> None:
+        """Monitor the status of conn while sleeping.
+        When the listen of conn is cancelled or terminated, it will automatically exit from sleep
+        """
+        try:
+            await asyncio.wait_for(asyncio.shield(self.conn_future), timeout=delay)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            pass
 
     async def write(self, data: tuple) -> None:
         if not self._writer or self._is_closed:
@@ -133,13 +143,11 @@ class Connection(BaseConnection):
         self.connection_info: str = f"{host}:{port}"
         self.score: float = 0.0
 
-        self.listen_future: asyncio.Future = asyncio.Future()
-        self.listen_future.set_result(True)
+        self.listen_future: asyncio.Future = done_future()
         self.semaphore: Semaphore = Semaphore(max_conn_inflight or 100)
 
         # ping
-        self.ping_future: asyncio.Future = asyncio.Future()
-        self.ping_future.set_result(True)
+        self.ping_future: asyncio.Future = done_future()
         self.available: bool = False
         self.last_ping_timestamp: float = time.time()
         self.rtt: float = 0.0

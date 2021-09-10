@@ -4,8 +4,8 @@ from typing import Any, Dict, Optional
 
 from rap.client.endpoint.base import BaseEndpoint, PickConnEnum
 from rap.client.transport.transport import Transport
+from rap.common.asyncio_helper import del_future, done_future
 from rap.common.coordinator.etcd import ETCD_EVENT_VALUE_DICT_TYPE, EtcdClient
-from rap.common.utils import del_future
 
 
 class EtcdEndpoint(BaseEndpoint):
@@ -42,8 +42,7 @@ class EtcdEndpoint(BaseEndpoint):
             key_path=etcd_key_path,
             ca_path=etcd_ca_path,
         )
-        self._watch_future: asyncio.Future = asyncio.Future()
-        self._watch_future.set_result(True)
+        self._watch_future: asyncio.Future = done_future()
         super().__init__(
             transport,
             timeout=timeout,

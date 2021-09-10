@@ -4,6 +4,7 @@ from typing import Optional
 
 from rap.client.endpoint.base import BaseEndpoint, PickConnEnum
 from rap.client.transport.transport import Transport
+from rap.common.asyncio_helper import done_future
 from rap.common.coordinator.consul import ConsulClient
 
 
@@ -47,8 +48,7 @@ class ConsulEndpoint(BaseEndpoint):
             verify=consul_verify,
             cert=consul_cert,
         )
-        self._watch_future: asyncio.Future = asyncio.Future()
-        self._watch_future.set_result(True)
+        self._watch_future: asyncio.Future = done_future()
         super().__init__(
             transport,
             timeout=timeout,

@@ -12,11 +12,12 @@ from rap.client.transport.channel import Channel
 from rap.client.utils import get_exc_status_code_dict, raise_rap_error
 from rap.common import event
 from rap.common import exceptions as rap_exc
+from rap.common.asyncio_helper import as_first_completed, safe_del_future
 from rap.common.conn import Connection
 from rap.common.exceptions import RPCError
 from rap.common.snowflake import get_snowflake_id
 from rap.common.types import SERVER_BASE_MSG_TYPE
-from rap.common.utils import Constant, as_first_completed
+from rap.common.utils import Constant
 
 if TYPE_CHECKING:
     from rap.client.core import BaseClient
@@ -208,7 +209,7 @@ class Transport(object):
             rtt += time.time() - start_time
             mos += response.body.get("mos", 10)
 
-        await asyncio.wait_for(asyncio.gather(*[_ping() for _ in range(3)]), timeout=timeout)
+        await asyncio.wait_for(asyncio.gather(*[_ping(), _ping(), _ping()]), timeout=timeout)
         mos = mos // 3
         rtt = rtt / 3
 
@@ -248,12 +249,13 @@ class Transport(object):
         if not request.correlation_id:
             request.correlation_id = str(get_snowflake_id())
         resp_future_id: str = f"{conn.sock_tuple}:{request.correlation_id}"
-        self._resp_future_dict[resp_future_id] = asyncio.Future()
-        await self.write_to_conn(request, conn)
         try:
+            response_future: asyncio.Future[Response] = asyncio.Future()
+            self._resp_future_dict[resp_future_id] = response_future
+            await self.write_to_conn(request, conn)
             try:
                 response: Response = await as_first_completed(
-                    [asyncio.wait_for(self._resp_future_dict[resp_future_id], timeout)],
+                    [asyncio.wait_for(response_future, timeout)],
                     not_cancel_future_list=[conn.conn_future],
                 )
                 response.state = request.state
@@ -261,8 +263,9 @@ class Transport(object):
             except asyncio.TimeoutError:
                 raise asyncio.TimeoutError(f"msg_id:{resp_future_id} request timeout")
         finally:
-            if resp_future_id in self._resp_future_dict:
-                del self._resp_future_dict[resp_future_id]
+            pop_future: Optional[asyncio.Future] = self._resp_future_dict.pop(resp_future_id, None)
+            if pop_future:
+                safe_del_future(pop_future)
 
     @staticmethod
     def before_write_handle(request: Request) -> None:

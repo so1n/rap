@@ -16,7 +16,7 @@ class PickConnEnum(Enum):
 
 
 class Picker(object):
-    """refer to `Kratos`"""
+    """refer to `Kratos` 1.x"""
 
     def __init__(self, conn_list: List[Connection]):
         self._conn: Connection = self._pick(conn_list)
@@ -141,10 +141,7 @@ class BaseEndpoint(object):
 
             sleep_time: float = next_ping_interval - (time.time() - now_time)
             if sleep_time > 0:
-                try:
-                    await asyncio.wait_for(asyncio.shield(conn.listen_future), timeout=sleep_time)
-                except asyncio.TimeoutError:
-                    pass
+                await conn.sleep_and_listen(sleep_time)
 
     @property
     def is_close(self) -> bool:
@@ -194,8 +191,7 @@ class BaseEndpoint(object):
             await self.destroy(ip, port)
             raise e
         conn.ping_future = asyncio.ensure_future(self._ping_event(conn))
-        if not self._wait_server_recover:
-            conn.ping_future.add_done_callback(lambda f: conn.close())
+        conn.ping_future.add_done_callback(lambda f: conn.close())
         self._conn_dict[key] = conn
 
     async def destroy(self, ip: str, port: int) -> None:
