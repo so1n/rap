@@ -9,14 +9,20 @@ from rap.client.transport.transport import Transport
 from rap.common.conn import Connection
 
 
-class PickConnEnum(Enum):
+class BalanceEnum(Enum):
+    """Balance method
+    random: random pick a conn
+    round_robin: round pick conn
+    faster: pick response faster conn
+    """
+
     random = auto()
     round_robin = auto()
     faster = auto()
 
 
 class Picker(object):
-    """refer to `Kratos` 1.x"""
+    """auto pick conn, refer to `Kratos` 1.x"""
 
     def __init__(self, conn_list: List[Connection]):
         self._conn: Connection = self._pick(conn_list)
@@ -58,9 +64,9 @@ class BaseEndpoint(object):
         self,
         transport: Transport,
         timeout: Optional[int] = None,
-        declare_timeout: int = 9,
+        declare_timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
-        pick_conn_method: Optional[PickConnEnum] = None,
+        balance_enum: Optional[BalanceEnum] = None,
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
         min_ping_interval: Optional[int] = None,
@@ -69,13 +75,13 @@ class BaseEndpoint(object):
         wait_server_recover: bool = True,
     ) -> None:
         """
-        conn_list: client conn info
-          include ip, port, weight
-          ip: server ip
-          port: server port
-          weight: select this conn weight
-          e.g.  [{"ip": "localhost", "port": "9000", weight: 10}]
-        timeout: read response from consumer timeout
+        :param transport: client transport
+        :param timeout: read response from consumer timeout, default 1200
+        :param declare_timeout: declare timeout include request & response, default 9
+        :param ssl_crt_path: client ssl crt file path
+        :param balance_enum: balance pick conn method, default random
+        :param pack_param: msgpack pack param
+        :param unpack_param: msgpack unpack param
         :param min_ping_interval: send client ping min interval, default 1
         :param max_ping_interval: send client ping max interval, default 3
         :param ping_fail_cnt: How many times ping fails to judge as unavailable, default 3
@@ -83,7 +89,7 @@ class BaseEndpoint(object):
         """
         self._transport: Transport = transport
         self._timeout: int = timeout or 1200
-        self._declare_timeout: int = declare_timeout
+        self._declare_timeout: int = declare_timeout or 9
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._pack_param: Optional[dict] = pack_param
         self._unpack_param: Optional[dict] = unpack_param
@@ -99,12 +105,12 @@ class BaseEndpoint(object):
         self._is_close: bool = True
 
         setattr(self, self._pick_conn.__name__, self._random_pick_conn)
-        if pick_conn_method:
-            if pick_conn_method == PickConnEnum.random:
+        if balance_enum:
+            if balance_enum == BalanceEnum.random:
                 setattr(self, self._pick_conn.__name__, self._random_pick_conn)
-            elif pick_conn_method == PickConnEnum.round_robin:
+            elif balance_enum == BalanceEnum.round_robin:
                 setattr(self, self._pick_conn.__name__, self._round_robin_pick_conn)
-            elif pick_conn_method == PickConnEnum.faster:
+            elif balance_enum == BalanceEnum.faster:
                 setattr(self, self._pick_conn.__name__, self._pick_faster_conn)
 
     async def _listen_conn(self, conn: Connection) -> None:
@@ -152,11 +158,11 @@ class BaseEndpoint(object):
 
     async def create(self, ip: str, port: int, weight: int = 10, max_conn_inflight: int = 100) -> None:
         """create and init conn
-        ip: server ip
-        port: server port
-        weight: select conn weight
+        :param ip: server ip
+        :param port: server port
+        :param weight: select conn weight
+        :param max_conn_inflight: Maximum number of connections per conn
         """
-
         key: tuple = (ip, port)
         if key in self._conn_dict:
             raise ConnectionError(f"conn:{key} already create")
@@ -199,8 +205,8 @@ class BaseEndpoint(object):
 
     async def destroy(self, ip: str, port: int) -> None:
         """destroy conn
-        ip: server ip
-        port: server port
+        :param ip: server ip
+        :param port: server port
         """
         key: tuple = (ip, port)
 

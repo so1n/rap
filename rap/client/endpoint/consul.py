@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import Optional
 
-from rap.client.endpoint.base import BaseEndpoint, PickConnEnum
+from rap.client.endpoint.base import BalanceEnum, BaseEndpoint
 from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import done_future
 from rap.common.coordinator.consul import ConsulClient
@@ -19,7 +19,7 @@ class ConsulEndpoint(BaseEndpoint):
         ssl_crt_path: Optional[str] = None,
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
-        pick_conn_method: PickConnEnum = PickConnEnum.random,
+        balance_enum: BalanceEnum = BalanceEnum.random,
         min_ping_interval: Optional[int] = None,
         max_ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
@@ -53,7 +53,7 @@ class ConsulEndpoint(BaseEndpoint):
             transport,
             timeout=timeout,
             ssl_crt_path=ssl_crt_path,
-            pick_conn_method=pick_conn_method,
+            balance_enum=balance_enum,
             pack_param=pack_param,
             unpack_param=unpack_param,
             ping_fail_cnt=ping_fail_cnt,

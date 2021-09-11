@@ -29,14 +29,11 @@ class Transport(object):
 
     _decay_time: float = 600.0
 
-    def __init__(
-        self,
-        app: "BaseClient",
-    ):
+    def __init__(self, app: "BaseClient"):
         self.app: "BaseClient" = app
-        self._process_request_list: List = []
-        self._process_response_list: List = []
-        self._process_exception_list: List = []
+        self._process_request_list: List[Callable[[Request], Any]] = []
+        self._process_response_list: List[Callable[[Response], Any]] = []
+        self._process_exception_list: List[Callable[[Response, Exception], Any]] = []
 
         self._max_msg_id: int = 65535
         self._msg_id: int = random.randrange(self._max_msg_id)
@@ -195,6 +192,13 @@ class Transport(object):
         raise exc
 
     async def ping(self, conn: Connection, timeout: int) -> None:
+        """
+        Send three requests to check the response time of the client and server.
+        At the same time, obtain the current quality score of the server to help the client better realize automatic
+         load balancing (if the server supports this function)
+        :param conn: client conn
+        :param timeout: recv ping timeout
+        """
         start_time: float = time.time()
         mos: int = 5
         rtt: float = 0
@@ -239,7 +243,7 @@ class Transport(object):
         """Send data to the server and get the response from the server.
         :param request: client request obj
         :param conn: client conn
-        :param timeout: recv response timeout
+        :param timeout: recv response timeout, default 9
 
         :return: return server response
         """
@@ -279,9 +283,9 @@ class Transport(object):
         set_header_value("user_agent", Constant.USER_AGENT, is_cover=True)
         set_header_value("request_id", str(get_snowflake_id()), is_cover=True)
 
-    #######################
-    # base write_to_conn&read api #
-    #######################
+    ##########################
+    # base write_to_conn api #
+    ##########################
     async def write_to_conn(self, request: Request, conn: Connection) -> None:
         """gen msg_id and seng msg to conn"""
         request.conn = conn

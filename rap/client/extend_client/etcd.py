@@ -1,7 +1,7 @@
 from typing import Optional
 
 from rap.client.core import BaseClient
-from rap.client.endpoint import PickConnEnum
+from rap.client.endpoint import BalanceEnum
 from rap.client.endpoint.etcd import EtcdEndpoint
 
 
@@ -15,7 +15,7 @@ class Client(BaseClient):
         ws_min_interval: Optional[int] = None,
         ws_max_interval: Optional[int] = None,
         ws_statistics_interval: Optional[int] = None,
-        select_conn_method: PickConnEnum = PickConnEnum.random,
+        select_conn_method: BalanceEnum = BalanceEnum.random,
         min_ping_interval: Optional[int] = None,
         max_ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
@@ -41,7 +41,7 @@ class Client(BaseClient):
             self.transport,
             timeout=keep_alive_timeout,
             ssl_crt_path=ssl_crt_path,
-            pick_conn_method=select_conn_method,
+            balance_enum=select_conn_method,
             ping_fail_cnt=ping_fail_cnt,
             min_ping_interval=min_ping_interval,
             max_ping_interval=max_ping_interval,

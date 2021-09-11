@@ -23,9 +23,9 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
 
     def __init__(
         self,
-        k: float = 2.0,  # google sre default
+        k: float = 2.0,
         expire: int = 180,
-        interval: int = 120,  # google sre default
+        interval: int = 120,
         prefix: str = "circuit_breaker",
         window_statistics: Optional[WindowStatistics] = None,
     ):

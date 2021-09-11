@@ -9,6 +9,12 @@ if TYPE_CHECKING:
 
 
 class BaseProcessor(object):
+    """client processor
+    Note:
+        It needs to be loaded before the client is started.
+        The client will automatically register the corresponding event callback when it is loaded.
+        After the client is started, it will assign itself to the corresponding `app` property
+    """
 
     app: "BaseClient"
     event_dict: Dict["EventEnum", List[CLIENT_EVENT_FN]] = {}

@@ -139,7 +139,6 @@ class Channel(BaseChannel[Response]):
             except ChannelError:
                 pass
             return
-        self.set_success_finish()
         self.channel_is_declare = False
 
         await self._base_write(None, Constant.DROP)

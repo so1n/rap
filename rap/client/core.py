@@ -3,16 +3,16 @@ import sys
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Sequence, Type
 
-from rap.client.endpoint import BaseEndpoint, LocalEndpoint, PickConnEnum
+from rap.client.endpoint import BalanceEnum, BaseEndpoint, LocalEndpoint
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
+from rap.client.transport.async_iterator import AsyncIteratorCall
 from rap.client.transport.transport import Transport
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common import event
 from rap.common.cache import Cache
 from rap.common.channel import UserChannel
 from rap.common.collect_statistics import WindowStatistics
-from rap.common.conn import Connection
 from rap.common.types import is_type
 from rap.common.utils import EventEnum, RapFunc, param_handle
 
@@ -20,64 +20,9 @@ __all__ = ["BaseClient", "Client"]
 CHANNEL_F = Callable[[UserChannel], Any]
 
 
-class AsyncIteratorCall:
-    """let client support async iterator (keep sending and receiving messages under the same conn)"""
-
-    def __init__(
-        self,
-        name: str,
-        client: "BaseClient",
-        conn: Connection,
-        arg_param: Sequence[Any],
-        header: Optional[dict] = None,
-        group: Optional[str] = None,
-        timeout: Optional[int] = None,
-    ):
-        """
-        :param name: func name
-        :param client: rap base client
-        :param arg_param: rpc func param
-        :param group: func's group, default value is `default`
-        :param header: request header
-        :param timeout: request timeout
-        """
-        self._name: str = name
-        self._client: "BaseClient" = client
-        self._conn: Connection = conn
-        self._call_id: Optional[int] = None
-        self._arg_param: Sequence[Any] = arg_param
-        self._header: Optional[dict] = header or {}
-        self.group: Optional[str] = group
-        self._timeout: Optional[int] = timeout
-
-    #####################
-    # async for support #
-    #####################
-    def __aiter__(self) -> "AsyncIteratorCall":
-        return self
-
-    async def __anext__(self) -> Any:
-        """
-        The server will return the invoke id of the generator function,
-        and the client can continue to get data based on the invoke id.
-        If no data, the server will return status_code = 301 and client must raise StopAsyncIteration Error.
-        """
-        response: Response = await self._client.transport.request(
-            self._name,
-            self._conn,
-            arg_param=self._arg_param,
-            call_id=self._call_id,
-            header=self._header,
-            group=self.group,
-            timeout=self._timeout,
-        )
-        if response.status_code == 301:
-            raise StopAsyncIteration()
-        self._call_id = response.body["call_id"]
-        return response.body["result"]
-
-
 class BaseClient:
+    """Human-friendly `rap client` api"""
+
     endpoint: BaseEndpoint
 
     def __init__(
@@ -89,6 +34,7 @@ class BaseClient:
         ws_statistics_interval: Optional[int] = None,
     ):
         """
+        :param server_name: server name
         :param cache_interval: Cache auto scan expire key interval
         :param ws_min_interval: WindowStatistics time per window
         :param ws_max_interval: WindowStatistics Window capacity
@@ -106,8 +52,8 @@ class BaseClient:
         )
 
     ##################
-    # start& close #
-    ##################
+    # start & close #
+    ################
     async def stop(self) -> None:
         """close client transport"""
         for handler in self._event_dict[EventEnum.before_end]:
@@ -124,26 +70,37 @@ class BaseClient:
         for handler in self._event_dict[EventEnum.after_start]:
             handler(self)  # type: ignore
 
+    #########################
+    # request event handler #
+    #########################
     def register_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
+        if not self.is_close:
+            raise RuntimeError("The method cannot be called on the run")
         self.transport.register_event_handle(event_class, fn)
 
     def unregister_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
+        if not self.is_close:
+            raise RuntimeError("The method cannot be called on the run")
         self.transport.unregister_event_handle(event_class, fn)
 
+    ########################
+    # client event handler #
+    ########################
     def register_client_event_handle(self, event_name: EventEnum, fn: CLIENT_EVENT_FN) -> None:
+        if not self.is_close:
+            raise RuntimeError("The method cannot be called on the run")
         self._event_dict[event_name].append(fn)
 
+    ############################
+    # client processor handler #
+    ############################
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:
+        if not self.is_close:
+            raise RuntimeError("The method cannot be called on the run")
         for processor in processor_list:
             processor.app = self  # type: ignore
             for event_type, handle in processor.event_dict.items():
                 self._event_dict[event_type].extend(handle)
-        if not self.is_close:
-            for processor in processor_list:
-                for handler in processor.event_dict.get(EventEnum.before_start, []):
-                    handler(self)  # type: ignore
-                for handler in processor.event_dict.get(EventEnum.after_start, []):
-                    handler(self)  # type: ignore
         self.transport.load_processor(processor_list)
 
     #####################
@@ -178,7 +135,13 @@ class BaseClient:
             timeout: Optional[int] = kwargs.pop("timeout", None)
             async with self.endpoint.picker() as conn:
                 async for result in AsyncIteratorCall(
-                    name, self, conn, param_handle(func, args, kwargs), group=group, header=header, timeout=timeout
+                    name,
+                    self,  # type: ignore
+                    conn,
+                    param_handle(func, args, kwargs),
+                    group=group,
+                    header=header,
+                    timeout=timeout,
                 ):
                     if not is_type(return_type, type(result)):
                         raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
@@ -223,7 +186,9 @@ class BaseClient:
         :param timeout: request timeout
         """
         async with self.endpoint.picker() as conn:
-            response = await self.transport.request(name, conn, arg_param, group=group, header=header, timeout=timeout)
+            response: Response = await self.transport.request(
+                name, conn, arg_param, group=group, header=header, timeout=timeout
+            )
         return response.body["result"]
 
     async def invoke(
@@ -268,13 +233,15 @@ class BaseClient:
         :param header: request header
         :param timeout: request timeout
         """
+        if not inspect.isasyncgenfunction(func):
+            raise TypeError("func must be async gen function")
         if not kwarg_param:
             kwarg_param = {}
 
         async with self.endpoint.picker() as conn:
             async for result in AsyncIteratorCall(
                 func.__name__,
-                self,
+                self,  # type: ignore
                 conn,
                 param_handle(func, arg_param, kwarg_param),
                 header=header,
@@ -284,7 +251,11 @@ class BaseClient:
                 yield result
 
     def inject(self, func: Callable, name: str = "", group: Optional[str] = None) -> RapFunc:
-        """Replace the function with `RapFunc` and inject it into the client at the same time"""
+        """Replace the function with `RapFunc` and inject it into the client at the same time
+        :param func: Python func
+        :param name: rap func name
+        :param group: func's group, default value is `default`
+        """
         if isinstance(func, RapFunc):
             raise RuntimeError(f"{func} already inject or register")
         new_func: RapFunc = self.register(name=name, group=group)(func)
@@ -313,8 +284,8 @@ class BaseClient:
         (such as ide completion, ide reconstruction and type hints)
         and will be automatically registered according to the function type
 
-        name: func name
-        group: func group, default value is `default`
+        :param name: rap func name
+        :param group: func's group, default value is `default`
         """
 
         def wrapper(func: Callable) -> RapFunc:
@@ -346,7 +317,7 @@ class Client(BaseClient):
         ws_min_interval: Optional[int] = None,
         ws_max_interval: Optional[int] = None,
         ws_statistics_interval: Optional[int] = None,
-        select_conn_method: PickConnEnum = PickConnEnum.random,
+        select_conn_method: BalanceEnum = BalanceEnum.random,
         min_ping_interval: Optional[int] = None,
         max_ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
@@ -377,7 +348,7 @@ class Client(BaseClient):
             timeout=keep_alive_timeout,
             pack_param=None,
             unpack_param=None,
-            pick_conn_method=select_conn_method,
+            balance_enum=select_conn_method,
             ping_fail_cnt=ping_fail_cnt,
             min_ping_interval=min_ping_interval,
             max_ping_interval=max_ping_interval,

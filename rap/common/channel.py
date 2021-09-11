@@ -58,8 +58,7 @@ class AsyncIterData(Generic[Read_T]):
     def __init__(self, channel: "BaseChannel"):
         self.channel = channel
 
-    def __aiter__(self: Read_T) -> "Read_T":
-        # `self: Read_T` support IDE identify type hints
+    def __aiter__(self) -> "AsyncIterData":
         return self
 
     async def __anext__(self) -> "Read_T":
@@ -128,6 +127,7 @@ class UserChannel(Generic[Read_T]):
 
     @property
     def channel_id(self) -> str:
+        """channel id, each channel has a unique id"""
         return self._channel.channel_id
 
     @property
@@ -143,7 +143,18 @@ class UserChannel(Generic[Read_T]):
     # async for support #
     #####################
     def iter(self) -> AsyncIterData[Read_T]:
+        """
+        >>> async def channel_demo(channel: UserChannel):
+        ...     async for response in channel.iter():
+        ...         response.body
+        ...         response.header
+        """
         return AsyncIterData(self._channel)
 
     def iter_body(self) -> AsyncIterDataBody[Read_T]:
+        """
+        >>> async def channel_demo(channel: UserChannel):
+        ...     async for body in channel.iter():
+        ...         print(body)
+        """
         return AsyncIterDataBody(self._channel)
