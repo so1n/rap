@@ -32,7 +32,10 @@ class Picker(object):
         elif conn_len > 1:
             score: float = 0.0
             for conn in conn_list:
-                _score: float = conn.score / conn.semaphore.value
+                conn_inflight: float = conn.semaphore.inflight
+                _score: float = conn.score
+                if conn_inflight:
+                    _score = _score / conn_inflight
                 logging.debug("conn:%s available:%s rtt:%s score:%s", conn.peer_tuple, conn.available, conn.rtt, _score)
                 if _score > score:
                     score = _score
@@ -135,7 +138,7 @@ class BaseEndpoint(object):
             try:
                 await self._transport.ping(conn, next_ping_interval)
             except asyncio.CancelledError:
-                pass
+                return
             except Exception as e:
                 logging.debug(f"{conn} ping event error:{e}")
 

@@ -6,7 +6,7 @@ from collections import OrderedDict
 from types import FunctionType
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
-from rap.common.channel import BaseChannel
+from rap.common.channel import UserChannel
 from rap.common.exceptions import FuncNotFoundError, RegisteredError
 from rap.common.types import is_json_type
 from rap.common.utils import Constant
@@ -75,7 +75,7 @@ class RegistryManager(object):
 
         func_type: str = Constant.NORMAL_TYPE
         try:
-            if len(func_arg_parameter) == 1 and issubclass(func_arg_parameter[0].annotation, BaseChannel):
+            if len(func_arg_parameter) == 1 and issubclass(func_arg_parameter[0].annotation, UserChannel):
                 func_type = Constant.CHANNEL_TYPE
         except TypeError:
             # ignore error TypeError: issubclass() arg 1 must be a class

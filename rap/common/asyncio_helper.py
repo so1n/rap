@@ -79,5 +79,10 @@ class Semaphore(asyncio.Semaphore):
         super(Semaphore, self).__init__(value, loop=loop)
 
     @property
-    def value(self) -> int:
-        return self._value  # type: ignore
+    def inflight(self) -> int:
+        value: int = self.raw_value - self._value  # type: ignore
+        if value < 0:
+            value = 0
+        if value > self.raw_value:
+            value = self.raw_value
+        return value

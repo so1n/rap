@@ -21,7 +21,7 @@ from typing import (
 )
 
 from rap.common.asyncio_helper import del_future
-from rap.common.channel import BaseChannel
+from rap.common.channel import BaseChannel, UserChannel
 from rap.common.conn import ServerConnection
 from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent, PongEvent
 from rap.common.exceptions import (
@@ -46,25 +46,22 @@ if TYPE_CHECKING:
 __all__ = ["Channel", "Receiver"]
 
 
-class Channel(BaseChannel):
+class Channel(BaseChannel[Request]):
     def __init__(
         self,
         channel_id: str,
         write: Callable[[Any, Dict[str, Any]], Coroutine[Any, Any, Any]],
-        close: Callable[[], None],
         conn: ServerConnection,
         func: Callable[["Channel"], Any],
     ):
-        self._func_name: str = func.__name__
-        self._close: Callable[[], None] = close
         self._write: Callable[[Any, Dict[str, Any]], Coroutine[Any, Any, Any]] = write
         self._conn: ServerConnection = conn
-        self._queue: asyncio.Queue = asyncio.Queue()
+        self.queue: asyncio.Queue = asyncio.Queue()
         self.channel_id: str = channel_id
 
         # if conn close, channel future will done and channel not read & write_to_conn
-        self._channel_conn_future: asyncio.Future = asyncio.Future()
-        self._channel_conn_future.add_done_callback(lambda f: self._queue.put_nowait(f.exception()))
+        self.channel_conn_future: asyncio.Future = asyncio.Future()
+        self.channel_conn_future.add_done_callback(lambda f: self.queue.put_nowait(f.exception()))
 
         self._conn.conn_future.add_done_callback(lambda f: self.set_exc(ChannelError("connection already close")))
 
@@ -72,7 +69,7 @@ class Channel(BaseChannel):
 
     async def _run_func(self, func: Callable) -> None:
         try:
-            await func(self)
+            await func(UserChannel(self))
         except Exception as e:
             logging.debug("channel:%s, func: %s, ignore raise exc:%s", self.channel_id, func.__name__, e)
         finally:
@@ -81,17 +78,17 @@ class Channel(BaseChannel):
 
     async def receive_request(self, request: Request) -> None:
         assert isinstance(request, Request), TypeError(f"request type must {Request}")
-        await self._queue.put(request)
+        await self.queue.put(request)
 
     async def write(self, body: Any) -> None:
         if self.is_close:
-            raise ChannelError(f"channel{self.channel_id} is close")
+            raise ChannelError(f"channel<{self.channel_id}> is close")
         await self._write(body, {"channel_life_cycle": Constant.MSG})
 
     async def read(self) -> Request:
         if self.is_close:
-            raise ChannelError(f"channel{self.channel_id} is close")
-        result: Union[Request, Exception] = await self._queue.get()
+            raise ChannelError(f"<channel{self.channel_id}> is close")
+        result: Union[Request, Exception] = await self.queue.get()
         if isinstance(result, Exception):
             raise result
         return result
@@ -111,7 +108,6 @@ class Channel(BaseChannel):
 
         # Actively cancel the future may not be successful, such as cancel asyncio.sleep
         del_future(self._func_future)
-        self._close()
 
 
 class Receiver(object):
@@ -258,10 +254,8 @@ class Receiver(object):
                     )
                 )
 
-            def close() -> None:
-                del self._channel_dict[channel_id]
-
-            channel = Channel(channel_id, write, close, self._conn, func)
+            channel = Channel(channel_id, write, self._conn, func)
+            channel.channel_conn_future.add_done_callback(lambda f: self._channel_dict.pop(channel_id, None))
             self._channel_dict[channel_id] = channel
 
             response.header = {"channel_id": channel_id, "channel_life_cycle": Constant.DECLARE}

@@ -1,7 +1,7 @@
 import asyncio
 from typing import Any, AsyncIterator
 
-from rap.server import Channel, Server
+from rap.server import Server, UserChannel
 
 
 def sync_sum(a: int, b: int) -> int:
@@ -18,7 +18,7 @@ async def async_gen(a: int) -> AsyncIterator[int]:
         yield i
 
 
-async def async_channel(channel: Channel) -> None:
+async def async_channel(channel: UserChannel) -> None:
     while await channel.loop():
         body: Any = await channel.read_body()
         await channel.write(body)

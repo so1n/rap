@@ -1,73 +1,60 @@
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Optional, Tuple
+import traceback
+from typing import TYPE_CHECKING, Any, Coroutine, Optional, Type, Union
 
 from rap.client.model import Request, Response
-from rap.common.channel import BaseChannel
+from rap.common.asyncio_helper import as_first_completed
+from rap.common.channel import BaseChannel, ChannelCloseError, UserChannel
 from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError
 from rap.common.snowflake import get_snowflake_id
 from rap.common.utils import Constant
-
-from ...common.asyncio_helper import as_first_completed
 
 if TYPE_CHECKING:
     from .transport import Transport
 __all__ = ["Channel"]
 
 
-class Channel(BaseChannel):
-    """support channel use"""
+class Channel(BaseChannel[Response]):
+    """client channel support"""
 
     def __init__(
         self,
         transport: "Transport",
         target: str,
         conn: Connection,
-        create: Callable[[str], Coroutine[Any, Any, Any]],
-        read: Callable[[str], Coroutine[Any, Any, Response]],
-        write: Callable[[Request], Coroutine[Any, Any, None]],
-        close: Callable[[str], Coroutine[Any, Any, Any]],
     ):
         """
-        target: rap target
-        conn: channel transport conn
-        create: rap's transport create channel queue func
-        read: rap's transport read response func
-        write: rap's transport write to conn func
-        close: close queue func
+        :param transport: rap client transport
+        :param target: rap target
+        :param conn: rap client conn
         """
-        self.channel_id: str = str(get_snowflake_id())
         self._transport: "Transport" = transport
         self._target: str = target
         self._conn: Connection = conn
-        self._create: Callable[[str], Coroutine[Any, Any, Any]] = create
-        self._read: Callable[[str], Coroutine[Any, Any, Response]] = read
-        self._write: Callable[[Request], Coroutine[Any, Any, None]] = write
-        self._close: Callable[[str], Coroutine[Any, Any, Any]] = close
-        self._channel_conn_future: asyncio.Future = asyncio.Future()
-        self._channel_conn_future.set_result(True)
-        self._drop_msg: str = "recv drop event, close channel"
+        self._drop_msg: str = "recv channel's drop event, close channel"
+
+        self.channel_id: str = str(get_snowflake_id())
+        self.queue: asyncio.Queue = asyncio.Queue()
+        self.user_channel: UserChannel[Response] = UserChannel(self)
+        self.channel_conn_future: asyncio.Future = asyncio.Future()
+        self.channel_is_declare: bool = False
 
     async def create(self) -> None:
         """create and init channel, create session and listen conn exc"""
-        if not self.is_close:
+        if self.channel_is_declare:
             raise ChannelError("channel already create")
-
-        # init channel data structure
-        await self._create(self.channel_id)
-        self._channel_conn_future = asyncio.Future()
 
         def add_done_callback(f: asyncio.Future) -> None:
             if f.cancelled():
-                self.set_exc(ChannelError("channel is close"))
+                self.set_exc(ChannelCloseError("channel's conn is close"))
             try:
                 f.exception()
             except Exception as e:
-                print(e)
                 self.set_exc(e)
             else:
-                self.set_exc(ChannelError("channel is close"))
+                self.set_exc(ChannelCloseError("channel's conn is close"))
 
         self._conn.conn_future.add_done_callback(add_done_callback)
 
@@ -80,27 +67,31 @@ class Channel(BaseChannel):
 
     async def _base_read(self, timeout: Optional[int] = None) -> Response:
         """base read response msg from channel conn
-        When a drop message is received or the channel is closed, will raise `ChannelError`
+        When a drop message is received , will raise `ChannelError`
+        :param timeout: read msg from channel conn timeout
         """
+
         if self.is_close:
             raise ChannelError("channel is closed")
 
+        async def _read_by_queue() -> Response:
+            """read response or exc from queue"""
+            result: Union[Response, Exception] = await self.queue.get()
+            if isinstance(result, Exception):
+                raise result
+            return result
+
         try:
-            if timeout:
-                response: Response = await as_first_completed(
-                    [asyncio.wait_for(self._read(self.channel_id), timeout=timeout)],
-                    not_cancel_future_list=[self._channel_conn_future],
-                )
-            else:
-                response = await as_first_completed(
-                    [self._read(self.channel_id)],
-                    not_cancel_future_list=[self._channel_conn_future],
-                )
+            response: Response = await as_first_completed(
+                [asyncio.wait_for(_read_by_queue(), timeout=timeout)],
+                not_cancel_future_list=[self.channel_conn_future],
+            )
+        except asyncio.TimeoutError:
+            raise ChannelError(f"channel<{self.channel_id}> read response timeout")
         except Exception as e:
             raise e
 
         if response.header.get("channel_life_cycle") == Constant.DROP:
-            await self._close(self.channel_id)
             exc: ChannelError = ChannelError(self._drop_msg)
             self.set_exc(exc)
             raise exc
@@ -118,10 +109,8 @@ class Channel(BaseChannel):
             correlation_id=self.channel_id,
             header={"channel_life_cycle": life_cycle},
         )
-        if timeout:
-            await asyncio.wait_for(self._write(request), timeout)
-        else:
-            await self._write(request)
+        coro: Coroutine = self._transport.write_to_conn(request, self._conn)
+        await asyncio.wait_for(coro, timeout)
 
     async def read(self, timeout: Optional[int] = None) -> Response:
         response: Response = await self._base_read(timeout=timeout)
@@ -146,10 +135,12 @@ class Channel(BaseChannel):
         """Actively send a close message and close the channel"""
         if self.is_close:
             try:
-                await self._channel_conn_future
+                await self.channel_conn_future
             except ChannelError:
                 pass
             return
+        self.set_success_finish()
+        self.channel_is_declare = False
 
         await self._base_write(None, Constant.DROP)
 
@@ -170,9 +161,13 @@ class Channel(BaseChannel):
     ######################
     # async with support #
     ######################
-    async def __aenter__(self) -> "Channel":
+    async def __aenter__(self) -> UserChannel[Response]:
         await self.create()
-        return self
+        return self.user_channel
 
-    async def __aexit__(self, *args: Tuple) -> None:
+    async def __aexit__(self, exc_type: Type[Exception], exc: str, tb: traceback.TracebackException) -> None:
+        if exc_type:
+            self.set_exc(exc_type(exc))
+        else:
+            self.set_success_finish()
         await self.close()

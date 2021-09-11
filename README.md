@@ -290,7 +290,7 @@ async def echo_body(channel: Channel) -> None:
 async def echo_response(channel: Channel) -> None:
     await channel.write_to_conn("hi!")
     # Read the response data (including header data), and return only if the data is read, or exit the loop if a signal is received to close the channel
-    async for response in channel.iter_response():
+    async for response in channel.iter():
         response: Response = response  #  help IDE check type....
         print(f"response: {response}")
         await channel.write_to_conn(response.body)

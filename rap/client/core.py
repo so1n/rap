@@ -6,18 +6,18 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Type
 from rap.client.endpoint import BaseEndpoint, LocalEndpoint, PickConnEnum
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
-from rap.client.transport.channel import Channel
 from rap.client.transport.transport import Transport
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common import event
 from rap.common.cache import Cache
+from rap.common.channel import UserChannel
 from rap.common.collect_statistics import WindowStatistics
 from rap.common.conn import Connection
 from rap.common.types import is_type
 from rap.common.utils import EventEnum, RapFunc, param_handle
 
 __all__ = ["BaseClient", "Client"]
-CHANNEL_F = Callable[[Channel], Any]
+CHANNEL_F = Callable[[UserChannel], Any]
 
 
 class AsyncIteratorCall:
@@ -324,7 +324,7 @@ class BaseClient:
             func_arg_parameter: List[inspect.Parameter] = [
                 i for i in func_sig.parameters.values() if i.default == i.empty
             ]
-            if len(func_arg_parameter) == 1 and func_arg_parameter[0].annotation is Channel:
+            if len(func_arg_parameter) == 1 and func_arg_parameter[0].annotation is UserChannel:
                 return self._async_channel_register(func, group, name=name)
             if inspect.iscoroutinefunction(func):
                 return self._async_register(func, group, name=name)

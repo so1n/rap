@@ -4,12 +4,11 @@ from typing import Any
 from aredis import StrictRedis  # type: ignore
 
 from rap.server.core import Server
-from rap.server.model import Response
 from rap.server.plugin.processor import CryptoProcessor
-from rap.server.receiver import Channel
+from rap.server.receiver import UserChannel
 
 
-async def async_channel(channel: Channel) -> None:
+async def async_channel(channel: UserChannel) -> None:
     while await channel.loop():
         body: Any = await channel.read_body()
         if body == "hello":
@@ -22,20 +21,20 @@ async def async_channel(channel: Channel) -> None:
             await channel.write("I don't know")
 
 
-async def echo_body(channel: Channel) -> None:
+async def echo_body(channel: UserChannel) -> None:
     cnt: int = 0
     async for body in channel.iter_body():
         await asyncio.sleep(1)
         cnt += 1
+        print(cnt, body)
         if cnt > 10:
             break
         await channel.write(f"pong! {cnt}")
 
 
-async def echo_response(channel: Channel) -> None:
+async def echo_response(channel: UserChannel) -> None:
     cnt: int = 0
-    async for response in channel.iter_response():
-        response: Response = response  # type: ignore  # IDE cannot check
+    async for response in channel.iter():
         await asyncio.sleep(1)
         cnt += 1
         if cnt > 10:

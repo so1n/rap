@@ -42,7 +42,7 @@
  - Feature: add conn result future(listen conn exc)
  - Feature: read conn data add listen conn exc
  - Feature: print cli func list table
- - Feature: channel add method `iter_body` & `iter_response`
+ - Feature: channel add method `iter_body` & `iter`
  - Refactor: refactor client session and add session execute
  - Refactor: func manager call func
 

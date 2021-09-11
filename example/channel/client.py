@@ -1,8 +1,8 @@
 import asyncio
 
-from rap.client import Channel, Client
-from rap.client.model import Response
+from rap.client import Client
 from rap.client.processor import CryptoProcessor
+from rap.common.channel import UserChannel
 
 client: Client = Client(
     "example", [{"ip": "localhost", "port": 9000}, {"ip": "localhost", "port": 9001}, {"ip": "localhost", "port": 9002}]
@@ -11,7 +11,7 @@ client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
 
 
 @client.register()
-async def async_channel(channel: Channel) -> None:
+async def async_channel(channel: UserChannel) -> None:
     await channel.write("hello")
     cnt: int = 0
     while await channel.loop(cnt < 3):
@@ -21,19 +21,19 @@ async def async_channel(channel: Channel) -> None:
 
 
 @client.register()
-async def echo_body(channel: Channel) -> None:
+async def echo_body(channel: UserChannel) -> None:
     cnt: int = 0
     await channel.write(f"ping! {cnt}")
     async for body in channel.iter_body():
+        print(body)
         cnt += 1
         await channel.write(f"ping! {cnt}")
 
 
 @client.register()
-async def echo_response(channel: Channel) -> None:
+async def echo_response(channel: UserChannel) -> None:
     await channel.write("hi!")
-    async for response in channel.iter_response():
-        response: Response = response  # type: ignore  # IDE cannot check
+    async for response in channel.iter():
         print(f"response: {response}")
         await channel.write(response.body)
 

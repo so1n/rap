@@ -100,7 +100,6 @@ class Transport(object):
             return
 
         correlation_id: str = f"{conn.sock_tuple}:{response.correlation_id}"
-
         if exc:
             await self._put_exc_to_receiver(response, exc, correlation_id)
         elif response.msg_type == Constant.SERVER_ERROR_RESPONSE or response.status_code in self._exc_status_code_dict:
@@ -349,30 +348,12 @@ class Transport(object):
         :param conn: channel transport conn
         :param group: func's group
         """
-
-        async def create(_channel_id: str) -> None:
-            """create recv queue"""
-            self._channel_queue_dict[f"{conn.sock_tuple}:{_channel_id}"] = asyncio.Queue()
-
-        async def read(_channel_id: str) -> Response:
-            """read response or exc from queue"""
-            result: Union[Response, Exception] = await self._channel_queue_dict[
-                f"{conn.sock_tuple}:{_channel_id}"
-            ].get()
-            if isinstance(result, Exception):
-                raise result
-            return result
-
-        async def write(request: Request) -> None:
-            """write request to conn"""
-            await self.write_to_conn(request, conn)
-
-        async def close(_channel_id: str) -> None:
-            """clear channel queue"""
-            del self._channel_queue_dict[f"{conn.sock_tuple}:{_channel_id}"]
-
         target: str = f"/{group or Constant.DEFAULT_GROUP}/{func_name}"
-        return Channel(self, target, conn, create, read, write, close)  # type: ignore
+        channel: Channel = Channel(self, target, conn)  # type: ignore
+        correlation_id: str = f"{conn.sock_tuple}:{channel.channel_id}"
+        self._channel_queue_dict[correlation_id] = channel.queue
+        channel.channel_conn_future.add_done_callback(lambda f: self._channel_queue_dict.pop(correlation_id, None))
+        return channel
 
     #############
     # processor #

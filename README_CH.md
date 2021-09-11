@@ -282,7 +282,7 @@ async def echo_body(channel: Channel) -> None:
 async def echo_response(channel: Channel) -> None:
     await channel.write_to_conn("hi!")
     # 读取响应数据(包括header等数据), 只有读取到数据才会返回, 如果收到关闭channel的信令, 则会退出循环
-    async for response in channel.iter_response():
+    async for response in channel.iter():
         response: Response = response  #  IDE 无法检查出该类型....
         print(f"response: {response}")
         await channel.write_to_conn(response.body)

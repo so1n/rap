@@ -7,8 +7,7 @@ from starlette.responses import JSONResponse
 from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 
 from rap.client import Client
-from rap.common.asyncio_helper import del_future
-from rap.common.exceptions import ChannelError
+from rap.common.asyncio_helper import as_first_completed
 
 
 def before_check(
@@ -72,20 +71,7 @@ async def websocket_route_func(websocket: WebSocket) -> None:
                 send_future: asyncio.Future = asyncio.ensure_future(send())
                 receive_future: asyncio.Future = asyncio.ensure_future(receive())
 
-                def set_finish(f: asyncio.Future) -> None:
-                    exc: Optional[BaseException] = f.exception()
-                    if exc:
-                        channel.set_exc(exc)
-                    else:
-                        channel.set_success_finish()
-
-                receive_future.add_done_callback(lambda f: set_finish(f))
-                try:
-                    await channel.wait_close()
-                except ChannelError:
-                    pass
-                del_future(send_future)
-                del_future(receive_future)
+                await as_first_completed([receive_future, send_future])
     except WebSocketDisconnect:
         pass
     finally:

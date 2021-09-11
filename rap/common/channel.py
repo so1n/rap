@@ -1,71 +1,23 @@
 import asyncio
-from typing import TYPE_CHECKING, Any, Union
+from typing import Any, Generic, TypeVar
 
 from rap.common.exceptions import ChannelError
 
-if TYPE_CHECKING:
-    from rap.client.model import Response
-    from rap.server.model import Response as ServerResponse
+Read_T = TypeVar("Read_T")
 
 
-class AsyncIterResponse(object):
-    def __init__(self, channel: "BaseChannel"):
-        self.channel = channel
-
-    def __aiter__(self) -> "AsyncIterResponse":
-        return self
-
-    async def __anext__(self) -> "Union[Response, ServerResponse]":
-        try:
-            return await self.channel.read()
-        except ChannelError:
-            raise StopAsyncIteration()
+class ChannelCloseError(Exception):
+    """channel is close"""
 
 
-class AsyncIterBody(AsyncIterResponse):
-    async def __anext__(self) -> "Union[Response, ServerResponse]":
-        try:
-            return await self.channel.read_body()
-        except ChannelError:
-            raise StopAsyncIteration()
-
-
-class BaseChannel(object):
+class BaseChannel(Generic[Read_T]):
     """Common method of rap client and server channel"""
 
-    _channel_conn_future: asyncio.Future
+    channel_id: str
+    channel_conn_future: asyncio.Future
+    queue: asyncio.Queue
 
-    async def loop(self, flag: bool = True) -> bool:
-        """In the channel function, elegantly replace `while True`
-        bad demo
-        >>> async def channel_demo(channel: BaseChannel):
-        ...     while True:
-        ...         pass
-
-        good demo
-        >>> async def channel_demo(channel: BaseChannel):
-        ...     while await channel.loop():
-        ...         pass
-
-        bad demo
-        >>> cnt: int = 0
-        >>> async def channel_demo(channel: BaseChannel):
-        ...     while cnt < 3:
-        ...         pass
-
-        good demo
-        >>> cnt: int = 0
-        >>> async def channel_demo(channel: BaseChannel):
-        ...     while await channel.loop(cnt < 3):
-        ...         pass
-        """
-        await asyncio.sleep(0)
-        if self.is_close:
-            return False
-        else:
-            return flag
-
-    async def read(self) -> Any:
+    async def read(self) -> Read_T:
         """read msg obj from channel"""
         raise NotImplementedError
 
@@ -84,28 +36,114 @@ class BaseChannel(object):
     @property
     def is_close(self) -> bool:
         """whether the channel is closed"""
-        return self._channel_conn_future.done()
+        return self.channel_conn_future.done()
 
     async def wait_close(self) -> None:
-        await self._channel_conn_future
+        await self.channel_conn_future
 
     def set_exc(self, exc: BaseException) -> None:
-        if self._channel_conn_future and not self._channel_conn_future.done():
-            self._channel_conn_future.set_exception(exc)
+        if self.channel_conn_future and not self.channel_conn_future.done():
+            self.channel_conn_future.set_exception(exc)
             try:
-                self._channel_conn_future.exception()
+                self.channel_conn_future.exception()
             except Exception:
                 pass
 
     def set_success_finish(self) -> None:
-        if self._channel_conn_future and not self._channel_conn_future.done():
-            self._channel_conn_future.set_result(True)
+        if self.channel_conn_future and not self.channel_conn_future.done():
+            self.channel_conn_future.set_result(True)
+
+
+class AsyncIterData(Generic[Read_T]):
+    def __init__(self, channel: "BaseChannel"):
+        self.channel = channel
+
+    def __aiter__(self: Read_T) -> "Read_T":
+        # `self: Read_T` support IDE identify type hints
+        return self
+
+    async def __anext__(self) -> "Read_T":
+        try:
+            return await self.channel.read()
+        except ChannelCloseError:
+            raise StopAsyncIteration()
+
+
+class AsyncIterDataBody(AsyncIterData[Read_T]):
+    async def __anext__(self) -> "Read_T":
+        try:
+            return await self.channel.read_body()
+        except ChannelError:
+            raise StopAsyncIteration()
+
+
+class UserChannel(Generic[Read_T]):
+    """Only expose the user interface of BaseChannel"""
+
+    def __init__(self, channel: "BaseChannel[Read_T]"):
+        self._channel: BaseChannel[Read_T] = channel
+
+    async def loop(self, flag: bool = True) -> bool:
+        """In the channel function, elegantly replace `while True`
+
+        bad demo
+        >>> async def channel_demo(channel: UserChannel):
+        ...     while True:
+        ...         pass
+
+        good demo
+        >>> async def channel_demo(channel: UserChannel):
+        ...     while await channel.loop():
+        ...         pass
+
+        bad demo
+        >>> cnt: int = 0
+        >>> async def channel_demo(channel: UserChannel):
+        ...     while cnt < 3:
+        ...         pass
+
+        good demo
+        >>> cnt: int = 0
+        >>> async def channel_demo(channel: UserChannel):
+        ...     while await channel.loop(cnt < 3):
+        ...         pass
+        """
+        await asyncio.sleep(0)
+        if self._channel.is_close:
+            return False
+        else:
+            return flag
+
+    async def read(self) -> Read_T:
+        """read msg obj from channel"""
+        return await self._channel.read()
+
+    async def read_body(self) -> Any:
+        """read body obj from channel's msg obj"""
+        return await self._channel.read_body()
+
+    async def write(self, body: Any) -> Any:
+        """write_to_conn body to channel"""
+        await self._channel.write(body)
+
+    @property
+    def channel_id(self) -> str:
+        return self._channel.channel_id
+
+    @property
+    def is_close(self) -> bool:
+        """whether the channel is closed"""
+        return self._channel.is_close
+
+    async def wait_close(self) -> None:
+        """wait channel close"""
+        await self._channel.wait_close()
 
     #####################
     # async for support #
     #####################
-    def iter_response(self) -> AsyncIterResponse:
-        return AsyncIterResponse(self)
+    def iter(self) -> AsyncIterData[Read_T]:
+        return AsyncIterData(self._channel)
 
-    def iter_body(self) -> AsyncIterBody:
-        return AsyncIterBody(self)
+    def iter_body(self) -> AsyncIterDataBody[Read_T]:
+        return AsyncIterDataBody(self._channel)
