@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import random
 from typing import TYPE_CHECKING, Any, List, Optional
@@ -14,7 +15,7 @@ __all__ = ["Sender"]
 
 
 class Sender(object):
-    """"""
+    """send data to conn"""
 
     def __init__(
         self,
@@ -23,6 +24,12 @@ class Sender(object):
         timeout: Optional[int] = None,
         processor_list: Optional[List[BaseProcessor]] = None,
     ):
+        """
+        :param app: rap server
+        :param conn: rap server conn
+        :param timeout: send data timeout
+        :param
+        """
         self._app: "Server" = app
         self._max_msg_id: int = 65535
         self._msg_id: int = random.randrange(self._max_msg_id)
@@ -32,6 +39,8 @@ class Sender(object):
 
     @staticmethod
     def header_handle(resp: Response) -> None:
+        """response header handle"""
+
         def set_header_value(header_key: str, header_value: Any, is_cover: bool = False) -> None:
             """set header value"""
             if is_cover:
@@ -43,7 +52,7 @@ class Sender(object):
         set_header_value("user_agent", Constant.USER_AGENT, is_cover=True)
         set_header_value("request_id", str(get_snowflake_id()), is_cover=resp.msg_type is Constant.CHANNEL_RESPONSE)
 
-    async def __call__(self, resp: Optional[Response]) -> bool:
+    async def __call__(self, resp: Optional[Response], timeout: Optional[int] = None) -> bool:
         """Send response data to the client"""
         if resp is None:
             return False
@@ -57,14 +66,18 @@ class Sender(object):
         msg_id: int = self._msg_id + 1
         # Avoid too big numbers
         self._msg_id = msg_id & self._max_msg_id
-        await self._conn.write((msg_id, *resp.to_msg()))
+        if not timeout:
+            timeout = self._timeout
+        await asyncio.wait_for(self._conn.write((msg_id, *resp.to_msg())), timeout=timeout)
         if resp.target.endswith(Constant.EVENT_CLOSE_CONN):
             if not self._conn.is_closed():
                 self._conn.close()
         return True
 
     async def send_event(self, event: Event) -> bool:
+        """send event obj to client"""
         return await self.__call__(Response.from_event(self._app, event))
 
     async def send_exc(self, exc: Exception) -> bool:
+        """send exc obj to client"""
         return await self.__call__(Response.from_exc(self._app, exc))

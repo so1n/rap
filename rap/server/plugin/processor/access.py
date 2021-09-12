@@ -7,6 +7,8 @@ from rap.server.plugin.processor.base import BaseProcessor
 
 
 class AccessProcessor(BaseProcessor):
+    """print access log"""
+
     async def process_request(self, request: Request) -> Request:
         host: str = request.header["host"]
         if request.msg_type == Constant.MSG_REQUEST:

@@ -23,7 +23,6 @@ WRITER_TYPE = asyncio.streams.StreamWriter
 UNPACKER_TYPE = msgpack.Unpacker
 
 _CAN_JSON_TYPE_SET: Set[Optional[type]] = {bool, dict, float, int, list, str, tuple, type(None), None}
-MyFunctionType = type(_f)
 
 
 class ParseTypeError(Exception):

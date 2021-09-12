@@ -26,6 +26,10 @@ class Cache(object):
             self._dict[key] = (time.time() + expire, value)
 
     def update_expire(self, key: Any, expire: float) -> bool:
+        """update key expire
+        :param key: cache key
+        :param expire: key new expire
+        """
         if key not in self._dict:
             return False
         _, value = self._dict[key]
@@ -42,17 +46,30 @@ class Cache(object):
         return expire, value
 
     def get_and_update_expire(self, key: Any, expire: float, default: Any = MISSING) -> Any:
+        """get value and update expire
+
+        :param key: cache key
+        :param expire: key new expire
+        :param default: The default value returned when the key corresponding value is not found.
+         If the default value is not filled in, an error will be thrown when the key corresponding value is not found
+        """
         _, value = self._get(key, default)
         if value is not MISSING:
             self._dict[key] = (expire, value)
         return value
 
     def get(self, key: Any, default: Any = MISSING) -> Any:
+        """get value from cache
+
+        :param key: cache key
+        :param default: The default value returned when the key corresponding value is not found.
+         If the default value is not filled in, an error will be thrown when the key corresponding value is not found
+        """
         _, value = self._get(key, default)
         return value
 
     def add(self, key: Any, expire: float, value: Any = None) -> None:
-        """
+        """add value by key, if value is None, like set
         :param key: cache key
         :param expire: key expire(seconds), if expire == -1, key not expire
         :param value: cache value, if value is None, cache like set
@@ -63,13 +80,16 @@ class Cache(object):
             setattr(self, self.add.__name__, self._add)
 
     def pop(self, key: Any) -> Any:
+        """delete key from cache"""
         return self._dict.pop(key, None)
 
     def items(self) -> Generator[Tuple[Any, Any], None, None]:
+        """like dict items"""
         for key in self._dict.keys():
             yield key, self._dict[key][1]
 
     def __contains__(self, key: Any) -> bool:
+        """check key in cache"""
         if key not in self._dict:
             return False
 
@@ -83,6 +103,7 @@ class Cache(object):
             return True
 
     def _auto_remove(self) -> None:
+        """Automatically clean up expired keys"""
         key_list: list = list(self._dict.keys())
         index: int = 0
         if not key_list:

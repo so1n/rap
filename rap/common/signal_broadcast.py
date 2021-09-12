@@ -15,7 +15,10 @@ def _signal_handler(signum: int, frame: Any) -> None:
             logging.exception(f"Receive signal:{signum}, run callback:{callback} error:{e}")
 
 
-def add_signal_handler(sig: int, callback: Callable, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
+def add_signal_handler(
+    sig: int, callback: Callable[[int, Any], None], loop: Optional[asyncio.AbstractEventLoop] = None
+) -> None:
+    """Add signal callback"""
     if sig not in _signal_dict_list:
         try:
             # only use in unix
@@ -28,7 +31,10 @@ def add_signal_handler(sig: int, callback: Callable, loop: Optional[asyncio.Abst
     _signal_dict_list[sig].append(callback)
 
 
-def remove_signal_handler(sig: int, callback: Callable, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
+def remove_signal_handler(
+    sig: int, callback: Callable[[int, Any], None], loop: Optional[asyncio.AbstractEventLoop] = None
+) -> None:
+    """remove signal callback"""
     assert sig in _signal_dict_list, f"{sig} not found"
     _signal_dict_list[sig].remove(callback)
     if not _signal_dict_list[sig]:

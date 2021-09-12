@@ -20,8 +20,6 @@ from typing import (
     Union,
 )
 
-from rap.common.asyncio_helper import del_future
-from rap.common.channel import BaseChannel, UserChannel
 from rap.common.conn import ServerConnection
 from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent, PongEvent
 from rap.common.exceptions import (
@@ -35,6 +33,7 @@ from rap.common.exceptions import (
 )
 from rap.common.types import is_type
 from rap.common.utils import Constant, get_event_loop, param_handle, parse_error, response_num_dict
+from rap.server.channel import Channel
 from rap.server.model import Request, Response
 from rap.server.plugin.processor.base import BaseProcessor
 from rap.server.registry import FuncModel
@@ -43,71 +42,7 @@ from rap.server.sender import Sender
 if TYPE_CHECKING:
     from rap.server.core import Server
 
-__all__ = ["Channel", "Receiver"]
-
-
-class Channel(BaseChannel[Request]):
-    def __init__(
-        self,
-        channel_id: str,
-        write: Callable[[Any, Dict[str, Any]], Coroutine[Any, Any, Any]],
-        conn: ServerConnection,
-        func: Callable[["Channel"], Any],
-    ):
-        self._write: Callable[[Any, Dict[str, Any]], Coroutine[Any, Any, Any]] = write
-        self._conn: ServerConnection = conn
-        self.queue: asyncio.Queue = asyncio.Queue()
-        self.channel_id: str = channel_id
-
-        # if conn close, channel future will done and channel not read & write_to_conn
-        self.channel_conn_future: asyncio.Future = asyncio.Future()
-        self.channel_conn_future.add_done_callback(lambda f: self.queue.put_nowait(f.exception()))
-
-        self._conn.conn_future.add_done_callback(lambda f: self.set_exc(ChannelError("connection already close")))
-
-        self._func_future: asyncio.Future = asyncio.ensure_future(self._run_func(func))
-
-    async def _run_func(self, func: Callable) -> None:
-        try:
-            await func(UserChannel(self))
-        except Exception as e:
-            logging.debug("channel:%s, func: %s, ignore raise exc:%s", self.channel_id, func.__name__, e)
-        finally:
-            if not self.is_close:
-                await self.close()
-
-    async def receive_request(self, request: Request) -> None:
-        assert isinstance(request, Request), TypeError(f"request type must {Request}")
-        await self.queue.put(request)
-
-    async def write(self, body: Any) -> None:
-        if self.is_close:
-            raise ChannelError(f"channel<{self.channel_id}> is close")
-        await self._write(body, {"channel_life_cycle": Constant.MSG})
-
-    async def read(self) -> Request:
-        if self.is_close:
-            raise ChannelError(f"<channel{self.channel_id}> is close")
-        result: Union[Request, Exception] = await self.queue.get()
-        if isinstance(result, Exception):
-            raise result
-        return result
-
-    async def read_body(self) -> Any:
-        request: Request = await self.read()
-        return request.body
-
-    async def close(self) -> None:
-        if self.is_close:
-            logging.debug("already close channel %s", self.channel_id)
-            return
-        self.set_exc(ChannelError(f"channel {self.channel_id} is close"))
-
-        if not self._conn.is_closed():
-            await self._write(None, {"channel_life_cycle": Constant.DROP})
-
-        # Actively cancel the future may not be successful, such as cancel asyncio.sleep
-        del_future(self._func_future)
+__all__ = ["Receiver"]
 
 
 class Receiver(object):
@@ -124,15 +59,15 @@ class Receiver(object):
         processor_list: Optional[List[BaseProcessor]] = None,
     ):
         """Receive and process messages from the client, and execute different logics according to the message type
-        app: server
-        conn: server conn
-        run_timeout: Maximum execution time per call
-        sender: Send response data to the client
-        ping_fail_cnt: When ping fails continuously and exceeds this value, conn will be disconnected
-        ping_interval: ping message interval time
-        event_handle_dict: request event dict
-        call_func_permission_fn: Check the permission to call the function
-        processor_list: processor list
+        :param app: server
+        :param conn: server conn
+        :param run_timeout: Maximum execution time per call
+        :param sender: Send response data to the client
+        :param ping_fail_cnt: When ping fails continuously and exceeds this value, conn will be disconnected
+        :param ping_sleep_time: ping message interval time
+        :param event_handle_dict: request event dict
+        :param call_func_permission_fn: Check the permission to call the private function
+        :param processor_list: processor list
         """
         self._app: "Server" = app
         self._conn: ServerConnection = conn
@@ -167,6 +102,7 @@ class Receiver(object):
         return func_model
 
     async def dispatch(self, request: Request) -> Optional[Response]:
+        """recv request, processor request and dispatch request by request msg type"""
         response_num: int = response_num_dict.get(request.msg_type, Constant.SERVER_ERROR_RESPONSE)
 
         # gen response object
@@ -204,7 +140,6 @@ class Receiver(object):
         except Exception as e:
             logging.debug(e)
             logging.debug(traceback.format_exc())
-            print(e, traceback.format_exc())
             response.set_exception(RpcRunTimeError())
             return response
 
@@ -222,6 +157,8 @@ class Receiver(object):
                 await self.sender.send_event(PingEvent(""))
                 try:
                     await self._conn.sleep_and_listen(self._ping_sleep_time)
+                except asyncio.CancelledError:
+                    return
                 except Exception as e:
                     logging.exception(f"{self._conn} ping event exit.. error:<{e.__class__.__name__}>[{e}]")
 
@@ -235,7 +172,7 @@ class Receiver(object):
             # Messages with a life cycle of `msg` in the channel type account for the highest proportion
             if channel is None:
                 raise ChannelError("channel not create")
-            await channel.receive_request(request)
+            await channel.queue.put(request)
             return None
         elif life_cycle == Constant.DECLARE:
             if channel is not None:
@@ -265,6 +202,7 @@ class Receiver(object):
                 raise ChannelError("channel not create")
             else:
                 await channel.close()
+                self._channel_dict.pop(channel_id, None)
                 return None
         else:
             raise ChannelError("channel life cycle error")
@@ -299,7 +237,7 @@ class Receiver(object):
             coroutine = get_event_loop().run_in_executor(None, partial(func_model.func, *param_tuple))
 
         try:
-            result = await asyncio.wait_for(coroutine, self._run_timeout)
+            result: Any = await asyncio.wait_for(coroutine, self._run_timeout)
         except asyncio.TimeoutError:
             return call_id, RpcRunTimeError(f"Call {func_model.func.__name__} timeout")
         except Exception as e:

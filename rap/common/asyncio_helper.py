@@ -4,12 +4,14 @@ from typing import Any, Callable, Coroutine, Dict, List, Optional, Union
 
 
 def done_future(loop: Optional[asyncio.AbstractEventLoop] = None) -> asyncio.Future:
+    """create init future, use in obj.__inti__ method"""
     future: asyncio.Future = asyncio.Future(loop=loop)
     future.set_result(True)
     return future
 
 
 async def can_cancel_sleep(delay: float, *, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
+    """Sleep method that can be cancelled"""
     await asyncio.wait_for(asyncio.Future(), delay, loop=loop)
 
 

@@ -30,6 +30,7 @@ class Constant(object):
     USER_AGENT: str = "Python3-0.5.3"
     SOCKET_RECV_SIZE: int = 1024 ** 1
 
+    # msg type
     SERVER_ERROR_RESPONSE: int = 100
     MSG_REQUEST: int = 101
     MSG_RESPONSE: int = 201
@@ -38,14 +39,17 @@ class Constant(object):
     CLIENT_EVENT: int = 103
     SERVER_EVENT: int = 203
 
+    # event func name
     EVENT_CLOSE_CONN: str = "event_close_conn"
     PING_EVENT: str = "ping"
     PONG_EVENT: str = "pong"
 
+    # life cycle
     DECLARE: str = "declare"
     MSG: str = "MSG"
     DROP: str = "drop"
 
+    # request type
     CHANNEL_TYPE: str = "channel"
     NORMAL_TYPE: str = "normal"
 

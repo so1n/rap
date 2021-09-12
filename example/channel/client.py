@@ -1,6 +1,6 @@
 import asyncio
 
-from rap.client import Client
+from rap.client import Client, Response
 from rap.client.processor import CryptoProcessor
 from rap.common.channel import UserChannel
 
@@ -34,6 +34,7 @@ async def echo_body(channel: UserChannel) -> None:
 async def echo_response(channel: UserChannel) -> None:
     await channel.write("hi!")
     async for response in channel.iter():
+        response: Response = response  # type:ignore # IDE support
         print(f"response: {response}")
         await channel.write(response.body)
 

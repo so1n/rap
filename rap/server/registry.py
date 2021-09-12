@@ -56,6 +56,8 @@ class FuncModel(object):
 
 
 class RegistryManager(object):
+    """server func manager"""
+
     def __init__(self) -> None:
         self._cwd: str = os.getcwd()
         self.func_dict: Dict[str, FuncModel] = dict()
@@ -66,10 +68,12 @@ class RegistryManager(object):
 
     @staticmethod
     def gen_key(group: str, name: str, type_: str) -> str:
+        """gen func key"""
         return f"{type_}:{group}:{name}"
 
     @staticmethod
     def _get_func_type(func: Callable) -> str:
+        """get func type, normal or channel"""
         sig: "inspect.Signature" = inspect.signature(func)
         func_arg_parameter: List[inspect.Parameter] = [i for i in sig.parameters.values() if i.default == i.empty]
 
@@ -99,13 +103,16 @@ class RegistryManager(object):
         doc: Optional[str] = None,
     ) -> None:
         """
-        func: Function that need to be registered
-        name: If the function name is not specified, the system will obtain its own name according to the function,
+        register func to manager
+        :param func: Function that need to be registered
+        :param name: If the function name is not specified,
+              the system will obtain its own name according to the function,
               otherwise it will be replaced by the specified function name
-        group: Specify the correlation_id to which the function to be registered belongs.
+        :param group: Specify the correlation_id to which the function to be registered belongs.
                The same function can be registered to different groups.
                The root correlation_id is generally used for system components, and there are restrictions when calling.
-        is_private: if True, it can only be accessed through the local cli
+        :param is_private: If the function is private, it will be restricted to call and cannot be overloaded
+        :param doc: func doc, if not set, auto use python func doc
         """
         if inspect.isfunction(func) or inspect.ismethod(func):
             name = name if name else func.__name__
@@ -143,6 +150,10 @@ class RegistryManager(object):
 
     @staticmethod
     def _load_func(path: str, func_str: str) -> FunctionType:
+        """Dynamic loading function
+        :param path: func file path
+        :param func_str: func name
+        """
         reload_module = importlib.import_module(path)
         func = getattr(reload_module, func_str)
         if not hasattr(func, "__call__"):

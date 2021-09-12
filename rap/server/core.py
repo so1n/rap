@@ -51,25 +51,25 @@ class Server(object):
         cache_interval: Optional[float] = None,
     ):
         """
-        server_name: server name
-        host: listen host
-        port: listen port
-        timeout: send&read msg timeout
-        keep_alive: conn keep_alive time
-        run_timeout: Maximum execution time per call
-        ping_fail_cnt: When ping fails continuously and exceeds this value, conn will be disconnected
-        ping_interval: ping message interval time
-        backlog: server backlog
-        close_timeout: The maximum time to wait for conn to process messages when shutting down the service
-        ssl_crt_path: ssl crt path
-        ssl_key_path: ssl key path
-        pack_param: msgpack.Pack param
-        unpack_param: msgpack.UnPack param
-        middleware_list: Server middleware list
-        processor_list: Server processor list
-        call_func_permission_fn: Check the permission to call the function
-        window_statistics: Server window state
-        cache_interval: Server cache interval seconds to clean up expired data
+        :param server_name: server name
+        :param host: listen host
+        :param port: listen port
+        :param timeout: send&read msg timeout
+        :param keep_alive: conn keep_alive time
+        :param run_timeout: Maximum execution time per call
+        :param ping_fail_cnt: When ping fails continuously and exceeds this value, conn will be disconnected
+        :param ping_sleep_time: ping message interval time
+        :param backlog: server backlog
+        :param close_timeout: The maximum time to wait for conn to process messages when shutting down the service
+        :param ssl_crt_path: ssl crt path
+        :param ssl_key_path: ssl key path
+        :param pack_param: msgpack.Pack param
+        :param unpack_param: msgpack.UnPack param
+        :param middleware_list: Server middleware list
+        :param processor_list: Server processor list
+        :param call_func_permission_fn: Check the permission to call the function
+        :param window_statistics: Server window state
+        :param cache_interval: Server cache interval seconds to clean up expired data
         """
         self.server_name: str = server_name
         self.host: str = host
@@ -114,22 +114,22 @@ class Server(object):
         if self.window_statistics is not None and self.window_statistics.is_closed:
             self.register_server_event(EventEnum.before_start, lambda _app: self.window_statistics.statistics_data())
 
-    def register_server_event(self, event: EventEnum, *event_handle_list: SERVER_EVENT_FN) -> None:
+    def register_server_event(self, event_enum: EventEnum, *event_handle_list: SERVER_EVENT_FN) -> None:
         """register server event handler
-        event: server event
-        event_handle_list: event handler list
+        :param event_enum: server event
+        :param event_handle_list: event handler list
         """
         for event_handle in event_handle_list:
-            if (event, event_handle) not in self._depend_set:
-                self._depend_set.add((event, event_handle))
-                self._server_event_dict[event].append(event_handle)
+            if (event_enum, event_handle) not in self._depend_set:
+                self._depend_set.add((event_enum, event_handle))
+                self._server_event_dict[event_enum].append(event_handle)
             else:
-                raise ImportError(f"even type:{event}, handle:{event_handle} already load")
+                raise ImportError(f"even type:{event_enum}, handle:{event_handle} already load")
 
     def register_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Request], None]) -> None:
         """register request event handler
-        event_class: rap transport protocol event class
-        fn: event handler
+        :param event_class: rap transport protocol event class
+        :param fn: event handler
         """
         if event_class not in self._request_event_handle_dict:
             raise KeyError(f"{event_class}")
@@ -139,8 +139,8 @@ class Server(object):
 
     def unregister_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Request], None]) -> None:
         """register request event handler
-        event_class: rap transport protocol event class
-        fn: event handler
+        :param event_class: rap transport protocol event class
+        :param fn: event handler
         """
         if event_class not in self._request_event_handle_dict:
             raise KeyError(f"{event_class}")
@@ -148,7 +148,7 @@ class Server(object):
 
     def load_middleware(self, middleware_list: List[BaseMiddleware]) -> None:
         """load server middleware
-        middleware_list: server middleware list
+        :param middleware_list: server middleware list
         """
         for middleware in middleware_list:
             if middleware not in self._depend_set:
@@ -170,7 +170,7 @@ class Server(object):
 
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:
         """load server processor
-        processor_list server load processor
+        :param processor_list server load processor
         """
         for processor in processor_list:
             if processor not in self._depend_set:
@@ -195,13 +195,13 @@ class Server(object):
         doc: Optional[str] = None,
     ) -> None:
         """Register function with Server
-        func: function
-        name: The real name of the function in the server
-        group: The group of the function
-        is_private: Whether the function is private or not, in general,
+        :param func: function
+        :param name: The real name of the function in the server
+        :param group: The group of the function
+        :param is_private: Whether the function is private or not, in general,
           private functions are only allowed to be called by the local client,
           but rap does not impose any mandatory restrictions
-        doc: Describe what the function does
+        :param doc: Describe what the function does
         """
         if isinstance(func, RapFunc):
             func = func.raw_func
