@@ -4,7 +4,7 @@ from dataclasses import MISSING
 from threading import Lock
 from typing import Any, Dict, Generator, Optional, Tuple
 
-from .utils import get_event_loop
+from .asyncio_helper import get_event_loop
 
 
 class Cache(object):

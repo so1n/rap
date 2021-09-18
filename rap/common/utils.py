@@ -1,8 +1,6 @@
-import asyncio
 import inspect
 import random
 import string
-import sys
 import time
 from enum import Enum, auto
 from typing import Any, Callable, Dict, Sequence, Tuple
@@ -15,7 +13,6 @@ __all__ = [
     "RapFunc",
     "check_func_type",
     "gen_random_time_id",
-    "get_event_loop",
     "parse_error",
     "param_handle",
     "response_num_dict",
@@ -93,17 +90,6 @@ class RapFunc(object):
         """support async for i in coro(x, x)"""
         self._check()
         return self.func(*self._arg_param, **self._kwargs_param).__aiter__()
-
-
-def _get_event_loop() -> Callable[[], asyncio.AbstractEventLoop]:
-    """get event loop in runtime"""
-    if sys.version_info >= (3, 7):
-        return asyncio.get_running_loop
-
-    return asyncio.get_event_loop
-
-
-get_event_loop = _get_event_loop()
 
 
 def gen_random_time_id(length: int = 8, time_length: int = 10) -> str:

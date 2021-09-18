@@ -2,8 +2,9 @@ from typing import TYPE_CHECKING, Dict, List
 
 import psutil
 
+from rap.common.asyncio_helper import get_event_loop
 from rap.common.collect_statistics import Counter, Gauge
-from rap.common.utils import Constant, EventEnum, get_event_loop
+from rap.common.utils import Constant, EventEnum
 from rap.server.model import Request, Response
 from rap.server.plugin.processor.base import BaseProcessor
 

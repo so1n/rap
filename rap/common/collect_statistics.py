@@ -5,8 +5,8 @@ from functools import partial
 from threading import Lock
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple
 
+from rap.common.asyncio_helper import get_event_loop
 from rap.common.cache import Cache
-from rap.common.utils import get_event_loop
 
 
 #############

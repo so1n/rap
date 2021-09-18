@@ -20,6 +20,7 @@ from typing import (
     Union,
 )
 
+from rap.common.asyncio_helper import get_event_loop
 from rap.common.conn import ServerConnection
 from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent, PongEvent
 from rap.common.exceptions import (
@@ -32,7 +33,7 @@ from rap.common.exceptions import (
     ServerError,
 )
 from rap.common.types import is_type
-from rap.common.utils import Constant, get_event_loop, param_handle, parse_error, response_num_dict
+from rap.common.utils import Constant, param_handle, parse_error, response_num_dict
 from rap.server.channel import Channel
 from rap.server.model import Request, Response
 from rap.server.plugin.processor.base import BaseProcessor
