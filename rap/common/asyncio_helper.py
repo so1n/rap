@@ -113,26 +113,53 @@ class Semaphore(asyncio.Semaphore):
         return value
 
 
+class IgnoreDeadlineTimeoutExc(Exception):
+    pass
+
+
 class Deadline(object):
     """
     cancel and timeout for human
      The design is inspired by http://www.pdadians.com.cn/
     """
 
-    def __init__(self, delay: float, loop: Optional[asyncio.AbstractEventLoop] = None):
-        self._loop = loop or get_event_loop()
+    def __init__(
+        self, delay: float, loop: Optional[asyncio.AbstractEventLoop] = None, timeout_exc: Optional[Exception] = None
+    ):
+        """
+        :param delay: How many seconds are before the deadline
+        :param loop: Event loop
+        :param timeout_exc: The exception thrown when the task is not completed at the deadline
+            None: raise asyncio.Timeout
+            IgnoreDeadlineTimeoutExc: not raise exc
+        """
         self._delay: float = delay
+        self._loop = loop or get_event_loop()
+        self._timeout_exc: Optional[Exception] = timeout_exc
+
         self._end_timestamp: float = time.time() + self._delay
         self._end_loop_time: float = self._loop.time() + self._delay
 
-        self._main_task: Optional[asyncio.Task[Any]] = current_task(self._loop)
+        self._is_active: bool = False
         self._deadline_future: asyncio.Future = asyncio.Future()
-        self._loop.call_at(self._end_loop_time, self._timeout, self._deadline_future)
+        self._loop.call_at(self._end_loop_time, self._timeout, None, self._deadline_future)
+
+    def copy(self, timeout_exc: Optional[Exception] = None) -> "Deadline":
+        """gen child Deadline"""
+        if not timeout_exc:
+            timeout_exc = self._timeout_exc
+        return self.__class__(delay=self.end_loop_time - self._loop.time(), loop=self._loop, timeout_exc=timeout_exc)
 
     @staticmethod
-    def _timeout(future: asyncio.Future) -> None:
-        if not future.cancelled():
-            future.cancel()
+    def _timeout(future: Optional[asyncio.Future], callback_future: asyncio.Future) -> None:
+        if future and not future.cancelled():
+            return
+        if not callback_future.cancelled():
+            callback_future.cancel()
+
+    @property
+    def surplus(self) -> float:
+        return self._end_loop_time - self._loop.time()
 
     @property
     def end_timestamp(self) -> float:
@@ -142,11 +169,20 @@ class Deadline(object):
     def end_loop_time(self) -> float:
         return self._end_loop_time
 
-    async def wait(self, future: asyncio.Future) -> None:
-        await as_first_completed([future], not_cancel_future_list=[self._deadline_future])
+    def __await__(self) -> Any:
+        self._deadline_future.__await__()
 
     async def wait_for(self, future: asyncio.Future) -> None:
-        await asyncio.wait_for(future, self._end_loop_time - self._loop.time(), loop=self._loop)
+        """wait future completed or deadline"""
+        try:
+            await as_first_completed([future], not_cancel_future_list=[self._deadline_future])
+        except asyncio.TimeoutError as e:
+            if isinstance(self._timeout_exc, IgnoreDeadlineTimeoutExc):
+                return
+            elif self._timeout_exc:
+                raise self._timeout_exc
+            else:
+                raise e
 
     async def __aenter__(self) -> "Deadline":
         return self.__enter__()
@@ -157,13 +193,14 @@ class Deadline(object):
         return self.__exit__(exc_type, exc_val, exc_tb)
 
     def __enter__(self) -> "Deadline":
-        if not self._main_task:
-            self._main_task = current_task(self._loop)
-        if not self._main_task:
-            raise RuntimeError("no running event loop")
-
-        main_task: asyncio.Task = self._main_task
-        self._deadline_future.add_done_callback(lambda f: self._timeout(main_task))
+        print("enter", self)
+        if self._is_active:
+            raise RuntimeError("`with` can only be called once")
+        self._is_active = True
+        main_task: Optional[asyncio.Task] = current_task(self._loop)
+        if not main_task:
+            raise RuntimeError("Can not found current task")
+        self._deadline_future.add_done_callback(lambda f: self._timeout(f, main_task))  # type: ignore
         return self
 
     def __exit__(
@@ -172,24 +209,15 @@ class Deadline(object):
         exc_val: Optional[BaseException],
         exc_tb: Optional[TracebackType],
     ) -> Optional[bool]:
+        self._is_active = False
         deadline_canceled: bool = self._deadline_future.cancelled()
-        if deadline_canceled and isinstance(exc_val, asyncio.CancelledError):
+        if deadline_canceled:
+            if self._timeout_exc and exc_type:
+                if isinstance(self._timeout_exc, IgnoreDeadlineTimeoutExc):
+                    return True
+                else:
+                    raise self._timeout_exc
             raise TimeoutError
         else:
-            self._deadline_future.cancel()
-            return None
-
-
-class SafeDeadline(Deadline):
-    def __exit__(
-        self,
-        exc_type: Optional[Type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
-    ) -> Optional[bool]:
-        deadline_canceled: bool = self._deadline_future.cancelled()
-        if deadline_canceled and isinstance(exc_val, asyncio.CancelledError):
-            return True
-        else:
-            self._deadline_future.cancel()
+            self._deadline_future.set_result(True)
             return None
