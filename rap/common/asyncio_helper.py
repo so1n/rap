@@ -141,6 +141,8 @@ class Deadline(object):
         self._end_loop_time: float = self._loop.time() + self._delay
 
         self._is_active: bool = False
+        self._parent: Optional["Deadline"] = None
+        self._child: Optional["Deadline"] = None
         self._deadline_future: asyncio.Future = asyncio.Future()
         self._loop.call_at(self._end_loop_time, self._timeout, None, self._deadline_future)
 
@@ -148,7 +150,13 @@ class Deadline(object):
         """gen child Deadline"""
         if not timeout_exc:
             timeout_exc = self._timeout_exc
-        return self.__class__(delay=self.end_loop_time - self._loop.time(), loop=self._loop, timeout_exc=timeout_exc)
+
+        deadline: "Deadline" = self.__class__(
+            delay=self.end_loop_time - self._loop.time(), loop=self._loop, timeout_exc=timeout_exc
+        )
+        self._child = deadline
+        deadline._parent = self
+        return deadline
 
     @staticmethod
     def _timeout(future: Optional[asyncio.Future], callback_future: asyncio.Future) -> None:
@@ -156,6 +164,10 @@ class Deadline(object):
             return
         if not callback_future.cancelled():
             callback_future.cancel()
+
+    @property
+    def is_active(self) -> bool:
+        return self._is_active
 
     @property
     def surplus(self) -> float:
@@ -193,7 +205,6 @@ class Deadline(object):
         return self.__exit__(exc_type, exc_val, exc_tb)
 
     def __enter__(self) -> "Deadline":
-        print("enter", self)
         if self._is_active:
             raise RuntimeError("`with` can only be called once")
         self._is_active = True

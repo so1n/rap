@@ -10,6 +10,7 @@ from rap.client.transport.async_iterator import AsyncIteratorCall
 from rap.client.transport.transport import Transport
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common import event
+from rap.common.asyncio_helper import Deadline
 from rap.common.cache import Cache
 from rap.common.channel import UserChannel
 from rap.common.collect_statistics import WindowStatistics
@@ -114,9 +115,9 @@ class BaseClient:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             header: Optional[dict] = kwargs.pop("header", None)
-            timeout: Optional[int] = kwargs.pop("timeout", None)
+            deadline: Optional[Deadline] = kwargs.pop("deadline", None)
             result: Any = await self.raw_invoke(
-                name, param_handle(func, args, kwargs), group=group, header=header, timeout=timeout
+                name, param_handle(func, args, kwargs), group=group, header=header, deadline=deadline
             )
             if not is_type(return_type, type(result)):
                 raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
@@ -132,7 +133,7 @@ class BaseClient:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             header: Optional[dict] = kwargs.pop("header", None)
-            timeout: Optional[int] = kwargs.pop("timeout", None)
+            deadline: Optional[Deadline] = kwargs.pop("deadline", None)
             async with self.endpoint.picker() as conn:
                 async for result in AsyncIteratorCall(
                     name,
@@ -141,7 +142,7 @@ class BaseClient:
                     param_handle(func, args, kwargs),
                     group=group,
                     header=header,
-                    timeout=timeout,
+                    deadline=deadline,
                 ):
                     if not is_type(return_type, type(result)):
                         raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
@@ -175,7 +176,7 @@ class BaseClient:
         arg_param: Optional[Sequence[Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
-        timeout: Optional[int] = None,
+        deadline: Optional[Deadline] = None,
     ) -> Any:
         """rpc client base invoke method
         Note: This method does not support parameter type checking, not support channels;
@@ -183,11 +184,11 @@ class BaseClient:
         :param arg_param: rpc func param
         :param group: func's group
         :param header: request header
-        :param timeout: request timeout
+        :param deadline: request deadline
         """
         async with self.endpoint.picker() as conn:
             response: Response = await self.transport.request(
-                name, conn, arg_param, group=group, header=header, timeout=timeout
+                name, conn, arg_param, group=group, header=header, deadline=deadline
             )
         return response.body["result"]
 
@@ -198,7 +199,7 @@ class BaseClient:
         kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
-        timeout: Optional[int] = None,
+        deadline: Optional[Deadline] = None,
     ) -> Any:
         """automatically resolve function names and call raw_invoke
         :param func: python func
@@ -206,14 +207,14 @@ class BaseClient:
         :param kwarg_param: func kwargs param
         :param group: func's group, default value is `default`
         :param header: request header
-        :param timeout: request timeout
+        :param deadline: request deadline
         """
         if not arg_param:
             arg_param = ()
         if not kwarg_param:
             kwarg_param = {}
         return await self.raw_invoke(
-            func.__name__, param_handle(func, arg_param, kwarg_param), group=group, header=header, timeout=timeout
+            func.__name__, param_handle(func, arg_param, kwarg_param), group=group, header=header, deadline=deadline
         )
 
     async def iterator_invoke(
@@ -223,7 +224,7 @@ class BaseClient:
         kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
-        timeout: Optional[int] = None,
+        deadline: Optional[Deadline] = None,
     ) -> Any:
         """Python-specific generator invoke
         :param func: python func
@@ -231,7 +232,7 @@ class BaseClient:
         :param kwarg_param: func kwargs param
         :param group: func's group, default value is `default`
         :param header: request header
-        :param timeout: request timeout
+        :param deadline: request deadline
         """
         if not inspect.isasyncgenfunction(func):
             raise TypeError("func must be async gen function")
@@ -246,7 +247,7 @@ class BaseClient:
                 param_handle(func, arg_param, kwarg_param),
                 header=header,
                 group=group,
-                timeout=timeout,
+                deadline=deadline,
             ):
                 yield result
 

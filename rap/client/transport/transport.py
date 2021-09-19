@@ -12,7 +12,7 @@ from rap.client.transport.channel import Channel
 from rap.client.utils import get_exc_status_code_dict, raise_rap_error
 from rap.common import event
 from rap.common import exceptions as rap_exc
-from rap.common.asyncio_helper import as_first_completed, safe_del_future
+from rap.common.asyncio_helper import Deadline, as_first_completed, safe_del_future
 from rap.common.conn import Connection
 from rap.common.exceptions import RPCError
 from rap.common.snowflake import get_snowflake_id
@@ -167,7 +167,7 @@ class Transport(object):
 
         return response, exc
 
-    async def declare(self, conn: Connection, timeout: Optional[int] = None) -> None:
+    async def declare(self, conn: Connection, deadline: Optional[Deadline] = None) -> None:
         """
         After conn is initialized, connect to the server and initialize the connection resources.
         Only include server_name and get conn id two functions, if you need to expand the function,
@@ -177,7 +177,7 @@ class Transport(object):
             response: Response = await self._base_request(
                 Request.from_event(self.app, event.DeclareEvent({"server_name": self.app.server_name})),
                 conn,
-                timeout=timeout,
+                deadline=deadline,
             )
         except asyncio.TimeoutError:
             raise asyncio.TimeoutError(f"conn:{conn} declare timeout")
@@ -191,13 +191,13 @@ class Transport(object):
                 return
         raise exc
 
-    async def ping(self, conn: Connection, timeout: int) -> None:
+    async def ping(self, conn: Connection, deadline: Deadline) -> None:
         """
         Send three requests to check the response time of the client and server.
         At the same time, obtain the current quality score of the server to help the client better realize automatic
          load balancing (if the server supports this function)
         :param conn: client conn
-        :param timeout: recv ping timeout
+        :param deadline: recv ping deadline
         """
         start_time: float = time.time()
         mos: int = 5
@@ -207,12 +207,12 @@ class Transport(object):
             nonlocal mos
             nonlocal rtt
             response: Response = await self._base_request(
-                Request.from_event(self.app, event.PingEvent({})), conn, timeout=timeout * 2
+                Request.from_event(self.app, event.PingEvent({})), conn, deadline=deadline
             )
             rtt += time.time() - start_time
             mos += response.body.get("mos", 10)
 
-        await asyncio.wait_for(asyncio.gather(*[_ping(), _ping(), _ping()]), timeout=timeout)
+        await asyncio.gather(*[_ping(), _ping(), _ping()])
         mos = mos // 3
         rtt = rtt / 3
 
@@ -239,32 +239,33 @@ class Transport(object):
     ####################################
     # base one by one request response #
     ####################################
-    async def _base_request(self, request: Request, conn: Connection, timeout: Optional[int] = None) -> Response:
+    async def _base_request(self, request: Request, conn: Connection, deadline: Optional[Deadline] = None) -> Response:
         """Send data to the server and get the response from the server.
         :param request: client request obj
         :param conn: client conn
-        :param timeout: recv response timeout, default 9
+        :param deadline: recv response deadline, default 9
 
         :return: return server response
         """
-        if not timeout:
-            timeout = 9
         if not request.correlation_id:
             request.correlation_id = str(get_snowflake_id())
         resp_future_id: str = f"{conn.sock_tuple}:{request.correlation_id}"
         try:
             response_future: asyncio.Future[Response] = asyncio.Future()
             self._resp_future_dict[resp_future_id] = response_future
-            await self.write_to_conn(request, conn)
-            try:
+            timeout_exc: Exception = asyncio.TimeoutError(f"msg_id:{resp_future_id} request timeout")
+            if not deadline:
+                deadline = Deadline(9, timeout_exc=timeout_exc)
+            else:
+                deadline = deadline.copy(timeout_exc=timeout_exc)
+            with deadline:
+                await self.write_to_conn(request, conn)
                 response: Response = await as_first_completed(
-                    [asyncio.wait_for(response_future, timeout)],
+                    [response_future],
                     not_cancel_future_list=[conn.conn_future],
                 )
                 response.state = request.state
                 return response
-            except asyncio.TimeoutError:
-                raise asyncio.TimeoutError(f"msg_id:{resp_future_id} request timeout")
         finally:
             pop_future: Optional[asyncio.Future] = self._resp_future_dict.pop(resp_future_id, None)
             if pop_future:
@@ -312,7 +313,7 @@ class Transport(object):
         call_id: Optional[int] = None,
         group: Optional[str] = None,
         header: Optional[dict] = None,
-        timeout: Optional[int] = None,
+        deadline: Optional[Deadline] = None,
     ) -> Response:
         """msg request handle
         :param func_name: rpc func name
@@ -321,7 +322,7 @@ class Transport(object):
         :param call_id: server gen func next id
         :param group: func's group
         :param header: request header
-        :param timeout: request timeout
+        :param deadline: request deadline
         """
         group = group or Constant.DEFAULT_GROUP
         call_id = call_id or -1
@@ -335,7 +336,7 @@ class Transport(object):
         )
         if header:
             request.header.update(header)
-        response: Response = await self._base_request(request, conn, timeout=timeout)
+        response: Response = await self._base_request(request, conn, deadline=deadline)
         if response.msg_type != Constant.MSG_RESPONSE:
             raise RPCError(f"response num must:{Constant.MSG_RESPONSE} not {response.msg_type}")
         if "exc" in response.body:

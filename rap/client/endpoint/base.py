@@ -6,6 +6,7 @@ from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Set
 
 from rap.client.transport.transport import Transport
+from rap.common.asyncio_helper import Deadline, IgnoreDeadlineTimeoutExc
 from rap.common.conn import Connection
 
 
@@ -141,16 +142,16 @@ class BaseEndpoint(object):
                 return
 
             next_ping_interval: int = random.randint(self._min_ping_interval, self._max_ping_interval)
-            try:
-                await self._transport.ping(conn, next_ping_interval)
-            except asyncio.CancelledError:
-                return
-            except Exception as e:
-                logging.debug(f"{conn} ping event error:{e}")
+            deadline: Deadline = Deadline(next_ping_interval, timeout_exc=IgnoreDeadlineTimeoutExc())
+            with deadline:
+                try:
+                    await self._transport.ping(conn, deadline)
+                except asyncio.CancelledError:
+                    return
+                except Exception as e:
+                    logging.debug(f"{conn} ping event error:{e}")
 
-            sleep_time: float = next_ping_interval - (time.time() - now_time)
-            if sleep_time > 0:
-                await conn.sleep_and_listen(sleep_time)
+                await conn.conn_future
 
     @property
     def is_close(self) -> bool:
@@ -195,7 +196,7 @@ class BaseEndpoint(object):
         conn.listen_future = asyncio.ensure_future(self._listen_conn(conn))
         conn.listen_future.add_done_callback(lambda f: _conn_done(f))
         try:
-            await self._transport.declare(conn, timeout=self._declare_timeout)
+            await self._transport.declare(conn, deadline=Deadline(self._declare_timeout))
         except Exception as e:
             await self.destroy(ip, port)
             raise e

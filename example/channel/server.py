@@ -3,9 +3,8 @@ from typing import Any
 
 from aredis import StrictRedis  # type: ignore
 
-from rap.server.core import Server
+from rap.server import Server, UserChannel
 from rap.server.plugin.processor import CryptoProcessor
-from rap.server.receiver import UserChannel
 
 
 async def async_channel(channel: UserChannel) -> None:
