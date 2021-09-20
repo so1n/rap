@@ -6,7 +6,7 @@ from types import TracebackType
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Type, Union
 
 
-def current_task(loop: asyncio.AbstractEventLoop) -> "Optional[asyncio.Task[Any]]":
+def current_task(loop: Optional[asyncio.AbstractEventLoop] = None) -> "Optional[asyncio.Task[Any]]":
     """return current task"""
     if sys.version_info >= (3, 7):
         return asyncio.current_task(loop=loop)
@@ -135,7 +135,7 @@ class Deadline(object):
         """
         self._delay: float = delay
         self._loop = loop or get_event_loop()
-        self._timeout_exc: Optional[Exception] = timeout_exc
+        self._timeout_exc: Exception = timeout_exc or asyncio.TimeoutError()
 
         self._end_timestamp: float = time.time() + self._delay
         self._end_loop_time: float = self._loop.time() + self._delay
@@ -144,7 +144,10 @@ class Deadline(object):
         self._parent: Optional["Deadline"] = None
         self._child: Optional["Deadline"] = None
         self._deadline_future: asyncio.Future = asyncio.Future()
-        self._loop.call_at(self._end_loop_time, self._timeout, None, self._deadline_future)
+        self._loop.call_at(self._end_loop_time, self._set_deadline_future_result)
+
+    def _set_deadline_future_result(self) -> None:
+        self._deadline_future.set_result(True)
 
     def copy(self, timeout_exc: Optional[Exception] = None) -> "Deadline":
         """gen child Deadline"""
@@ -159,8 +162,8 @@ class Deadline(object):
         return deadline
 
     @staticmethod
-    def _timeout(future: Optional[asyncio.Future], callback_future: asyncio.Future) -> None:
-        if future and not future.cancelled():
+    def _timeout(future: asyncio.Future, callback_future: asyncio.Future) -> None:
+        if not future.done():
             return
         if not callback_future.cancelled():
             callback_future.cancel()
@@ -182,19 +185,17 @@ class Deadline(object):
         return self._end_loop_time
 
     def __await__(self) -> Any:
-        self._deadline_future.__await__()
+        return self._deadline_future.__await__()
 
     async def wait_for(self, future: asyncio.Future) -> None:
         """wait future completed or deadline"""
         try:
-            await as_first_completed([future], not_cancel_future_list=[self._deadline_future])
-        except asyncio.TimeoutError as e:
+            await asyncio.wait_for(future, self.end_loop_time - self._loop.time())
+        except asyncio.TimeoutError:
             if isinstance(self._timeout_exc, IgnoreDeadlineTimeoutExc):
                 return
-            elif self._timeout_exc:
-                raise self._timeout_exc
             else:
-                raise e
+                raise self._timeout_exc
 
     async def __aenter__(self) -> "Deadline":
         return self.__enter__()
@@ -221,14 +222,11 @@ class Deadline(object):
         exc_tb: Optional[TracebackType],
     ) -> Optional[bool]:
         self._is_active = False
-        deadline_canceled: bool = self._deadline_future.cancelled()
-        if deadline_canceled:
-            if self._timeout_exc and exc_type:
+        if self._deadline_future.done():
+            if exc_type:
                 if isinstance(self._timeout_exc, IgnoreDeadlineTimeoutExc):
                     return True
-                else:
-                    raise self._timeout_exc
-            raise TimeoutError
+            raise self._timeout_exc
         else:
             self._deadline_future.set_result(True)
             return None
