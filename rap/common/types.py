@@ -4,11 +4,6 @@ from typing import Any, List, Optional, Set, Tuple, Type, Union, _GenericAlias  
 
 import msgpack  # type: ignore
 
-
-def _f(*args: Any, **kwargs: Any) -> None:
-    pass
-
-
 # msg_type, correlation_id, target, header, body
 MSG_TYPE = Tuple[int, str, str, dict, Any]
 # msg_type, correlation_id, target, status_code, header, body
@@ -72,7 +67,7 @@ def parse_typing(_type: Any) -> Union[List[Type[Any]], Type]:
         raise ParseTypeError(f"Can not parse {_type} origin type")
 
 
-def is_json_type(_type: Any) -> bool:
+def is_json_type(_type: Union[Type, object]) -> bool:
     """
     check type is legal json type
     >>> from typing import Dict, Optional
@@ -97,7 +92,7 @@ def is_json_type(_type: Any) -> bool:
         return False
 
 
-def is_type(source_type: Type, target_type: Type) -> bool:
+def is_type(source_type: Type, target_type: Union[Type, object]) -> bool:
     """Determine whether the two types are consistent"""
     parse_source_type: Union[List[Type], Type] = parse_typing(source_type)
     if not isinstance(parse_source_type, list):

@@ -17,7 +17,8 @@ class Metric(object):
     prefix: str = ""
 
     def __init__(self, name: str):
-        self.name: str = name
+        self.raw_name: str = name
+        self.name: str = self.gen_metric_name(name)
         self.metric_cache_name: str = self.gen_metric_cache_name(name)
         self.diff: int = 0
 
@@ -116,8 +117,8 @@ class WindowStatistics(object):
         self._interval: int = interval or 1
         self._max_interval: int = max_interval or 60
         self._statistics_interval: int = statistics_interval or min((self._max_interval - self._interval) // 3, 10)
-        self._statistics_callback_set: Set[Callable] = statistics_callback_set or set()
-        self._statistics_callback_priority_set: Set[Callable] = statistics_callback_priority_set or set()
+        self._statistics_callback_set: Set[Callable[[dict], None]] = statistics_callback_set or set()
+        self._statistics_callback_priority_set: Set[Callable[[dict], None]] = statistics_callback_priority_set or set()
         self._statistics_callback_wait_cnt: int = statistics_callback_wait_cnt
         self._metric_cache: Cache = metric_cache or Cache()
 
@@ -148,10 +149,10 @@ class WindowStatistics(object):
         if isinstance(metric, Gauge):
             if not metric.diff <= self._max_interval:
                 raise ValueError(f"metric.{metric.name}.diff > {self._max_interval}")
-            get_value_fn: Callable = partial(self.get_gauge_value, metric.name, diff=metric.diff)
+            get_value_fn: Callable = partial(self.get_gauge_value, metric.raw_name, diff=metric.diff)
             set_value_fn: Callable = partial(self._set_gauge_value, metric.name)
         else:
-            get_value_fn = partial(self.get_counter_value, metric.name)
+            get_value_fn = partial(self.get_counter_value, metric.raw_name)
             set_value_fn = partial(self._set_counter_value, metric.name)
 
         setattr(metric, "_temp_get_value", metric.get_value)
@@ -193,41 +194,40 @@ class WindowStatistics(object):
         cache_key: str = Gauge.gen_metric_cache_name(key)
         if cache_key not in self._metric_cache:
             self.registry_metric(Gauge(key, diff=diff), expire)
-        self._set_gauge_value(key, value)
+        self._set_gauge_value(Gauge.gen_metric_name(key), value)
 
     def get_gauge_value(self, key: str, diff: int = 0) -> float:
         cache_key: str = Gauge.gen_metric_cache_name(key)
-        assert cache_key in self._metric_cache
-        assert diff <= self._max_interval
+        assert cache_key in self._metric_cache, KeyError(key)
+        assert diff <= self._max_interval, ValueError(f"diff must <={self._max_interval}")
         cnt, index = self._get_now_info()
         value: float = 0.0
         for i in range(diff):
             bucket: dict = self._gauge_bucket_list[index - i - 1]
-            if bucket["cnt"] != cnt:
-                break
-            value += bucket.get(key, 0.0)
+            if bucket["cnt"] < cnt:
+                continue
+            value += bucket.get(Gauge.gen_metric_name(key), 0.0)
         return value
 
     ################
     # count metric #
     ################
     def _set_counter_value(self, key: str, value: float, is_cover: bool = True) -> None:
-        assert value > 0, "counter value must > 0"
-        key = f"statistics:{key}"
+        assert value > 0, ValueError("counter value must > 0")
         if is_cover:
             self._metric_cache.add(key, self._max_interval + 5, value)
         else:
             self._metric_cache.add(key, self._max_interval + 5, self.get_counter_value(key) + value)
 
     def set_counter_value(self, key: str, expire: float, value: float = 1, is_cover: bool = True) -> None:
-        cache_key: str = Gauge.gen_metric_cache_name(key)
+        cache_key: str = Counter.gen_metric_cache_name(key)
         if cache_key not in self._metric_cache:
             self.registry_metric(Counter(key), expire)
-        self._set_counter_value(key, value, is_cover=is_cover)
+        self._set_counter_value(Counter.gen_metric_name(key), value, is_cover=is_cover)
 
     def get_counter_value(self, key: str) -> float:
-        key = f"statistics:{key}"
-        assert key in self._metric_cache
+        key = Counter.gen_metric_name(key)
+        assert key in self._metric_cache, KeyError(key)
         return self._metric_cache.get(key, 0.0)
 
     #######################
@@ -256,12 +256,14 @@ class WindowStatistics(object):
 
         async def _real_run_callback() -> None:
             # statistics callback is serial execution, no need to use lock
-            await asyncio.gather(
-                *[_safe_run_callback(fn, self.statistics_dict) for fn in self._statistics_callback_priority_set]
-            )
-            # statistics callback dict is read only
-            copy_dict: dict = self.statistics_dict.copy()
-            await asyncio.gather(*[_safe_run_callback(fn, copy_dict) for fn in self._statistics_callback_set])
+            if self._statistics_callback_priority_set:
+                await asyncio.gather(
+                    *[_safe_run_callback(fn, self.statistics_dict) for fn in self._statistics_callback_priority_set]
+                )
+            if self._statistics_callback_set:
+                # statistics callback dict is read only
+                copy_dict: dict = self.statistics_dict.copy()
+                await asyncio.gather(*[_safe_run_callback(fn, copy_dict) for fn in self._statistics_callback_set])
 
         return asyncio.ensure_future(_real_run_callback())
 
@@ -272,31 +274,30 @@ class WindowStatistics(object):
         self._loop_timestamp = loop.time()
         logging.debug("%s run once at loop time: %s" % (self.__class__.__name__, self._start_timestamp))
         # call callback
-        if self._statistics_callback_set or self._statistics_callback_priority_set:
-            if self._statistics_callback_future and not self._statistics_callback_future.done():
-                # The callback is still executing
-                if (
-                    self._statistics_callback_future_run_timestamp
-                    + self._statistics_interval * self._statistics_callback_wait_cnt
-                    < self._start_timestamp
-                ):
-                    # the running time does not exceed the maximum allowable number of cycles
-                    loop.call_at(self._start_timestamp + self._statistics_interval, self._statistics_data)
-                    return
-                elif not self._statistics_callback_future.cancelled():
-                    logging.warning("Callback collection execution timeout...cancel")
-                    self._statistics_callback_future.cancel()
+        if self._statistics_callback_future and not self._statistics_callback_future.done():
+            # The callback is still executing
+            if (
+                self._statistics_callback_future_run_timestamp
+                + self._statistics_interval * self._statistics_callback_wait_cnt
+                < self._start_timestamp
+            ):
+                # the running time does not exceed the maximum allowable number of cycles
+                loop.call_at(self._start_timestamp + self._statistics_interval, self._statistics_data)
+                return
+            elif not self._statistics_callback_future.cancelled():
+                logging.warning("Callback collection execution timeout...cancel")
+                self._statistics_callback_future.cancel()
 
-            self._statistics_callback_future = self._run_callback()
-            self._statistics_callback_future.add_done_callback(
-                lambda f: self._update_statistics_callback_future_run_timestamp
-            )
+        self._statistics_callback_future = self._run_callback()
+        self._statistics_callback_future.add_done_callback(
+            lambda f: self._update_statistics_callback_future_run_timestamp
+        )
         loop.call_at(self._start_timestamp + self._statistics_interval, self._statistics_data)
 
-    def add_callback(self, fn: Callable) -> None:
+    def add_callback(self, fn: Callable[[dict], None]) -> None:
         self._statistics_callback_set.add(fn)
 
-    def remove_callback(self, fn: Callable) -> None:
+    def remove_callback(self, fn: Callable[[dict], None]) -> None:
         self._statistics_callback_set.remove(fn)
 
     def add_priority_callback(self, fn: Callable) -> None:

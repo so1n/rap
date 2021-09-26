@@ -190,7 +190,7 @@ class Deadline(object):
     async def wait_for(self, future: asyncio.Future) -> None:
         """wait future completed or deadline"""
         try:
-            await asyncio.wait_for(future, self.end_loop_time - self._loop.time())
+            await asyncio.wait_for(future, self.surplus)
         except asyncio.TimeoutError:
             if isinstance(self._timeout_exc, IgnoreDeadlineTimeoutExc):
                 return

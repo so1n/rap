@@ -36,3 +36,4 @@ class TestTypes:
     def test_is_type(self) -> None:
         assert is_type(int, int)
         assert is_type(List, list)
+        assert is_type(int, Optional[int])
