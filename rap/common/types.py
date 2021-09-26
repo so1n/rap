@@ -29,7 +29,7 @@ class ParseTypeError(Exception):
     pass
 
 
-def parse_typing(_type: Type) -> Union[List[Type[Any]], Type]:
+def parse_typing(_type: Any) -> Union[List[Type[Any]], Type]:
     """
     parse typing.type to Python.type
     >>> from typing import Dict, Optional
@@ -72,7 +72,7 @@ def parse_typing(_type: Type) -> Union[List[Type[Any]], Type]:
         raise ParseTypeError(f"Can not parse {_type} origin type")
 
 
-def is_json_type(_type: Type) -> bool:
+def is_json_type(_type: Any) -> bool:
     """
     check type is legal json type
     >>> from typing import Dict, Optional

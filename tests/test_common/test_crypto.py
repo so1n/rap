@@ -2,8 +2,6 @@ import pytest
 
 from rap.common.crypto import Crypto
 
-pytestmark = pytest.mark.asyncio
-
 
 class TestCrypto:
     def test_init_error(self) -> None:
