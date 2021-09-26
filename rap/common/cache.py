@@ -42,7 +42,7 @@ class Cache(object):
         except KeyError:
             if default is MISSING:
                 raise KeyError(key)
-            return default
+            return -1, default
         return expire, value
 
     def get_and_update_expire(self, key: Any, expire: float, default: Any = MISSING) -> Any:
@@ -55,7 +55,7 @@ class Cache(object):
         """
         _, value = self._get(key, default)
         if value is not MISSING:
-            self._dict[key] = (expire, value)
+            self._add(key, expire, value)
         return value
 
     def get(self, key: Any, default: Any = MISSING) -> Any:
@@ -79,9 +79,15 @@ class Cache(object):
             self._auto_remove()
             setattr(self, self.add.__name__, self._add)
 
-    def pop(self, key: Any) -> Any:
+    def pop(self, key: Any, default: Any = MISSING) -> Any:
         """delete key from cache"""
-        return self._dict.pop(key, None)
+        try:
+            return self._dict.pop(key)[1]
+        except KeyError as e:
+            if default is MISSING:
+                raise e
+            else:
+                return default
 
     def items(self) -> Generator[Tuple[Any, Any], None, None]:
         """like dict items"""
