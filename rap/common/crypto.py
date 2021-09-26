@@ -41,15 +41,3 @@ class Crypto(object):
 
     def decrypt_object(self, raw_byte: bytes) -> Any:
         return _json.loads(self.decrypt(raw_byte))
-
-
-if __name__ == "__main__":
-    crypto: "Crypto" = Crypto("keyskeyskeyskeys")
-    raw_str: str = "test_rap_crypto_text"
-
-    encrypt_byte: bytes = crypto.encrypt(raw_str)
-    decrypt_str: str = crypto.decrypt(encrypt_byte)
-    print(raw_str)
-    print(encrypt_byte)
-    print(decrypt_str)
-    print(raw_str == decrypt_str)
