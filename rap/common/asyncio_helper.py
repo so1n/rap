@@ -124,27 +124,33 @@ class Deadline(object):
     """
 
     def __init__(
-        self, delay: float, loop: Optional[asyncio.AbstractEventLoop] = None, timeout_exc: Optional[Exception] = None
+        self,
+        delay: Optional[float],
+        loop: Optional[asyncio.AbstractEventLoop] = None,
+        timeout_exc: Optional[Exception] = None,
     ):
         """
-        :param delay: How many seconds are before the deadline
+        :param delay: How many seconds are before the deadline, if delay is None, Deadline not delay
         :param loop: Event loop
         :param timeout_exc: The exception thrown when the task is not completed at the deadline
             None: raise asyncio.Timeout
             IgnoreDeadlineTimeoutExc: not raise exc
         """
-        self._delay: float = delay
+        self._delay: Optional[float] = delay
         self._loop = loop or get_event_loop()
         self._timeout_exc: Exception = timeout_exc or asyncio.TimeoutError()
-
-        self._end_timestamp: float = time.time() + self._delay
-        self._end_loop_time: float = self._loop.time() + self._delay
 
         self._is_active: bool = False
         self._parent: Optional["Deadline"] = None
         self._child: Optional["Deadline"] = None
         self._deadline_future: asyncio.Future = asyncio.Future()
-        self._loop.call_at(self._end_loop_time, self._set_deadline_future_result)
+        if self._delay is not None:
+            self._end_timestamp: Optional[float] = time.time() + self._delay
+            self._end_loop_time: Optional[float] = self._loop.time() + self._delay
+            self._loop.call_at(self._end_loop_time, self._set_deadline_future_result)
+        else:
+            self._end_timestamp = None
+            self._end_loop_time = None
 
     def _set_deadline_future_result(self) -> None:
         self._deadline_future.set_result(True)
@@ -154,9 +160,12 @@ class Deadline(object):
         if not timeout_exc:
             timeout_exc = self._timeout_exc
 
-        deadline: "Deadline" = self.__class__(
-            delay=self.end_loop_time - self._loop.time(), loop=self._loop, timeout_exc=timeout_exc
-        )
+        if self._end_loop_time is None:
+            delay: Optional[float] = None
+        else:
+            delay = self._end_loop_time - self._loop.time()
+
+        deadline: "Deadline" = self.__class__(delay=delay, loop=self._loop, timeout_exc=timeout_exc)
         self._child = deadline
         deadline._parent = self
         return deadline
@@ -173,15 +182,17 @@ class Deadline(object):
         return self._is_active
 
     @property
-    def surplus(self) -> float:
+    def surplus(self) -> Optional[float]:
+        if self._end_loop_time is None:
+            return None
         return self._end_loop_time - self._loop.time()
 
     @property
-    def end_timestamp(self) -> float:
+    def end_timestamp(self) -> Optional[float]:
         return self._end_timestamp
 
     @property
-    def end_loop_time(self) -> float:
+    def end_loop_time(self) -> Optional[float]:
         return self._end_loop_time
 
     def __await__(self) -> Any:
@@ -209,10 +220,11 @@ class Deadline(object):
         if self._is_active:
             raise RuntimeError("`with` can only be called once")
         self._is_active = True
-        main_task: Optional[asyncio.Task] = current_task(self._loop)
-        if not main_task:
-            raise RuntimeError("Can not found current task")
-        self._deadline_future.add_done_callback(lambda f: self._timeout(f, main_task))  # type: ignore
+        if self._delay is not None:
+            main_task: Optional[asyncio.Task] = current_task(self._loop)
+            if not main_task:
+                raise RuntimeError("Can not found current task")
+            self._deadline_future.add_done_callback(lambda f: self._timeout(f, main_task))  # type: ignore
         return self
 
     def __exit__(
@@ -222,6 +234,8 @@ class Deadline(object):
         exc_tb: Optional[TracebackType],
     ) -> Optional[bool]:
         self._is_active = False
+        if self._delay is None:
+            return None
         if self._deadline_future.done():
             if exc_type:
                 if isinstance(self._timeout_exc, IgnoreDeadlineTimeoutExc):

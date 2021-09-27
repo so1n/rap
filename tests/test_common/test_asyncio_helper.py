@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import Coroutine, Optional
 
 import pytest
@@ -73,6 +74,16 @@ class TestAsyncioHelper:
 
 
 class TestAsyncioHelperDeadline:
+    async def test_delay_is_none(self) -> None:
+        deadline: asyncio_helper.Deadline = asyncio_helper.Deadline(None)
+        timestamp: float = time.time()
+        await deadline.wait_for(asyncio.sleep(0.1))
+        assert 0.09 < time.time() - timestamp <= 0.11
+        timestamp = time.time()
+        with deadline:
+            await asyncio.sleep(0.1)
+        assert 0.09 < time.time() - timestamp <= 0.11
+
     async def test_deadline_timeout(self) -> None:
         with pytest.raises(asyncio.TimeoutError):
             deadline: asyncio_helper.Deadline = asyncio_helper.Deadline(0.5)
