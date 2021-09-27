@@ -5,6 +5,7 @@ import math
 import random
 import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
+from uuid import uuid4
 
 from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
@@ -15,7 +16,7 @@ from rap.common import exceptions as rap_exc
 from rap.common.asyncio_helper import Deadline, as_first_completed, safe_del_future
 from rap.common.conn import Connection
 from rap.common.exceptions import RPCError
-from rap.common.snowflake import get_snowflake_id
+from rap.common.snowflake import async_get_snowflake_id
 from rap.common.types import SERVER_BASE_MSG_TYPE
 from rap.common.utils import Constant
 
@@ -248,7 +249,7 @@ class Transport(object):
         :return: return server response
         """
         if not request.correlation_id:
-            request.correlation_id = str(get_snowflake_id())
+            request.correlation_id = str(async_get_snowflake_id())
         resp_future_id: str = f"{conn.sock_tuple}:{request.correlation_id}"
         try:
             response_future: asyncio.Future[Response] = asyncio.Future()
@@ -282,7 +283,7 @@ class Transport(object):
 
         set_header_value("version", Constant.VERSION, is_cover=True)
         set_header_value("user_agent", Constant.USER_AGENT, is_cover=True)
-        set_header_value("request_id", str(get_snowflake_id()), is_cover=True)
+        set_header_value("request_id", str(uuid4()), is_cover=True)
 
     ##########################
     # base write_to_conn api #
@@ -332,7 +333,6 @@ class Transport(object):
             Constant.MSG_REQUEST,
             f"{self.app.server_name}/{group}/{func_name}",
             {"call_id": call_id, "param": arg_param},
-            correlation_id=str(get_snowflake_id()),
         )
         if header:
             request.header.update(header)

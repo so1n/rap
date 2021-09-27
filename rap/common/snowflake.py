@@ -1,10 +1,12 @@
 """
 copy from:https://github.com/tarzanjw/pysnowflake/edit/master/snowflake/server/generator.py
 """
+import asyncio
 import logging
 import os
 import socket
 import time
+from threading import Lock
 from typing import Dict, Tuple
 
 from typing_extensions import TypedDict
@@ -24,7 +26,11 @@ StatsTypedDict = TypedDict(
 )
 
 
-class Snowflake(object):
+class WaitNextSequenceExc(Exception):
+    pass
+
+
+class _Snowflake(object):
     """Simple snowflake id implementation"""
 
     def __init__(self, dc: int, worker: int):
@@ -54,8 +60,7 @@ class Snowflake(object):
             # the sequence is overload, just wait to next sequence
             logging.warning("The sequence has been overload")
             self.sequence_overload += 1
-            time.sleep(0.001)
-            return self.get_next_id()
+            raise WaitNextSequenceExc("The sequence is overload, just wait to next sequence")
 
         generated_id: int = ((curr_time - EPOCH_TIMESTAMP) << 22) | (self.node_id << 12) | self.sequence
 
@@ -75,13 +80,36 @@ class Snowflake(object):
         }
 
 
-_cache: Dict[Tuple[int, int], Snowflake] = {}
+_cache: Dict[Tuple[int, int], _Snowflake] = {}
+thread_lock: Lock = Lock()
 
 
-def get_snowflake_id() -> int:
+def get_snowflake_id(wait_sequence: bool = True) -> int:
+    dc: int = hash(socket.gethostname())
+    pid: int = os.getpid()
+    dc_worker_key: Tuple[int, int] = (dc, pid)
+    with thread_lock:
+        if dc_worker_key not in _cache:
+            _cache[dc_worker_key] = _Snowflake(dc, pid)
+        while True:
+            try:
+                return _cache[dc_worker_key].get_next_id()
+            except WaitNextSequenceExc as e:
+                if wait_sequence:
+                    time.sleep(0.001)
+                raise e
+
+
+async def async_get_snowflake_id(wait_sequence: bool = True) -> int:
     dc: int = hash(socket.gethostname())
     pid: int = os.getpid()
     dc_worker_key: Tuple[int, int] = (dc, pid)
     if dc_worker_key not in _cache:
-        _cache[dc_worker_key] = Snowflake(dc, pid)
-    return _cache[dc_worker_key].get_next_id()
+        _cache[dc_worker_key] = _Snowflake(dc, pid)
+    while True:
+        try:
+            return _cache[dc_worker_key].get_next_id()
+        except WaitNextSequenceExc as e:
+            if wait_sequence:
+                await asyncio.sleep(0.001)
+            raise e

@@ -35,7 +35,7 @@ class Channel(BaseChannel[Response]):
         self._conn: Connection = conn
         self._drop_msg: str = "recv channel's drop event, close channel"
 
-        self.channel_id: str = str(get_snowflake_id())
+        self.channel_id: str = str(get_snowflake_id(wait_sequence=False))
         self.queue: asyncio.Queue = asyncio.Queue()
         self.user_channel: UserChannel[Response] = UserChannel(self)
         self.channel_conn_future: asyncio.Future = asyncio.Future()

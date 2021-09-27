@@ -6,7 +6,7 @@ from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError
-from rap.common.snowflake import get_snowflake_id
+from rap.common.snowflake import async_get_snowflake_id
 from rap.common.utils import Constant, gen_random_time_id
 
 
@@ -45,8 +45,8 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
         assert request.conn is not None, "Not found conn from request"
         if request.msg_type == Constant.CLIENT_EVENT and request.target.endswith(Constant.DECLARE):
             crypto_key: str = gen_random_time_id(length=6, time_length=10)
-            crypto_id: str = str(get_snowflake_id())
-            check_id: str = str(get_snowflake_id())
+            crypto_id: str = str(async_get_snowflake_id())
+            check_id: str = str(async_get_snowflake_id())
             request.body["crypto_id"] = crypto_id
             request.body["crypto_key"] = crypto_key
             request.body["check_id"] = check_id
@@ -55,7 +55,7 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
         elif request.msg_type in (Constant.MSG_REQUEST, Constant.CHANNEL_REQUEST):
             try:
                 crypto: Crypto = request.conn.state.crypto
-                request.body = {"body": request.body, "timestamp": int(time.time()), "nonce": get_snowflake_id()}
+                request.body = {"body": request.body, "timestamp": int(time.time()), "nonce": async_get_snowflake_id()}
                 request.body = crypto.encrypt_object(request.body)
             except Exception as e:
                 raise CryptoError("Can't encrypt body.") from e
@@ -100,7 +100,7 @@ class CryptoProcessor(BaseCryptoProcessor):
             request.body["crypto_id"] = self._crypto_id
             request.body["check_body"] = self._crypto.encrypt_object(self._crypto_id)
         elif request.msg_type in (Constant.MSG_REQUEST, Constant.CHANNEL_REQUEST):
-            request.body = {"body": request.body, "timestamp": int(time.time()), "nonce": get_snowflake_id()}
+            request.body = {"body": request.body, "timestamp": int(time.time()), "nonce": async_get_snowflake_id()}
             request.body = self._crypto.encrypt_object(request.body)
         return request
 

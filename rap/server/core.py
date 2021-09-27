@@ -12,7 +12,7 @@ from rap.common.collect_statistics import WindowStatistics
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import ServerError
 from rap.common.signal_broadcast import add_signal_handler, remove_signal_handler
-from rap.common.snowflake import get_snowflake_id
+from rap.common.snowflake import async_get_snowflake_id
 from rap.common.types import BASE_MSG_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utils import EventEnum, RapFunc
 from rap.server.context import context
@@ -307,7 +307,7 @@ class Server(object):
         conn: ServerConnection = ServerConnection(
             reader, writer, self._timeout, pack_param=self._pack_param, unpack_param=self._unpack_param
         )
-        conn.conn_id = str(get_snowflake_id())
+        conn.conn_id = str(async_get_snowflake_id())
         try:
             self._connected_set.add(conn)
             await self._conn_handle(conn)
