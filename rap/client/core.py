@@ -29,6 +29,7 @@ class BaseClient:
     def __init__(
         self,
         server_name: str,
+        keep_alive_timeout: Optional[int] = None,
         cache_interval: Optional[float] = None,
         ws_min_interval: Optional[int] = None,
         ws_max_interval: Optional[int] = None,
@@ -42,7 +43,7 @@ class BaseClient:
         :param ws_statistics_interval: WindowStatistics Statistical data interval from window
         """
         self.server_name: str = server_name
-        self.transport: Transport = Transport(self)  # type: ignore
+        self.transport: Transport = Transport(self, read_timeout=keep_alive_timeout)  # type: ignore
         self._processor_list: List[BaseProcessor] = []
         self._event_dict: Dict[EventEnum, List[CLIENT_EVENT_FN]] = {
             value: [] for value in EventEnum.__members__.values()
@@ -337,6 +338,7 @@ class Client(BaseClient):
 
         super().__init__(
             server_name,
+            keep_alive_timeout=keep_alive_timeout,
             cache_interval=cache_interval,
             ws_min_interval=ws_min_interval,
             ws_max_interval=ws_max_interval,
@@ -346,7 +348,6 @@ class Client(BaseClient):
             conn_list,
             self.transport,
             ssl_crt_path=ssl_crt_path,
-            timeout=keep_alive_timeout,
             pack_param=None,
             unpack_param=None,
             balance_enum=select_conn_method,

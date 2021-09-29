@@ -20,7 +20,7 @@ from typing import (
     Union,
 )
 
-from rap.common.asyncio_helper import get_event_loop
+from rap.common.asyncio_helper import Deadline, get_event_loop
 from rap.common.conn import ServerConnection
 from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent, PongEvent
 from rap.common.exceptions import (
@@ -151,17 +151,21 @@ class Receiver(object):
         ping_interval += min(ping_interval * 0.1, random.randint(5, 15))
         while not self._conn.is_closed():
             diff_time: int = int(time.time()) - self._keepalive_timestamp
-            if diff_time > ping_interval:
-                await self.sender.send_event(CloseConnEvent("recv pong timeout"))
+            try:
+                with Deadline(self._ping_sleep_time):
+                    if diff_time > ping_interval:
+                        await self.sender.send_event(CloseConnEvent("recv pong timeout"))
+                        return
+                    else:
+                        await self.sender.send_event(PingEvent(""))
+                        await self._conn.conn_future
+            except asyncio.CancelledError:
                 return
-            else:
-                await self.sender.send_event(PingEvent(""))
-                try:
-                    await self._conn.sleep_and_listen(self._ping_sleep_time)
-                except asyncio.CancelledError:
-                    return
-                except Exception as e:
-                    logging.exception(f"{self._conn} ping event exit.. error:<{e.__class__.__name__}>[{e}]")
+            except asyncio.TimeoutError:
+                continue
+            except Exception as e:
+                logging.exception(f"{self._conn} ping event exit.. error:<{e.__class__.__name__}>[{e}]")
+                return
 
     async def channel_handle(self, request: Request, response: Response) -> Optional[Response]:
         func: Callable = (await self._call_func_permission_fn(request)).func

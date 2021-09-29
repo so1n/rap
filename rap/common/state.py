@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 
 
 class State(object):
-    """copy from starlette"""
+    """inherit from starlette"""
 
     def __init__(self, state: Optional[Dict] = None):
         if state is None:

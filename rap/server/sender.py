@@ -1,9 +1,9 @@
-import asyncio
 import logging
 import random
 from typing import TYPE_CHECKING, Any, List, Optional
 from uuid import uuid4
 
+from rap.common.asyncio_helper import Deadline
 from rap.common.conn import ServerConnection
 from rap.common.utils import Constant
 from rap.server.model import Event, Response
@@ -52,7 +52,7 @@ class Sender(object):
         set_header_value("user_agent", Constant.USER_AGENT, is_cover=True)
         set_header_value("request_id", str(uuid4()), is_cover=resp.msg_type is Constant.CHANNEL_RESPONSE)
 
-    async def __call__(self, resp: Optional[Response], timeout: Optional[int] = None) -> bool:
+    async def __call__(self, resp: Optional[Response], deadline: Optional[Deadline] = None) -> bool:
         """Send response data to the client"""
         if resp is None:
             return False
@@ -66,18 +66,20 @@ class Sender(object):
         msg_id: int = self._msg_id + 1
         # Avoid too big numbers
         self._msg_id = msg_id & self._max_msg_id
-        if not timeout:
-            timeout = self._timeout
-        await asyncio.wait_for(self._conn.write((msg_id, *resp.to_msg())), timeout=timeout)
+        if not deadline:
+            deadline = Deadline(self._timeout)
+
+        with deadline:
+            await self._conn.write((msg_id, *resp.to_msg()))
         if resp.target.endswith(Constant.EVENT_CLOSE_CONN):
             if not self._conn.is_closed():
                 self._conn.close()
         return True
 
-    async def send_event(self, event: Event) -> bool:
+    async def send_event(self, event: Event, deadline: Optional[Deadline] = None) -> bool:
         """send event obj to client"""
-        return await self.__call__(Response.from_event(self._app, event))
+        return await self.__call__(Response.from_event(self._app, event), deadline=deadline)
 
-    async def send_exc(self, exc: Exception) -> bool:
+    async def send_exc(self, exc: Exception, deadline: Optional[Deadline] = None) -> bool:
         """send exc obj to client"""
-        return await self.__call__(Response.from_exc(self._app, exc))
+        return await self.__call__(Response.from_exc(self._app, exc), deadline=deadline)

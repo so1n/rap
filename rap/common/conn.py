@@ -18,9 +18,8 @@ __all__ = ["Connection", "ServerConnection"]
 class BaseConnection:
     """rap transmission function, including serialization and deserialization of transmitted data"""
 
-    def __init__(self, timeout: int, pack_param: Optional[dict] = None, unpack_param: Optional[dict] = None):
+    def __init__(self, pack_param: Optional[dict] = None, unpack_param: Optional[dict] = None):
         self._is_closed: bool = True
-        self._timeout: int = timeout
         self._pack_param: dict = pack_param or {}
         self._unpack_param: dict = unpack_param or {}
         if "raw" not in self._unpack_param:
@@ -55,7 +54,7 @@ class BaseConnection:
         self._writer.write(msgpack.packb(data, **self._pack_param))
         await self._writer.drain()
 
-    async def read(self, timeout: Optional[int] = None) -> Any:
+    async def read(self) -> Any:
         if not self._reader or self._is_closed:
             raise ConnectionError("connection has not been created")
         try:
@@ -66,9 +65,8 @@ class BaseConnection:
             except StopIteration:
                 pass
 
-            timeout = timeout if timeout else self._timeout
             while True:
-                data = await asyncio.wait_for(self._reader.read(Constant.SOCKET_RECV_SIZE), timeout)
+                data = self._reader.read(Constant.SOCKET_RECV_SIZE)
                 if not data:
                     raise ConnectionError(f"Connection to {self.peer_tuple} closed")
                 self._unpacker.feed(data)
@@ -124,14 +122,13 @@ class Connection(BaseConnection):
         self,
         host: str,
         port: int,
-        timeout: int,
         weight: int,
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
         ssl_crt_path: Optional[str] = None,
         max_conn_inflight: Optional[int] = None,
     ):
-        super().__init__(timeout, pack_param, unpack_param)
+        super().__init__(pack_param, unpack_param)
         self._host: str = host
         self._port: int = port
         if weight > 10:
@@ -183,11 +180,10 @@ class ServerConnection(BaseConnection):
         self,
         reader: READER_TYPE,
         writer: WRITER_TYPE,
-        timeout: int,
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
     ):
-        super().__init__(timeout, pack_param, unpack_param)
+        super().__init__(pack_param, unpack_param)
         self._reader = reader
         self._writer = writer
         self.peer_tuple = self._writer.get_extra_info("peername")

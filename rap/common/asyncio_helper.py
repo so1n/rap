@@ -155,7 +155,7 @@ class Deadline(object):
     def _set_deadline_future_result(self) -> None:
         self._deadline_future.set_result(True)
 
-    def copy(self, timeout_exc: Optional[Exception] = None) -> "Deadline":
+    def inherit(self, timeout_exc: Optional[Exception] = None) -> "Deadline":
         """gen child Deadline"""
         if not timeout_exc:
             timeout_exc = self._timeout_exc
@@ -198,7 +198,7 @@ class Deadline(object):
     def __await__(self) -> Any:
         return self._deadline_future.__await__()
 
-    async def wait_for(self, future: asyncio.Future) -> None:
+    async def wait_for(self, future: Union[asyncio.Future, Coroutine]) -> None:
         """wait future completed or deadline"""
         try:
             await asyncio.wait_for(future, self.surplus)

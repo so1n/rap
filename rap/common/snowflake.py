@@ -1,5 +1,5 @@
 """
-copy from:https://github.com/tarzanjw/pysnowflake/edit/master/snowflake/server/generator.py
+inherit from:https://github.com/tarzanjw/pysnowflake/edit/master/snowflake/server/generator.py
 """
 import asyncio
 import logging

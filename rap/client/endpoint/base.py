@@ -64,7 +64,6 @@ class BaseEndpoint(object):
     def __init__(
         self,
         transport: Transport,
-        timeout: Optional[int] = None,
         declare_timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
         balance_enum: Optional[BalanceEnum] = None,
@@ -77,7 +76,6 @@ class BaseEndpoint(object):
     ) -> None:
         """
         :param transport: client transport
-        :param timeout: read response from consumer timeout, default 1200
         :param declare_timeout: declare timeout include request & response, default 9
         :param ssl_crt_path: client ssl crt file path
         :param balance_enum: balance pick conn method, default random
@@ -89,7 +87,6 @@ class BaseEndpoint(object):
         :param wait_server_recover: If False, ping failure will close conn
         """
         self._transport: Transport = transport
-        self._timeout: int = timeout or 1200
         self._declare_timeout: int = declare_timeout or 9
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._pack_param: Optional[dict] = pack_param
@@ -143,15 +140,14 @@ class BaseEndpoint(object):
 
             next_ping_interval: int = random.randint(self._min_ping_interval, self._max_ping_interval)
             deadline: Deadline = Deadline(next_ping_interval, timeout_exc=IgnoreDeadlineTimeoutExc())
-            with deadline:
-                try:
-                    await self._transport.ping(conn, deadline)
-                except asyncio.CancelledError:
-                    return
-                except Exception as e:
-                    logging.debug(f"{conn} ping event error:{e}")
+            try:
+                await self._transport.ping(conn, deadline=deadline)
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                logging.debug(f"{conn} ping event error:{e}")
 
-                await conn.conn_future
+            await conn.conn_future
 
     @property
     def is_close(self) -> bool:
@@ -171,7 +167,6 @@ class BaseEndpoint(object):
         conn: Connection = Connection(
             ip,
             port,
-            self._timeout,
             weight,
             ssl_crt_path=self._ssl_crt_path,
             pack_param=self._pack_param,
@@ -189,14 +184,15 @@ class BaseEndpoint(object):
                     msg += f", conn done exc:{f.exception()}"
                 logging.exception(msg)
 
-        await conn.connect()
-        logging.debug("Connection to %s...", conn.connection_info)
-        self._connected_cnt += 1
-        conn.available = True
-        conn.listen_future = asyncio.ensure_future(self._listen_conn(conn))
-        conn.listen_future.add_done_callback(lambda f: _conn_done(f))
         try:
-            await self._transport.declare(conn, deadline=Deadline(self._declare_timeout))
+            with Deadline(self._declare_timeout) as deadline:
+                await conn.connect()
+                logging.debug("Connection to %s...", conn.connection_info)
+                self._connected_cnt += 1
+                conn.available = True
+                conn.listen_future = asyncio.ensure_future(self._listen_conn(conn))
+                conn.listen_future.add_done_callback(lambda f: _conn_done(f))
+                await self._transport.declare(conn, deadline=deadline)
         except Exception as e:
             await self.destroy(ip, port)
             raise e

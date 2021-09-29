@@ -30,8 +30,9 @@ class Transport(object):
 
     _decay_time: float = 600.0
 
-    def __init__(self, app: "BaseClient"):
+    def __init__(self, app: "BaseClient", read_timeout: Optional[int] = None):
         self.app: "BaseClient" = app
+        self._read_timeout = read_timeout or 1200
         self._process_request_list: List[Callable[[Request], Any]] = []
         self._process_response_list: List[Callable[[Response], Any]] = []
         self._process_exception_list: List[Callable[[Response, Exception], Any]] = []
@@ -123,7 +124,7 @@ class Transport(object):
             elif response.func_name in (Constant.DECLARE, Constant.PONG_EVENT):
                 self._resp_future_dict[correlation_id].set_result(response)
             elif response.func_name == Constant.PING_EVENT:
-                await self.write_to_conn(Request.from_event(self.app, event.PongEvent("")), conn)
+                await Deadline(3).wait_for(self.write_to_conn(Request.from_event(self.app, event.PongEvent("")), conn))
             else:
                 logging.error(f"recv not support event {response}")
         elif response.msg_type == Constant.CHANNEL_RESPONSE:
@@ -168,20 +169,17 @@ class Transport(object):
 
         return response, exc
 
-    async def declare(self, conn: Connection, deadline: Optional[Deadline] = None) -> None:
+    async def declare(self, conn: Connection, deadline: Deadline) -> None:
         """
         After conn is initialized, connect to the server and initialize the connection resources.
         Only include server_name and get conn id two functions, if you need to expand the function,
           you need to process the request and response of the declared life cycle through the processor
         """
-        try:
+        with deadline.inherit(timeout_exc=asyncio.TimeoutError(f"conn:{conn} declare timeout")):
             response: Response = await self._base_request(
                 Request.from_event(self.app, event.DeclareEvent({"server_name": self.app.server_name})),
                 conn,
-                deadline=deadline,
             )
-        except asyncio.TimeoutError:
-            raise asyncio.TimeoutError(f"conn:{conn} declare timeout")
 
         exc: Exception = ConnectionError(f"conn:{conn} declare error")
         if response.msg_type != Constant.SERVER_EVENT:
@@ -207,13 +205,12 @@ class Transport(object):
         async def _ping() -> None:
             nonlocal mos
             nonlocal rtt
-            response: Response = await self._base_request(
-                Request.from_event(self.app, event.PingEvent({})), conn, deadline=deadline
-            )
+            response: Response = await self._base_request(Request.from_event(self.app, event.PingEvent({})), conn)
             rtt += time.time() - start_time
             mos += response.body.get("mos", 10)
 
-        await asyncio.gather(*[_ping(), _ping(), _ping()])
+        with deadline.inherit():
+            await asyncio.gather(*[_ping(), _ping(), _ping()])
         mos = mos // 3
         rtt = rtt / 3
 
@@ -244,7 +241,7 @@ class Transport(object):
         """Send data to the server and get the response from the server.
         :param request: client request obj
         :param conn: client conn
-        :param deadline: recv response deadline, default 9
+        :param deadline: recv response deadline, default None
 
         :return: return server response
         """
@@ -254,36 +251,26 @@ class Transport(object):
         try:
             response_future: asyncio.Future[Response] = asyncio.Future()
             self._resp_future_dict[resp_future_id] = response_future
-            timeout_exc: Exception = asyncio.TimeoutError(f"msg_id:{resp_future_id} request timeout")
             if not deadline:
-                deadline = Deadline(9, timeout_exc=timeout_exc)
+                deadline = Deadline(None)
             else:
-                deadline = deadline.copy(timeout_exc=timeout_exc)
-            with deadline:
-                await self.write_to_conn(request, conn)
-                response: Response = await as_first_completed(
-                    [response_future],
-                    not_cancel_future_list=[conn.conn_future],
-                )
-                response.state = request.state
-                return response
+                deadline = deadline.inherit()
+            try:
+                with deadline:
+                    request.header["X-rap-deadline"] = deadline.end_timestamp
+                    await self.write_to_conn(request, conn)
+                    response: Response = await as_first_completed(
+                        [response_future],
+                        not_cancel_future_list=[conn.conn_future],
+                    )
+                    response.state = request.state
+                    return response
+            except asyncio.TimeoutError:
+                raise asyncio.TimeoutError(f"msg_id:{resp_future_id} request timeout")
         finally:
             pop_future: Optional[asyncio.Future] = self._resp_future_dict.pop(resp_future_id, None)
             if pop_future:
                 safe_del_future(pop_future)
-
-    @staticmethod
-    def before_write_handle(request: Request) -> None:
-        """check header value"""
-
-        def set_header_value(header_key: str, header_value: Any, is_cover: bool = False) -> None:
-            """if key not in header, set header value"""
-            if is_cover or header_key not in request.header:
-                request.header[header_key] = header_value
-
-        set_header_value("version", Constant.VERSION, is_cover=True)
-        set_header_value("user_agent", Constant.USER_AGENT, is_cover=True)
-        set_header_value("request_id", str(uuid4()), is_cover=True)
 
     ##########################
     # base write_to_conn api #
@@ -292,11 +279,12 @@ class Transport(object):
         """gen msg_id and seng msg to conn"""
         request.conn = conn
         request.header["host"] = conn.peer_tuple
+        request.header["version"] = Constant.VERSION
+        request.header["user_agent"] = Constant.USER_AGENT
+        request.header["request_id"] = str(uuid4())
         msg_id: int = self._msg_id + 1
         # Avoid too big numbers
         self._msg_id = msg_id & self._max_msg_id
-
-        self.before_write_handle(request)
 
         for process_request in self._process_request_list:
             await process_request(request)

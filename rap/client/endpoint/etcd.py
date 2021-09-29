@@ -15,7 +15,6 @@ class EtcdEndpoint(BaseEndpoint):
         self,
         server_name: str,
         transport: Transport,
-        timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
@@ -45,7 +44,6 @@ class EtcdEndpoint(BaseEndpoint):
         self._watch_future: asyncio.Future = done_future()
         super().__init__(
             transport,
-            timeout=timeout,
             ssl_crt_path=ssl_crt_path,
             balance_enum=balance_enum,
             pack_param=pack_param,

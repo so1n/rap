@@ -3,10 +3,10 @@ import logging
 import signal
 import ssl
 import threading
-import time
 from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Set, Type
 
 from rap.common import event
+from rap.common.asyncio_helper import Deadline
 from rap.common.cache import Cache
 from rap.common.collect_statistics import WindowStatistics
 from rap.common.conn import ServerConnection
@@ -33,7 +33,7 @@ class Server(object):
         server_name: str,
         host: str = "localhost",
         port: int = 9000,
-        timeout: int = 9,
+        send_timeout: int = 9,
         keep_alive: int = 1200,
         run_timeout: int = 9,
         ping_fail_cnt: int = 2,
@@ -54,7 +54,7 @@ class Server(object):
         :param server_name: server name
         :param host: listen host
         :param port: listen port
-        :param timeout: send&read msg timeout
+        :param send_timeout: send msg timeout
         :param keep_alive: conn keep_alive time
         :param run_timeout: Maximum execution time per call
         :param ping_fail_cnt: When ping fails continuously and exceeds this value, conn will be disconnected
@@ -74,7 +74,7 @@ class Server(object):
         self.server_name: str = server_name
         self.host: str = host
         self.port: int = port
-        self._timeout: int = timeout
+        self._send_timeout: int = send_timeout
         self._run_timeout: int = run_timeout
         self._close_timeout: int = close_timeout
         self._keep_alive: int = keep_alive
@@ -270,42 +270,46 @@ class Server(object):
         if self.is_closed:
             return
 
-        await self.run_event_list(EventEnum.before_end)
-
-        # Stop accepting new connections.
-        if self._server:
-            self._server.close()
-            await self._server.wait_closed()
-
         # Notify the client that the server is ready to shut down
         async def send_shutdown_event(_conn: ServerConnection) -> None:
             # conn may be closed
             if not _conn.is_closed():
                 try:
                     await Sender(
-                        self, _conn, self._timeout, processor_list=self._processor_list  # type: ignore
+                        self, _conn, self._send_timeout, processor_list=self._processor_list  # type: ignore
                     ).send_event(event.ShutdownEvent({"close_timeout": self._close_timeout}))
                 except ConnectionError:
                     # conn may be closed
                     pass
 
-        task_list: List[Coroutine] = [send_shutdown_event(conn) for conn in self._connected_set if not conn.is_closed()]
-        if task_list:
-            logging.info("send shutdown event to client")
-        await asyncio.gather(*task_list)
+        try:
+            with Deadline(self._close_timeout):
+                await self.run_event_list(EventEnum.before_end)
 
-        # until connections close
-        logging.info(f"{self} Waiting for connections to close. (CTRL+C to force quit)")
-        close_timestamp: int = int(time.time()) + self._close_timeout
-        while self._connected_set and close_timestamp > int(time.time()):
-            await asyncio.sleep(0.1)
-        self._run_event.set()
-        await self.run_event_list(EventEnum.after_end, is_raise=True)
+                # Stop accepting new connections.
+                if self._server:
+                    self._server.close()
+                    await self._server.wait_closed()
+
+                task_list: List[Coroutine] = [
+                    send_shutdown_event(conn) for conn in self._connected_set if not conn.is_closed()
+                ]
+                if task_list:
+                    logging.info("send shutdown event to client")
+                await asyncio.gather(*task_list)
+
+                # until connections close
+                logging.info(f"{self} Waiting for connections to close. (CTRL+C to force quit)")
+                while self._connected_set:
+                    await asyncio.sleep(0.1)
+                await self.run_event_list(EventEnum.after_end, is_raise=True)
+        finally:
+            self._run_event.set()
 
     async def conn_handle(self, reader: READER_TYPE, writer: WRITER_TYPE) -> None:
         """Handle initialization and recycling of conn"""
         conn: ServerConnection = ServerConnection(
-            reader, writer, self._timeout, pack_param=self._pack_param, unpack_param=self._unpack_param
+            reader, writer, pack_param=self._pack_param, unpack_param=self._unpack_param
         )
         conn.conn_id = str(async_get_snowflake_id())
         try:
@@ -320,7 +324,7 @@ class Server(object):
 
     async def _conn_handle(self, conn: ServerConnection) -> None:
         """Receive or send messages by conn"""
-        sender: Sender = Sender(self, conn, self._timeout, processor_list=self._processor_list)  # type: ignore
+        sender: Sender = Sender(self, conn, self._send_timeout, processor_list=self._processor_list)  # type: ignore
         receiver: Receiver = Receiver(
             self,  # type: ignore
             conn,
@@ -357,7 +361,8 @@ class Server(object):
 
         while not conn.is_closed():
             try:
-                request_msg: Optional[BASE_MSG_TYPE] = await conn.read(self._keep_alive)
+                with Deadline(self._keep_alive):
+                    request_msg: Optional[BASE_MSG_TYPE] = await conn.read()
                 # create future handle msg
                 future: asyncio.Future = asyncio.ensure_future(recv_msg_handle(request_msg))
                 future.add_done_callback(lambda f: recv_msg_handle_future_set.remove(f))

@@ -14,7 +14,6 @@ class LocalEndpoint(BaseEndpoint):
         self,
         conn_list: List[dict],
         transport: Transport,
-        timeout: Optional[int] = None,
         declare_timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
         pack_param: Optional[dict] = None,
@@ -29,7 +28,6 @@ class LocalEndpoint(BaseEndpoint):
         :param conn_list: conn info list, 参数和默认值跟`BaseEndpoint.create`的参数保持一致
             like:[{"ip": localhost, "port": 9000, "weight": 10, "max_conn_inflight": 100}]
         :param transport: client transport
-        :param timeout: read response from consumer timeout
         :param declare_timeout: declare timeout include request & response
         :param ssl_crt_path: client ssl crt file path
         :param balance_enum: balance pick conn method, default random
@@ -43,7 +41,6 @@ class LocalEndpoint(BaseEndpoint):
         self._conn_list: List[dict] = conn_list
         super().__init__(
             transport,
-            timeout=timeout,
             declare_timeout=declare_timeout,
             ssl_crt_path=ssl_crt_path,
             balance_enum=balance_enum,
