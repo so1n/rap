@@ -20,6 +20,7 @@ class Client(BaseClient):
         max_ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
         wait_server_recover: bool = True,
+        through_deadline: bool = False,
         # consul client param
         consul_namespace: str = "rap",
         consul_ttl: int = 10,
@@ -39,6 +40,7 @@ class Client(BaseClient):
             ws_min_interval=ws_min_interval,
             ws_max_interval=ws_max_interval,
             ws_statistics_interval=ws_statistics_interval,
+            through_deadline=through_deadline,
         )
         self.endpoint = ConsulEndpoint(
             server_name,

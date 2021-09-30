@@ -20,6 +20,7 @@ class Client(BaseClient):
         max_ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
         wait_server_recover: bool = True,
+        through_deadline: bool = False,
         # etcd client param
         etcd_host: str = "localhost",
         etcd_port: int = 2379,
@@ -36,6 +37,7 @@ class Client(BaseClient):
             ws_min_interval=ws_min_interval,
             ws_max_interval=ws_max_interval,
             ws_statistics_interval=ws_statistics_interval,
+            through_deadline=through_deadline,
         )
         self.endpoint = EtcdEndpoint(
             server_name,

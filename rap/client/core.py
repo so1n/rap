@@ -34,6 +34,7 @@ class BaseClient:
         ws_min_interval: Optional[int] = None,
         ws_max_interval: Optional[int] = None,
         ws_statistics_interval: Optional[int] = None,
+        through_deadline: bool = False,
     ):
         """
         :param server_name: server name
@@ -41,10 +42,12 @@ class BaseClient:
         :param ws_min_interval: WindowStatistics time per window
         :param ws_max_interval: WindowStatistics Window capacity
         :param ws_statistics_interval: WindowStatistics Statistical data interval from window
+        :param through_deadline: enable through deadline to server
         """
         self.server_name: str = server_name
         self.transport: Transport = Transport(self, read_timeout=keep_alive_timeout)  # type: ignore
         self._processor_list: List[BaseProcessor] = []
+        self._through_deadline: bool = through_deadline
         self._event_dict: Dict[EventEnum, List[CLIENT_EVENT_FN]] = {
             value: [] for value in EventEnum.__members__.values()
         }
@@ -52,6 +55,10 @@ class BaseClient:
         self.window_statistics: WindowStatistics = WindowStatistics(
             interval=ws_min_interval, max_interval=ws_max_interval, statistics_interval=ws_statistics_interval
         )
+
+    @property
+    def through_deadline(self) -> bool:
+        return self._through_deadline
 
     ##################
     # start & close #
@@ -319,6 +326,7 @@ class Client(BaseClient):
         ws_min_interval: Optional[int] = None,
         ws_max_interval: Optional[int] = None,
         ws_statistics_interval: Optional[int] = None,
+        through_deadline: bool = False,
         select_conn_method: BalanceEnum = BalanceEnum.random,
         min_ping_interval: Optional[int] = None,
         max_ping_interval: Optional[int] = None,
@@ -343,6 +351,7 @@ class Client(BaseClient):
             ws_min_interval=ws_min_interval,
             ws_max_interval=ws_max_interval,
             ws_statistics_interval=ws_statistics_interval,
+            through_deadline=through_deadline,
         )
         self.endpoint = LocalEndpoint(
             conn_list,

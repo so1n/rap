@@ -242,7 +242,12 @@ class Receiver(object):
             coroutine = get_event_loop().run_in_executor(None, partial(func_model.func, *param_tuple))
 
         try:
-            result: Any = await asyncio.wait_for(coroutine, self._run_timeout)
+            deadline_timestamp: int = request.header.get("X-rap-deadline", 0)
+            if deadline_timestamp:
+                timeout: int = int(time.time() - deadline_timestamp)
+            else:
+                timeout = self._run_timeout
+            result: Any = await asyncio.wait_for(coroutine, timeout)
         except asyncio.TimeoutError:
             return call_id, RpcRunTimeError(f"Call {func_model.func.__name__} timeout")
         except Exception as e:

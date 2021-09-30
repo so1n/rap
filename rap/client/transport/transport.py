@@ -257,7 +257,8 @@ class Transport(object):
                 deadline = deadline.inherit()
             try:
                 with deadline:
-                    request.header["X-rap-deadline"] = deadline.end_timestamp
+                    if self.app.through_deadline:
+                        request.header["X-rap-deadline"] = deadline.end_timestamp
                     await self.write_to_conn(request, conn)
                     response: Response = await as_first_completed(
                         [response_future],
