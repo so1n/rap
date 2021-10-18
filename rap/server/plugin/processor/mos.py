@@ -20,7 +20,7 @@ class MosProcessor(BaseProcessor):
     def __init__(
         self,
         diff: int = 10,
-        prefix: str = "client_ping",
+        prefix: str = "mos",
         max_request_online: int = 100,
         max_channel_online: int = 100,
         max_error_cnt: int = 100,
@@ -56,7 +56,8 @@ class MosProcessor(BaseProcessor):
 
     def _get_cpu_percent(self) -> None:
         self._cpu_percent = psutil.cpu_percent()
-        get_event_loop().call_later(1, self._get_cpu_percent)
+        if self._run_cpu_percent:
+            get_event_loop().call_later(1, self._get_cpu_percent)
 
     def start_event_handle(self, app: "Server") -> None:
         self._run_cpu_percent = True
@@ -91,7 +92,7 @@ class MosProcessor(BaseProcessor):
             self.error_cnt_gauge.increment()
         if response.target.endswith(Constant.PONG_EVENT):
             mos: int = int(
-                10
+                5
                 * (1 - self._cpu_percent)
                 * (1 - (self.request_cnt_gauge.get_statistics_value() / self._max_request_cnt))
                 * (1 - (self.response_cnt_gauge.get_statistics_value() / self._max_response_cnt))
@@ -102,6 +103,6 @@ class MosProcessor(BaseProcessor):
             if mos < 1:
                 mos = 1
             if mos > 10:
-                mos = 10
+                mos = 5
             response.body["mos"] = mos
         return response
