@@ -100,8 +100,8 @@ class MosProcessor(BaseProcessor):
                 * (1 - (self.request_online_counter.get_statistics_value() - self._max_request_online))
                 * (1 - (self.channel_online_cnt_counter.get_statistics_value() - self._max_channel_online))
             )
-            if mos < 1:
-                mos = 1
+            if mos < 0:
+                mos = 0
             if mos > 10:
                 mos = 5
             response.body["mos"] = mos

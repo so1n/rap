@@ -148,7 +148,7 @@ class Connection(BaseConnection):
         self.available: bool = False
         self.last_ping_timestamp: float = time.time()
         self.rtt: float = 0.0
-        self.mos: int = 10
+        self.mos: int = 5
 
     async def connect(self) -> None:
         ssl_context: Optional[ssl.SSLContext] = None

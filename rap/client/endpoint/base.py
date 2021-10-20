@@ -3,7 +3,7 @@ import logging
 import random
 import time
 from enum import Enum, auto
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import Deadline, IgnoreDeadlineTimeoutExc
@@ -239,7 +239,7 @@ class BaseEndpoint(object):
             if self._connected_cnt <= 3:
                 cnt = self._connected_cnt
             else:
-                cnt = self._connected_cnt // 3
+                cnt = 3
         if cnt <= 0:
             cnt = 1
 
@@ -255,12 +255,14 @@ class BaseEndpoint(object):
         key_list: List[tuple] = list(self._conn_dict.keys())
         if not key_list:
             raise ConnectionError("Endpoint Can not found available conn")
-        conn_set: Set[Connection] = set()
-        while len(conn_set) < cnt:
+        conn_list: List[Connection] = []
+        for _ in range(cnt):
             key: tuple = random.choice(key_list)
-            conn_set.add(self._conn_dict[key])
+            conn: Connection = self._conn_dict[key]
+            if conn.available:
+                conn_list.append(conn)
 
-        return list([i for i in conn_set if i.available])
+        return conn_list
 
     def _round_robin_pick_conn(self, cnt: int) -> List[Connection]:
         """get conn by round robin"""
