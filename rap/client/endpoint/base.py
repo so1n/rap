@@ -139,9 +139,9 @@ class BaseEndpoint(object):
                 return
 
             next_ping_interval: int = random.randint(self._min_ping_interval, self._max_ping_interval)
-            deadline: Deadline = Deadline(next_ping_interval, timeout_exc=IgnoreDeadlineTimeoutExc())
             try:
-                await self._transport.ping(conn, deadline=deadline)
+                with Deadline(next_ping_interval, timeout_exc=IgnoreDeadlineTimeoutExc()):
+                    await self._transport.ping(conn)
             except asyncio.CancelledError:
                 return
             except Exception as e:
@@ -185,14 +185,14 @@ class BaseEndpoint(object):
                 logging.exception(msg)
 
         try:
-            with Deadline(self._declare_timeout) as deadline:
+            with Deadline(self._declare_timeout, timeout_exc=asyncio.TimeoutError(f"conn:{conn} declare timeout")):
                 await conn.connect()
                 logging.debug("Connection to %s...", conn.connection_info)
                 self._connected_cnt += 1
                 conn.available = True
                 conn.listen_future = asyncio.ensure_future(self._listen_conn(conn))
                 conn.listen_future.add_done_callback(lambda f: _conn_done(f))
-                await self._transport.declare(conn, deadline=deadline)
+                await self._transport.declare(conn)
         except Exception as e:
             await self.destroy(ip, port)
             raise e

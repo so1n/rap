@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING, Any, Optional, Sequence
 
 from rap.client.model import Response
-from rap.common.asyncio_helper import Deadline
 from rap.common.conn import Connection
 
 if TYPE_CHECKING:
@@ -19,7 +18,6 @@ class AsyncIteratorCall:
         arg_param: Sequence[Any],
         header: Optional[dict] = None,
         group: Optional[str] = None,
-        deadline: Optional[Deadline] = None,
     ):
         """
         :param name: func name
@@ -27,7 +25,6 @@ class AsyncIteratorCall:
         :param arg_param: rpc func param
         :param group: func's group, default value is `default`
         :param header: request header
-        :param deadline: request deadline
         """
         self._name: str = name
         self._client: "BaseClient" = client
@@ -36,7 +33,6 @@ class AsyncIteratorCall:
         self._arg_param: Sequence[Any] = arg_param
         self._header: Optional[dict] = header or {}
         self.group: Optional[str] = group
-        self._deadline: Optional[Deadline] = deadline
 
     #####################
     # async for support #
@@ -57,7 +53,6 @@ class AsyncIteratorCall:
             call_id=self._call_id,
             header=self._header,
             group=self.group,
-            deadline=self._deadline,
         )
         if response.status_code == 301:
             raise StopAsyncIteration()

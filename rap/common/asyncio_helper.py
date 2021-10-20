@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import sys
 import time
+from contextvars import ContextVar, Token
 from types import TracebackType
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Type, Union
 
@@ -117,10 +118,13 @@ class IgnoreDeadlineTimeoutExc(Exception):
     pass
 
 
+deadline_context: ContextVar[Optional["Deadline"]] = ContextVar("deadline_context", default=None)
+
+
 class Deadline(object):
     """
     cancel and timeout for human
-     The design is inspired by http://www.pdadians.com.cn/
+     The design is inspired by https://vorpus.org/blog/timeouts-and-cancellation-for-humans/
     """
 
     def __init__(
@@ -151,6 +155,8 @@ class Deadline(object):
         else:
             self._end_timestamp = None
             self._end_loop_time = None
+
+        self._context_token: Optional[Token] = None
 
     def _set_deadline_future_result(self) -> None:
         self._deadline_future.set_result(True)
@@ -219,6 +225,9 @@ class Deadline(object):
     def __enter__(self) -> "Deadline":
         if self._is_active:
             raise RuntimeError("`with` can only be called once")
+        if self._parent and self._parent._context_token:
+            deadline_context.reset(self._parent._context_token)
+        self._context_token = deadline_context.set(self)
         self._is_active = True
         if self._delay is not None:
             main_task: Optional[asyncio.Task] = current_task(self._loop)
@@ -233,6 +242,9 @@ class Deadline(object):
         exc_val: Optional[BaseException],
         exc_tb: Optional[TracebackType],
     ) -> Optional[bool]:
+        if self._context_token:
+            deadline_context.reset(self._context_token)
+            self._context_token = None
         self._is_active = False
         if self._delay is None:
             return None

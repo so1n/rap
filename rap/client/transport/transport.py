@@ -13,7 +13,7 @@ from rap.client.transport.channel import Channel
 from rap.client.utils import get_exc_status_code_dict, raise_rap_error
 from rap.common import event
 from rap.common import exceptions as rap_exc
-from rap.common.asyncio_helper import Deadline, as_first_completed, safe_del_future
+from rap.common.asyncio_helper import Deadline, as_first_completed, deadline_context, safe_del_future
 from rap.common.conn import Connection
 from rap.common.exceptions import RPCError
 from rap.common.snowflake import async_get_snowflake_id
@@ -169,17 +169,16 @@ class Transport(object):
 
         return response, exc
 
-    async def declare(self, conn: Connection, deadline: Deadline) -> None:
+    async def declare(self, conn: Connection) -> None:
         """
         After conn is initialized, connect to the server and initialize the connection resources.
         Only include server_name and get conn id two functions, if you need to expand the function,
           you need to process the request and response of the declared life cycle through the processor
         """
-        with deadline.inherit(timeout_exc=asyncio.TimeoutError(f"conn:{conn} declare timeout")):
-            response: Response = await self._base_request(
-                Request.from_event(self.app, event.DeclareEvent({"server_name": self.app.server_name})),
-                conn,
-            )
+        response: Response = await self._base_request(
+            Request.from_event(self.app, event.DeclareEvent({"server_name": self.app.server_name})),
+            conn,
+        )
 
         exc: Exception = ConnectionError(f"conn:{conn} declare error")
         if response.msg_type != Constant.SERVER_EVENT:
@@ -190,13 +189,12 @@ class Transport(object):
                 return
         raise exc
 
-    async def ping(self, conn: Connection, deadline: Deadline) -> None:
+    async def ping(self, conn: Connection) -> None:
         """
         Send three requests to check the response time of the client and server.
         At the same time, obtain the current quality score of the server to help the client better realize automatic
          load balancing (if the server supports this function)
         :param conn: client conn
-        :param deadline: recv ping deadline
         """
         start_time: float = time.time()
         mos: int = 5
@@ -209,8 +207,7 @@ class Transport(object):
             rtt += time.time() - start_time
             mos += response.body.get("mos", 5)
 
-        with deadline.inherit():
-            await asyncio.gather(*[_ping(), _ping(), _ping()])
+        await asyncio.gather(*[_ping(), _ping(), _ping()])
         mos = mos // 3
         rtt = rtt / 3
 
@@ -237,11 +234,10 @@ class Transport(object):
     ####################################
     # base one by one request response #
     ####################################
-    async def _base_request(self, request: Request, conn: Connection, deadline: Optional[Deadline] = None) -> Response:
+    async def _base_request(self, request: Request, conn: Connection) -> Response:
         """Send data to the server and get the response from the server.
         :param request: client request obj
         :param conn: client conn
-        :param deadline: recv response deadline, default None
 
         :return: return server response
         """
@@ -251,23 +247,16 @@ class Transport(object):
         try:
             response_future: asyncio.Future[Response] = asyncio.Future()
             self._resp_future_dict[resp_future_id] = response_future
-            if not deadline:
-                deadline = Deadline(None)
-            else:
-                deadline = deadline.inherit()
-            try:
-                with deadline:
-                    if self.app.through_deadline:
-                        request.header["X-rap-deadline"] = deadline.end_timestamp
-                    await self.write_to_conn(request, conn)
-                    response: Response = await as_first_completed(
-                        [response_future],
-                        not_cancel_future_list=[conn.conn_future],
-                    )
-                    response.state = request.state
-                    return response
-            except asyncio.TimeoutError:
-                raise asyncio.TimeoutError(f"msg_id:{resp_future_id} request timeout")
+            deadline: Optional[Deadline] = deadline_context.get()
+            if self.app.through_deadline and deadline:
+                request.header["X-rap-deadline"] = deadline.end_timestamp
+            await self.write_to_conn(request, conn)
+            response: Response = await as_first_completed(
+                [response_future],
+                not_cancel_future_list=[conn.conn_future],
+            )
+            response.state = request.state
+            return response
         finally:
             pop_future: Optional[asyncio.Future] = self._resp_future_dict.pop(resp_future_id, None)
             if pop_future:
@@ -303,7 +292,6 @@ class Transport(object):
         call_id: Optional[int] = None,
         group: Optional[str] = None,
         header: Optional[dict] = None,
-        deadline: Optional[Deadline] = None,
     ) -> Response:
         """msg request handle
         :param func_name: rpc func name
@@ -312,7 +300,6 @@ class Transport(object):
         :param call_id: server gen func next id
         :param group: func's group
         :param header: request header
-        :param deadline: request deadline
         """
         group = group or Constant.DEFAULT_GROUP
         call_id = call_id or -1
@@ -325,7 +312,7 @@ class Transport(object):
         )
         if header:
             request.header.update(header)
-        response: Response = await self._base_request(request, conn, deadline=deadline)
+        response: Response = await self._base_request(request, conn)
         if response.msg_type != Constant.MSG_RESPONSE:
             raise RPCError(f"response num must:{Constant.MSG_RESPONSE} not {response.msg_type}")
         if "exc" in response.body:
