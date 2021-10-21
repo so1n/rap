@@ -158,8 +158,79 @@ class Deadline(object):
 
         self._context_token: Optional[Token] = None
 
+    def _set_context(self) -> None:
+        """reset parent context and set self context"""
+        if self._parent and self._parent._context_token:
+            deadline_context.reset(self._parent._context_token)
+        self._context_token = deadline_context.set(self)
+
+    def _reset_contest(self) -> None:
+        """reset self context and set parent (if active) context"""
+        if self._context_token:
+            deadline_context.reset(self._context_token)
+            self._context_token = None
+        if self._parent and self._parent.is_active:
+            self._parent._context_token = deadline_context.set(self._parent)
+
     def _set_deadline_future_result(self) -> None:
+        """set deadline finish"""
         self._deadline_future.set_result(True)
+
+    def __await__(self) -> Any:
+        """wait deadline"""
+        return self._deadline_future.__await__()
+
+    #######################
+    # support `async with`#
+    #######################
+    async def __aenter__(self) -> "Deadline":
+        return self.__enter__()
+
+    async def __aexit__(
+        self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[TracebackType]
+    ) -> Optional[bool]:
+        return self.__exit__(exc_type, exc_val, exc_tb)
+
+    def __enter__(self) -> "Deadline":
+        if self._is_active:
+            raise RuntimeError("`with` can only be called once")
+        self._set_context()
+        self._is_active = True
+        if self._delay is not None:
+            main_task: Optional[asyncio.Task] = current_task(self._loop)
+            if not main_task:
+                raise RuntimeError("Can not found current task")
+            self._deadline_future.add_done_callback(lambda f: self._timeout(f, main_task))  # type: ignore
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> Optional[bool]:
+        try:
+            self._is_active = False
+            if self._delay is None:
+                return None
+            if self._deadline_future.done():
+                if exc_type:
+                    if isinstance(self._timeout_exc, IgnoreDeadlineTimeoutExc):
+                        return True
+                raise self._timeout_exc
+            else:
+                self._deadline_future.set_result(True)
+                return None
+        finally:
+            self._reset_contest()
+
+    @staticmethod
+    def _timeout(future: asyncio.Future, callback_future: asyncio.Future) -> None:
+        """call current task cancel"""
+        if not future.done():
+            return
+        if not callback_future.cancelled():
+            callback_future.cancel()
 
     def inherit(self, timeout_exc: Optional[Exception] = None) -> "Deadline":
         """gen child Deadline"""
@@ -175,13 +246,6 @@ class Deadline(object):
         self._child = deadline
         deadline._parent = self
         return deadline
-
-    @staticmethod
-    def _timeout(future: asyncio.Future, callback_future: asyncio.Future) -> None:
-        if not future.done():
-            return
-        if not callback_future.cancelled():
-            callback_future.cancel()
 
     @property
     def is_active(self) -> bool:
@@ -201,9 +265,6 @@ class Deadline(object):
     def end_loop_time(self) -> Optional[float]:
         return self._end_loop_time
 
-    def __await__(self) -> Any:
-        return self._deadline_future.__await__()
-
     async def wait_for(self, future: Union[asyncio.Future, Coroutine]) -> None:
         """wait future completed or deadline"""
         try:
@@ -213,46 +274,3 @@ class Deadline(object):
                 return
             else:
                 raise self._timeout_exc
-
-    async def __aenter__(self) -> "Deadline":
-        return self.__enter__()
-
-    async def __aexit__(
-        self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[TracebackType]
-    ) -> Optional[bool]:
-        return self.__exit__(exc_type, exc_val, exc_tb)
-
-    def __enter__(self) -> "Deadline":
-        if self._is_active:
-            raise RuntimeError("`with` can only be called once")
-        if self._parent and self._parent._context_token:
-            deadline_context.reset(self._parent._context_token)
-        self._context_token = deadline_context.set(self)
-        self._is_active = True
-        if self._delay is not None:
-            main_task: Optional[asyncio.Task] = current_task(self._loop)
-            if not main_task:
-                raise RuntimeError("Can not found current task")
-            self._deadline_future.add_done_callback(lambda f: self._timeout(f, main_task))  # type: ignore
-        return self
-
-    def __exit__(
-        self,
-        exc_type: Optional[Type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
-    ) -> Optional[bool]:
-        if self._context_token:
-            deadline_context.reset(self._context_token)
-            self._context_token = None
-        self._is_active = False
-        if self._delay is None:
-            return None
-        if self._deadline_future.done():
-            if exc_type:
-                if isinstance(self._timeout_exc, IgnoreDeadlineTimeoutExc):
-                    return True
-            raise self._timeout_exc
-        else:
-            self._deadline_future.set_result(True)
-            return None
