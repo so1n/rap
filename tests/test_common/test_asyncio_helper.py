@@ -86,9 +86,9 @@ class TestAsyncioHelperDeadline:
 
     async def test_deadline_timeout(self) -> None:
         with pytest.raises(asyncio.TimeoutError):
-            deadline: asyncio_helper.Deadline = asyncio_helper.Deadline(0.5)
+            deadline: asyncio_helper.Deadline = asyncio_helper.Deadline(0.1)
             with deadline:
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
 
     async def test_deadline_spec_timeout(self) -> None:
         exc: Exception = RuntimeError("test")
@@ -104,8 +104,10 @@ class TestAsyncioHelperDeadline:
         deadline: asyncio_helper.Deadline = asyncio_helper.Deadline(
             0.5, timeout_exc=asyncio_helper.IgnoreDeadlineTimeoutExc()
         )
+        start_time: float = time.time()
         with deadline:
             await asyncio.sleep(1)
+        assert 0.4 <= (time.time() - start_time) <= 0.6
 
     async def test_deadline_repeat_call_with_block(self) -> None:
         with pytest.raises(RuntimeError) as e:
@@ -136,3 +138,14 @@ class TestAsyncioHelperDeadline:
         start_time: float = asyncio.get_event_loop().time()
         await asyncio_helper.Deadline(0.5)
         assert 0.45 <= (asyncio.get_event_loop().time() - start_time) <= 0.55
+
+    async def test_deadline_context(self) -> None:
+        deadline: asyncio_helper.Deadline = asyncio_helper.Deadline(0.5)
+        with deadline:
+            assert deadline == asyncio_helper.deadline_context.get()
+            with deadline.inherit() as child_deadline:
+                context_deadline: Optional[asyncio_helper.Deadline] = asyncio_helper.deadline_context.get()
+                assert context_deadline
+                assert child_deadline == context_deadline
+                assert deadline == context_deadline._parent
+            assert deadline == asyncio_helper.deadline_context.get()
