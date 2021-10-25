@@ -109,7 +109,7 @@ class TestAsyncioHelperDeadline:
             await asyncio.sleep(1)
         assert 0.4 <= (time.time() - start_time) <= 0.6
 
-    async def test_deadline_repeat_call_with_block(self) -> None:
+    async def test_deadline_call_with_in_self_with_block(self) -> None:
         with pytest.raises(RuntimeError) as e:
             deadline: asyncio_helper.Deadline = asyncio_helper.Deadline(0.5)
             with deadline:
@@ -149,3 +149,13 @@ class TestAsyncioHelperDeadline:
                 assert child_deadline == context_deadline
                 assert deadline == context_deadline._parent
             assert deadline == asyncio_helper.deadline_context.get()
+
+    async def test_repeat_call_with_in_func(self) -> None:
+        deadline: asyncio_helper.Deadline = asyncio_helper.Deadline(0.5)
+        with deadline:
+            await asyncio.sleep(0.1)
+        with deadline:
+            await asyncio.sleep(0.1)
+        with pytest.raises(asyncio.TimeoutError):
+            with deadline:
+                await asyncio.sleep(1)

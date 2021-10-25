@@ -144,10 +144,10 @@ class Deadline(object):
         self._loop = loop or get_event_loop()
         self._timeout_exc: Exception = timeout_exc or asyncio.TimeoutError()
 
-        self._is_active: bool = False
         self._parent: Optional["Deadline"] = None
         self._child: Optional["Deadline"] = None
         self._deadline_future: asyncio.Future = asyncio.Future()
+        self._with_scope_future: Optional[asyncio.Future] = None
         if self._delay is not None:
             self._end_timestamp: Optional[float] = time.time() + self._delay
             self._end_loop_time: Optional[float] = self._loop.time() + self._delay
@@ -162,6 +162,7 @@ class Deadline(object):
         """reset parent context and set self context"""
         if self._parent and self._parent._context_token:
             deadline_context.reset(self._parent._context_token)
+            self._parent._context_token = None
         self._context_token = deadline_context.set(self)
 
     def _reset_contest(self) -> None:
@@ -175,6 +176,8 @@ class Deadline(object):
     def _set_deadline_future_result(self) -> None:
         """set deadline finish"""
         self._deadline_future.set_result(True)
+        if self._with_scope_future and not self._with_scope_future.cancelled():
+            self._with_scope_future.cancel()
 
     def __await__(self) -> Any:
         """wait deadline"""
@@ -192,15 +195,14 @@ class Deadline(object):
         return self.__exit__(exc_type, exc_val, exc_tb)
 
     def __enter__(self) -> "Deadline":
-        if self._is_active:
+        if self._with_scope_future:
             raise RuntimeError("`with` can only be called once")
         self._set_context()
-        self._is_active = True
         if self._delay is not None:
             main_task: Optional[asyncio.Task] = current_task(self._loop)
             if not main_task:
                 raise RuntimeError("Can not found current task")
-            self._deadline_future.add_done_callback(lambda f: self._timeout(f, main_task))  # type: ignore
+            self._with_scope_future = main_task
         return self
 
     def __exit__(
@@ -210,8 +212,9 @@ class Deadline(object):
         exc_tb: Optional[TracebackType],
     ) -> Optional[bool]:
         try:
-            self._is_active = False
-            if self._delay is None:
+            if self._with_scope_future:
+                self._with_scope_future = None
+            else:
                 return None
             if self._deadline_future.done():
                 if exc_type:
@@ -219,18 +222,9 @@ class Deadline(object):
                         return True
                 raise self._timeout_exc
             else:
-                self._deadline_future.set_result(True)
                 return None
         finally:
             self._reset_contest()
-
-    @staticmethod
-    def _timeout(future: asyncio.Future, callback_future: asyncio.Future) -> None:
-        """call current task cancel"""
-        if not future.done():
-            return
-        if not callback_future.cancelled():
-            callback_future.cancel()
 
     def inherit(self, timeout_exc: Optional[Exception] = None) -> "Deadline":
         """gen child Deadline"""
@@ -249,7 +243,7 @@ class Deadline(object):
 
     @property
     def is_active(self) -> bool:
-        return self._is_active
+        return self._with_scope_future is not None
 
     @property
     def surplus(self) -> Optional[float]:
