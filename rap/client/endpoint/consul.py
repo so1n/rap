@@ -7,6 +7,8 @@ from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import done_future
 from rap.common.coordinator.consul import ConsulClient
 
+logger: logging.Logger = logging.getLogger()
+
 
 class ConsulEndpoint(BaseEndpoint):
     """The endpoint will maintain the conn in memory according to the changes in the conn data in consul"""
@@ -35,6 +37,7 @@ class ConsulEndpoint(BaseEndpoint):
         consul_verify: bool = True,
         consul_cert: Optional[str] = None,
     ):
+        self.consul_url: str = f"{consul_scheme}://{consul_host}:{consul_port}"
         self.consul_client: ConsulClient = ConsulClient(
             namespace=consul_namespace,
             ttl=consul_ttl,
@@ -62,32 +65,36 @@ class ConsulEndpoint(BaseEndpoint):
         self.server_name: str = server_name
 
     async def stop(self) -> None:
-        await super().stop()
         if not self._watch_future.done() and not self._watch_future.cancelled():
             self._watch_future.cancel()
         await self.consul_client.stop()
+        await super().stop()
 
     async def _watch(self) -> None:
         async for conn_dict in self.consul_client.watch(self.server_name):
             if conn_dict:
-                for key, value in conn_dict.items():
+                for key, conn in self._conn_dict.items():
                     if key not in conn_dict:
-                        await self.destroy(value["host"], value["port"])
-                    del conn_dict[key]
+                        await self.destroy(conn.host, conn.port)
+                    else:
+                        conn_dict.pop(key, None)
             for key, value in conn_dict.items():
                 await self.create(value["host"], value["port"], value["weight"])
 
     async def start(self) -> None:
         if not self.is_close:
             raise ConnectionError(f"{self.__class__.__name__} is running")
+
+        logger.info(f"connect to consul:{self.consul_url}, wait discovery....")
         async for item in self.consul_client.discovery(self.server_name):
-            await self.create(item["host"], item["port"])
+            await self.create(item["host"], item["port"], item["weight"])
 
         if not self._conn_dict:
-            logging.warning(f"Can not found conn info from etcd, wait {self.server_name} server start")
+            logging.warning(
+                f"Can not found conn info from cousul, wait `{self.server_name}` server start and register to consul"
+            )
             async for conn_dict in self.consul_client.watch(self.server_name):
                 for key, value in conn_dict.items():
                     await self.create(value["host"], value["port"], value["weight"])
                     return
         self._watch_future = asyncio.ensure_future(self._watch())
-        await super().start()

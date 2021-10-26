@@ -242,7 +242,7 @@ class Transport(object):
         :return: return server response
         """
         if not request.correlation_id:
-            request.correlation_id = str(async_get_snowflake_id())
+            request.correlation_id = str(await async_get_snowflake_id())
         resp_future_id: str = f"{conn.sock_tuple}:{request.correlation_id}"
         try:
             response_future: asyncio.Future[Response] = asyncio.Future()

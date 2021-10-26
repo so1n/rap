@@ -36,7 +36,7 @@ class ConsulClient(BaseCoordinator):
         for service_id, future in self._heartbeat_future_dict.items():
             if not future.done() and not future.cancelled():
                 future.cancel()
-        self._client.close()
+        await self._client.http._session.close()
 
     async def _heartbeat(self, service_id: str) -> None:
         try:
@@ -45,6 +45,8 @@ class ConsulClient(BaseCoordinator):
                 try:
                     await self._client.agent.check.ttl_pass(service_id)
                     await asyncio.sleep(self._ttl // 2)
+                except asyncio.CancelledError:
+                    return
                 except Exception as e:
                     logger.exception(f"heartbeat id:{service_id}. error:{e}")
                 finally:
@@ -82,7 +84,7 @@ class ConsulClient(BaseCoordinator):
             result_dict["port"] = item["ServicePort"]
             yield result_dict
 
-    async def watch(self, server_name: str) -> AsyncGenerator[Dict[str, Dict[str, Any]], Any]:
+    async def watch(self, server_name: str) -> AsyncGenerator[Dict[tuple, Dict[str, Any]], Any]:
         index: Optional[str] = None
         while True:
             try:
@@ -91,7 +93,7 @@ class ConsulClient(BaseCoordinator):
                 )
                 index = resp[0]
 
-                conn_dict: Dict[str, Dict] = {}
+                conn_dict: Dict[tuple, Dict] = {}
                 for item in resp[1]:
                     host: str = item["ServiceAddress"]
                     port: int = item["ServicePort"]
@@ -101,8 +103,10 @@ class ConsulClient(BaseCoordinator):
                     result_dict: dict = json.loads(kv_resp[1]["Value"].decode())  # type: ignore
                     result_dict["host"] = host
                     result_dict["port"] = port
-                    conn_dict[f"{host}_{port}"] = result_dict
+                    conn_dict[(host, port)] = result_dict
                 yield conn_dict
+            except asyncio.CancelledError:
+                pass
             except Exception as e:
                 logger.exception(f"watch consul error:{e}")
             await asyncio.sleep(0.01)

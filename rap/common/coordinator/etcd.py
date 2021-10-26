@@ -15,8 +15,6 @@ ETCD_EVENT_VALUE_DICT_TYPE = TypedDict("ETCD_EVENT_VALUE_DICT_TYPE", {"key": str
 
 
 class EtcdClient(BaseCoordinator):
-    """TODO replace etcd client"""
-
     def __init__(
         self,
         host: str = "localhost",
@@ -38,6 +36,9 @@ class EtcdClient(BaseCoordinator):
         self._heartbeat_future: Optional[asyncio.Future] = None
 
     async def stop(self) -> None:
+        """
+        cancel heartbeat future and revoke lease
+        """
         if self._heartbeat_future and not self._heartbeat_future.done() and not self._heartbeat_future.cancelled():
             self._heartbeat_future.cancel()
         if self._lease_id:
@@ -50,7 +51,6 @@ class EtcdClient(BaseCoordinator):
                 logger.debug(f"heartbeat by etcd, id: {self._lease_id}")
                 try:
                     await self._client.lease_keep_alive(b'{"ID":%d}\n' % self._lease_id).resp
-                    await asyncio.sleep(self._ttl // 2)
                 except Exception as e:
                     logger.exception(f"heartbeat id:{self._lease_id}. error:{e}")
                 finally:
@@ -114,6 +114,8 @@ class EtcdClient(BaseCoordinator):
                                     await ret
                     elif "created" in resp_dict:
                         logging.info(f"watch {key} success")
+            except asyncio.CancelledError:
+                return
             except Exception as e:
                 logger.exception(f"watch etcd error:{e}")
             await asyncio.sleep(0.01)

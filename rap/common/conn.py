@@ -7,7 +7,7 @@ from typing import Any, Optional, Tuple
 
 import msgpack
 
-from rap.common.asyncio_helper import Semaphore, del_future, done_future
+from rap.common.asyncio_helper import Semaphore, del_future, done_future, safe_del_future
 from rap.common.state import State
 from rap.common.types import READER_TYPE, UNPACKER_TYPE, WRITER_TYPE
 from rap.common.utils import Constant
@@ -66,7 +66,7 @@ class BaseConnection:
                 pass
 
             while True:
-                data = self._reader.read(Constant.SOCKET_RECV_SIZE)
+                data = await self._reader.read(Constant.SOCKET_RECV_SIZE)
                 if not data:
                     raise ConnectionError(f"Connection to {self.peer_tuple} closed")
                 self._unpacker.feed(data)
@@ -150,6 +150,14 @@ class Connection(BaseConnection):
         self.rtt: float = 0.0
         self.mos: int = 5
 
+    @property
+    def host(self) -> str:
+        return self._host
+
+    @property
+    def port(self) -> int:
+        return self._port
+
     async def connect(self) -> None:
         ssl_context: Optional[ssl.SSLContext] = None
         if self._ssl_crt_path:
@@ -168,7 +176,7 @@ class Connection(BaseConnection):
         return super(Connection, self).is_closed() or self.listen_future.done()
 
     def close(self) -> None:
-        del_future(self.ping_future)
+        safe_del_future(self.ping_future)
         del_future(self.listen_future)
         super(Connection, self).close()
 

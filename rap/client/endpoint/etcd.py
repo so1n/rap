@@ -7,6 +7,8 @@ from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import del_future, done_future
 from rap.common.coordinator.etcd import ETCD_EVENT_VALUE_DICT_TYPE, EtcdClient
 
+logger: logging.Logger = logging.getLogger()
+
 
 class EtcdEndpoint(BaseEndpoint):
     """The endpoint will maintain the conn in memory according to the changes in the conn data in etcd"""
@@ -32,6 +34,7 @@ class EtcdEndpoint(BaseEndpoint):
         etcd_key_path: Optional[str] = None,
         etcd_ca_path: Optional[str] = None,
     ):
+        self.etcd_url: str = f"http://{etcd_host}:{etcd_port}"
         self.etcd_client: EtcdClient = EtcdClient(
             host=etcd_host,
             port=etcd_port,
@@ -64,12 +67,15 @@ class EtcdEndpoint(BaseEndpoint):
         """create conn by etcd info and init watch etcd info future"""
         if not self.is_close:
             raise ConnectionError(f"{self.__class__.__name__} is running")
+        logger.info(f"connect to etcd:{self.etcd_url}, wait discovery....")
         async for item in self.etcd_client.discovery(self.server_name):
             await self.create(item["host"], item["port"], item["weight"])
 
         wait_start_future: asyncio.Future = asyncio.Future()
         if not self._conn_dict:
-            logging.warning(f"Can not found conn info from etcd, wait {self.server_name} server start")
+            logging.warning(
+                f"Can not found conn info from etcd, wait {self.server_name} server start and register to etcd"
+            )
         else:
             wait_start_future.set_result(True)
 
@@ -93,4 +99,3 @@ class EtcdEndpoint(BaseEndpoint):
 
         self._watch_future = asyncio.ensure_future(self.etcd_client.watch(self.server_name, [create], [destroy]))
         await wait_start_future
-        await super().start()

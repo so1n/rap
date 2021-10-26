@@ -14,7 +14,6 @@ async def async_sum(a: int, b: int) -> int:
 async def main() -> None:
     await client.start()
     await async_sum(1, 2)
-    await asyncio.sleep(100)
     await client.stop()
 
 
