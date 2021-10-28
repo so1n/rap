@@ -53,6 +53,25 @@ class Constant(object):
     DEFAULT_GROUP: str = "default"
 
 
+class _SubRapFunc(object):
+    def __init__(self, func: Callable, raw_func: Callable, *args: Any, **kwargs: Any):
+        self.func: Callable = func
+        self.raw_func: Callable = raw_func
+
+        self._arg_param: Sequence[Any] = args
+        self._kwargs_param: Dict[str, Any] = kwargs
+
+        self.__name__ = self.func.__name__
+
+    def __await__(self) -> Any:
+        """support await coro(x, x)"""
+        return self.func(*self._arg_param, **self._kwargs_param).__await__()
+
+    def __aiter__(self) -> Any:
+        """support async for i in coro(x, x)"""
+        return self.func(*self._arg_param, **self._kwargs_param).__aiter__()
+
+
 class RapFunc(object):
     """
     Normally, a coroutine is created after calling the async function.
@@ -64,32 +83,10 @@ class RapFunc(object):
         self.func: Callable = func
         self.raw_func: Callable = raw_func
 
-        self._arg_param: Sequence[Any] = []
-        self._kwargs_param: Dict[str, Any] = {}
-        self._is_call: bool = False
-
         self.__name__ = self.func.__name__
 
-    def _check(self) -> None:
-        if not self._is_call:
-            raise RuntimeError(f"{self.__class__.__name__} has not been called")
-        self._is_call = False
-
-    def __call__(self, *args: Any, **kwargs: Any) -> "RapFunc":
-        self._arg_param = args
-        self._kwargs_param = kwargs
-        self._is_call = True
-        return self
-
-    def __await__(self) -> Any:
-        """support await coro(x, x)"""
-        self._check()
-        return self.func(*self._arg_param, **self._kwargs_param).__await__()
-
-    def __aiter__(self) -> Any:
-        """support async for i in coro(x, x)"""
-        self._check()
-        return self.func(*self._arg_param, **self._kwargs_param).__aiter__()
+    def __call__(self, *args: Any, **kwargs: Any) -> "_SubRapFunc":
+        return _SubRapFunc(self.func, self.raw_func, *args, **kwargs)
 
 
 def gen_random_time_id(length: int = 8, time_length: int = 10) -> str:
