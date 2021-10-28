@@ -15,7 +15,7 @@ from rap.common.signal_broadcast import add_signal_handler, remove_signal_handle
 from rap.common.snowflake import async_get_snowflake_id
 from rap.common.types import BASE_MSG_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utils import EventEnum, RapFunc
-from rap.server.context import context
+from rap.server.context import WithContext
 from rap.server.model import Request, Response
 from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware
 from rap.server.plugin.processor.base import BaseProcessor
@@ -311,7 +311,7 @@ class Server(object):
         conn: ServerConnection = ServerConnection(
             reader, writer, pack_param=self._pack_param, unpack_param=self._unpack_param
         )
-        conn.conn_id = str(async_get_snowflake_id())
+        conn.conn_id = str(await async_get_snowflake_id())
         try:
             self._connected_set.add(conn)
             await self._conn_handle(conn)
@@ -350,7 +350,7 @@ class Server(object):
                 await conn.await_close()
                 return
 
-            with context as c:
+            with WithContext() as c:
                 c.request = request
                 try:
                     response: Optional[Response] = await receiver.dispatch(request)
