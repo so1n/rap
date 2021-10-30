@@ -80,7 +80,7 @@ class _Snowflake(object):
         }
 
 
-_cache: Dict[Tuple[int, int], _Snowflake] = {}
+_snowflake_cache: Dict[Tuple[int, int], _Snowflake] = {}
 thread_lock: Lock = Lock()
 
 
@@ -89,11 +89,11 @@ def get_snowflake_id(wait_sequence: bool = True) -> int:
     pid: int = os.getpid()
     dc_worker_key: Tuple[int, int] = (dc, pid)
     with thread_lock:
-        if dc_worker_key not in _cache:
-            _cache[dc_worker_key] = _Snowflake(dc, pid)
+        if dc_worker_key not in _snowflake_cache:
+            _snowflake_cache[dc_worker_key] = _Snowflake(dc, pid)
         while True:
             try:
-                return _cache[dc_worker_key].get_next_id()
+                return _snowflake_cache[dc_worker_key].get_next_id()
             except WaitNextSequenceExc as e:
                 if wait_sequence:
                     time.sleep(0.001)
@@ -104,11 +104,11 @@ async def async_get_snowflake_id(wait_sequence: bool = True) -> int:
     dc: int = hash(socket.gethostname())
     pid: int = os.getpid()
     dc_worker_key: Tuple[int, int] = (dc, pid)
-    if dc_worker_key not in _cache:
-        _cache[dc_worker_key] = _Snowflake(dc, pid)
+    if dc_worker_key not in _snowflake_cache:
+        _snowflake_cache[dc_worker_key] = _Snowflake(dc, pid)
     while True:
         try:
-            return _cache[dc_worker_key].get_next_id()
+            return _snowflake_cache[dc_worker_key].get_next_id()
         except WaitNextSequenceExc as e:
             if wait_sequence:
                 await asyncio.sleep(0.001)

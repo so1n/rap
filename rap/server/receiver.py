@@ -231,7 +231,7 @@ class Receiver(object):
 
         # Check param type
         try:
-            param_tuple: tuple = param_handle(func_model.func, param, {})
+            param_tuple: tuple = param_handle(func_model.func_sig, param, {})
         except TypeError as e:
             raise ParseError(extra_msg=str(e))
 

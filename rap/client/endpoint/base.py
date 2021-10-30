@@ -35,7 +35,7 @@ class Picker(object):
         pick_conn: Optional[Connection] = None
         conn_len: int = len(conn_list)
         if conn_len == 1:
-            pick_conn = conn_list[0]
+            return conn_list[0]
         elif conn_len > 1:
             score: float = 0.0
             for conn in conn_list:
@@ -229,19 +229,11 @@ class BaseEndpoint(object):
         self._conn_dict = {}
         self._is_close = True
 
-    def picker(self, cnt: Optional[int] = None) -> Picker:
+    def picker(self, cnt: int = 3) -> Picker:
         """get conn by endpoint
         :param cnt: How many conn to get.
-          if the value is empty, it will automatically get 1/3 of the conn from the endpoint,
-          which should not be less than or equal to 0
         """
-        if not cnt:
-            if self._connected_cnt <= 3:
-                cnt = self._connected_cnt
-            else:
-                cnt = 3
-        if cnt <= 0:
-            cnt = 1
+        cnt = min(self._connected_cnt, cnt)
 
         conn_list: List[Connection] = self._pick_conn(cnt)
         return Picker(conn_list)
@@ -251,7 +243,6 @@ class BaseEndpoint(object):
 
     def _random_pick_conn(self, cnt: int) -> List[Connection]:
         """random get conn"""
-        cnt = min(cnt, len(self._conn_dict))
         key_list: List[tuple] = list(self._conn_dict.keys())
         if not key_list:
             raise ConnectionError("Endpoint Can not found available conn")

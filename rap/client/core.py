@@ -117,12 +117,13 @@ class BaseClient:
     def _async_register(self, func: Callable, group: Optional[str], name: str = "") -> RapFunc:
         """Decorate normal function"""
         name = name if name else func.__name__
-        return_type: Type = inspect.signature(func).return_annotation
+        func_sig: inspect.Signature = inspect.signature(func)
+        return_type: Type = func_sig.return_annotation
 
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             header: Optional[dict] = kwargs.pop("header", None)
-            result: Any = await self.raw_invoke(name, param_handle(func, args, kwargs), group=group, header=header)
+            result: Any = await self.raw_invoke(name, param_handle(func_sig, args, kwargs), group=group, header=header)
             if not is_type(return_type, type(result)):
                 raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
             return result
@@ -132,7 +133,8 @@ class BaseClient:
     def _async_gen_register(self, func: Callable, group: Optional[str], name: str = "") -> RapFunc:
         """Decoration generator function"""
         name = name if name else func.__name__
-        return_type: Type = inspect.signature(func).return_annotation
+        func_sig: inspect.Signature = inspect.signature(func)
+        return_type: Type = func_sig.return_annotation
 
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -142,7 +144,7 @@ class BaseClient:
                     name,
                     self,  # type: ignore
                     conn,
-                    param_handle(func, args, kwargs),
+                    param_handle(func_sig, args, kwargs),
                     group=group,
                     header=header,
                 ):
@@ -210,7 +212,7 @@ class BaseClient:
         if not kwarg_param:
             kwarg_param = {}
         return await self.raw_invoke(
-            func.__name__, param_handle(func, arg_param, kwarg_param), group=group, header=header
+            func.__name__, param_handle(inspect.signature(func), arg_param, kwarg_param), group=group, header=header
         )
 
     async def iterator_invoke(
@@ -238,7 +240,7 @@ class BaseClient:
                 func.__name__,
                 self,  # type: ignore
                 conn,
-                param_handle(func, arg_param, kwarg_param),
+                param_handle(inspect.signature(func), arg_param, kwarg_param),
                 header=header,
                 group=group,
             ):

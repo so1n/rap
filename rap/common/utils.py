@@ -106,23 +106,24 @@ response_num_dict: Dict[int, int] = {
 }
 
 
-def check_func_type(func: Callable, param_list: Sequence[Any], default_param_dict: Dict[str, Any]) -> None:
+def check_func_type(func_sig: inspect.Signature, param_list: Sequence[Any], default_param_dict: Dict[str, Any]) -> None:
     """Check whether the input parameter type is consistent with the function parameter type"""
-    func_sig: inspect.Signature = inspect.signature(func)
     for index, parameter_tuple in enumerate(func_sig.parameters.items()):
         name, parameter = parameter_tuple
         if parameter.default is parameter.empty:
-            if not is_type(type(param_list[index]), parameter.annotation):
-                raise TypeError(f"{param_list[index]} type must: {parameter.annotation}")
+            value: Any = param_list[index]
         else:
-            if not is_type(type(default_param_dict.get(name, parameter.default)), parameter.annotation):
-                raise TypeError(f"{default_param_dict[name]} type must: {parameter.annotation}")
+            value = default_param_dict.get(name, parameter.default)
+        if not is_type(type(value), parameter.annotation):
+            raise TypeError(f"{default_param_dict[name]} type must: {parameter.annotation}")
 
 
-def param_handle(func: Callable, param_list: Sequence[Any], default_param_dict: Dict[str, Any]) -> Tuple[Any, ...]:
+def param_handle(
+    func_sig: inspect.Signature, param_list: Sequence[Any], default_param_dict: Dict[str, Any]
+) -> Tuple[Any, ...]:
     """Check whether the parameter is legal and whether the parameter type is correct"""
-    new_param_list: Tuple[Any, ...] = inspect.signature(func).bind(*param_list, **default_param_dict).args
-    check_func_type(func, param_list, default_param_dict)
+    new_param_list: Tuple[Any, ...] = func_sig.bind(*param_list, **default_param_dict).args
+    check_func_type(func_sig, param_list, default_param_dict)
     return new_param_list
 
 

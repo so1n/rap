@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 
 import pytest
 
@@ -61,10 +62,10 @@ class TestUtil:
             pass
 
         with pytest.raises(TypeError):
-            check_func_type(_demo, (1, 2), {})
+            check_func_type(inspect.signature(_demo), (1, 2), {})
 
         with pytest.raises(TypeError):
-            check_func_type(_demo, (1, "2"), {"c": 3})
+            check_func_type(inspect.signature(_demo), (1, "2"), {"c": 3})
 
     async def test_cache(self) -> None:
         cache: Cache = Cache(1.5)

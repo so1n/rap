@@ -37,6 +37,8 @@ pre-commit = "^2.14.0"
 autoflake = "^1.4"
 flake8 = "^3.9.2"
 psutil = "^5.8.0"
+uvloop = "^0.16.0"
+msgpack-rpc-python = "^0.4.1"
 
 [tool.poetry.extras]
 crypto = ["pycrypto"]

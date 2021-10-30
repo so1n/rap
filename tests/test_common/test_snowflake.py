@@ -3,7 +3,7 @@ import time
 import pytest
 from pytest_mock import MockFixture
 
-from rap.common.snowflake import WaitNextSequenceExc, _cache, async_get_snowflake_id, get_snowflake_id
+from rap.common.snowflake import WaitNextSequenceExc, _snowflake_cache, async_get_snowflake_id, get_snowflake_id
 
 pytestmark = pytest.mark.asyncio
 
@@ -11,20 +11,20 @@ pytestmark = pytest.mark.asyncio
 class TestSnowFlake:
     def test_get_snowflake_id(self, mocker: MockFixture) -> None:
         # local host
-        _cache.clear()
+        _snowflake_cache.clear()
         for _ in range(10):
             get_snowflake_id()
-        assert len(_cache) == 1
+        assert len(_snowflake_cache) == 1
 
         # two local host
-        _cache.clear()
+        _snowflake_cache.clear()
         mocker.patch("socket.gethostname").return_value = "test_a"
         for _ in range(10):
             get_snowflake_id()
         mocker.patch("socket.gethostname").return_value = "test_b"
         for _ in range(10):
             get_snowflake_id()
-        assert len(_cache) == 2
+        assert len(_snowflake_cache) == 2
 
         # test wait sequence
         index: int = 0
@@ -36,20 +36,20 @@ class TestSnowFlake:
 
     async def test_async_get_snowflake_id(self, mocker: MockFixture) -> None:
         # local host
-        _cache.clear()
+        _snowflake_cache.clear()
         for _ in range(10):
             await async_get_snowflake_id()
-        assert len(_cache) == 1
+        assert len(_snowflake_cache) == 1
 
         # two local host
-        _cache.clear()
+        _snowflake_cache.clear()
         mocker.patch("socket.gethostname").return_value = "test_a"
         for _ in range(10):
             await async_get_snowflake_id()
         mocker.patch("socket.gethostname").return_value = "test_b"
         for _ in range(10):
             await async_get_snowflake_id()
-        assert len(_cache) == 2
+        assert len(_snowflake_cache) == 2
 
         # test wait sequence
         index: int = 0

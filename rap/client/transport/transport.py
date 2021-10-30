@@ -124,7 +124,9 @@ class Transport(object):
             elif response.func_name in (Constant.DECLARE, Constant.PONG_EVENT):
                 self._resp_future_dict[correlation_id].set_result(response)
             elif response.func_name == Constant.PING_EVENT:
-                await Deadline(3).wait_for(self.write_to_conn(Request.from_event(self.app, event.PongEvent("")), conn))
+                await asyncio.wait_for(
+                    self.write_to_conn(Request.from_event(self.app, event.PongEvent("")), conn), timeout=3
+                )
             else:
                 logging.error(f"recv not support event {response}")
         elif response.msg_type == Constant.CHANNEL_RESPONSE:
@@ -143,7 +145,9 @@ class Transport(object):
     async def _get_response_from_conn(self, conn: Connection) -> Tuple[Optional[Response], Optional[Exception]]:
         """recv server msg and gen response handle"""
         try:
-            response_msg: Optional[SERVER_BASE_MSG_TYPE] = await conn.read()
+            response_msg: Optional[SERVER_BASE_MSG_TYPE] = await asyncio.wait_for(
+                conn.read(), timeout=self._read_timeout
+            )
             logging.debug("recv raw data: %s", response_msg)
         except asyncio.TimeoutError as e:
             logging.error(f"recv response from {conn.connection_info} timeout")
@@ -180,21 +184,23 @@ class Transport(object):
             conn,
         )
 
-        exc: Exception = ConnectionError(f"conn:{conn} declare error")
-        if response.msg_type != Constant.SERVER_EVENT:
-            raise exc
-        elif response.func_name == Constant.DECLARE:
-            if response.body.get("result", False) and "conn_id" in response.body:
-                conn.conn_id = response.body["conn_id"]
-                return
-        raise exc
+        if (
+            response.msg_type == Constant.SERVER_EVENT
+            and response.func_name == Constant.DECLARE
+            and response.body.get("result", False)
+            and "conn_id" in response.body
+        ):
+            conn.conn_id = response.body["conn_id"]
+            return
+        raise ConnectionError(f"conn:{conn} declare error")
 
-    async def ping(self, conn: Connection) -> None:
+    async def ping(self, conn: Connection, cnt: int = 3) -> None:
         """
         Send three requests to check the response time of the client and server.
         At the same time, obtain the current quality score of the server to help the client better realize automatic
          load balancing (if the server supports this function)
         :param conn: client conn
+        :param cnt: ping cnt
         """
         start_time: float = time.time()
         mos: int = 5
@@ -207,9 +213,9 @@ class Transport(object):
             rtt += time.time() - start_time
             mos += response.body.get("mos", 5)
 
-        await asyncio.gather(*[_ping(), _ping(), _ping()])
-        mos = mos // 3
-        rtt = rtt / 3
+        await asyncio.gather(*[_ping() for _ in range(cnt)])
+        mos = mos // cnt
+        rtt = rtt / cnt
 
         # declare
         now_time: float = time.time()
@@ -241,8 +247,7 @@ class Transport(object):
 
         :return: return server response
         """
-        if not request.correlation_id:
-            request.correlation_id = str(await async_get_snowflake_id())
+        request.correlation_id = str(await async_get_snowflake_id())
         resp_future_id: str = f"{conn.sock_tuple}:{request.correlation_id}"
         try:
             response_future: asyncio.Future[Response] = asyncio.Future()
