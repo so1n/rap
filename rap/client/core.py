@@ -78,33 +78,33 @@ class BaseClient:
         for handler in self._event_dict[EventEnum.after_start]:
             handler(self)  # type: ignore
 
+    def _check_run(self) -> None:
+        if not self.is_close:
+            raise RuntimeError("The method cannot be called on the run")
+
     #########################
     # request event handler #
     #########################
     def register_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
-        if not self.is_close:
-            raise RuntimeError("The method cannot be called on the run")
+        self._check_run()
         self.transport.register_event_handle(event_class, fn)
 
     def unregister_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
-        if not self.is_close:
-            raise RuntimeError("The method cannot be called on the run")
+        self._check_run()
         self.transport.unregister_event_handle(event_class, fn)
 
     ########################
     # client event handler #
     ########################
     def register_client_event_handle(self, event_name: EventEnum, fn: CLIENT_EVENT_FN) -> None:
-        if not self.is_close:
-            raise RuntimeError("The method cannot be called on the run")
+        self._check_run()
         self._event_dict[event_name].append(fn)
 
     ############################
     # client processor handler #
     ############################
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:
-        if not self.is_close:
-            raise RuntimeError("The method cannot be called on the run")
+        self._check_run()
         for processor in processor_list:
             processor.app = self  # type: ignore
             for event_type, handle in processor.event_dict.items():
@@ -174,6 +174,23 @@ class BaseClient:
         """Whether the client is closed"""
         return self.endpoint.is_close
 
+    async def request(
+        self,
+        name: str,
+        arg_param: Optional[Sequence[Any]] = None,
+        header: Optional[dict] = None,
+        group: Optional[str] = None,
+    ) -> Response:
+        """rpc client base invoke method
+        Note: This method does not support parameter type checking, not support channels;
+        :param name: rpc func name
+        :param arg_param: rpc func param
+        :param group: func's group
+        :param header: request header
+        """
+        async with self.endpoint.picker() as conn:
+            return await self.transport.request(name, conn, arg_param, group=group, header=header)
+
     async def raw_invoke(
         self,
         name: str,
@@ -188,8 +205,7 @@ class BaseClient:
         :param group: func's group
         :param header: request header
         """
-        async with self.endpoint.picker() as conn:
-            response: Response = await self.transport.request(name, conn, arg_param, group=group, header=header)
+        response: Response = await self.request(name, arg_param, group=group, header=header)
         return response.body["result"]
 
     async def invoke(
@@ -266,7 +282,10 @@ class BaseClient:
         """Restore functions that have been injected"""
         if not isinstance(func, RapFunc):
             raise RuntimeError(f"{func} is not {RapFunc}, which can not recovery")
-        sys.modules[func.__module__].__setattr__(func.__name__, func.raw_func)
+        func_module: str = getattr(func.raw_func, "__module__")
+        if not func_module:
+            raise AttributeError(f"{type(func)} object has no attribute '__module__'")
+        sys.modules[func_module].__setattr__(func.__name__, func.raw_func)
 
     @staticmethod
     def get_raw_func(func: RapFunc) -> Callable:
