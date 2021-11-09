@@ -8,6 +8,8 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple
 from rap.common.asyncio_helper import get_event_loop
 from rap.common.cache import Cache
 
+logger: logging.Logger = logging.getLogger(__name__)
+
 
 #############
 #  Metric  #
@@ -252,7 +254,7 @@ class WindowStatistics(object):
             try:
                 await coro
             except Exception as e:
-                logging.exception(f"{self.__class__.__name__} run {fn} error: {e}")
+                logger.exception(f"{self.__class__.__name__} run {fn} error: {e}")
 
         async def _real_run_callback() -> None:
             # statistics callback is serial execution, no need to use lock
@@ -272,7 +274,7 @@ class WindowStatistics(object):
             return
         loop: asyncio.AbstractEventLoop = self._loop  # type: ignore
         self._loop_timestamp = loop.time()
-        logging.debug("%s run once at loop time: %s" % (self.__class__.__name__, self._start_timestamp))
+        logger.debug("%s run once at loop time: %s" % (self.__class__.__name__, self._start_timestamp))
         # call callback
         if self._statistics_callback_future and not self._statistics_callback_future.done():
             # The callback is still executing
@@ -285,7 +287,7 @@ class WindowStatistics(object):
                 loop.call_at(self._start_timestamp + self._statistics_interval, self._statistics_data)
                 return
             elif not self._statistics_callback_future.cancelled():
-                logging.warning("Callback collection execution timeout...cancel")
+                logger.warning("Callback collection execution timeout...cancel")
                 self._statistics_callback_future.cancel()
 
         self._statistics_callback_future = self._run_callback()

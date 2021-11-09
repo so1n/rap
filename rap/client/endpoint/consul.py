@@ -7,7 +7,7 @@ from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import done_future
 from rap.common.coordinator.consul import ConsulClient
 
-logger: logging.Logger = logging.getLogger()
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class ConsulEndpoint(BaseEndpoint):
@@ -90,7 +90,7 @@ class ConsulEndpoint(BaseEndpoint):
             await self.create(item["host"], item["port"], item["weight"])
 
         if not self._conn_dict:
-            logging.warning(
+            logger.warning(
                 f"Can not found conn info from cousul, wait `{self.server_name}` server start and register to consul"
             )
             async for conn_dict in self.consul_client.watch(self.server_name):

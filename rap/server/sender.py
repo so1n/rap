@@ -12,6 +12,7 @@ from rap.server.plugin.processor.base import BaseProcessor
 if TYPE_CHECKING:
     from rap.server.core import Server
 __all__ = ["Sender"]
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class Sender(object):
@@ -62,7 +63,7 @@ class Sender(object):
         if self._processor_list:
             for processor in reversed(self._processor_list):
                 resp = await processor.process_response(resp)
-        logging.debug("resp: %s", resp)
+        logger.debug("resp: %s", resp)
         msg_id: int = self._msg_id + 1
         # Avoid too big numbers
         self._msg_id = msg_id & self._max_msg_id

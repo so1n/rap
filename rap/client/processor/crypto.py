@@ -9,6 +9,8 @@ from rap.common.exceptions import CryptoError
 from rap.common.snowflake import async_get_snowflake_id
 from rap.common.utils import Constant, gen_random_time_id
 
+logger: logging.Logger = logging.getLogger(__name__)
+
 
 class BaseCryptoProcessor(BaseProcessor):
     _nonce_timeout: int = 60
@@ -113,6 +115,6 @@ class CryptoProcessor(BaseCryptoProcessor):
                 self._body_handle(response.body)
                 response.body = response.body["body"]
             except Exception as e:
-                logging.exception(f"decrypt error:{e}")
+                logger.exception(f"decrypt error:{e}")
                 raise CryptoError("Can't decrypt body.") from e
         return response

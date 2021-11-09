@@ -13,6 +13,7 @@ from rap.common.types import READER_TYPE, UNPACKER_TYPE, WRITER_TYPE
 from rap.common.utils import Constant
 
 __all__ = ["Connection", "ServerConnection"]
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class BaseConnection:
@@ -50,7 +51,7 @@ class BaseConnection:
     async def write(self, data: tuple) -> None:
         if not self._writer or self._is_closed:
             raise ConnectionError("connection has not been created")
-        logging.debug("write %s to %s", data, self.peer_tuple)
+        logger.debug("write %s to %s", data, self.peer_tuple)
         self._writer.write(msgpack.packb(data, **self._pack_param))
         await self._writer.drain()
 
@@ -60,7 +61,7 @@ class BaseConnection:
         try:
             try:
                 data: Any = next(self._unpacker)
-                logging.debug("read %s from %s", data, self.peer_tuple)
+                logger.debug("read %s from %s", data, self.peer_tuple)
                 return data
             except StopIteration:
                 pass
@@ -72,7 +73,7 @@ class BaseConnection:
                 self._unpacker.feed(data)
                 try:
                     data = next(self._unpacker)
-                    logging.debug("read %s from %s", data, self.peer_tuple)
+                    logger.debug("read %s from %s", data, self.peer_tuple)
                     return data
                 except StopIteration:
                     continue
@@ -164,7 +165,7 @@ class Connection(BaseConnection):
             ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
             ssl_context.check_hostname = False
             ssl_context.load_verify_locations(self._ssl_crt_path)
-            logging.info("connection enable ssl")
+            logger.info("connection enable ssl")
 
         self._reader, self._writer = await asyncio.open_connection(self._host, self._port, ssl=ssl_context)
         self.sock_tuple = self._writer.get_extra_info("sockname")

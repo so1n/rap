@@ -16,6 +16,9 @@ if TYPE_CHECKING:
 __all__ = ["Channel"]
 
 
+logger: logging.Logger = logging.getLogger(__name__)
+
+
 class Channel(BaseChannel[Response]):
     """client channel support"""
 
@@ -147,7 +150,7 @@ class Channel(BaseChannel[Response]):
             try:
                 while True:
                     response: Response = await self._base_read()
-                    logging.debug("drop msg:%s" % response)
+                    logger.debug("drop msg:%s" % response)
             except ChannelError as e:
                 if str(e) != self._drop_msg:
                     raise e
@@ -155,7 +158,7 @@ class Channel(BaseChannel[Response]):
         try:
             await asyncio.wait_for(wait_drop_response(), 3)
         except asyncio.TimeoutError:
-            logging.warning("wait drop response timeout")
+            logger.warning("wait drop response timeout")
 
     ######################
     # async with support #

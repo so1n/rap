@@ -113,7 +113,7 @@ class EtcdClient(BaseCoordinator):
                                 if inspect.iscoroutine(ret):
                                     await ret
                     elif "created" in resp_dict:
-                        logging.info(f"watch {key} success")
+                        logger.info(f"watch {key} success")
             except asyncio.CancelledError:
                 return
             except Exception as e:

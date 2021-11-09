@@ -12,6 +12,8 @@ from rap.common.types import is_json_type
 from rap.common.utils import Constant
 from rap.server.model import Request
 
+logger: logging.Logger = logging.getLogger(__name__)
+
 
 class FuncModel(object):
     def __init__(
@@ -146,7 +148,7 @@ class RegistryManager(object):
         self.func_dict[func_key] = FuncModel(
             group=group, func_type=func_type, func_name=name, func=func, is_private=is_private, doc=doc
         )
-        logging.debug(f"register `{func_key}` success")
+        logger.debug(f"register `{func_key}` success")
 
     @staticmethod
     def _load_func(path: str, func_str: str) -> FunctionType:

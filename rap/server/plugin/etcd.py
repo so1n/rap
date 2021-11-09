@@ -7,7 +7,7 @@ from rap.common.utils import EventEnum
 if TYPE_CHECKING:
     from rap.server import Server
 
-logger: logging.Logger = logging.getLogger()
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def add_etcd_client(

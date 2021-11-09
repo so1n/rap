@@ -23,6 +23,7 @@ from rap.common.utils import Constant
 if TYPE_CHECKING:
     from rap.client.core import BaseClient
 __all__ = ["Transport"]
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class Transport(object):
@@ -87,7 +88,7 @@ class Transport(object):
         elif isinstance(put_exc, rap_exc.ServerError):
             raise put_exc
         else:
-            logging.error(f"recv error msg:{response}, ignore")
+            logger.error(f"recv error msg:{response}, ignore")
 
     # flake8: noqa: C901
     async def dispatch_resp_from_conn(self, conn: Connection) -> None:
@@ -95,7 +96,7 @@ class Transport(object):
         response, exc = await self._get_response_from_conn(conn)
         if not response:
             # not response data, not a legal response
-            logging.error(str(exc))
+            logger.error(str(exc))
             return
 
         correlation_id: str = f"{conn.sock_tuple}:{response.correlation_id}"
@@ -115,11 +116,11 @@ class Transport(object):
                     try:
                         fn(response)
                     except Exception as e:
-                        logging.exception(f"run event name:{response.func_name} raise error:{e}")
+                        logger.exception(f"run event name:{response.func_name} raise error:{e}")
             # server event msg handle
             if response.func_name == Constant.EVENT_CLOSE_CONN:
                 # server want to close...do not send data
-                logging.error(f"recv close conn event, event info:{response.body}")
+                logger.error(f"recv close conn event, event info:{response.body}")
                 conn.available = False
             elif response.func_name in (Constant.DECLARE, Constant.PONG_EVENT):
                 self._resp_future_dict[correlation_id].set_result(response)
@@ -128,18 +129,18 @@ class Transport(object):
                     self.write_to_conn(Request.from_event(self.app, event.PongEvent("")), conn), timeout=3
                 )
             else:
-                logging.error(f"recv not support event {response}")
+                logger.error(f"recv not support event {response}")
         elif response.msg_type == Constant.CHANNEL_RESPONSE:
             # put msg to channel
             if correlation_id not in self._channel_queue_dict:
-                logging.error(f"recv channel msg, but channel not create. channel id:{correlation_id}")
+                logger.error(f"recv channel msg, but channel not create. channel id:{correlation_id}")
             else:
                 self._channel_queue_dict[correlation_id].put_nowait(response)
         elif response.msg_type == Constant.MSG_RESPONSE and correlation_id in self._resp_future_dict:
             # set msg to future_dict's `future`
             self._resp_future_dict[correlation_id].set_result(response)
         else:
-            logging.error(f"Can' parse response: {response}, ignore")
+            logger.error(f"Can' parse response: {response}, ignore")
         return
 
     async def _get_response_from_conn(self, conn: Connection) -> Tuple[Optional[Response], Optional[Exception]]:
@@ -148,9 +149,9 @@ class Transport(object):
             response_msg: Optional[SERVER_BASE_MSG_TYPE] = await asyncio.wait_for(
                 conn.read(), timeout=self._read_timeout
             )
-            logging.debug("recv raw data: %s", response_msg)
+            logger.debug("recv raw data: %s", response_msg)
         except asyncio.TimeoutError as e:
-            logging.error(f"recv response from {conn.connection_info} timeout")
+            logger.error(f"recv response from {conn.connection_info} timeout")
             raise e
 
         if response_msg is None:

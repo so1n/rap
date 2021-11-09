@@ -9,6 +9,8 @@ from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 from rap.client import Client
 from rap.common.asyncio_helper import as_first_completed
 
+logger: logging.Logger = logging.getLogger(__name__)
+
 
 def before_check(
     server_name: str, group: str, func_name: str, func_type: str, request: HTTPConnection

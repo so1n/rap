@@ -11,6 +11,7 @@ from typing import Dict, Tuple
 
 from typing_extensions import TypedDict
 
+logger: logging.Logger = logging.getLogger(__name__)
 EPOCH_TIMESTAMP: int = 550281600000
 StatsTypedDict = TypedDict(
     "StatsTypedDict",
@@ -58,7 +59,7 @@ class _Snowflake(object):
 
         if self.sequence > 4095:
             # the sequence is overload, just wait to next sequence
-            logging.warning("The sequence has been overload")
+            logger.warning("The sequence has been overload")
             self.sequence_overload += 1
             raise WaitNextSequenceExc("The sequence is overload, just wait to next sequence")
 

@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from rap.server.core import Server
     from rap.server.types import SERVER_EVENT_FN
 
+logger: logging.Logger = logging.getLogger(__name__)
+
 
 class ConnLimitMiddleware(BaseConnMiddleware):
     """
@@ -117,7 +119,7 @@ class IpMaxConnMiddleware(BaseConnMiddleware):
         try:
             if now_cnt > self._ip_max_conn:
                 msg: str = f"Currently exceeding the maximum number of ip conn limit, close {conn.peer_tuple}"
-                logging.error(msg)
+                logger.error(msg)
                 await Sender(self.app, conn).send_event(CloseConnEvent(msg))
                 await conn.await_close()
             else:

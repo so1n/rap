@@ -11,6 +11,8 @@ from rap.common.utils import Constant
 if TYPE_CHECKING:
     from rap.server import Request
 
+logger: logging.Logger = logging.getLogger(__name__)
+
 
 class Channel(BaseChannel["Request"]):
     """server channel support"""
@@ -39,7 +41,7 @@ class Channel(BaseChannel["Request"]):
         try:
             await func(UserChannel(self))
         except Exception as e:
-            logging.debug("channel:%s, func: %s, ignore raise exc:%s", self.channel_id, func.__name__, e)
+            logger.debug("channel:%s, func: %s, ignore raise exc:%s", self.channel_id, func.__name__, e)
         finally:
             if not self.is_close:
                 await self.close()
@@ -63,7 +65,7 @@ class Channel(BaseChannel["Request"]):
 
     async def close(self) -> None:
         if self.is_close:
-            logging.debug("already close channel %s", self.channel_id)
+            logger.debug("already close channel %s", self.channel_id)
             return
         self.set_exc(ChannelError(f"channel {self.channel_id} is close"))
 

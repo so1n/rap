@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from rap.server.core import Server
 
 __all__ = ["Receiver"]
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class Receiver(object):
@@ -118,7 +119,7 @@ class Receiver(object):
 
         # check type_id
         if response.msg_type is Constant.SERVER_ERROR_RESPONSE:
-            logging.error(f"parse request data: {request} from {self._conn.peer_tuple} error")
+            logger.error(f"parse request data: {request} from {self._conn.peer_tuple} error")
             response.set_exception(ServerError("Illegal request"))
             return response
 
@@ -128,7 +129,7 @@ class Receiver(object):
                     request = await processor.process_request(request)
             except Exception as e:
                 if not isinstance(e, BaseRapError):
-                    logging.exception(e)
+                    logger.exception(e)
                 response.set_exception(e)
                 return response
 
@@ -139,8 +140,8 @@ class Receiver(object):
             response.set_exception(e)
             return response
         except Exception as e:
-            logging.debug(e)
-            logging.debug(traceback.format_exc())
+            logger.debug(e)
+            logger.debug(traceback.format_exc())
             response.set_exception(RpcRunTimeError())
             return response
 
@@ -164,7 +165,7 @@ class Receiver(object):
             except asyncio.TimeoutError:
                 continue
             except Exception as e:
-                logging.exception(f"{self._conn} ping event exit.. error:<{e.__class__.__name__}>[{e}]")
+                logger.exception(f"{self._conn} ping event exit.. error:<{e.__class__.__name__}>[{e}]")
                 return
 
     async def channel_handle(self, request: Request, response: Response) -> Optional[Response]:
@@ -293,7 +294,7 @@ class Receiver(object):
         else:
             response.body["result"] = result
             if not is_type(func_model.return_type, type(result)):
-                logging.warning(
+                logger.warning(
                     f"{func_model.func} return type is {func_model.return_type}, but result type is {type(result)}"
                 )
                 response.status_code = 302
@@ -308,7 +309,7 @@ class Receiver(object):
                 try:
                     fn(request)
                 except Exception as e:
-                    logging.exception(f"run event name:{response.target} raise error:{e}")
+                    logger.exception(f"run event name:{response.target} raise error:{e}")
 
         # rap event handle
         if request.func_name == Constant.PONG_EVENT:

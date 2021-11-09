@@ -9,6 +9,8 @@ from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import Deadline, IgnoreDeadlineTimeoutExc
 from rap.common.conn import Connection
 
+logger: logging.Logger = logging.getLogger(__name__)
+
 
 class BalanceEnum(Enum):
     """Balance method
@@ -43,7 +45,7 @@ class Picker(object):
                 _score: float = conn.score
                 if conn_inflight:
                     _score = _score / conn_inflight
-                logging.debug("conn:%s available:%s rtt:%s score:%s", conn.peer_tuple, conn.available, conn.rtt, _score)
+                logger.debug("conn:%s available:%s rtt:%s score:%s", conn.peer_tuple, conn.available, conn.rtt, _score)
                 if _score > score:
                     score = _score
                     pick_conn = conn
@@ -113,7 +115,7 @@ class BaseEndpoint(object):
 
     async def _listen_conn(self, conn: Connection) -> None:
         """listen server msg from conn"""
-        logging.debug("listen:%s start", conn.peer_tuple)
+        logger.debug("listen:%s start", conn.peer_tuple)
         try:
             while not conn.is_closed():
                 await self._transport.dispatch_resp_from_conn(conn)
@@ -121,7 +123,7 @@ class BaseEndpoint(object):
             pass
         except Exception as e:
             conn.set_reader_exc(e)
-            logging.exception(f"listen {conn.connection_info} error:{e}")
+            logger.exception(f"listen {conn.connection_info} error:{e}")
             if not conn.is_closed():
                 await conn.await_close()
 
@@ -133,9 +135,9 @@ class BaseEndpoint(object):
             diff_time: float = now_time - conn.last_ping_timestamp
             available: bool = diff_time < ping_fail_interval
             conn.available = available
-            logging.debug("conn:%s available:%s rtt:%s", conn.peer_tuple, available, conn.rtt)
+            logger.debug("conn:%s available:%s rtt:%s", conn.peer_tuple, available, conn.rtt)
             if not available and not self._wait_server_recover:
-                logging.error(f"ping {conn.sock_tuple} timeout... exit")
+                logger.error(f"ping {conn.sock_tuple} timeout... exit")
                 return
 
             next_ping_interval: int = random.randint(self._min_ping_interval, self._max_ping_interval)
@@ -145,7 +147,7 @@ class BaseEndpoint(object):
             except asyncio.CancelledError:
                 return
             except Exception as e:
-                logging.debug(f"{conn} ping event error:{e}")
+                logger.debug(f"{conn} ping event error:{e}")
 
             await conn.conn_future
 
@@ -182,12 +184,12 @@ class BaseEndpoint(object):
                 msg: str = f"close conn error: {_e}"
                 if f.exception():
                     msg += f", conn done exc:{f.exception()}"
-                logging.exception(msg)
+                logger.exception(msg)
 
         try:
             with Deadline(self._declare_timeout, timeout_exc=asyncio.TimeoutError(f"conn:{conn} declare timeout")):
                 await conn.connect()
-                logging.debug("Connection to %s...", conn.connection_info)
+                logger.debug("Connection to %s...", conn.connection_info)
                 self._connected_cnt += 1
                 conn.available = True
                 conn.listen_future = asyncio.ensure_future(self._listen_conn(conn))

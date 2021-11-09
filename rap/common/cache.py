@@ -6,6 +6,8 @@ from typing import Any, Dict, Generator, Optional, Tuple
 
 from .asyncio_helper import get_event_loop
 
+logger: logging.Logger = logging.getLogger(__name__)
+
 
 class Cache(object):
     """Dict with expiration time function"""
@@ -126,7 +128,7 @@ class Cache(object):
                     break
 
         next_call_interval: float = self._idling_times * self._interval
-        logging.debug(
+        logger.debug(
             f"{self.__class__.__name__} auto remove key length:{len(key_list)}, clean cnt:{index},"
             f"until the next call:{next_call_interval}"
         )

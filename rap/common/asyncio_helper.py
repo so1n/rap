@@ -165,7 +165,7 @@ class Deadline(object):
             self._parent._context_token = None
         self._context_token = deadline_context.set(self)
 
-    def _reset_contest(self) -> None:
+    def _reset_context(self) -> None:
         """reset self context and set parent (if active) context"""
         if self._context_token:
             deadline_context.reset(self._context_token)
@@ -224,7 +224,7 @@ class Deadline(object):
             else:
                 return None
         finally:
-            self._reset_contest()
+            self._reset_context()
 
     def inherit(self, timeout_exc: Optional[Exception] = None) -> "Deadline":
         """gen child Deadline"""

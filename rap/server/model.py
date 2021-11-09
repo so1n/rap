@@ -14,6 +14,9 @@ if TYPE_CHECKING:
     from rap.server.core import Server
 
 
+logger: logging.Logger = logging.getLogger(__name__)
+
+
 class ServerMsgProtocol(BaseMsgProtocol):
     app: "Server"
 
@@ -64,7 +67,7 @@ class Response(ServerMsgProtocol):
         if not isinstance(exc, Exception):
             raise TypeError(f"{exc} type must Exception")
         if not isinstance(exc, BaseRapError):
-            logging.error(exc)
+            logger.error(exc)
             exc = ServerError(str(exc))
         self.body = str(exc)
         self.status_code = exc.status_code

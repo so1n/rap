@@ -25,6 +25,7 @@ from rap.server.sender import Sender
 from rap.server.types import SERVER_EVENT_FN
 
 __all__ = ["Server"]
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class Server(object):
@@ -226,7 +227,7 @@ class Server(object):
                 if is_raise:
                     raise e
                 else:
-                    logging.exception(f"server event<{event_type}:{callback}> run error:{e}")
+                    logger.exception(f"server event<{event_type}:{callback}> run error:{e}")
 
     async def create_server(self) -> "Server":
         """start server"""
@@ -236,7 +237,7 @@ class Server(object):
         self._server = await asyncio.start_server(
             self.conn_handle, self.host, self.port, ssl=self._ssl_context, backlog=self._backlog
         )
-        logging.info(f"server running on {self.host}:{self.port}. use ssl:{bool(self._ssl_context)}")
+        logger.info(f"server running on {self.host}:{self.port}. use ssl:{bool(self._ssl_context)}")
         await self.run_event_list(EventEnum.after_start)
 
         # fix different loop event
@@ -250,7 +251,7 @@ class Server(object):
             await self.create_server()
 
         def _shutdown(signum: int, frame: Any) -> None:
-            logging.debug("Receive signal %s, run shutdown...", signum)
+            logger.debug("Receive signal %s, run shutdown...", signum)
             asyncio.ensure_future(self.shutdown())
 
         if threading.current_thread() is not threading.main_thread():
@@ -295,11 +296,11 @@ class Server(object):
                     send_shutdown_event(conn) for conn in self._connected_set if not conn.is_closed()
                 ]
                 if task_list:
-                    logging.info("send shutdown event to client")
+                    logger.info("send shutdown event to client")
                 await asyncio.gather(*task_list)
 
                 # until connections close
-                logging.info(f"{self} Waiting for connections to close. (CTRL+C to force quit)")
+                logger.info(f"{self} Waiting for connections to close. (CTRL+C to force quit)")
                 while self._connected_set:
                     await asyncio.sleep(0.1)
                 await self.run_event_list(EventEnum.after_end, is_raise=True)
@@ -345,7 +346,7 @@ class Server(object):
             try:
                 request: Request = Request.from_msg(self, _request_msg, conn)  # type: ignore
             except Exception as closer_e:
-                logging.error(f"{conn.peer_tuple} send bad msg:{_request_msg}, error:{closer_e}")
+                logger.error(f"{conn.peer_tuple} send bad msg:{_request_msg}, error:{closer_e}")
                 await sender.send_event(event.CloseConnEvent("protocol error"))
                 await conn.await_close()
                 return

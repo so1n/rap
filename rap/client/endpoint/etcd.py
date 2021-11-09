@@ -7,7 +7,7 @@ from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import del_future, done_future
 from rap.common.coordinator.etcd import ETCD_EVENT_VALUE_DICT_TYPE, EtcdClient
 
-logger: logging.Logger = logging.getLogger()
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class EtcdEndpoint(BaseEndpoint):
@@ -73,7 +73,7 @@ class EtcdEndpoint(BaseEndpoint):
 
         wait_start_future: asyncio.Future = asyncio.Future()
         if not self._conn_dict:
-            logging.warning(
+            logger.warning(
                 f"Can not found conn info from etcd, wait {self.server_name} server start and register to etcd"
             )
         else:
@@ -95,7 +95,7 @@ class EtcdEndpoint(BaseEndpoint):
                 raise KeyError(f"Can not found key:{etcd_value_dict['key']}")
             await self.destroy(conn_dict["host"], conn_dict["port"])
             if not self._conn_dict:
-                logging.warning("client not conn")
+                logger.warning("client not conn")
 
         self._watch_future = asyncio.ensure_future(self.etcd_client.watch(self.server_name, [create], [destroy]))
         await wait_start_future

@@ -8,7 +8,7 @@ from consul.aio import Consul
 
 from .bass import BaseCoordinator
 
-logger: logging.Logger = logging.getLogger()
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class ConsulClient(BaseCoordinator):

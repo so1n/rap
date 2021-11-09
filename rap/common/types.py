@@ -40,8 +40,10 @@ def parse_typing(_type: Any) -> Union[List[Type[Any]], Type]:
     >>> assert dict is parse_typing(Union[Dict[str, Any]])
     """
     if isinstance(_type, _GenericAlias):
-        origin: type = _type.__origin__
+        # support typing.xxx
+        origin: type = _type.__origin__  # get typing.xxx's raw type
         if origin is Union:
+            # support Union, Optional
             type_list: List[Type[Any]] = []
             for i in _type.__args__:
                 if isinstance(i, list):
@@ -59,6 +61,7 @@ def parse_typing(_type: Any) -> Union[List[Type[Any]], Type]:
                         type_list.append(value)
             return type_list
         elif origin in (AsyncIterator, Iterator):
+            # support AsyncIterator, Iterator
             return _type.__args__[0]
         return origin
     elif _type in _CAN_JSON_TYPE_SET:

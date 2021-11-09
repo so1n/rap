@@ -5,6 +5,8 @@ from rap.common.utils import Constant
 from rap.server.model import Request, Response
 from rap.server.plugin.processor.base import BaseProcessor
 
+logger: logging.Logger = logging.getLogger(__name__)
+
 
 class AccessProcessor(BaseProcessor):
     """print access log"""
@@ -17,14 +19,14 @@ class AccessProcessor(BaseProcessor):
             request.msg_type == Constant.CHANNEL_REQUEST
             and request.header.get("channel_life_cycle", "error") == Constant.DECLARE
         ):
-            logging.info(f"host:{host} declare channel. group:{request.group} func:{request.func_name}")
+            logger.info(f"host:{host} declare channel. group:{request.group} func:{request.func_name}")
         return request
 
     async def process_response(self, response: Response) -> Response:
         host: str = response.header["host"]
         status_code: int = response.header["status_code"]
         if response.msg_type == Constant.MSG_RESPONSE:
-            logging.info(
+            logger.info(
                 f"host:{host}, target: {response.target},"
                 f" time:{time.time() - response.state.access_processor_start_time }, status:{status_code >= 400}"
             )
@@ -32,5 +34,5 @@ class AccessProcessor(BaseProcessor):
             response.msg_type == Constant.CHANNEL_RESPONSE
             and response.header.get("channel_life_cycle", "error") == Constant.DROP
         ):
-            logging.info(f"host:{host}, target: {response.target} drop")
+            logger.info(f"host:{host}, target: {response.target} drop")
         return response
