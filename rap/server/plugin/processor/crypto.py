@@ -151,6 +151,13 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
     The auto-negotiation key of this mode is in plain text, which may be attacked
     """
 
+    def __init__(
+        self,
+        timeout: int = 60,
+        nonce_timeout: int = 120,
+    ):
+        super(AutoCryptoProcessor, self).__init__({}, timeout=timeout, nonce_timeout=nonce_timeout)
+
     async def process_request(self, request: Request) -> Request:
         assert request.conn is not None, "Not found conn from request"
         if request.msg_type == Constant.CLIENT_EVENT and request.target.endswith(Constant.DECLARE):
@@ -159,12 +166,12 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
             crypto_key: str = request.body.get("crypto_key", "")
             if not crypto_id or not crypto_key or not check_id:
                 raise CryptoError("crypto param error")
-            request.conn.state.crypto = Crypto(crypto_key)
+            crypto: Crypto = Crypto(crypto_key)
             try:
-                request.conn.state.crypto.decrypt_object(check_id)
+                request.state.check_id = crypto.decrypt_object(check_id)
             except Exception:
                 raise CryptoError("crypto check error")
-            request.app.cache.add(f"auto_crypto:{request.conn.conn_id}:init", 3, check_id)
+            request.conn.state.crypto = crypto
             return request
         else:
             return await super().decrypt_request(request)
@@ -172,10 +179,11 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
     async def process_response(self, response: Response) -> Response:
         assert response.conn is not None, "Not found conn from response"
         if response.msg_type == Constant.SERVER_EVENT and response.target.endswith(Constant.DECLARE):
-            check_id: str = response.app.cache.get(f"auto_crypto:{response.conn.conn_id}:init", "")
-            if not check_id:
+            try:
+                check_id: int = response.state.check_id
+            except KeyError:
                 raise CryptoError("check id error")
-            response.body["check_body"] = response.conn.state.crypto.encrypt_object(check_id)
+            response.body["check_id"] = response.conn.state.crypto.encrypt_object(check_id + 1)
             return response
         else:
             return await super().encrypt_response(response)

@@ -1,4 +1,5 @@
 import logging
+import random
 import time
 from typing import Optional
 
@@ -47,17 +48,22 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
         assert request.conn is not None, "Not found conn from request"
         if request.msg_type == Constant.CLIENT_EVENT and request.target.endswith(Constant.DECLARE):
             crypto_key: str = gen_random_time_id(length=6, time_length=10)
-            crypto_id: str = str(async_get_snowflake_id())
-            check_id: str = str(async_get_snowflake_id())
+            crypto_id: str = str(await async_get_snowflake_id())
             request.body["crypto_id"] = crypto_id
             request.body["crypto_key"] = crypto_key
-            request.body["check_id"] = check_id
             request.conn.state.crypto = Crypto(crypto_key)
-            self.app.cache.add(crypto_id, 10, check_id)
+            check_id: int = random.randint(0, 999999)
+            request.body["check_id"] = request.conn.state.crypto.encrypt_object(check_id)
+            request.state.check_id = check_id
+            # self.app.cache.add(crypto_id, 10, check_id)
         elif request.msg_type in (Constant.MSG_REQUEST, Constant.CHANNEL_REQUEST):
             try:
                 crypto: Crypto = request.conn.state.crypto
-                request.body = {"body": request.body, "timestamp": int(time.time()), "nonce": async_get_snowflake_id()}
+                request.body = {
+                    "body": request.body,
+                    "timestamp": int(time.time()),
+                    "nonce": await async_get_snowflake_id(),
+                }
                 request.body = crypto.encrypt_object(request.body)
             except Exception as e:
                 raise CryptoError("Can't encrypt body.") from e
@@ -67,9 +73,7 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
         crypto: Crypto = response.conn.state.crypto
         try:
             if response.msg_type == Constant.SERVER_EVENT and response.target.endswith(Constant.DECLARE):
-                if crypto.decrypt_object(response.body["check_id"]) != self.app.cache.get(
-                    response.body["crypto_id"], ""
-                ):
+                if crypto.decrypt_object(response.body["check_id"]) - 1 != response.state.check_id:
                     raise CryptoError("Check body error")
             elif response.msg_type in (Constant.MSG_RESPONSE, Constant.CHANNEL_RESPONSE) and response.status_code < 400:
                 response.body = crypto.decrypt_object(response.body)
@@ -102,15 +106,17 @@ class CryptoProcessor(BaseCryptoProcessor):
             request.body["crypto_id"] = self._crypto_id
             request.body["check_body"] = self._crypto.encrypt_object(self._crypto_id)
         elif request.msg_type in (Constant.MSG_REQUEST, Constant.CHANNEL_REQUEST):
-            request.body = {"body": request.body, "timestamp": int(time.time()), "nonce": async_get_snowflake_id()}
+            request.body = {
+                "body": request.body,
+                "timestamp": int(time.time()),
+                "nonce": await async_get_snowflake_id(),
+            }
             request.body = self._crypto.encrypt_object(request.body)
         return request
 
     async def process_response(self, response: Response) -> Response:
         if response.msg_type in (Constant.MSG_RESPONSE, Constant.CHANNEL_RESPONSE) and response.status_code < 400:
             try:
-                if type(response.body) is not bytes:
-                    raise TypeError("Response body type error, can not decrypt")
                 response.body = self._crypto.decrypt_object(response.body)
                 self._body_handle(response.body)
                 response.body = response.body["body"]
