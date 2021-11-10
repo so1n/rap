@@ -23,7 +23,7 @@ async def async_channel(channel: UserChannel) -> None:
 async def echo_body(channel: UserChannel) -> None:
     cnt: int = 0
     async for body in channel.iter_body():
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.1)
         cnt += 1
         print(cnt, body)
         if cnt > 10:
@@ -34,7 +34,7 @@ async def echo_body(channel: UserChannel) -> None:
 async def echo_response(channel: UserChannel) -> None:
     cnt: int = 0
     async for response in channel.iter():
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.1)
         cnt += 1
         if cnt > 10:
             break

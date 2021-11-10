@@ -2,14 +2,18 @@ import asyncio
 import logging
 
 from jaeger_client import Config, Tracer  # type: ignore
+from opentracing.scope_managers.asyncio import AsyncioScopeManager  # type: ignore
+from opentracing.scope_managers.contextvars import ContextVarsScopeManager  # type: ignore
 
 from rap.client import Client
 from rap.client.processor import TracingProcessor
+from rap.common.channel import UserChannel
 
 logging.basicConfig(format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.DEBUG)
 
 config: Config = Config(
     config={"sampler": {"type": "const", "param": 1}, "logging": True, "local_agent": {"reporting_host": "127.0.0.1"}},
+    scope_manager=AsyncioScopeManager(),
     service_name="rap client opentracing example",
 )
 tracer: Tracer = config.initialize_tracer()
@@ -24,12 +28,27 @@ async def async_sum(a: int, b: int) -> int:
     pass
 
 
+@client.register()
+async def echo_body(channel: UserChannel) -> None:
+    cnt: int = 0
+    await channel.write(f"ping! {cnt}")
+    async for body in channel.iter_body():
+        print(body)
+        cnt += 1
+        await channel.write(f"ping! {cnt}")
+
+
 async def main() -> None:
     await client.start()
     print(f"async result: {await async_sum(1, 3)}")
+    await echo_body()
     await client.stop()
 
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
+    import time
+
+    time.sleep(2)
+    tracer.close()
