@@ -77,7 +77,7 @@ class Channel(BaseChannel[Response]):
         """
 
         if self.is_close:
-            raise ChannelError("channel is closed")
+            raise ChannelCloseError("channel is closed")
 
         async def _read_by_queue() -> Response:
             """read response or exc from queue"""
@@ -97,7 +97,7 @@ class Channel(BaseChannel[Response]):
             raise e
 
         if response.header.get("channel_life_cycle") == Constant.DROP:
-            exc: ChannelError = ChannelError(self._drop_msg)
+            exc: ChannelCloseError = ChannelCloseError(self._drop_msg)
             self.set_exc(exc)
             raise exc
         return response
@@ -105,7 +105,7 @@ class Channel(BaseChannel[Response]):
     async def _base_write(self, body: Any, life_cycle: str, timeout: Optional[int] = None) -> None:
         """base send body to channel"""
         if self.is_close:
-            raise ChannelError("channel is closed")
+            raise ChannelCloseError("channel is closed")
         request: Request = Request(
             self._transport.app,
             Constant.CHANNEL_REQUEST,
@@ -142,7 +142,7 @@ class Channel(BaseChannel[Response]):
         if self.is_close:
             try:
                 await self.channel_conn_future
-            except ChannelError:
+            except ChannelCloseError:
                 pass
             return
         self.channel_is_declare = False

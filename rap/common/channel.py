@@ -1,8 +1,6 @@
 import asyncio
 from typing import Any, Generic, TypeVar
 
-from rap.common.exceptions import ChannelError
-
 Read_T = TypeVar("Read_T")
 
 
@@ -72,7 +70,7 @@ class AsyncIterDataBody(AsyncIterData[Read_T]):
     async def __anext__(self) -> "Read_T":
         try:
             return await self.channel.read_body()
-        except ChannelError:
+        except ChannelCloseError:
             raise StopAsyncIteration()
 
 
