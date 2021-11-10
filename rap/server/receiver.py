@@ -56,7 +56,6 @@ class Receiver(object):
         sender: Sender,
         ping_fail_cnt: int,
         ping_sleep_time: int,
-        event_handle_dict: Dict[str, List[Callable[[Request], None]]],
         call_func_permission_fn: Optional[Callable[[Request], Awaitable[FuncModel]]] = None,
         processor_list: Optional[List[BaseProcessor]] = None,
     ):
@@ -67,7 +66,6 @@ class Receiver(object):
         :param sender: Send response data to the client
         :param ping_fail_cnt: When ping fails continuously and exceeds this value, conn will be disconnected
         :param ping_sleep_time: ping message interval time
-        :param event_handle_dict: request event dict
         :param call_func_permission_fn: Check the permission to call the private function
         :param processor_list: processor list
         """
@@ -78,7 +76,6 @@ class Receiver(object):
         self._ping_sleep_time: int = ping_sleep_time
         self._ping_fail_cnt: int = ping_fail_cnt
         self._processor_list: Optional[List[BaseProcessor]] = processor_list
-        self._event_handle_dict: Dict[str, List[Callable[[Request], None]]] = event_handle_dict
         self._call_func_permission_fn: Callable[[Request], Awaitable[FuncModel]] = (
             call_func_permission_fn if call_func_permission_fn else self._default_call_fun_permission_fn
         )
@@ -302,15 +299,6 @@ class Receiver(object):
 
     async def event(self, request: Request, response: Response) -> Optional[Response]:
         """client event request handle"""
-        if request.func_name in self._event_handle_dict:
-            """User-defined event handle"""
-            event_handle_list: List[Callable[[Request], None]] = self._event_handle_dict[request.func_name]
-            for fn in event_handle_list:
-                try:
-                    fn(request)
-                except Exception as e:
-                    logger.exception(f"run event name:{response.target} raise error:{e}")
-
         # rap event handle
         if request.func_name == Constant.PONG_EVENT:
             self._keepalive_timestamp = int(time.time())

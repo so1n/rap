@@ -3,7 +3,7 @@ import logging
 import signal
 import ssl
 import threading
-from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Set, Type
+from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Set
 
 from rap.common import event
 from rap.common.asyncio_helper import Deadline
@@ -100,7 +100,6 @@ class Server(object):
         self._server_event_dict: Dict[EventEnum, List[SERVER_EVENT_FN]] = {
             value: [] for value in EventEnum.__members__.values()
         }
-        self._request_event_handle_dict: Dict[str, List[Callable[[Request], None]]] = {}
 
         self._depend_set: Set[Any] = set()  # Check whether any components have been re-introduced
         if middleware_list:
@@ -126,26 +125,6 @@ class Server(object):
                 self._server_event_dict[event_enum].append(event_handle)
             else:
                 raise ImportError(f"even type:{event_enum}, handle:{event_handle} already load")
-
-    def register_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Request], None]) -> None:
-        """register request event handler
-        :param event_class: rap transport protocol event class
-        :param fn: event handler
-        """
-        if event_class not in self._request_event_handle_dict:
-            raise KeyError(f"{event_class}")
-        if fn in self._request_event_handle_dict[event_class.event_name]:
-            raise ValueError(f"{fn} already exists {event_class}")
-        self._request_event_handle_dict[event_class.event_name].append(fn)
-
-    def unregister_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Request], None]) -> None:
-        """register request event handler
-        :param event_class: rap transport protocol event class
-        :param fn: event handler
-        """
-        if event_class not in self._request_event_handle_dict:
-            raise KeyError(f"{event_class}")
-        self._request_event_handle_dict[event_class.event_name].remove(fn)
 
     def load_middleware(self, middleware_list: List[BaseMiddleware]) -> None:
         """load server middleware
@@ -333,7 +312,6 @@ class Server(object):
             sender,
             self._ping_fail_cnt,
             self._ping_sleep_time,
-            self._request_event_handle_dict,
             processor_list=self._processor_list,
             call_func_permission_fn=self._call_func_permission_fn,
         )

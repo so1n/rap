@@ -1,5 +1,4 @@
 import asyncio
-import inspect
 import logging
 import math
 import random
@@ -44,33 +43,6 @@ class Transport(object):
         self._resp_future_dict: Dict[str, asyncio.Future[Response]] = {}
         self._channel_queue_dict: Dict[str, asyncio.Queue[Union[Response, Exception]]] = {}
 
-        self._event_handle_dict: Dict[str, List[Callable[[Response], None]]] = {}
-
-        for event_name in dir(event):
-            event_class: Type[event.Event] = getattr(event, event_name)
-            if inspect.isclass(event_class) and issubclass(event_class, event.Event) and event_class is not event.Event:
-                self._event_handle_dict[event_class.event_name] = []
-
-    def register_event_handle(self, event_name: Type[event.Event], fn: Callable[[Response], None]) -> None:
-        """register recv response event callback handle
-        :param event_name: event name
-        :param fn: event callback
-        """
-        if event_name not in self._event_handle_dict:
-            raise KeyError(f"{event_name}")
-        if fn in self._event_handle_dict[event_name.event_name]:
-            raise ValueError(f"{fn} already exists {event_name}")
-        self._event_handle_dict[event_name.event_name].append(fn)
-
-    def unregister_event_handle(self, event_name: Type[event.Event], fn: Callable[[Response], None]) -> None:
-        """unregister recv response event callback handle
-        :param event_name: event name
-        :param fn: event callback
-        """
-        if event_name not in self._event_handle_dict:
-            raise KeyError(f"{event_name}")
-        self._event_handle_dict[event_name.event_name].remove(fn)
-
     async def _put_exc_to_receiver(self, response: Response, put_exc: Exception, correlation_id: str) -> None:
         """handler exc by response
         :param response: server response
@@ -109,14 +81,6 @@ class Transport(object):
             )
             await self._put_exc_to_receiver(response, exc_class(response.body), correlation_id)
         elif response.msg_type == Constant.SERVER_EVENT:
-            # customer event handle
-            if response.func_name in self._event_handle_dict:
-                event_handle_list: List[Callable[[Response], None]] = self._event_handle_dict[response.func_name]
-                for fn in event_handle_list:
-                    try:
-                        fn(response)
-                    except Exception as e:
-                        logger.exception(f"run event name:{response.func_name} raise error:{e}")
             # server event msg handle
             if response.func_name == Constant.EVENT_CLOSE_CONN:
                 # server want to close...do not send data

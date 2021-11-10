@@ -9,7 +9,6 @@ from rap.client.processor.base import BaseProcessor
 from rap.client.transport.async_iterator import AsyncIteratorCall
 from rap.client.transport.transport import Transport
 from rap.client.types import CLIENT_EVENT_FN
-from rap.common import event
 from rap.common.cache import Cache
 from rap.common.channel import UserChannel
 from rap.common.collect_statistics import WindowStatistics
@@ -81,17 +80,6 @@ class BaseClient:
     def _check_run(self) -> None:
         if not self.is_close:
             raise RuntimeError("The method cannot be called on the run")
-
-    #########################
-    # request event handler #
-    #########################
-    def register_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
-        self._check_run()
-        self.transport.register_event_handle(event_class, fn)
-
-    def unregister_request_event_handle(self, event_class: Type[event.Event], fn: Callable[[Response], None]) -> None:
-        self._check_run()
-        self.transport.unregister_event_handle(event_class, fn)
 
     ########################
     # client event handler #
