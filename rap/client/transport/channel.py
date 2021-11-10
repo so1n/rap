@@ -9,6 +9,7 @@ from rap.common.channel import BaseChannel, ChannelCloseError, UserChannel
 from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError
 from rap.common.snowflake import get_snowflake_id
+from rap.common.state import State
 from rap.common.utils import Constant
 
 if TYPE_CHECKING:
@@ -37,6 +38,7 @@ class Channel(BaseChannel[Response]):
         self._target: str = target
         self._conn: Connection = conn
         self._drop_msg: str = "recv channel's drop event, close channel"
+        self.state: State = State()
 
         self.channel_id: str = str(get_snowflake_id(wait_sequence=False))
         self.queue: asyncio.Queue = asyncio.Queue()
@@ -111,6 +113,7 @@ class Channel(BaseChannel[Response]):
             body,
             correlation_id=self.channel_id,
             header={"channel_life_cycle": life_cycle},
+            state=self.state,
         )
         coro: Coroutine = self._transport.write_to_conn(request, self._conn)
         await asyncio.wait_for(coro, timeout)

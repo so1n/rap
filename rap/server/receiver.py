@@ -32,6 +32,7 @@ from rap.common.exceptions import (
     RpcRunTimeError,
     ServerError,
 )
+from rap.common.state import State
 from rap.common.types import is_type
 from rap.common.utils import Constant, param_handle, parse_error, response_num_dict
 from rap.server.channel import Channel
@@ -73,6 +74,7 @@ class Receiver(object):
         self._conn: ServerConnection = conn
         self._run_timeout: int = run_timeout
         self.sender: Sender = sender
+        self._state_dict: Dict[str, State] = {}
         self._ping_sleep_time: int = ping_sleep_time
         self._ping_fail_cnt: int = ping_fail_cnt
         self._processor_list: Optional[List[BaseProcessor]] = processor_list
@@ -103,6 +105,12 @@ class Receiver(object):
     async def dispatch(self, request: Request) -> Optional[Response]:
         """recv request, processor request and dispatch request by request msg type"""
         response_num: int = response_num_dict.get(request.msg_type, Constant.SERVER_ERROR_RESPONSE)
+
+        if request.msg_type == Constant.CHANNEL_REQUEST:
+            correlation_id: str = f"{request.conn.peer_tuple}:{request.correlation_id}"
+            state: State = self._state_dict.get(correlation_id, request.state)
+            self._state_dict[correlation_id] = state
+            request.state = state
 
         # gen response object
         response: "Response" = Response(
@@ -191,6 +199,7 @@ class Receiver(object):
                         correlation_id=channel_id,
                         header=header,
                         body=body,
+                        state=request.state,
                     )
                 )
 
@@ -205,6 +214,8 @@ class Receiver(object):
                 raise ChannelError("channel not create")
             else:
                 await channel.close()
+                correlation_id: str = f"{request.conn.peer_tuple}:{request.correlation_id}"
+                self._state_dict.pop(correlation_id, None)
                 self._channel_dict.pop(channel_id, None)
                 return None
         else:

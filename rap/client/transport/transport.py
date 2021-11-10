@@ -16,6 +16,7 @@ from rap.common.asyncio_helper import Deadline, as_first_completed, deadline_con
 from rap.common.conn import Connection
 from rap.common.exceptions import RPCError
 from rap.common.snowflake import async_get_snowflake_id
+from rap.common.state import State
 from rap.common.types import SERVER_BASE_MSG_TYPE
 from rap.common.utils import Constant
 
@@ -39,6 +40,7 @@ class Transport(object):
 
         self._max_msg_id: int = 65535
         self._msg_id: int = random.randrange(self._max_msg_id)
+        self._state_dict: Dict[str, State] = {}
         self._exc_status_code_dict: Dict[int, Type[rap_exc.BaseRapError]] = get_exc_status_code_dict()
         self._resp_future_dict: Dict[str, asyncio.Future[Response]] = {}
         self._channel_queue_dict: Dict[str, asyncio.Queue[Union[Response, Exception]]] = {}
@@ -128,6 +130,11 @@ class Transport(object):
             e_msg: str = f"recv wrong response:{response_msg}, ignore error:{e}"
             return None, rap_exc.ProtocolError(e_msg)
 
+        # update state
+        correlation_id: str = f"{conn.sock_tuple}:{response.correlation_id}"
+        state: Optional[State] = self._state_dict.get(correlation_id, None)
+        if state:
+            response.state = state
         # Legal response, but may be intercepted by the processor
         exc: Optional[Exception] = None
         try:
@@ -217,6 +224,7 @@ class Transport(object):
         try:
             response_future: asyncio.Future[Response] = asyncio.Future()
             self._resp_future_dict[resp_future_id] = response_future
+            self._state_dict[resp_future_id] = request.state
             deadline: Optional[Deadline] = deadline_context.get()
             if self.app.through_deadline and deadline:
                 request.header["X-rap-deadline"] = deadline.end_timestamp
@@ -225,9 +233,9 @@ class Transport(object):
                 [response_future],
                 not_cancel_future_list=[conn.conn_future],
             )
-            response.state = request.state
             return response
         finally:
+            self._state_dict.pop(resp_future_id, None)
             pop_future: Optional[asyncio.Future] = self._resp_future_dict.pop(resp_future_id, None)
             if pop_future:
                 safe_del_future(pop_future)
@@ -303,7 +311,13 @@ class Transport(object):
         channel: Channel = Channel(self, target, conn)  # type: ignore
         correlation_id: str = f"{conn.sock_tuple}:{channel.channel_id}"
         self._channel_queue_dict[correlation_id] = channel.queue
-        channel.channel_conn_future.add_done_callback(lambda f: self._channel_queue_dict.pop(correlation_id, None))
+        self._state_dict[correlation_id] = channel.state
+
+        def _clean_channel_resource(_: asyncio.Future) -> None:
+            self._channel_queue_dict.pop(correlation_id, None)
+            self._state_dict.pop(correlation_id, None)
+
+        channel.channel_conn_future.add_done_callback(_clean_channel_resource)
         return channel
 
     #############
