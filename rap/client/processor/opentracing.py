@@ -1,6 +1,5 @@
 from typing import Optional
 
-from jaeger_client.span import Span
 from jaeger_client.span_context import SpanContext
 from jaeger_client.tracer import Tracer
 from opentracing import InvalidCarrierException, SpanContextCorruptedException
@@ -19,7 +18,7 @@ class TracingProcessor(BaseProcessor):
         self._tracer: Tracer = tracer
         self._scope_cache_timeout: float = scope_cache_timeout or 60.0
 
-    def _get_span(self, msg: BaseMsgProtocol) -> Span:
+    def _create_scope(self, msg: BaseMsgProtocol, finish_on_close: bool = True) -> Scope:
         span_ctx: Optional[SpanContext] = None
         try:
             span_ctx = self._tracer.extract(Format.HTTP_HEADERS, msg.header)
@@ -27,31 +26,34 @@ class TracingProcessor(BaseProcessor):
             pass
 
         # The client sending coroutine and receiving coroutine are not the same coroutine
-        scope: Scope = self._tracer.start_active_span(str(msg.target), child_of=span_ctx, finish_on_close=False)
+        scope: Scope = self._tracer.start_active_span(
+            str(msg.target), child_of=span_ctx, finish_on_close=finish_on_close
+        )
         self._tracer.inject(span_context=scope.span.context, format=Format.HTTP_HEADERS, carrier=msg.header)
         scope.span.set_tag(tags.SPAN_KIND, tags.SPAN_KIND_RPC_CLIENT)
         scope.span.set_tag(tags.PEER_SERVICE, self.app.server_name)
         scope.span.set_tag(tags.PEER_HOSTNAME, ":".join([str(i) for i in msg.header["host"]]))
         scope.span.set_tag("correlation_id", msg.correlation_id)
         scope.span.set_tag("msg_type", msg.msg_type)
-        scope.close()
-        return scope.span
+        if not finish_on_close:
+            scope.close()
+        return scope
 
     async def process_request(self, request: Request) -> Request:
-        if not request.state.get_value("span", None) and request.msg_type in (
-            Constant.MSG_REQUEST,
-            Constant.CHANNEL_REQUEST,
-        ):
-            request.state.span = self._get_span(request)
+        if request.msg_type is Constant.MSG_REQUEST and not request.state.get_value("scope", None):
+            request.state.scope = self._create_scope(request)
+        elif request.msg_type is Constant.CHANNEL_REQUEST and not request.state.get_value("span", None):
+            # A channel is a continuous activity that may involve the interaction of multiple coroutines
+            request.state.span = self._create_scope(request, finish_on_close=False).span
         return request
 
     async def process_response(self, response: Response) -> Response:
         if response.msg_type is Constant.MSG_RESPONSE:
-            span: Span = response.state.span
+            scope: Scope = response.state.scope
             status_code: int = response.status_code
-            span.set_tag("status_code", status_code)
-            span.set_tag(tags.ERROR, status_code != 200)
-            span.finish()
+            scope.span.set_tag("status_code", status_code)
+            scope.span.set_tag(tags.ERROR, status_code != 200)
+            scope.close()
         elif (
             response.msg_type is Constant.CHANNEL_RESPONSE
             and response.header.get("channel_life_cycle") == Constant.DROP

@@ -8,7 +8,7 @@ from rap.client import Client
 from rap.common.exceptions import RpcRunTimeError, ServerError
 from rap.common.utils import EventEnum
 from rap.server import Server
-from rap.server.context import Context
+from rap.server.context import WithContext
 from rap.server.plugin.middleware.conn.limit import ConnLimitMiddleware
 from rap.server.plugin.processor import CryptoProcessor as ServerCryptoProcessor
 
@@ -117,7 +117,7 @@ class TestRequestHandle:
 
 class TestContext:
     def test_context(self) -> None:
-        class Demo(Context):
+        class Demo(WithContext):
             bar: str
 
         with Demo() as d:
@@ -126,7 +126,7 @@ class TestContext:
         assert not d.bar
 
     async def test_context_in_asyncio(self) -> None:
-        class Demo(Context):
+        class Demo(WithContext):
             bar: str
 
         with Demo() as d:

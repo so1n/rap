@@ -39,7 +39,7 @@ class TestTransport:
         mock_future.set_result(request_tuple)
 
         for conn in client.endpoint._conn_dict.values():
-            await client.transport.dispatch_resp_from_conn(conn)
+            await client.transport.response_handler(conn)
 
         mocker_obj.assert_called_once_with(once_target)
 

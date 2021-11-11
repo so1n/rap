@@ -3,7 +3,7 @@ import logging
 import math
 import random
 import time
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple, Type
 from uuid import uuid4
 
 from rap.client.model import Request, Response
@@ -42,75 +42,30 @@ class Transport(object):
         self._msg_id: int = random.randrange(self._max_msg_id)
         self._state_dict: Dict[str, State] = {}
         self._exc_status_code_dict: Dict[int, Type[rap_exc.BaseRapError]] = get_exc_status_code_dict()
-        self._resp_future_dict: Dict[str, asyncio.Future[Response]] = {}
-        self._channel_queue_dict: Dict[str, asyncio.Queue[Union[Response, Exception]]] = {}
+        self._resp_future_dict: Dict[str, asyncio.Future[Tuple[Response, Optional[Exception]]]] = {}
+        self._channel_queue_dict: Dict[str, asyncio.Queue[Tuple[Response, Optional[Exception]]]] = {}
 
-    async def _put_exc_to_receiver(self, response: Response, put_exc: Exception, correlation_id: str) -> None:
-        """handler exc by response
-        :param response: server response
-        :param put_exc: get response exc
-        :param correlation_id: consumer correlation id
+    async def process_response(self, response: Response, exc: Optional[Exception]) -> Response:
         """
-        for process_exc in self._process_exception_list:
-            response, put_exc = await process_exc(response, put_exc)
-
-        # send exc to consumer
-        if correlation_id in self._channel_queue_dict:
-            self._channel_queue_dict[correlation_id].put_nowait(put_exc)
-        elif correlation_id in self._resp_future_dict:
-            self._resp_future_dict[correlation_id].set_exception(put_exc)
-        elif isinstance(put_exc, rap_exc.ServerError):
-            raise put_exc
-        else:
-            logger.error(f"recv error msg:{response}, ignore")
+        If this response is accompanied by an exception, handle the exception directly and throw it.
+        """
+        if not exc:
+            try:
+                for process_response in self._process_response_list:
+                    response = await process_response(response)
+            except Exception as e:
+                exc = e
+        if exc:
+            # why mypy not support ????
+            for process_exc in self._process_exception_list:
+                response, exc = await process_exc(response, exc)  # type: ignore
+            raise exc  # type: ignore
+        return response
 
     # flake8: noqa: C901
-    async def dispatch_resp_from_conn(self, conn: Connection) -> None:
+    async def response_handler(self, conn: Connection) -> None:
         """Distribute the response data to different consumers according to different conditions"""
-        response, exc = await self._get_response_from_conn(conn)
-        if not response:
-            # not response data, not a legal response
-            logger.error(str(exc))
-            return
-
-        correlation_id: str = f"{conn.sock_tuple}:{response.correlation_id}"
-        if exc:
-            await self._put_exc_to_receiver(response, exc, correlation_id)
-        elif response.msg_type == Constant.SERVER_ERROR_RESPONSE or response.status_code in self._exc_status_code_dict:
-            # gen and put rap error by response
-            exc_class: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(
-                response.status_code, rap_exc.BaseRapError
-            )
-            await self._put_exc_to_receiver(response, exc_class(response.body), correlation_id)
-        elif response.msg_type == Constant.SERVER_EVENT:
-            # server event msg handle
-            if response.func_name == Constant.EVENT_CLOSE_CONN:
-                # server want to close...do not send data
-                logger.error(f"recv close conn event, event info:{response.body}")
-                conn.available = False
-            elif response.func_name in (Constant.DECLARE, Constant.PONG_EVENT):
-                self._resp_future_dict[correlation_id].set_result(response)
-            elif response.func_name == Constant.PING_EVENT:
-                await asyncio.wait_for(
-                    self.write_to_conn(Request.from_event(self.app, event.PongEvent("")), conn), timeout=3
-                )
-            else:
-                logger.error(f"recv not support event {response}")
-        elif response.msg_type == Constant.CHANNEL_RESPONSE:
-            # put msg to channel
-            if correlation_id not in self._channel_queue_dict:
-                logger.error(f"recv channel msg, but channel not create. channel id:{correlation_id}")
-            else:
-                self._channel_queue_dict[correlation_id].put_nowait(response)
-        elif response.msg_type == Constant.MSG_RESPONSE and correlation_id in self._resp_future_dict:
-            # set msg to future_dict's `future`
-            self._resp_future_dict[correlation_id].set_result(response)
-        else:
-            logger.error(f"Can' parse response: {response}, ignore")
-        return
-
-    async def _get_response_from_conn(self, conn: Connection) -> Tuple[Optional[Response], Optional[Exception]]:
-        """recv server msg and gen response handle"""
+        # read response msg
         try:
             response_msg: Optional[SERVER_BASE_MSG_TYPE] = await asyncio.wait_for(
                 conn.read(), timeout=self._read_timeout
@@ -127,23 +82,48 @@ class Transport(object):
         try:
             response: Response = Response.from_msg(self.app, conn, response_msg)
         except Exception as e:
-            e_msg: str = f"recv wrong response:{response_msg}, ignore error:{e}"
-            return None, rap_exc.ProtocolError(e_msg)
+            logger.error(f"recv wrong response:{response_msg}, ignore error:{e}")
+            return
 
-        # update state
+        # share state
         correlation_id: str = f"{conn.sock_tuple}:{response.correlation_id}"
         state: Optional[State] = self._state_dict.get(correlation_id, None)
         if state:
             response.state = state
-        # Legal response, but may be intercepted by the processor
-        exc: Optional[Exception] = None
-        try:
-            for process_response in self._process_response_list:
-                response = await process_response(response)
-        except Exception as e:
-            exc = e
+        else:
+            logger.warning(f"response:{response} can not found state")
 
-        return response, exc
+        exc: Optional[Exception] = None
+        if response.msg_type == Constant.SERVER_ERROR_RESPONSE or response.status_code in self._exc_status_code_dict:
+            # Generate rap standard error
+            exc_class: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(
+                response.status_code, rap_exc.BaseRapError
+            )
+            exc = exc_class(response.body)
+        # dispatch response
+        if response.msg_type == Constant.SERVER_EVENT:
+            # server event msg handle
+            if response.func_name == Constant.EVENT_CLOSE_CONN:
+                # server want to close...do not send data
+                logger.error(f"recv close conn event, event info:{response.body}")
+                conn.available = False
+            elif response.func_name in (Constant.DECLARE, Constant.PONG_EVENT):
+                self._resp_future_dict[correlation_id].set_result((response, exc))
+            elif response.func_name == Constant.PING_EVENT:
+                await asyncio.wait_for(
+                    self.write_to_conn(Request.from_event(self.app, event.PongEvent("")), conn), timeout=3
+                )
+            else:
+                logger.error(f"recv not support event response:{response}")
+        elif response.msg_type == Constant.CHANNEL_RESPONSE and correlation_id in self._channel_queue_dict:
+            # put msg to channel
+            self._channel_queue_dict[correlation_id].put_nowait((response, exc))
+        elif response.msg_type == Constant.MSG_RESPONSE and correlation_id in self._resp_future_dict:
+            # set msg to future_dict's `future`
+            self._resp_future_dict[correlation_id].set_result((response, exc))
+        else:
+            logger.error(f"Can' dispatch response: {response}, ignore")
+        return
 
     async def declare(self, conn: Connection) -> None:
         """
@@ -222,17 +202,18 @@ class Transport(object):
         request.correlation_id = str(await async_get_snowflake_id())
         resp_future_id: str = f"{conn.sock_tuple}:{request.correlation_id}"
         try:
-            response_future: asyncio.Future[Response] = asyncio.Future()
+            response_future: asyncio.Future[Tuple[Response, Optional[Exception]]] = asyncio.Future()
             self._resp_future_dict[resp_future_id] = response_future
             self._state_dict[resp_future_id] = request.state
             deadline: Optional[Deadline] = deadline_context.get()
             if self.app.through_deadline and deadline:
                 request.header["X-rap-deadline"] = deadline.end_timestamp
             await self.write_to_conn(request, conn)
-            response: Response = await as_first_completed(
+            response, exc = await as_first_completed(
                 [response_future],
                 not_cancel_future_list=[conn.conn_future],
             )
+            response = await self.process_response(response, exc)
             return response
         finally:
             self._state_dict.pop(resp_future_id, None)

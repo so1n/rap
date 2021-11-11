@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import traceback
-from typing import TYPE_CHECKING, Any, Coroutine, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Coroutine, Optional, Tuple, Type
 
 from rap.client.model import Request, Response
 from rap.common.asyncio_helper import as_first_completed
@@ -41,7 +41,7 @@ class Channel(BaseChannel[Response]):
         self.state: State = State()
 
         self.channel_id: str = str(get_snowflake_id(wait_sequence=False))
-        self.queue: asyncio.Queue = asyncio.Queue()
+        self.queue: asyncio.Queue[Tuple[Response, Optional[Exception]]] = asyncio.Queue()
         self.user_channel: UserChannel[Response] = UserChannel(self)
         self.channel_conn_future: asyncio.Future = asyncio.Future()
         self.channel_is_declare: bool = False
@@ -81,10 +81,9 @@ class Channel(BaseChannel[Response]):
 
         async def _read_by_queue() -> Response:
             """read response or exc from queue"""
-            result: Union[Response, Exception] = await self.queue.get()
-            if isinstance(result, Exception):
-                raise result
-            return result
+            _response, _exc = await self.queue.get()
+            _response = await self._transport.process_response(_response, _exc)
+            return _response
 
         try:
             response: Response = await as_first_completed(

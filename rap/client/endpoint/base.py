@@ -118,7 +118,7 @@ class BaseEndpoint(object):
         logger.debug("listen:%s start", conn.peer_tuple)
         try:
             while not conn.is_closed():
-                await self._transport.dispatch_resp_from_conn(conn)
+                await self._transport.response_handler(conn)
         except asyncio.CancelledError:
             pass
         except Exception as e:
