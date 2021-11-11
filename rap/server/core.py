@@ -15,7 +15,6 @@ from rap.common.signal_broadcast import add_signal_handler, remove_signal_handle
 from rap.common.snowflake import async_get_snowflake_id
 from rap.common.types import BASE_MSG_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utils import EventEnum, RapFunc
-from rap.server.context import WithContext
 from rap.server.model import Request, Response
 from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware
 from rap.server.plugin.processor.base import BaseProcessor
@@ -329,14 +328,12 @@ class Server(object):
                 await conn.await_close()
                 return
 
-            with WithContext() as c:
-                c.request = request
-                try:
-                    response: Optional[Response] = await receiver.dispatch(request)
-                    await sender(response)
-                except Exception as closer_e:
-                    logging.exception("raw_request handle error e")
-                    await sender.send_exc(ServerError(str(closer_e)))
+            try:
+                response: Optional[Response] = await receiver.dispatch(request)
+                await sender(response)
+            except Exception as closer_e:
+                logging.exception("raw_request handle error e")
+                await sender.send_exc(ServerError(str(closer_e)))
 
         while not conn.is_closed():
             try:

@@ -1,8 +1,6 @@
 from contextvars import ContextVar, Token
 from typing import Any, Dict, Optional
 
-from rap.server.model import Request
-
 rap_context: ContextVar[Dict[str, Any]] = ContextVar("rap_context", default={})
 
 
@@ -16,18 +14,13 @@ class Context(object):
 
 
 class WithContext(Context):
-    request: Request
-
     def __init__(self) -> None:
         self._token: Optional[Token] = None
 
-    def __enter__(self) -> "Context":
+    def __enter__(self) -> "WithContext":
         self._token = rap_context.set({})
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         if self._token:
             rap_context.reset(self._token)
-
-
-context: Context = Context()
