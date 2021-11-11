@@ -52,7 +52,8 @@ class TracingProcessor(BaseProcessor):
             scope.close()
         elif (
             response.msg_type is Constant.CHANNEL_RESPONSE
-            and response.header.get("channel_life_cycle") is Constant.DROP
+            and response.header.get("channel_life_cycle", "error") == Constant.DECLARE
         ):
-            response.state.span.finish()
+            # The channel is created after receiving the request
+            response.state.user_channel.add_done_callback(lambda f: response.state.span.finish())
         return response

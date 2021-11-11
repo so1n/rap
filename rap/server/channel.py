@@ -28,6 +28,7 @@ class Channel(BaseChannel["Request"]):
         self._conn: ServerConnection = conn
         self.queue: asyncio.Queue = asyncio.Queue()
         self.channel_id: str = channel_id
+        self.user_channel: UserChannel = UserChannel(self)
 
         # if conn close, channel future will done and channel not read & write_to_conn
         self.channel_conn_future: asyncio.Future = asyncio.Future()
@@ -39,7 +40,7 @@ class Channel(BaseChannel["Request"]):
 
     async def _run_func(self, func: Callable) -> None:
         try:
-            await func(UserChannel(self))
+            await func(self.user_channel)
         except Exception as e:
             logger.debug("channel:%s, func: %s, ignore raise exc:%s", self.channel_id, func.__name__, e)
         finally:

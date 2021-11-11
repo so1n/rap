@@ -204,6 +204,7 @@ class Receiver(object):
                 )
 
             channel = Channel(channel_id, write, self._conn, func)
+            request.state.user_channel = channel.user_channel
             channel.channel_conn_future.add_done_callback(lambda f: self._channel_dict.pop(channel_id, None))
             self._channel_dict[channel_id] = channel
 

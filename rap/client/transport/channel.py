@@ -43,6 +43,7 @@ class Channel(BaseChannel[Response]):
         self.channel_id: str = str(get_snowflake_id(wait_sequence=False))
         self.queue: asyncio.Queue[Tuple[Response, Optional[Exception]]] = asyncio.Queue()
         self.user_channel: UserChannel[Response] = UserChannel(self)
+        self.state.user_channel = self.user_channel
         self.channel_conn_future: asyncio.Future = asyncio.Future()
         self.channel_is_declare: bool = False
 
