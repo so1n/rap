@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Generic, TypeVar
+from typing import Any, Callable, Generic, TypeVar
 
 Read_T = TypeVar("Read_T")
 
@@ -136,6 +136,12 @@ class UserChannel(Generic[Read_T]):
     async def wait_close(self) -> None:
         """wait channel close"""
         await self._channel.wait_close()
+
+    def add_done_callback(self, fn: Callable[[asyncio.Future], None]) -> None:
+        self._channel.channel_conn_future.add_done_callback(fn)
+
+    def remove_done_callback(self, fn: Callable[[asyncio.Future], None]) -> None:
+        self._channel.channel_conn_future.remove_done_callback(fn)
 
     #####################
     # async for support #
