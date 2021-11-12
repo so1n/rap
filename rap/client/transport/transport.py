@@ -2,6 +2,7 @@ import asyncio
 import logging
 import math
 import random
+import sys
 import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple, Type
 from uuid import uuid4
@@ -51,13 +52,15 @@ class Transport(object):
         """
         if not exc:
             try:
-                for process_response in self._process_response_list:
+                for process_response in reversed(self._process_response_list):
                     response = await process_response(response)
             except Exception as e:
                 exc = e
+                response.exc = exc
+                response.tb = sys.exc_info()[2]
         if exc:
             # why mypy not support ????
-            for process_exc in self._process_exception_list:
+            for process_exc in reversed(self._process_exception_list):
                 response, exc = await process_exc(response, exc)  # type: ignore
             raise exc  # type: ignore
         return response
@@ -100,6 +103,8 @@ class Transport(object):
                 response.status_code, rap_exc.BaseRapError
             )
             exc = exc_class(response.body)
+            response.exc = exc
+            response.tb = sys.exc_info()[2]
         # dispatch response
         if response.msg_type == Constant.SERVER_EVENT:
             # server event msg handle

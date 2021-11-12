@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from types import TracebackType
 from typing import TYPE_CHECKING, Any, Optional
 
 from rap.common.conn import Connection
@@ -51,6 +52,9 @@ class Response(BaseMsgProtocol):
 
     state: State = field(default_factory=State)
     _target_dict: dict = field(default_factory=dict)
+
+    exc: Optional[Exception] = None
+    tb: Optional[TracebackType] = None
 
     @classmethod
     def from_msg(cls, app: "BaseClient", conn: Connection, msg: SERVER_BASE_MSG_TYPE) -> "Response":

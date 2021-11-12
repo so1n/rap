@@ -29,6 +29,11 @@ async def async_sum(a: int, b: int) -> int:
 
 
 @client.register()
+async def not_found() -> None:
+    pass
+
+
+@client.register()
 async def echo_body(channel: UserChannel) -> None:
     cnt: int = 0
     await channel.write(f"ping! {cnt}")
@@ -41,6 +46,10 @@ async def echo_body(channel: UserChannel) -> None:
 async def main() -> None:
     await client.start()
     print(f"async result: {await async_sum(1, 3)}")
+    try:
+        await not_found()
+    except Exception:
+        pass
     await echo_body()
     await client.stop()
 
