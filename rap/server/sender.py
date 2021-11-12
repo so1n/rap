@@ -61,8 +61,16 @@ class Sender(object):
         resp.conn = self._conn
         self.header_handle(resp)
         if self._processor_list:
-            for processor in reversed(self._processor_list):
-                resp = await processor.process_response(resp)
+            if not resp.exc:
+                try:
+                    for processor in reversed(self._processor_list):
+                        resp = await processor.process_response(resp)
+                except Exception as e:
+                    resp.set_exception(e)
+            if resp.exc:
+                for processor in reversed(self._processor_list):
+                    resp, resp.exc = await processor.process_exc(resp, resp.exc)
+
         logger.debug("resp: %s", resp)
         msg_id: int = self._msg_id + 1
         # Avoid too big numbers

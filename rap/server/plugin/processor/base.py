@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple
 
 from rap.server.model import Request, Response
 
@@ -35,3 +35,6 @@ class BaseProcessor(object):
 
     async def process_response(self, response: Response) -> Response:
         return response
+
+    async def process_exc(self, response: Response, exc: Exception) -> Tuple[Response, Exception]:
+        return response, exc

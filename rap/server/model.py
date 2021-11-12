@@ -1,5 +1,7 @@
 import logging
+import sys
 from dataclasses import dataclass, field
+from types import TracebackType
 from typing import TYPE_CHECKING, Any, Optional
 
 from rap.common.conn import ServerConnection
@@ -62,13 +64,17 @@ class Response(ServerMsgProtocol):
     body: Any = None
     state: "State" = field(default_factory=State)
     conn: Optional[ServerConnection] = None
+    exc: Optional[Exception] = None
+    tb: Optional[TracebackType] = None
 
     def set_exception(self, exc: Exception) -> None:
         if not isinstance(exc, Exception):
             raise TypeError(f"{exc} type must Exception")
+        self.tb = sys.exc_info()[2]
         if not isinstance(exc, BaseRapError):
             logger.error(exc)
             exc = ServerError(str(exc))
+        self.exc = exc
         self.body = str(exc)
         self.status_code = exc.status_code
 
