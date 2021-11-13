@@ -4,7 +4,7 @@ import math
 import random
 import sys
 import time
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple, Type
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Type
 from uuid import uuid4
 
 from rap.client.model import Request, Response
@@ -15,7 +15,7 @@ from rap.common import event
 from rap.common import exceptions as rap_exc
 from rap.common.asyncio_helper import Deadline, as_first_completed, deadline_context, safe_del_future
 from rap.common.conn import Connection
-from rap.common.exceptions import RPCError
+from rap.common.exceptions import IgnoreNextProcessor, RPCError
 from rap.common.snowflake import async_get_snowflake_id
 from rap.common.state import State
 from rap.common.types import SERVER_BASE_MSG_TYPE
@@ -35,9 +35,7 @@ class Transport(object):
     def __init__(self, app: "BaseClient", read_timeout: Optional[int] = None):
         self.app: "BaseClient" = app
         self._read_timeout = read_timeout or 1200
-        self._process_request_list: List[Callable[[Request], Any]] = []
-        self._process_response_list: List[Callable[[Response], Any]] = []
-        self._process_exception_list: List[Callable[[Response, Exception], Any]] = []
+        self._processor_list: List[BaseProcessor] = []
 
         self._max_msg_id: int = 65535
         self._msg_id: int = random.randrange(self._max_msg_id)
@@ -52,16 +50,27 @@ class Transport(object):
         """
         if not exc:
             try:
-                for process_response in reversed(self._process_response_list):
-                    response = await process_response(response)
+                for processor in reversed(self._processor_list):
+                    response = await processor.process_response(response)
+            except IgnoreNextProcessor:
+                pass
             except Exception as e:
                 exc = e
                 response.exc = exc
                 response.tb = sys.exc_info()[2]
         if exc:
             # why mypy not support ????
-            for process_exc in reversed(self._process_exception_list):
-                response, exc = await process_exc(response, exc)  # type: ignore
+            for processor in reversed(self._processor_list):
+                raw_response: Response = response
+                try:
+                    response, exc = await processor.process_exc(response, exc)  # type: ignore
+                except IgnoreNextProcessor:
+                    break
+                except Exception as e:
+                    logger.exception(
+                        f"processor:{processor.__class__.__name__} handle response:{response.correlation_id} error:{e}"
+                    )
+                    response = raw_response
             raise exc  # type: ignore
         return response
 
@@ -94,7 +103,8 @@ class Transport(object):
         if state:
             response.state = state
         else:
-            logger.warning(f"response:{response} can not found state")
+            if response.msg_type != Constant.SERVER_EVENT:
+                logger.warning(f"response:{response} can not found state")
 
         exc: Optional[Exception] = None
         if response.msg_type == Constant.SERVER_ERROR_RESPONSE or response.status_code in self._exc_status_code_dict:
@@ -240,8 +250,8 @@ class Transport(object):
         # Avoid too big numbers
         self._msg_id = msg_id & self._max_msg_id
 
-        for process_request in self._process_request_list:
-            await process_request(request)
+        for processor in self._processor_list:
+            await processor.process_request(request)
 
         await conn.write((msg_id, *request.to_msg()))
 
@@ -311,13 +321,8 @@ class Transport(object):
     #############
     def load_processor(self, processor_list: List[BaseProcessor]) -> None:
         """load client processor"""
-        for processor in processor_list:
-            self._process_request_list.append(processor.process_request)
-            self._process_response_list.append(processor.process_response)
-            self._process_exception_list.append(processor.process_exc)
+        self._processor_list.extend(processor_list)
 
     def remove_processor(self, processor_list: List[BaseProcessor]) -> None:
         for processor in processor_list:
-            self._process_request_list.remove(processor.process_request)
-            self._process_response_list.remove(processor.process_response)
-            self._process_exception_list.remove(processor.process_exc)
+            self._processor_list.remove(processor)

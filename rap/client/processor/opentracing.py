@@ -1,4 +1,3 @@
-from traceback import format_exc
 from typing import Optional, Tuple
 
 from jaeger_client.span_context import SpanContext
@@ -63,6 +62,6 @@ class TracingProcessor(BaseProcessor):
         if scope and response.msg_type is Constant.MSG_RESPONSE:
             status_code: int = response.status_code
             scope.span.set_tag("status_code", status_code)
-            scope.span._on_error(scope.span, type(exc), exc, format_exc())
+            scope.span._on_error(scope.span, type(exc), exc, response.tb)
             scope.close()
         return response, exc

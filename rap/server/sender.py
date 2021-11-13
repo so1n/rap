@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from rap.common.asyncio_helper import Deadline
 from rap.common.conn import ServerConnection
+from rap.common.exceptions import IgnoreNextProcessor
 from rap.common.utils import Constant
 from rap.server.model import Event, Response
 from rap.server.plugin.processor.base import BaseProcessor
@@ -65,11 +66,22 @@ class Sender(object):
                 try:
                     for processor in reversed(self._processor_list):
                         resp = await processor.process_response(resp)
+                except IgnoreNextProcessor:
+                    pass
                 except Exception as e:
                     resp.set_exception(e)
             if resp.exc:
                 for processor in reversed(self._processor_list):
-                    resp, resp.exc = await processor.process_exc(resp, resp.exc)
+                    raw_resp: Response = resp
+                    try:
+                        resp, resp.exc = await processor.process_exc(resp, resp.exc)
+                    except IgnoreNextProcessor:
+                        break
+                    except Exception as e:
+                        logger.exception(
+                            f"processor:{processor.__class__.__name__} handle response:{resp.correlation_id} error:{e}"
+                        )
+                        resp = raw_resp
 
         logger.debug("resp: %s", resp)
         msg_id: int = self._msg_id + 1
