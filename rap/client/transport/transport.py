@@ -214,7 +214,9 @@ class Transport(object):
 
         :return: return server response
         """
-        request.correlation_id = str(await async_get_snowflake_id())
+        correlation_id: str = str(await async_get_snowflake_id())
+        request.correlation_id = correlation_id
+        request.header["header_id"] = correlation_id
         resp_future_id: str = f"{conn.sock_tuple}:{request.correlation_id}"
         try:
             response_future: asyncio.Future[Tuple[Response, Optional[Exception]]] = asyncio.Future()
@@ -245,7 +247,8 @@ class Transport(object):
         request.header["host"] = conn.peer_tuple
         request.header["version"] = Constant.VERSION
         request.header["user_agent"] = Constant.USER_AGENT
-        request.header["request_id"] = str(uuid4())
+        if not request.header.get("request_id"):
+            request.header["request_id"] = str(uuid4())
         msg_id: int = self._msg_id + 1
         # Avoid too big numbers
         self._msg_id = msg_id & self._max_msg_id

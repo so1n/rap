@@ -123,7 +123,7 @@ class Receiver(object):
         response.header.update(request.header)
 
         # check type_id
-        if response.msg_type is Constant.SERVER_ERROR_RESPONSE:
+        if response.msg_type == Constant.SERVER_ERROR_RESPONSE:
             logger.error(f"parse request data: {request} from {self._conn.peer_tuple} error")
             response.set_exception(ServerError("Illegal request"))
             return response
@@ -281,17 +281,13 @@ class Receiver(object):
         """根据函数类型分发请求，以及会对函数结果进行封装"""
         func_model: FuncModel = await self._call_func_permission_fn(request)
 
-        try:
-            call_id: int = request.body.get("call_id", -1)
-        except KeyError:
-            raise ParseError(extra_msg="body miss params")
-        if call_id != -1:
-            if call_id in self._generator_dict:
-                new_call_id, result = await self._gen_msg_handle(call_id)
-            else:
-                raise ProtocolError("Error call id")
-        else:
+        call_id: int = request.body.get("call_id", -1)
+        if call_id in self._generator_dict:
+            new_call_id, result = await self._gen_msg_handle(call_id)
+        elif call_id == -1:
             new_call_id, result = await self._msg_handle(request, call_id, func_model)
+        else:
+            raise ProtocolError("Error call id")
         response.body = {"call_id": new_call_id}
         if isinstance(result, StopAsyncIteration) or isinstance(result, StopIteration):
             response.status_code = 301

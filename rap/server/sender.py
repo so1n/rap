@@ -54,6 +54,31 @@ class Sender(object):
         set_header_value("user_agent", Constant.USER_AGENT, is_cover=True)
         set_header_value("request_id", str(uuid4()), is_cover=resp.msg_type is Constant.CHANNEL_RESPONSE)
 
+    async def _processor_response_handle(self, resp: Response) -> Response:
+        if not self._processor_list:
+            return resp
+        if not resp.exc:
+            try:
+                for processor in reversed(self._processor_list):
+                    resp = await processor.process_response(resp)
+            except IgnoreNextProcessor:
+                pass
+            except Exception as e:
+                resp.set_exception(e)
+        if resp.exc:
+            for processor in reversed(self._processor_list):
+                raw_resp: Response = resp
+                try:
+                    resp, resp.exc = await processor.process_exc(resp, resp.exc)
+                except IgnoreNextProcessor:
+                    break
+                except Exception as e:
+                    logger.exception(
+                        f"processor:{processor.__class__.__name__} handle response:{resp.correlation_id} error:{e}"
+                    )
+                    resp = raw_resp
+        return resp
+
     async def __call__(self, resp: Optional[Response], deadline: Optional[Deadline] = None) -> bool:
         """Send response data to the client"""
         if resp is None:
@@ -61,28 +86,7 @@ class Sender(object):
 
         resp.conn = self._conn
         self.header_handle(resp)
-        if self._processor_list:
-            if not resp.exc:
-                try:
-                    for processor in reversed(self._processor_list):
-                        resp = await processor.process_response(resp)
-                except IgnoreNextProcessor:
-                    pass
-                except Exception as e:
-                    resp.set_exception(e)
-            if resp.exc:
-                for processor in reversed(self._processor_list):
-                    raw_resp: Response = resp
-                    try:
-                        resp, resp.exc = await processor.process_exc(resp, resp.exc)
-                    except IgnoreNextProcessor:
-                        break
-                    except Exception as e:
-                        logger.exception(
-                            f"processor:{processor.__class__.__name__} handle response:{resp.correlation_id} error:{e}"
-                        )
-                        resp = raw_resp
-
+        resp = await self._processor_response_handle(resp)
         logger.debug("resp: %s", resp)
         msg_id: int = self._msg_id + 1
         # Avoid too big numbers

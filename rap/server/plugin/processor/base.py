@@ -17,12 +17,6 @@ class BaseProcessor(object):
     app: "Server"
     server_event_dict: Dict["EventEnum", List["SERVER_EVENT_FN"]] = {}
 
-    def start_event_handle(self, app: "Server") -> None:
-        pass
-
-    def stop_event_handle(self, app: "Server") -> None:
-        pass
-
     def register(self, func: Callable, name: Optional[str] = None, group: Optional[str] = None) -> None:
         if not group:
             group = self.__class__.__name__
