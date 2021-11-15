@@ -356,7 +356,6 @@ class Server(object):
             logging.debug("wait recv msg handle future")
             while len(recv_msg_handle_future_set) > 0:
                 await asyncio.sleep(0.1)
-        receiver.del_receiver()
         if not conn.is_closed():
             conn.close()
             logging.debug("close connection: %s", conn.peer_tuple)

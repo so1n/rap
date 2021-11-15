@@ -88,7 +88,6 @@ class Receiver(object):
             Constant.CHANNEL_REQUEST: self.channel_handle,
         }
         # now one conn one Request object
-        self._ping_pong_future: Optional[asyncio.Future] = None
         self._keepalive_timestamp: int = int(time.time())
         self._generator_dict: Dict[int, Union[Generator, AsyncGenerator]] = {}
         self._channel_dict: Dict[str, Channel] = {}
@@ -309,7 +308,7 @@ class Receiver(object):
         """client event request handle"""
         # rap event handle
         if request.func_name == Constant.PONG_EVENT:
-            self._keepalive_timestamp = int(time.time())
+            self._conn.keepalive_timestamp = int(time.time())
             return None
         elif request.func_name == Constant.PING_EVENT:
             response.set_event(PongEvent({}))
@@ -318,14 +317,9 @@ class Receiver(object):
                 response.set_event(CloseConnEvent("error server name"))
             else:
                 response.set_event(DeclareEvent({"result": True, "conn_id": self._conn.conn_id}))
-                self._keepalive_timestamp = int(time.time())
-                self._ping_pong_future = asyncio.ensure_future(self.ping_event())
+                self._conn.keepalive_timestamp = int(time.time())
+                self._conn.ping_future = asyncio.ensure_future(self.ping_event())
         elif request.func_name == Constant.DROP:
-            self.del_receiver()
             response.set_event(DropEvent("success"))
         response.correlation_id = request.correlation_id
         return response
-
-    def del_receiver(self) -> None:
-        if self._ping_pong_future and not self._ping_pong_future.done() and not self._ping_pong_future.cancelled():
-            self._ping_pong_future.cancel()

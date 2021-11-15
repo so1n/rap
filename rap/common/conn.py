@@ -199,3 +199,9 @@ class ServerConnection(BaseConnection):
         self.sock_tuple: Tuple[str, int] = self._writer.get_extra_info("sockname")
         self.conn_future = asyncio.Future()
         self._is_closed = False
+        self.ping_future: asyncio.Future = done_future()
+        self.keepalive_timestamp = int(time.time())
+
+    def close(self) -> None:
+        safe_del_future(self.ping_future)
+        super(ServerConnection, self).close()
