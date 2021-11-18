@@ -6,7 +6,7 @@ from uuid import uuid4
 from rap.common.asyncio_helper import Deadline
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import IgnoreNextProcessor
-from rap.common.utils import Constant
+from rap.common.utils import constant
 from rap.server.model import Event, Response
 from rap.server.plugin.processor.base import BaseProcessor
 
@@ -50,9 +50,9 @@ class Sender(object):
             elif header_key not in resp.header:
                 resp.header[header_key] = header_value
 
-        set_header_value("version", Constant.VERSION, is_cover=True)
-        set_header_value("user_agent", Constant.USER_AGENT, is_cover=True)
-        set_header_value("request_id", str(uuid4()), is_cover=resp.msg_type is Constant.CHANNEL_RESPONSE)
+        set_header_value("version", constant.VERSION, is_cover=True)
+        set_header_value("user_agent", constant.USER_AGENT, is_cover=True)
+        set_header_value("request_id", str(uuid4()), is_cover=resp.msg_type is constant.CHANNEL_RESPONSE)
 
     async def _processor_response_handle(self, resp: Response) -> Response:
         if not self._processor_list:
@@ -96,7 +96,7 @@ class Sender(object):
 
         with deadline:
             await self._conn.write((msg_id, *resp.to_msg()))
-        if resp.target.endswith(Constant.EVENT_CLOSE_CONN):
+        if resp.target.endswith(constant.EVENT_CLOSE_CONN):
             if not self._conn.is_closed():
                 self._conn.close()
         return True

@@ -81,8 +81,7 @@ async def rap_server() -> AsyncGenerator[Server, None]:
 
 @pytest.fixture
 async def rap_client() -> AsyncGenerator[Client, None]:
-    client.transport._process_request_list = []
-    client.transport._process_response_list = []
+    client.transport._processor_list = []
     await client.start()
     try:
         yield client
@@ -92,8 +91,7 @@ async def rap_client() -> AsyncGenerator[Client, None]:
 
 @asynccontextmanager
 async def process_client(process_list: List[BaseProcessor]) -> AsyncGenerator[Client, None]:
-    client.transport._process_request_list = []
-    client.transport._process_response_list = []
+    client.transport._processor_list = []
     client.load_processor(process_list)
     await client.start()
     try:

@@ -10,7 +10,7 @@ import msgpack
 from rap.common.asyncio_helper import Semaphore, del_future, done_future, safe_del_future
 from rap.common.state import State
 from rap.common.types import READER_TYPE, UNPACKER_TYPE, WRITER_TYPE
-from rap.common.utils import Constant
+from rap.common.utils import constant
 
 __all__ = ["Connection", "ServerConnection"]
 logger: logging.Logger = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ class BaseConnection:
                 pass
 
             while True:
-                data = await self._reader.read(Constant.SOCKET_RECV_SIZE)
+                data = await self._reader.read(constant.SOCKET_RECV_SIZE)
                 if not data:
                     raise ConnectionError(f"Connection to {self.peer_tuple} closed")
                 self._unpacker.feed(data)

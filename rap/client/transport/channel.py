@@ -10,7 +10,7 @@ from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError
 from rap.common.snowflake import get_snowflake_id
 from rap.common.state import State
-from rap.common.utils import Constant
+from rap.common.utils import constant
 
 if TYPE_CHECKING:
     from .transport import Transport
@@ -65,7 +65,7 @@ class Channel(BaseChannel[Response]):
         self._conn.conn_future.add_done_callback(add_done_callback)
 
         # init with server
-        life_cycle: str = Constant.DECLARE
+        life_cycle: str = constant.DECLARE
         await self._base_write(None, life_cycle)
         response: Response = await self._base_read()
         if response.header.get("channel_life_cycle") != life_cycle:
@@ -96,7 +96,7 @@ class Channel(BaseChannel[Response]):
         except Exception as e:
             raise e
 
-        if response.header.get("channel_life_cycle") == Constant.DROP:
+        if response.header.get("channel_life_cycle") == constant.DROP:
             exc: ChannelCloseError = ChannelCloseError(self._drop_msg)
             self.set_exc(exc)
             raise exc
@@ -108,7 +108,7 @@ class Channel(BaseChannel[Response]):
             raise ChannelCloseError("channel is closed")
         request: Request = Request(
             self._transport.app,
-            Constant.CHANNEL_REQUEST,
+            constant.CHANNEL_REQUEST,
             self._target,
             body,
             correlation_id=self.channel_id,
@@ -120,7 +120,7 @@ class Channel(BaseChannel[Response]):
 
     async def read(self, timeout: Optional[int] = None) -> Response:
         response: Response = await self._base_read(timeout=timeout)
-        if response.header.get("channel_life_cycle") != Constant.MSG:
+        if response.header.get("channel_life_cycle") != constant.MSG:
             raise ChannelError("channel life cycle error")
         return response
 
@@ -135,7 +135,7 @@ class Channel(BaseChannel[Response]):
             In general, the write method is very fast,
             but in extreme cases conn has accumulated some requests and needs to wait
         """
-        await self._base_write(body, Constant.MSG, timeout=timeout)
+        await self._base_write(body, constant.MSG, timeout=timeout)
 
     async def close(self) -> None:
         """Actively send a close message and close the channel"""
@@ -147,7 +147,7 @@ class Channel(BaseChannel[Response]):
             return
         self.channel_is_declare = False
 
-        await self._base_write(None, Constant.DROP)
+        await self._base_write(None, constant.DROP)
 
         async def wait_drop_response() -> None:
             try:

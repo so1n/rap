@@ -7,7 +7,7 @@ from opentracing.ext import tags
 from opentracing.propagation import Format
 from opentracing.scope import Scope
 
-from rap.common.utils import Constant
+from rap.common.utils import constant
 from rap.server.model import Request, Response, ServerMsgProtocol
 from rap.server.plugin.processor.base import BaseProcessor
 
@@ -36,23 +36,23 @@ class TracingProcessor(BaseProcessor):
         return scope
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type is Constant.MSG_REQUEST and not request.state.get_value("scope", None):
+        if request.msg_type is constant.MSG_REQUEST and not request.state.get_value("scope", None):
             request.state.scope = self._create_scope(request)
-        elif request.msg_type is Constant.CHANNEL_REQUEST and not request.state.get_value("span", None):
+        elif request.msg_type is constant.CHANNEL_REQUEST and not request.state.get_value("span", None):
             # A channel is a continuous activity that may involve the interaction of multiple coroutines
             request.state.span = self._create_scope(request, finish_on_close=False).span
         return request
 
     async def process_response(self, response: Response) -> Response:
-        if response.msg_type is Constant.MSG_RESPONSE:
+        if response.msg_type is constant.MSG_RESPONSE:
             scope: Scope = response.state.scope
             status_code: int = response.status_code
             scope.span.set_tag("status_code", status_code)
             scope.span.set_tag(tags.ERROR, status_code >= 400)
             scope.close()
         elif (
-            response.msg_type is Constant.CHANNEL_RESPONSE
-            and response.header.get("channel_life_cycle", "error") == Constant.DECLARE
+            response.msg_type is constant.CHANNEL_RESPONSE
+            and response.header.get("channel_life_cycle", "error") == constant.DECLARE
         ):
             # The channel is created after receiving the request
             response.state.user_channel.add_done_callback(lambda f: response.state.span.finish())
@@ -60,7 +60,7 @@ class TracingProcessor(BaseProcessor):
 
     async def process_exc(self, response: Response, exc: Exception) -> Tuple[Response, Exception]:
         scope: Optional[Scope] = response.state.get_value("scope", None)
-        if scope and response.msg_type is Constant.MSG_RESPONSE:
+        if scope and response.msg_type is constant.MSG_RESPONSE:
             status_code: int = response.status_code
             scope.span.set_tag("status_code", status_code)
             scope.span._on_error(scope.span, type(exc), exc, response.tb)

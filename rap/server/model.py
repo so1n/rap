@@ -10,7 +10,7 @@ from rap.common.exceptions import BaseRapError, ServerError
 from rap.common.msg import BaseMsgProtocol
 from rap.common.state import State
 from rap.common.types import BASE_MSG_TYPE, SERVER_MSG_TYPE
-from rap.common.utils import Constant
+from rap.common.utils import constant
 
 if TYPE_CHECKING:
     from rap.server.core import Server
@@ -57,7 +57,7 @@ class Request(ServerMsgProtocol):
 class Response(ServerMsgProtocol):
     app: "Server"
     target: str
-    msg_type: int = Constant.MSG_RESPONSE
+    msg_type: int = constant.MSG_RESPONSE
     correlation_id: str = ""
     status_code: int = 200
     header: dict = field(default_factory=dict)
@@ -81,7 +81,7 @@ class Response(ServerMsgProtocol):
     def set_event(self, event: Event) -> None:
         if not isinstance(event, Event):
             raise TypeError(f"{event} type must {Event.__name__}")
-        self.msg_type = Constant.SERVER_EVENT
+        self.msg_type = constant.SERVER_EVENT
         self.target = f"/_event/{event.event_name}"
         self.body = event.event_info
 

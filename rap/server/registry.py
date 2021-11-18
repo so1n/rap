@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, List, Optional, Type, Union
 from rap.common.channel import UserChannel
 from rap.common.exceptions import FuncNotFoundError, RegisteredError
 from rap.common.types import is_json_type
-from rap.common.utils import Constant
+from rap.common.utils import constant
 from rap.server.model import Request
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ class FuncModel(object):
         self.arg_list: List[str] = []
         self.kwarg_dict: OrderedDict = OrderedDict()
 
-        if self.func_type == Constant.CHANNEL_TYPE and self.is_gen_func:
+        if self.func_type == constant.CHANNEL_TYPE and self.is_gen_func:
             raise RegisteredError("Is not a legal function. is channel or gen func?")
 
         for name, parameter in self.func_sig.parameters.items():
@@ -79,10 +79,10 @@ class RegistryManager(object):
         sig: "inspect.Signature" = inspect.signature(func)
         func_arg_parameter: List[inspect.Parameter] = [i for i in sig.parameters.values() if i.default == i.empty]
 
-        func_type: str = Constant.NORMAL_TYPE
+        func_type: str = constant.NORMAL_TYPE
         try:
             if len(func_arg_parameter) == 1 and issubclass(func_arg_parameter[0].annotation, UserChannel):
-                func_type = Constant.CHANNEL_TYPE
+                func_type = constant.CHANNEL_TYPE
         except TypeError:
             # ignore error TypeError: issubclass() arg 1 must be a class
             pass
@@ -125,7 +125,7 @@ class RegistryManager(object):
 
         func_type: str = self._get_func_type(func)
 
-        if func_type == Constant.NORMAL_TYPE:
+        if func_type == constant.NORMAL_TYPE:
             # check func param&return value type hint
             if sig.return_annotation is sig.empty:
                 raise RegisteredError(f"{func.__name__} must use TypeHints")
@@ -140,7 +140,7 @@ class RegistryManager(object):
                     )
 
         if group is None:
-            group = Constant.DEFAULT_GROUP
+            group = constant.DEFAULT_GROUP
 
         func_key: str = self.gen_key(group, name, func_type)
         if func_key in self.func_dict:
@@ -177,7 +177,7 @@ class RegistryManager(object):
             if not name:
                 name = func.__name__
             if group is None:
-                group = Constant.DEFAULT_GROUP
+                group = constant.DEFAULT_GROUP
 
             func_type: str = self._get_func_type(func)
             func_key: str = self.gen_key(group, name, func_type)
@@ -203,7 +203,7 @@ class RegistryManager(object):
             if not name:
                 name = func.__name__
             if group is None:
-                group = Constant.DEFAULT_GROUP
+                group = constant.DEFAULT_GROUP
             func_type: str = self._get_func_type(func)
             func_key: str = self.gen_key(group, name, func_type)
             if func_key not in self.func_dict:

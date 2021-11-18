@@ -6,7 +6,7 @@ from rap.common.asyncio_helper import del_future
 from rap.common.channel import BaseChannel, UserChannel
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import ChannelError
-from rap.common.utils import Constant
+from rap.common.utils import constant
 
 if TYPE_CHECKING:
     from rap.server import Request
@@ -50,7 +50,7 @@ class Channel(BaseChannel["Request"]):
     async def write(self, body: Any) -> None:
         if self.is_close:
             raise ChannelError(f"channel<{self.channel_id}> is close")
-        await self._write(body, {"channel_life_cycle": Constant.MSG})
+        await self._write(body, {"channel_life_cycle": constant.MSG})
 
     async def read(self) -> "Request":
         if self.is_close:
@@ -71,7 +71,7 @@ class Channel(BaseChannel["Request"]):
         self.set_exc(ChannelError(f"channel {self.channel_id} is close"))
 
         if not self._conn.is_closed():
-            await self._write(None, {"channel_life_cycle": Constant.DROP})
+            await self._write(None, {"channel_life_cycle": constant.DROP})
 
         # Actively cancel the future may not be successful, such as cancel asyncio.sleep
         del_future(self._func_future)

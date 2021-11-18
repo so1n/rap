@@ -3,7 +3,7 @@ import asyncio
 from aredis import StrictRedis  # type: ignore
 
 from rap.common.channel import UserChannel
-from rap.common.utils import Constant
+from rap.common.utils import constant
 from rap.server import Server
 from rap.server.model import Request
 from rap.server.plugin.processor import limit
@@ -29,8 +29,8 @@ async def echo_body(channel: UserChannel) -> None:
 
 def match_demo_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
     if (
-        request.msg_type == Constant.CHANNEL_REQUEST
-        and request.header.get("channel_life_cycle", "") != Constant.DECLARE
+        request.msg_type == constant.CHANNEL_REQUEST
+        and request.header.get("channel_life_cycle", "") != constant.DECLARE
     ):
         return None, True
     if request.func_name in ("demo", "echo_body"):
@@ -41,8 +41,8 @@ def match_demo_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
 
 def match_ip_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
     if (
-        request.msg_type == Constant.CHANNEL_REQUEST
-        and request.header.get("channel_life_cycle", "") != Constant.DECLARE
+        request.msg_type == constant.CHANNEL_REQUEST
+        and request.header.get("channel_life_cycle", "") != constant.DECLARE
     ):
         return None, True
     key: str = "127.0.0.1"

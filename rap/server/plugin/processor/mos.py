@@ -4,7 +4,7 @@ import psutil
 
 from rap.common.asyncio_helper import get_event_loop
 from rap.common.collect_statistics import Counter, Gauge
-from rap.common.utils import Constant, EventEnum
+from rap.common.utils import EventEnum, constant
 from rap.server.model import Request, Response
 from rap.server.plugin.processor.base import BaseProcessor
 
@@ -73,24 +73,24 @@ class MosProcessor(BaseProcessor):
 
     async def process_request(self, request: Request) -> Request:
         self.request_cnt_gauge.increment()
-        if request.msg_type == Constant.MSG_REQUEST:
+        if request.msg_type == constant.MSG_REQUEST:
             self.request_online_counter.increment()
         return request
 
     async def process_response(self, response: Response) -> Response:
         self.response_cnt_gauge.increment()
-        if response.msg_type == Constant.MSG_RESPONSE:
+        if response.msg_type == constant.MSG_RESPONSE:
             self.request_online_counter.decrement()
-        elif response.msg_type == Constant.CHANNEL_RESPONSE:
+        elif response.msg_type == constant.CHANNEL_RESPONSE:
             life_cycle: str = response.header.get("channel_life_cycle", "error")
-            if life_cycle == Constant.DECLARE:
+            if life_cycle == constant.DECLARE:
                 self.channel_online_cnt_counter.increment()
-            elif life_cycle == Constant.DROP:
+            elif life_cycle == constant.DROP:
                 self.channel_online_cnt_counter.decrement()
 
         if response.status_code >= 400:
             self.error_cnt_gauge.increment()
-        if response.target.endswith(Constant.PONG_EVENT):
+        if response.target.endswith(constant.PONG_EVENT):
             mos: int = int(
                 5
                 * (1 - self._cpu_percent)

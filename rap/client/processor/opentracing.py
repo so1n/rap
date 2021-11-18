@@ -8,7 +8,7 @@ from opentracing.propagation import Format
 from opentracing.scope import Scope
 
 from rap.client.model import BaseMsgProtocol, Request, Response
-from rap.common.utils import Constant
+from rap.common.utils import constant
 
 from .base import BaseProcessor
 
@@ -40,16 +40,16 @@ class TracingProcessor(BaseProcessor):
         return scope
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type is Constant.MSG_REQUEST and not request.state.get_value("scope", None):
+        if request.msg_type is constant.MSG_REQUEST and not request.state.get_value("scope", None):
             request.state.scope = self._create_scope(request)
-        elif request.msg_type is Constant.CHANNEL_REQUEST and not request.state.get_value("span", None):
+        elif request.msg_type is constant.CHANNEL_REQUEST and not request.state.get_value("span", None):
             # A channel is a continuous activity that may involve the interaction of multiple coroutines
             request.state.span = self._create_scope(request, finish_on_close=False).span
             request.state.user_channel.add_done_callback(lambda f: request.state.span.finish())
         return request
 
     async def process_response(self, response: Response) -> Response:
-        if response.msg_type is Constant.MSG_RESPONSE:
+        if response.msg_type is constant.MSG_RESPONSE:
             scope: Scope = response.state.scope
             status_code: int = response.status_code
             scope.span.set_tag("status_code", status_code)
@@ -59,7 +59,7 @@ class TracingProcessor(BaseProcessor):
 
     async def process_exc(self, response: Response, exc: Exception) -> Tuple[Response, Exception]:
         scope: Optional[Scope] = response.state.get_value("scope", None)
-        if scope and response.msg_type is Constant.MSG_RESPONSE:
+        if scope and response.msg_type is constant.MSG_RESPONSE:
             status_code: int = response.status_code
             scope.span.set_tag("status_code", status_code)
             scope.span._on_error(scope.span, type(exc), exc, response.tb)

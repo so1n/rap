@@ -9,7 +9,7 @@ from skywalking.trace.tags import Tag
 from skywalking.utils import filter
 
 from rap.client.model import BaseMsgProtocol, Request, Response
-from rap.common.utils import Constant
+from rap.common.utils import constant
 
 from .base import BaseProcessor
 
@@ -63,16 +63,16 @@ class SkywalkingProcessor(BaseProcessor):
         return span
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type is Constant.MSG_REQUEST:
+        if request.msg_type is constant.MSG_REQUEST:
             request.state.span = self._create_span(request)
-        elif request.msg_type is Constant.CHANNEL_REQUEST and not request.state.get_value("span", None):
+        elif request.msg_type is constant.CHANNEL_REQUEST and not request.state.get_value("span", None):
             # A channel is a continuous activity that may involve the interaction of multiple coroutines
             request.state.span = self._create_span(request)
             request.state.user_channel.add_done_callback(lambda f: request.state.span.stop())
         return request
 
     async def process_response(self, response: Response) -> Response:
-        if response.msg_type is Constant.MSG_RESPONSE:
+        if response.msg_type is constant.MSG_RESPONSE:
             span: Span = response.state.span
             status_code: int = response.status_code
             span.tag(TagStatusCode(status_code))
@@ -89,6 +89,6 @@ class SkywalkingProcessor(BaseProcessor):
             span.logs = [
                 Log(items=[LogItem(key="Traceback", val=filter.sw_filter(target="".join(format_tb(response.tb))))])
             ]
-            if response.msg_type is not Constant.CHANNEL_RESPONSE:
+            if response.msg_type is not constant.CHANNEL_RESPONSE:
                 span.stop()
         return response, exc

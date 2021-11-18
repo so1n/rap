@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, Sequence, Tuple
 from rap.common.types import is_type
 
 __all__ = [
-    "Constant",
+    "constant",
     "EventEnum",
     "RapFunc",
     "check_func_type",
@@ -22,7 +22,15 @@ __all__ = [
 _STR_LD = string.ascii_letters + string.digits
 
 
-class Constant(object):
+class _Constant(object):
+
+    __initialized: bool = False
+
+    def __init__(self) -> None:
+        self.__initialized = True
+        if self.__initialized:
+            raise RuntimeError("Can not support initialized")
+
     VERSION: str = "0.1"  # protocol version
     USER_AGENT: str = "Python3-0.5.3"
     SOCKET_RECV_SIZE: int = 1024 ** 1
@@ -51,6 +59,13 @@ class Constant(object):
     NORMAL_TYPE: str = "normal"
 
     DEFAULT_GROUP: str = "default"
+
+    def __setattr__(self, key: Any, value: Any) -> None:
+        if self.__initialized:
+            raise RuntimeError("Can not set new value in runtime")
+
+
+constant: _Constant = _Constant()
 
 
 class _SubRapFunc(object):
@@ -100,9 +115,9 @@ def parse_error(exception: Exception) -> Tuple[str, str]:
 
 
 response_num_dict: Dict[int, int] = {
-    Constant.MSG_REQUEST: Constant.MSG_RESPONSE,
-    Constant.CHANNEL_REQUEST: Constant.CHANNEL_RESPONSE,
-    Constant.CLIENT_EVENT: -1,
+    constant.MSG_REQUEST: constant.MSG_RESPONSE,
+    constant.CHANNEL_REQUEST: constant.CHANNEL_RESPONSE,
+    constant.CLIENT_EVENT: -1,
 }
 
 

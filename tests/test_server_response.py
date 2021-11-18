@@ -7,7 +7,7 @@ from rap.client import Client
 from rap.common.conn import BaseConnection
 from rap.common.event import Event
 from rap.common.exceptions import RPCError, ServerError
-from rap.common.utils import Constant
+from rap.common.utils import constant
 from rap.server import Server
 from rap.server.model import Response
 from rap.server.sender import Sender
@@ -16,7 +16,7 @@ pytestmark = pytest.mark.asyncio
 test_exc: Exception = Exception("this is test exc")
 test_rpc_exc: RPCError = RPCError("this is rpc error")
 test_event: Event = Event(event_info="test event", event_name="test")
-test_target: str = f"/{Constant.DEFAULT_GROUP}/test"
+test_target: str = f"/{constant.DEFAULT_GROUP}/test"
 
 
 class TestServerResponse:
@@ -56,14 +56,14 @@ class TestServerResponse:
             response.set_event(test_exc)  # type: ignore
 
         response.set_event(test_event)
-        assert response.msg_type == Constant.SERVER_EVENT
+        assert response.msg_type == constant.SERVER_EVENT
         assert response.target.endswith(test_event.event_name)
         assert response.body == test_event.event_info
 
     async def test_from_event(self) -> None:
         test_server: Server = Server("test")
         response: Response = Response.from_event(test_server, test_event)
-        assert response.msg_type == Constant.SERVER_EVENT
+        assert response.msg_type == constant.SERVER_EVENT
         assert response.target.endswith(test_event.event_name)
         assert response.body == test_event.event_info
 
@@ -86,7 +86,7 @@ class TestServerResponse:
 
         response = Response(test_server, test_target)
         response(test_event)
-        assert response.msg_type == Constant.SERVER_EVENT
+        assert response.msg_type == constant.SERVER_EVENT
         assert response.target.endswith(test_event.event_name)
         assert response.body == test_event.event_info
 

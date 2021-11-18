@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError, ParseError
-from rap.common.utils import Constant, EventEnum, gen_random_time_id
+from rap.common.utils import EventEnum, constant, gen_random_time_id
 from rap.server.model import Request, Response
 from rap.server.plugin.processor.base import BaseProcessor
 
@@ -82,7 +82,7 @@ class BaseCryptoProcessor(BaseProcessor):
 
     async def decrypt_request(self, request: Request) -> Request:
         """decrypt request body"""
-        if request.msg_type in (Constant.MSG_REQUEST, Constant.CHANNEL_REQUEST):
+        if request.msg_type in (constant.MSG_REQUEST, constant.CHANNEL_REQUEST):
             crypto: Optional[Crypto] = request.conn.state.get_value("crypto", None)
             if crypto:
                 try:
@@ -114,7 +114,7 @@ class BaseCryptoProcessor(BaseProcessor):
     @staticmethod
     async def encrypt_response(response: Response) -> Response:
         """encrypt response body"""
-        if response.msg_type in (Constant.MSG_RESPONSE, Constant.CHANNEL_RESPONSE) and response.status_code <= 400:
+        if response.msg_type in (constant.MSG_RESPONSE, constant.CHANNEL_RESPONSE) and response.status_code <= 400:
             assert response.conn is not None
             crypto: Optional[Crypto] = response.conn.state.get_value("crypto", None)
             if not crypto:
@@ -127,7 +127,7 @@ class BaseCryptoProcessor(BaseProcessor):
 
 class CryptoProcessor(BaseCryptoProcessor):
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type == Constant.CLIENT_EVENT and request.target.endswith(Constant.DECLARE):
+        if request.msg_type == constant.CLIENT_EVENT and request.target.endswith(constant.DECLARE):
             crypto_id: str = request.body.get("crypto_id", "")
             if crypto_id:
                 crypto: Optional[Crypto] = self.get_crypto_by_key_id(crypto_id)
@@ -160,7 +160,7 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
 
     async def process_request(self, request: Request) -> Request:
         assert request.conn is not None, "Not found conn from request"
-        if request.msg_type == Constant.CLIENT_EVENT and request.target.endswith(Constant.DECLARE):
+        if request.msg_type == constant.CLIENT_EVENT and request.target.endswith(constant.DECLARE):
             check_id: bytes = request.body.get("check_id", b"")
             crypto_id: str = request.body.get("crypto_id", "")
             crypto_key: str = request.body.get("crypto_key", "")
@@ -178,7 +178,7 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
 
     async def process_response(self, response: Response) -> Response:
         assert response.conn is not None, "Not found conn from response"
-        if response.msg_type == Constant.SERVER_EVENT and response.target.endswith(Constant.DECLARE):
+        if response.msg_type == constant.SERVER_EVENT and response.target.endswith(constant.DECLARE):
             try:
                 check_id: int = response.state.check_id
             except KeyError:

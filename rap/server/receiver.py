@@ -34,7 +34,7 @@ from rap.common.exceptions import (
 )
 from rap.common.state import State
 from rap.common.types import is_type
-from rap.common.utils import Constant, param_handle, parse_error, response_num_dict
+from rap.common.utils import constant, param_handle, parse_error, response_num_dict
 from rap.server.channel import Channel
 from rap.server.model import Request, Response
 from rap.server.plugin.processor.base import BaseProcessor
@@ -83,9 +83,9 @@ class Receiver(object):
         )
 
         self.dispatch_func_dict: Dict[int, Callable] = {
-            Constant.CLIENT_EVENT: self.event,
-            Constant.MSG_REQUEST: self.msg_handle,
-            Constant.CHANNEL_REQUEST: self.channel_handle,
+            constant.CLIENT_EVENT: self.event,
+            constant.MSG_REQUEST: self.msg_handle,
+            constant.CHANNEL_REQUEST: self.channel_handle,
         }
         # now one conn one Request object
         self._keepalive_timestamp: int = int(time.time())
@@ -94,7 +94,7 @@ class Receiver(object):
 
     async def _default_call_fun_permission_fn(self, request: Request) -> FuncModel:
         func_model: FuncModel = self._app.registry.get_func_model(
-            request, Constant.NORMAL_TYPE if request.msg_type == Constant.MSG_REQUEST else Constant.CHANNEL_TYPE
+            request, constant.NORMAL_TYPE if request.msg_type == constant.MSG_REQUEST else constant.CHANNEL_TYPE
         )
 
         if func_model.is_private and request.conn.peer_tuple[0] not in ("::1", "127.0.0.1", "localhost"):
@@ -103,9 +103,9 @@ class Receiver(object):
 
     async def dispatch(self, request: Request) -> Optional[Response]:
         """recv request, processor request and dispatch request by request msg type"""
-        response_num: int = response_num_dict.get(request.msg_type, Constant.SERVER_ERROR_RESPONSE)
+        response_num: int = response_num_dict.get(request.msg_type, constant.SERVER_ERROR_RESPONSE)
 
-        if request.msg_type == Constant.CHANNEL_REQUEST:
+        if request.msg_type == constant.CHANNEL_REQUEST:
             correlation_id: str = f"{request.conn.peer_tuple}:{request.correlation_id}"
             state: State = self._state_dict.get(correlation_id, request.state)
             self._state_dict[correlation_id] = state
@@ -122,7 +122,7 @@ class Receiver(object):
         response.header.update(request.header)
 
         # check type_id
-        if response.msg_type == Constant.SERVER_ERROR_RESPONSE:
+        if response.msg_type == constant.SERVER_ERROR_RESPONSE:
             logger.error(f"parse request data: {request} from {self._conn.peer_tuple} error")
             response.set_exception(ServerError("Illegal request"))
             return response
@@ -178,13 +178,13 @@ class Receiver(object):
         channel_id: str = request.correlation_id
         life_cycle: str = request.header.get("channel_life_cycle", "error")
         channel: Optional[Channel] = self._channel_dict.get(channel_id, None)
-        if life_cycle == Constant.MSG:
+        if life_cycle == constant.MSG:
             # Messages with a life cycle of `msg` in the channel type account for the highest proportion
             if channel is None:
                 raise ChannelError("channel not create")
             await channel.queue.put(request)
             return None
-        elif life_cycle == Constant.DECLARE:
+        elif life_cycle == constant.DECLARE:
             if channel is not None:
                 raise ChannelError("channel already create")
 
@@ -194,7 +194,7 @@ class Receiver(object):
                     Response(
                         app=self._app,
                         target=request.target,
-                        msg_type=Constant.CHANNEL_RESPONSE,
+                        msg_type=constant.CHANNEL_RESPONSE,
                         correlation_id=channel_id,
                         header=header,
                         body=body,
@@ -207,9 +207,9 @@ class Receiver(object):
             channel.channel_conn_future.add_done_callback(lambda f: self._channel_dict.pop(channel_id, None))
             self._channel_dict[channel_id] = channel
 
-            response.header = {"channel_id": channel_id, "channel_life_cycle": Constant.DECLARE}
+            response.header = {"channel_id": channel_id, "channel_life_cycle": constant.DECLARE}
             return response
-        elif life_cycle == Constant.DROP:
+        elif life_cycle == constant.DROP:
             if channel is None:
                 raise ChannelError("channel not create")
             else:
@@ -265,7 +265,7 @@ class Receiver(object):
         # generator fun support
         if inspect.isgenerator(result) or inspect.isasyncgen(result):
             user_agent: str = request.header.get("user_agent", "None")
-            if user_agent != Constant.USER_AGENT:
+            if user_agent != constant.USER_AGENT:
                 result = ProtocolError(f"{user_agent} not support generator")
             else:
                 call_id = id(result)
@@ -293,7 +293,7 @@ class Receiver(object):
         elif isinstance(result, Exception):
             exc, exc_info = parse_error(result)
             response.body["exc_info"] = exc_info  # type: ignore
-            if request.header.get("user_agent") == Constant.USER_AGENT:
+            if request.header.get("user_agent") == constant.USER_AGENT:
                 response.body["exc"] = exc  # type: ignore
         else:
             response.body["result"] = result
@@ -307,19 +307,19 @@ class Receiver(object):
     async def event(self, request: Request, response: Response) -> Optional[Response]:
         """client event request handle"""
         # rap event handle
-        if request.func_name == Constant.PONG_EVENT:
+        if request.func_name == constant.PONG_EVENT:
             self._conn.keepalive_timestamp = int(time.time())
             return None
-        elif request.func_name == Constant.PING_EVENT:
+        elif request.func_name == constant.PING_EVENT:
             response.set_event(PongEvent({}))
-        elif request.func_name == Constant.DECLARE:
+        elif request.func_name == constant.DECLARE:
             if request.body.get("server_name") != self._app.server_name:
                 response.set_event(CloseConnEvent("error server name"))
             else:
                 response.set_event(DeclareEvent({"result": True, "conn_id": self._conn.conn_id}))
                 self._conn.keepalive_timestamp = int(time.time())
                 self._conn.ping_future = asyncio.ensure_future(self.ping_event())
-        elif request.func_name == Constant.DROP:
+        elif request.func_name == constant.DROP:
             response.set_event(DropEvent("success"))
         response.correlation_id = request.correlation_id
         return response

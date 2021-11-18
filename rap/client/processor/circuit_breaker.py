@@ -5,7 +5,7 @@ from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common.collect_statistics import WindowStatistics
-from rap.common.utils import Constant, EventEnum
+from rap.common.utils import EventEnum, constant
 
 if TYPE_CHECKING:
     from rap.client.core import BaseClient
@@ -87,7 +87,7 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
         raise NotImplementedError
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type == Constant.CLIENT_EVENT:
+        if request.msg_type == constant.CLIENT_EVENT:
             # do not process event
             return request
         index: str = self.get_index_from_request(request)

@@ -11,7 +11,7 @@ from example.api_gateway.api_client import example_websockets_client
 from example.api_gateway.server import Server, create_server
 from rap.api_gateway.app import create_app
 from rap.client import Client
-from rap.common.utils import Constant
+from rap.common.utils import constant
 
 
 @pytest.fixture()
@@ -91,7 +91,7 @@ class TestApiGateWay:
 
     def test_not_found(self) -> None:
         group_set: Set[str] = set()
-        group_set.add(Constant.DEFAULT_GROUP)
+        group_set.add(constant.DEFAULT_GROUP)
         client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
         app: Starlette = create_app("/api", [client], group_filter=group_set)
         server: Server = create_server("test")

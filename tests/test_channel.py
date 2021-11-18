@@ -7,7 +7,7 @@ from pytest_mock import MockerFixture
 from rap.client import Client, Response
 from rap.common.channel import UserChannel
 from rap.common.exceptions import ChannelError, FuncNotFoundError
-from rap.common.utils import Constant
+from rap.common.utils import constant
 from rap.server import Response as ServerResponse
 from rap.server import Server
 from rap.server import UserChannel as ServerChannel
@@ -142,10 +142,10 @@ class TestChannel:
         # test channel already create
         mocker.patch("rap.client.transport.channel.get_snowflake_id").return_value = 123
         mocker.patch("rap.client.model.Request.to_msg").return_value = (
-            Constant.CHANNEL_REQUEST,
+            constant.CHANNEL_REQUEST,
             "123",
             "/default/test_channel",
-            {"channel_life_cycle": Constant.DECLARE},
+            {"channel_life_cycle": constant.DECLARE},
             None,
         )
         with pytest.raises(ChannelError) as e:
@@ -155,10 +155,10 @@ class TestChannel:
 
         mocker.patch("rap.client.transport.channel.get_snowflake_id").return_value = 234
         mocker.patch("rap.client.model.Request.to_msg").return_value = (
-            Constant.CHANNEL_REQUEST,
+            constant.CHANNEL_REQUEST,
             "234",
             "/default/test_channel",
-            {"channel_life_cycle": Constant.MSG, "channel_id": "234"},
+            {"channel_life_cycle": constant.MSG, "channel_id": "234"},
             None,
         )
         with pytest.raises(ChannelError) as e:
@@ -168,10 +168,10 @@ class TestChannel:
 
         mocker.patch("rap.client.transport.channel.get_snowflake_id").return_value = 345
         mocker.patch("rap.client.model.Request.to_msg").return_value = (
-            Constant.CHANNEL_REQUEST,
+            constant.CHANNEL_REQUEST,
             "345",
             "/default/test_channel",
-            {"channel_life_cycle": Constant.DROP, "channel_id": "345"},
+            {"channel_life_cycle": constant.DROP, "channel_id": "345"},
             None,
         )
         with pytest.raises(ChannelError) as e:
@@ -181,7 +181,7 @@ class TestChannel:
 
         mocker.patch("rap.client.transport.channel.get_snowflake_id").return_value = 456
         mocker.patch("rap.client.model.Request.to_msg").return_value = (
-            Constant.CHANNEL_REQUEST,
+            constant.CHANNEL_REQUEST,
             "456",
             "/default/test_channel",
             {"channel_life_cycle": -1, "channel_id": "456"},

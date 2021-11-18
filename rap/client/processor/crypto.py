@@ -8,7 +8,7 @@ from rap.client.processor.base import BaseProcessor
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError
 from rap.common.snowflake import async_get_snowflake_id
-from rap.common.utils import Constant, gen_random_time_id
+from rap.common.utils import constant, gen_random_time_id
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
 
     async def process_request(self, request: Request) -> Request:
         assert request.conn is not None, "Not found conn from request"
-        if request.msg_type == Constant.CLIENT_EVENT and request.target.endswith(Constant.DECLARE):
+        if request.msg_type == constant.CLIENT_EVENT and request.target.endswith(constant.DECLARE):
             crypto_key: str = gen_random_time_id(length=6, time_length=10)
             crypto_id: str = str(await async_get_snowflake_id())
             request.body["crypto_id"] = crypto_id
@@ -56,7 +56,7 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
             request.body["check_id"] = request.conn.state.crypto.encrypt_object(check_id)
             request.state.check_id = check_id
             # self.app.cache.add(crypto_id, 10, check_id)
-        elif request.msg_type in (Constant.MSG_REQUEST, Constant.CHANNEL_REQUEST):
+        elif request.msg_type in (constant.MSG_REQUEST, constant.CHANNEL_REQUEST):
             try:
                 crypto: Crypto = request.conn.state.crypto
                 request.body = {
@@ -72,10 +72,10 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
     async def process_response(self, response: Response) -> Response:
         crypto: Crypto = response.conn.state.crypto
         try:
-            if response.msg_type == Constant.SERVER_EVENT and response.target.endswith(Constant.DECLARE):
+            if response.msg_type == constant.SERVER_EVENT and response.target.endswith(constant.DECLARE):
                 if crypto.decrypt_object(response.body["check_id"]) - 1 != response.state.check_id:
                     raise CryptoError("Check body error")
-            elif response.msg_type in (Constant.MSG_RESPONSE, Constant.CHANNEL_RESPONSE) and response.status_code < 400:
+            elif response.msg_type in (constant.MSG_RESPONSE, constant.CHANNEL_RESPONSE) and response.status_code < 400:
                 response.body = crypto.decrypt_object(response.body)
                 self._body_handle(response.body)
                 response.body = response.body["body"]
@@ -101,11 +101,11 @@ class CryptoProcessor(BaseCryptoProcessor):
         self._crypto: "Crypto" = Crypto(self._crypto_key)
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type == Constant.CLIENT_EVENT and request.target.endswith(Constant.DECLARE):
+        if request.msg_type == constant.CLIENT_EVENT and request.target.endswith(constant.DECLARE):
             # Tell the server that the key will be used for encrypted communication
             request.body["crypto_id"] = self._crypto_id
             request.body["check_body"] = self._crypto.encrypt_object(self._crypto_id)
-        elif request.msg_type in (Constant.MSG_REQUEST, Constant.CHANNEL_REQUEST):
+        elif request.msg_type in (constant.MSG_REQUEST, constant.CHANNEL_REQUEST):
             request.body = {
                 "body": request.body,
                 "timestamp": int(time.time()),
@@ -115,7 +115,7 @@ class CryptoProcessor(BaseCryptoProcessor):
         return request
 
     async def process_response(self, response: Response) -> Response:
-        if response.msg_type in (Constant.MSG_RESPONSE, Constant.CHANNEL_RESPONSE) and response.status_code < 400:
+        if response.msg_type in (constant.MSG_RESPONSE, constant.CHANNEL_RESPONSE) and response.status_code < 400:
             try:
                 response.body = self._crypto.decrypt_object(response.body)
                 self._body_handle(response.body)

@@ -7,7 +7,7 @@ from pytest_mock import MockerFixture
 
 from rap.client import Client, Response
 from rap.common.exceptions import RPCError, RpcRunTimeError
-from rap.common.utils import Constant
+from rap.common.utils import constant
 from rap.server import Server
 
 pytestmark = pytest.mark.asyncio
@@ -197,7 +197,7 @@ class TestTransport:
                 await rap_client.raw_invoke("sync_sum", [1, 2])
 
             exec_msg: str = e.value.args[0]
-            assert exec_msg == f"response num must:{Constant.MSG_RESPONSE} not 202"
+            assert exec_msg == f"response num must:{constant.MSG_RESPONSE} not 202"
 
     async def test_request_receive_not_python_server_exc_response(
         self, rap_server: Server, rap_client: Client, mocker: MockerFixture

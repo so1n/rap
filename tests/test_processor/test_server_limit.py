@@ -48,16 +48,16 @@ class TestLimit:
     async def test_limit(self, rap_server: Server, rap_client: Client) -> None:
         def match_demo_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
             if request.func_name == "async_sum":
-                return request.func_name
+                return request.func_name, False
             else:
-                return None
+                return None, False
 
         def match_ip_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
             host: str = request.conn.peer_tuple[0]
             if host in ("127.0.0.1", "::1"):
-                return host + "1"
+                return host + "1", False
             else:
-                return None
+                return None, False
 
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
         limit_processor = limit.LimitProcessor(
@@ -85,9 +85,9 @@ class TestLimit:
         def match_ip_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
             host: str = request.conn.peer_tuple[0]
             if host in ("127.0.0.1", "::1"):
-                return host + "2"
+                return host + "2", False
             else:
-                return None
+                return None, False
 
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
         limit_processor = limit.LimitProcessor(
@@ -114,9 +114,9 @@ class TestLimit:
         def match_ip_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
             host: str = request.conn.peer_tuple[0]
             if host in ("127.0.0.1", "::1"):
-                return host + "3"
+                return host + "3", False
             else:
-                return None
+                return None, False
 
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
         limit_processor = limit.LimitProcessor(

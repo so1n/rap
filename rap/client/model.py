@@ -7,7 +7,7 @@ from rap.common.event import Event
 from rap.common.msg import BaseMsgProtocol
 from rap.common.state import State
 from rap.common.types import MSG_TYPE, SERVER_BASE_MSG_TYPE
-from rap.common.utils import Constant
+from rap.common.utils import constant
 
 if TYPE_CHECKING:
     from rap.client.core import BaseClient
@@ -35,7 +35,7 @@ class Request(ClientMsgProtocol):
 
     @classmethod
     def from_event(cls, app: "BaseClient", event: Event) -> "Request":
-        return cls(app, msg_type=Constant.CLIENT_EVENT, target=f"/_event/{event.event_name}", body=event.event_info)
+        return cls(app, msg_type=constant.CLIENT_EVENT, target=f"/_event/{event.event_name}", body=event.event_info)
 
 
 @dataclass()

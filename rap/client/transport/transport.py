@@ -19,7 +19,7 @@ from rap.common.exceptions import IgnoreNextProcessor, RPCError
 from rap.common.snowflake import async_get_snowflake_id
 from rap.common.state import State
 from rap.common.types import SERVER_BASE_MSG_TYPE
-from rap.common.utils import Constant
+from rap.common.utils import constant
 
 if TYPE_CHECKING:
     from rap.client.core import BaseClient
@@ -103,11 +103,11 @@ class Transport(object):
         if state:
             response.state = state
         else:
-            if response.msg_type != Constant.SERVER_EVENT:
+            if response.msg_type != constant.SERVER_EVENT:
                 logger.warning(f"response:{response} can not found state")
 
         exc: Optional[Exception] = None
-        if response.msg_type == Constant.SERVER_ERROR_RESPONSE or response.status_code in self._exc_status_code_dict:
+        if response.msg_type == constant.SERVER_ERROR_RESPONSE or response.status_code in self._exc_status_code_dict:
             # Generate rap standard error
             exc_class: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(
                 response.status_code, rap_exc.BaseRapError
@@ -116,24 +116,24 @@ class Transport(object):
             response.exc = exc
             response.tb = sys.exc_info()[2]
         # dispatch response
-        if response.msg_type == Constant.SERVER_EVENT:
+        if response.msg_type == constant.SERVER_EVENT:
             # server event msg handle
-            if response.func_name == Constant.EVENT_CLOSE_CONN:
+            if response.func_name == constant.EVENT_CLOSE_CONN:
                 # server want to close...do not send data
                 logger.error(f"recv close conn event, event info:{response.body}")
                 conn.available = False
-            elif response.func_name in (Constant.DECLARE, Constant.PONG_EVENT):
+            elif response.func_name in (constant.DECLARE, constant.PONG_EVENT):
                 self._resp_future_dict[correlation_id].set_result((response, exc))
-            elif response.func_name == Constant.PING_EVENT:
+            elif response.func_name == constant.PING_EVENT:
                 await asyncio.wait_for(
                     self.write_to_conn(Request.from_event(self.app, event.PongEvent("")), conn), timeout=3
                 )
             else:
                 logger.error(f"recv not support event response:{response}")
-        elif response.msg_type == Constant.CHANNEL_RESPONSE and correlation_id in self._channel_queue_dict:
+        elif response.msg_type == constant.CHANNEL_RESPONSE and correlation_id in self._channel_queue_dict:
             # put msg to channel
             self._channel_queue_dict[correlation_id].put_nowait((response, exc))
-        elif response.msg_type == Constant.MSG_RESPONSE and correlation_id in self._resp_future_dict:
+        elif response.msg_type == constant.MSG_RESPONSE and correlation_id in self._resp_future_dict:
             # set msg to future_dict's `future`
             self._resp_future_dict[correlation_id].set_result((response, exc))
         else:
@@ -152,8 +152,8 @@ class Transport(object):
         )
 
         if (
-            response.msg_type == Constant.SERVER_EVENT
-            and response.func_name == Constant.DECLARE
+            response.msg_type == constant.SERVER_EVENT
+            and response.func_name == constant.DECLARE
             and response.body.get("result", False)
             and "conn_id" in response.body
         ):
@@ -245,8 +245,8 @@ class Transport(object):
         """gen msg_id and seng msg to conn"""
         request.conn = conn
         request.header["host"] = conn.peer_tuple
-        request.header["version"] = Constant.VERSION
-        request.header["user_agent"] = Constant.USER_AGENT
+        request.header["version"] = constant.VERSION
+        request.header["user_agent"] = constant.USER_AGENT
         if not request.header.get("request_id"):
             request.header["request_id"] = str(uuid4())
         msg_id: int = self._msg_id + 1
@@ -278,23 +278,23 @@ class Transport(object):
         :param group: func's group
         :param header: request header
         """
-        group = group or Constant.DEFAULT_GROUP
+        group = group or constant.DEFAULT_GROUP
         call_id = call_id or -1
         arg_param = arg_param or []
         request: Request = Request(
             self.app,
-            Constant.MSG_REQUEST,
+            constant.MSG_REQUEST,
             f"{self.app.server_name}/{group}/{func_name}",
             {"call_id": call_id, "param": arg_param},
         )
         if header:
             request.header.update(header)
         response: Response = await self._base_request(request, conn)
-        if response.msg_type != Constant.MSG_RESPONSE:
-            raise RPCError(f"response num must:{Constant.MSG_RESPONSE} not {response.msg_type}")
+        if response.msg_type != constant.MSG_RESPONSE:
+            raise RPCError(f"response num must:{constant.MSG_RESPONSE} not {response.msg_type}")
         if "exc" in response.body:
             exc_info: str = response.body.get("exc_info", "")
-            if response.header.get("user_agent") == Constant.USER_AGENT:
+            if response.header.get("user_agent") == constant.USER_AGENT:
                 raise_rap_error(response.body["exc"], exc_info)
             else:
                 raise rap_exc.RpcRunTimeError(exc_info)
@@ -306,7 +306,7 @@ class Transport(object):
         :param conn: channel transport conn
         :param group: func's group
         """
-        target: str = f"/{group or Constant.DEFAULT_GROUP}/{func_name}"
+        target: str = f"/{group or constant.DEFAULT_GROUP}/{func_name}"
         channel: Channel = Channel(self, target, conn)  # type: ignore
         correlation_id: str = f"{conn.sock_tuple}:{channel.channel_id}"
         self._channel_queue_dict[correlation_id] = channel.queue

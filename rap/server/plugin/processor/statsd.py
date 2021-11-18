@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 
 from aio_statsd import StatsdClient
 
-from rap.common.utils import Constant, EventEnum
+from rap.common.utils import EventEnum, constant
 from rap.server.model import Request, Response
 from rap.server.plugin.processor.base import BaseProcessor
 
@@ -45,7 +45,7 @@ class StatsdProcessor(BaseProcessor):
 
     async def process_request(self, request: Request) -> Request:
         self._statsd_client.increment(self._request_key, 1)
-        if request.msg_type == Constant.MSG_REQUEST:
+        if request.msg_type == constant.MSG_REQUEST:
             self._statsd_client.increment(self._msg_key, 1)
             self._statsd_client.increment(self._process_msg_key, 1)
         host: str = request.header["host"]
@@ -53,18 +53,18 @@ class StatsdProcessor(BaseProcessor):
         return request
 
     async def process_response(self, response: Response) -> Response:
-        if response.msg_type == Constant.MSG_RESPONSE:
+        if response.msg_type == constant.MSG_RESPONSE:
             self._statsd_client.decrement(self._process_msg_key, 1)
             if response.status_code >= 400:
                 # NOTE: Don't try to get the response body data
                 self._statsd_client.increment(self._error_msg_key, 1)
-        elif response.msg_type == Constant.CHANNEL_RESPONSE:
+        elif response.msg_type == constant.CHANNEL_RESPONSE:
             life_cycle: str = response.header.get("channel_life_cycle", "error")
-            if life_cycle == Constant.DECLARE:
+            if life_cycle == constant.DECLARE:
                 self._channel_online_cnt += 1
                 self._statsd_client.increment(self._channel_key, 1)
-            elif life_cycle == Constant.DROP:
+            elif life_cycle == constant.DROP:
                 self._channel_online_cnt -= 1
-        elif response.msg_type == Constant.SERVER_ERROR_RESPONSE:
+        elif response.msg_type == constant.SERVER_ERROR_RESPONSE:
             self._statsd_client.increment(self._error_request_key, 1)
         return response
