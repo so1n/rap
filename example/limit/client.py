@@ -3,6 +3,7 @@ import time
 from typing import Callable
 
 from rap.client import Client
+from rap.common.channel import UserChannel
 from rap.common.exceptions import TooManyRequest
 
 client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
@@ -19,21 +20,35 @@ async def demo1(a: int, b: int) -> int:
     pass
 
 
+@client.register()
+async def echo_body(channel: UserChannel) -> None:
+    cnt: int = 0
+    await channel.write(f"ping! {cnt}")
+    async for body in channel.iter_body():
+        print(body)
+        cnt += 1
+        await channel.write(f"ping! {cnt}")
+
+
 async def retry_handle(func: Callable) -> None:
     for i in range(3):
-        while True:
-            try:
-                print(await func(i, 0))
-                break
-            except TooManyRequest as e:
-                print(f"recv error: {e}")
-                print("limiting...sleep 10")
-                await asyncio.sleep(10)
+        try:
+            print(await func(i, 0))
+            break
+        except TooManyRequest as e:
+            print(f"recv error: {e}")
+            await asyncio.sleep(2)
 
 
 async def main() -> None:
     s_t = time.time()
     await client.start()
+    await echo_body()
+    try:
+        await echo_body()
+    except TooManyRequest as e:
+        print(f"call channel error: {e}")
+
     await retry_handle(demo)
     await retry_handle(demo1)
 

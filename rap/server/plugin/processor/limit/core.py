@@ -1,9 +1,9 @@
 import inspect
-from typing import Awaitable, List, Optional, Set, Tuple, Union
+from typing import Awaitable, List, Set, Tuple, Union
 
 from rap.common.exceptions import TooManyRequest
 from rap.common.utils import Constant
-from rap.server.model import Request, Response
+from rap.server.model import Request
 from rap.server.plugin.processor.base import BaseProcessor
 from rap.server.plugin.processor.limit.backend import BaseLimitBackend
 from rap.server.plugin.processor.limit.rule import Rule
@@ -17,14 +17,17 @@ class LimitProcessor(BaseProcessor):
         self._ignore_request_num_set: Set = {Constant.CHANNEL_REQUEST, Constant.CLIENT_EVENT, Constant.CHANNEL_RESPONSE}
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type in self._ignore_request_num_set:
+        # not limit client event
+        if request.msg_type == Constant.CLIENT_EVENT:
             return request
 
         for func, rule in self._rule_list:
             if inspect.iscoroutinefunction(func):
-                key: Optional[str] = await func(request)  # type: ignore
+                key, is_ignore_limit = await func(request)  # type: ignore
             else:
-                key = func(request)
+                key, is_ignore_limit = func(request)
+            if is_ignore_limit:
+                return request
             if key:
                 break
         else:
@@ -40,6 +43,3 @@ class LimitProcessor(BaseProcessor):
                 expected_time = await expected_time  # type: ignore
             raise TooManyRequest(extra_msg=f"expected time: {expected_time}")
         return request
-
-    async def process_response(self, response: Response) -> Response:
-        return response

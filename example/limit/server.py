@@ -2,6 +2,8 @@ import asyncio
 
 from aredis import StrictRedis  # type: ignore
 
+from rap.common.channel import UserChannel
+from rap.common.utils import Constant
 from rap.server import Server
 from rap.server.model import Request
 from rap.server.plugin.processor import limit
@@ -15,19 +17,39 @@ async def demo1(a: int, b: int) -> int:
     return a + b
 
 
+async def echo_body(channel: UserChannel) -> None:
+    cnt: int = 0
+    async for body in channel.iter_body():
+        cnt += 1
+        print(cnt, body)
+        if cnt > 10:
+            break
+        await channel.write(f"pong! {cnt}")
+
+
 def match_demo_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
-    if request.func_name == "demo":
-        return request.func_name
+    if (
+        request.msg_type == Constant.CHANNEL_REQUEST
+        and request.header.get("channel_life_cycle", "") != Constant.DECLARE
+    ):
+        return None, True
+    if request.func_name in ("demo", "echo_body"):
+        return request.func_name, False
     else:
-        return None
+        return None, False
 
 
 def match_ip_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
+    if (
+        request.msg_type == Constant.CHANNEL_REQUEST
+        and request.header.get("channel_life_cycle", "") != Constant.DECLARE
+    ):
+        return None, True
     key: str = "127.0.0.1"
     if request.conn.peer_tuple[0] == "127.0.0.1":
-        return key
+        return key, False
     else:
-        return None
+        return None, False
 
 
 if __name__ == "__main__":
@@ -42,11 +64,12 @@ if __name__ == "__main__":
     rpc_server = Server("example")
     rpc_server.register(demo)
     rpc_server.register(demo1)
+    rpc_server.register(echo_body)
     limit_processor = limit.LimitProcessor(
         limit.backend.RedisTokenBucketBackend(redis),
         [
-            (match_demo_request, limit.Rule(second=5, gen_token=1, init_token=1, max_token=10, block_time=10)),
-            (match_ip_request, limit.Rule(second=5, gen_token=1, init_token=1, max_token=10, block_time=10)),
+            (match_demo_request, limit.Rule(second=1, gen_token=1, init_token=1, max_token=10, block_time=2)),
+            (match_ip_request, limit.Rule(second=1, gen_token=1, init_token=1, max_token=10, block_time=2)),
         ],
     )
     rpc_server.load_processor([limit_processor])
