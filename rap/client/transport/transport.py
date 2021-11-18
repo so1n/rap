@@ -102,9 +102,6 @@ class Transport(object):
         state: Optional[State] = self._state_dict.get(correlation_id, None)
         if state:
             response.state = state
-        else:
-            if response.msg_type != constant.SERVER_EVENT:
-                logger.warning(f"response:{response} can not found state")
 
         exc: Optional[Exception] = None
         if response.msg_type == constant.SERVER_ERROR_RESPONSE or response.status_code in self._exc_status_code_dict:

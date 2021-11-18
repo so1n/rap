@@ -48,4 +48,5 @@ if __name__ == "__main__":
     p.start()
     time.sleep(1)
     run_client()
+    time.sleep(1)
     p.terminate()

@@ -73,9 +73,10 @@ class ConsulEndpoint(BaseEndpoint):
     async def _watch(self) -> None:
         async for conn_dict in self.consul_client.watch(self.server_name):
             if conn_dict:
-                for key, conn in self._conn_dict.items():
+                for conn in self._conn_list:
+                    key: tuple = (conn.host, conn.port)
                     if key not in conn_dict:
-                        await self.destroy(conn.host, conn.port)
+                        await self.destroy(conn)
                     else:
                         conn_dict.pop(key, None)
             for key, value in conn_dict.items():
@@ -89,7 +90,7 @@ class ConsulEndpoint(BaseEndpoint):
         async for item in self.consul_client.discovery(self.server_name):
             await self.create(item["host"], item["port"], item["weight"])
 
-        if not self._conn_dict:
+        if not self._conn_list:
             logger.warning(
                 f"Can not found conn info from cousul, wait `{self.server_name}` server start and register to consul"
             )

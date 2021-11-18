@@ -38,7 +38,7 @@ class LocalEndpoint(BaseEndpoint):
         :param ping_fail_cnt: How many times ping fails to judge as unavailable
         :param wait_server_recover: If False, ping failure will close conn
         """
-        self._conn_list: List[dict] = conn_list
+        self._conn_config_list: List[dict] = conn_list
         super().__init__(
             transport,
             declare_timeout=declare_timeout,
@@ -56,12 +56,12 @@ class LocalEndpoint(BaseEndpoint):
         """init conn and start"""
         if not self.is_close:
             raise ConnectionError(f"{self.__class__.__name__} is running")
-        if not self._conn_list:
+        if not self._conn_config_list:
             raise ValueError("Can not found conn config")
         await asyncio.gather(
             *[
-                self.create(conn_dict["ip"], conn_dict["port"], conn_dict.get("weight", 10))
-                for conn_dict in self._conn_list
+                self.create(conn_config_dict["ip"], conn_config_dict["port"], conn_config_dict.get("weight", 10))
+                for conn_config_dict in self._conn_config_list
             ]
         )
         await self._start()

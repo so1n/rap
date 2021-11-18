@@ -3,7 +3,7 @@ import logging
 import random
 import time
 from enum import Enum, auto
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import Deadline, IgnoreDeadlineTimeoutExc
@@ -100,7 +100,8 @@ class BaseEndpoint(object):
         self._wait_server_recover: bool = wait_server_recover
 
         self._connected_cnt: int = 0
-        self._conn_dict: Dict[tuple, Connection] = {}
+        # self._conn_dict: Dict[tuple, List[Connection]] = {}
+        self._conn_list: List[Connection] = []
         self._round_robin_index: int = 0
         self._is_close: bool = True
 
@@ -162,10 +163,6 @@ class BaseEndpoint(object):
         :param weight: select conn weight
         :param max_conn_inflight: Maximum number of connections per conn
         """
-        key: tuple = (ip, port)
-        if key in self._conn_dict:
-            raise ConnectionError(f"conn:{key} already create")
-
         conn: Connection = Connection(
             ip,
             port,
@@ -178,7 +175,10 @@ class BaseEndpoint(object):
 
         def _conn_done(f: asyncio.Future) -> None:
             try:
-                self._conn_dict.pop(key, None)
+                try:
+                    self._conn_list.remove(conn)
+                except ValueError:
+                    pass
                 self._connected_cnt -= 1
             except Exception as _e:
                 msg: str = f"close conn error: {_e}"
@@ -196,25 +196,34 @@ class BaseEndpoint(object):
                 conn.listen_future.add_done_callback(lambda f: _conn_done(f))
                 await self._transport.declare(conn)
         except Exception as e:
-            await self.destroy(ip, port)
+            await self.destroy(conn)
             raise e
         conn.ping_future = asyncio.ensure_future(self._ping_event(conn))
         conn.ping_future.add_done_callback(lambda f: conn.close())
-        self._conn_dict[key] = conn
+        self._conn_list.append(conn)
 
-    async def destroy(self, ip: str, port: int) -> None:
-        """destroy conn
-        :param ip: server ip
-        :param port: server port
-        """
-        key: tuple = (ip, port)
-
-        conn: Optional[Connection] = self._conn_dict.get(key, None)
-        if not conn:
-            return
+    async def destroy(self, conn: Connection) -> None:
         if not conn.is_closed():
             await conn.await_close()
-        self._conn_dict.pop(key, None)
+        try:
+            self._conn_list.remove(conn)
+        except ValueError:
+            pass
+
+    # async def destroy(self, ip: str, port: int) -> None:
+    #     """destroy conn
+    #     :param ip: server ip
+    #     :param port: server port
+    #     """
+    #     key: tuple = (ip, port)
+    #
+    #     for conn in self._conn_dict.get(key, []):
+    #         if not conn:
+    #             return
+    #         if not conn.is_closed():
+    #             await conn.await_close()
+    #         await self.destroy_conn(key, conn)
+    #         self._conn_dict.pop(key, None)
 
     async def _start(self) -> None:
         self._is_close = False
@@ -225,10 +234,10 @@ class BaseEndpoint(object):
 
     async def stop(self) -> None:
         """stop endpoint and close all conn and cancel future"""
-        for key, conn in self._conn_dict.copy().items():
-            await self.destroy(*key)
+        while self._conn_list:
+            await self.destroy(self._conn_list.pop())
 
-        self._conn_dict = {}
+        self._conn_list = []
         self._is_close = True
 
     def picker(self, cnt: int = 3) -> Picker:
@@ -245,34 +254,30 @@ class BaseEndpoint(object):
 
     def _random_pick_conn(self, cnt: int) -> List[Connection]:
         """random get conn"""
-        key_list: List[tuple] = list(self._conn_dict.keys())
-        if not key_list:
+        if not self._conn_list:
             raise ConnectionError("Endpoint Can not found available conn")
         conn_list: List[Connection] = []
         for _ in range(cnt):
-            key: tuple = random.choice(key_list)
-            conn: Connection = self._conn_dict[key]
+            conn: Connection = random.choice(self._conn_list)
             if conn.available:
                 conn_list.append(conn)
-
         return conn_list
 
     def _round_robin_pick_conn(self, cnt: int) -> List[Connection]:
         """get conn by round robin"""
         conn_list: List[Connection] = []
-        key_list: List[tuple] = list(self._conn_dict.keys())
-        if not key_list:
+        if not self._conn_list:
             raise ConnectionError("Endpoint Can not found available conn")
         for _ in range(cnt):
             self._round_robin_index += 1
-            index = self._round_robin_index % (len(self._conn_dict))
-            conn: Connection = self._conn_dict[key_list[index]]
+            index = self._round_robin_index % (len(self._conn_list))
+            conn: Connection = self._conn_list[index]
             if conn.available:
                 conn_list.append(conn)
         return conn_list
 
     def _pick_faster_conn(self, cnt: int) -> List[Connection]:
-        return sorted([i for i in self._conn_dict.values()], key=lambda c: c.rtt)[:cnt]
+        return sorted(self._conn_list, key=lambda c: c.rtt)[:cnt]
 
     def __len__(self) -> int:
         return self._connected_cnt

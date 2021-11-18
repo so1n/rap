@@ -72,7 +72,7 @@ class EtcdEndpoint(BaseEndpoint):
             await self.create(item["host"], item["port"], item["weight"])
 
         wait_start_future: asyncio.Future = asyncio.Future()
-        if not self._conn_dict:
+        if not self._conn_list:
             logger.warning(
                 f"Can not found conn info from etcd, wait {self.server_name} server start and register to etcd"
             )
@@ -93,8 +93,10 @@ class EtcdEndpoint(BaseEndpoint):
             conn_dict: dict = _cache_dict.get(etcd_value_dict["key"], {})
             if not conn_dict:
                 raise KeyError(f"Can not found key:{etcd_value_dict['key']}")
-            await self.destroy(conn_dict["host"], conn_dict["port"])
-            if not self._conn_dict:
+            for conn in self._conn_list:
+                if conn.host == conn_dict["host"] and conn.port == conn_dict["post"]:
+                    await self.destroy(conn)
+            if not self._conn_list:
                 logger.warning("client not conn")
 
         self._watch_future = asyncio.ensure_future(self.etcd_client.watch(self.server_name, [create], [destroy]))
