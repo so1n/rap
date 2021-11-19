@@ -26,7 +26,7 @@ class LocalEndpoint(BaseEndpoint):
     ):
         """
         :param conn_list: conn info list, 参数和默认值跟`BaseEndpoint.create`的参数保持一致
-            like:[{"ip": localhost, "port": 9000, "weight": 10, "max_conn_inflight": 100}]
+            like:[{"ip": localhost, "port": 9000, "weight": 10, "max_conn_inflight": 100, "size": 2}]
         :param transport: client transport
         :param declare_timeout: declare timeout include request & response
         :param ssl_crt_path: client ssl crt file path
@@ -60,7 +60,13 @@ class LocalEndpoint(BaseEndpoint):
             raise ValueError("Can not found conn config")
         await asyncio.gather(
             *[
-                self.create(conn_config_dict["ip"], conn_config_dict["port"], conn_config_dict.get("weight", 10))
+                self.create(
+                    conn_config_dict["ip"],
+                    conn_config_dict["port"],
+                    weight=conn_config_dict.get("weight", None),
+                    size=conn_config_dict.get("size", None),
+                    max_conn_inflight=conn_config_dict.get("max_conn_inflight", None),
+                )
                 for conn_config_dict in self._conn_config_list
             ]
         )

@@ -88,14 +88,26 @@ class ConsulEndpoint(BaseEndpoint):
 
         logger.info(f"connect to consul:{self.consul_url}, wait discovery....")
         async for item in self.consul_client.discovery(self.server_name):
-            await self.create(item["host"], item["port"], item["weight"])
+            await self.create(
+                item["host"],
+                item["port"],
+                weight=item["weight"],
+                size=item.get("size"),
+                max_conn_inflight=item.get("max_conn_inflight"),
+            )
 
         if not self._conn_list:
             logger.warning(
-                f"Can not found conn info from cousul, wait `{self.server_name}` server start and register to consul"
+                f"Can not found conn info from consul, wait `{self.server_name}` server start and register to consul"
             )
             async for conn_dict in self.consul_client.watch(self.server_name):
                 for key, value in conn_dict.items():
-                    await self.create(value["host"], value["port"], value["weight"])
+                    await self.create(
+                        value["host"],
+                        value["port"],
+                        weight=value["weight"],
+                        size=value.get("size"),
+                        max_conn_inflight=value.get("max_conn_inflight"),
+                    )
                     return
         self._watch_future = asyncio.ensure_future(self._watch())

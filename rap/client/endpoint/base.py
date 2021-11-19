@@ -158,74 +158,72 @@ class BaseEndpoint(object):
     def is_close(self) -> bool:
         return self._is_close
 
-    async def create(self, ip: str, port: int, weight: int = 10, max_conn_inflight: int = 100) -> None:
+    async def create(
+        self,
+        ip: str,
+        port: int,
+        weight: Optional[int] = None,
+        max_conn_inflight: Optional[int] = None,
+        size: Optional[int] = None,
+    ) -> None:
         """create and init conn
         :param ip: server ip
         :param port: server port
         :param weight: select conn weight
         :param max_conn_inflight: Maximum number of connections per conn
+        :param size: connect server conn size
         """
-        conn: Connection = Connection(
-            ip,
-            port,
-            weight,
-            ssl_crt_path=self._ssl_crt_path,
-            pack_param=self._pack_param,
-            unpack_param=self._unpack_param,
-            max_conn_inflight=max_conn_inflight,
-        )
+        if not weight:
+            weight = 10
+        if not max_conn_inflight:
+            max_conn_inflight = 100
+        if not size:
+            size = 1
 
-        def _conn_done(f: asyncio.Future) -> None:
-            try:
+        for _ in range(size):
+            conn: Connection = Connection(
+                ip,
+                port,
+                weight,
+                ssl_crt_path=self._ssl_crt_path,
+                pack_param=self._pack_param,
+                unpack_param=self._unpack_param,
+                max_conn_inflight=max_conn_inflight,
+            )
+
+            def _conn_done(f: asyncio.Future) -> None:
                 try:
-                    self._conn_list.remove(conn)
-                except ValueError:
-                    pass
-                self._connected_cnt -= 1
-            except Exception as _e:
-                msg: str = f"close conn error: {_e}"
-                if f.exception():
-                    msg += f", conn done exc:{f.exception()}"
-                logger.exception(msg)
+                    try:
+                        self._conn_list.remove(conn)
+                    except ValueError:
+                        pass
+                    self._connected_cnt -= 1
+                except Exception as _e:
+                    msg: str = f"close conn error: {_e}"
+                    if f.exception():
+                        msg += f", conn done exc:{f.exception()}"
+                    logger.exception(msg)
 
-        try:
-            with Deadline(self._declare_timeout, timeout_exc=asyncio.TimeoutError(f"conn:{conn} declare timeout")):
-                await conn.connect()
-                logger.debug("Connection to %s...", conn.connection_info)
-                self._connected_cnt += 1
-                conn.available = True
-                conn.listen_future = asyncio.ensure_future(self._listen_conn(conn))
-                conn.listen_future.add_done_callback(lambda f: _conn_done(f))
-                await self._transport.declare(conn)
-        except Exception as e:
-            await self.destroy(conn)
-            raise e
-        conn.ping_future = asyncio.ensure_future(self._ping_event(conn))
-        conn.ping_future.add_done_callback(lambda f: conn.close())
-        self._conn_list.append(conn)
+            try:
+                with Deadline(self._declare_timeout, timeout_exc=asyncio.TimeoutError(f"conn:{conn} declare timeout")):
+                    await conn.connect()
+                    logger.debug("Connection to %s...", conn.connection_info)
+                    self._connected_cnt += 1
+                    conn.available = True
+                    conn.listen_future = asyncio.ensure_future(self._listen_conn(conn))
+                    conn.listen_future.add_done_callback(lambda f: _conn_done(f))
+                    await self._transport.declare(conn)
+            except Exception as e:
+                await self.destroy(conn)
+                raise e
+            conn.ping_future = asyncio.ensure_future(self._ping_event(conn))
+            conn.ping_future.add_done_callback(lambda f: conn.close())
+            self._conn_list.append(conn)
 
-    async def destroy(self, conn: Connection) -> None:
+    @staticmethod
+    async def destroy(conn: Connection) -> None:
         if not conn.is_closed():
             await conn.await_close()
-        try:
-            self._conn_list.remove(conn)
-        except ValueError:
-            pass
-
-    # async def destroy(self, ip: str, port: int) -> None:
-    #     """destroy conn
-    #     :param ip: server ip
-    #     :param port: server port
-    #     """
-    #     key: tuple = (ip, port)
-    #
-    #     for conn in self._conn_dict.get(key, []):
-    #         if not conn:
-    #             return
-    #         if not conn.is_closed():
-    #             await conn.await_close()
-    #         await self.destroy_conn(key, conn)
-    #         self._conn_dict.pop(key, None)
 
     async def _start(self) -> None:
         self._is_close = False

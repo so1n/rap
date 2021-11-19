@@ -69,7 +69,13 @@ class EtcdEndpoint(BaseEndpoint):
             raise ConnectionError(f"{self.__class__.__name__} is running")
         logger.info(f"connect to etcd:{self.etcd_url}, wait discovery....")
         async for item in self.etcd_client.discovery(self.server_name):
-            await self.create(item["host"], item["port"], item["weight"])
+            await self.create(
+                item["host"],
+                item["port"],
+                weight=item["weight"],
+                size=item.get("size"),
+                max_conn_inflight=item.get("max_conn_inflight"),
+            )
 
         wait_start_future: asyncio.Future = asyncio.Future()
         if not self._conn_list:
@@ -84,13 +90,17 @@ class EtcdEndpoint(BaseEndpoint):
         async def create(etcd_value_dict: ETCD_EVENT_VALUE_DICT_TYPE) -> None:
             _cache_dict[etcd_value_dict["key"]] = etcd_value_dict["value"]
             await self.create(
-                etcd_value_dict["value"]["host"], etcd_value_dict["value"]["port"], etcd_value_dict["value"]["weight"]
+                etcd_value_dict["value"]["host"],
+                etcd_value_dict["value"]["port"],
+                weight=etcd_value_dict["value"]["weight"],
+                size=etcd_value_dict["value"]["size"],
+                max_conn_inflight=etcd_value_dict["value"]["max_conn_inflight"],
             )
             if not wait_start_future.done():
                 wait_start_future.set_result(True)
 
         async def destroy(etcd_value_dict: ETCD_EVENT_VALUE_DICT_TYPE) -> None:
-            conn_dict: dict = _cache_dict.get(etcd_value_dict["key"], {})
+            conn_dict: dict = _cache_dict.pop(etcd_value_dict["key"], {})
             if not conn_dict:
                 raise KeyError(f"Can not found key:{etcd_value_dict['key']}")
             for conn in self._conn_list:

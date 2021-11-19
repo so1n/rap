@@ -120,7 +120,8 @@ class Transport(object):
                 logger.error(f"recv close conn event, event info:{response.body}")
                 conn.available = False
             elif response.func_name in (constant.DECLARE, constant.PONG_EVENT):
-                self._resp_future_dict[correlation_id].set_result((response, exc))
+                if correlation_id in self._resp_future_dict:
+                    self._resp_future_dict[correlation_id].set_result((response, exc))
             elif response.func_name == constant.PING_EVENT:
                 await asyncio.wait_for(
                     self.write_to_conn(Request.from_event(self.app, event.PongEvent("")), conn), timeout=3
