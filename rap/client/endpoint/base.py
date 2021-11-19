@@ -100,18 +100,19 @@ class BaseEndpoint(object):
         self._wait_server_recover: bool = wait_server_recover
 
         self._connected_cnt: int = 0
-        # self._conn_dict: Dict[tuple, List[Connection]] = {}
         self._conn_list: List[Connection] = []
         self._round_robin_index: int = 0
         self._is_close: bool = True
 
         setattr(self, self._pick_conn.__name__, self._random_pick_conn)
+        self._faster_conn_cache_key: str = ""
         if balance_enum:
             if balance_enum == BalanceEnum.random:
                 setattr(self, self._pick_conn.__name__, self._random_pick_conn)
             elif balance_enum == BalanceEnum.round_robin:
                 setattr(self, self._pick_conn.__name__, self._round_robin_pick_conn)
             elif balance_enum == BalanceEnum.faster:
+                self._faster_conn_cache_key = "rap:endpoint:faster_conn"
                 setattr(self, self._pick_conn.__name__, self._pick_faster_conn)
 
     async def _listen_conn(self, conn: Connection) -> None:
@@ -143,14 +144,15 @@ class BaseEndpoint(object):
 
             next_ping_interval: int = random.randint(self._min_ping_interval, self._max_ping_interval)
             try:
-                with Deadline(next_ping_interval, timeout_exc=IgnoreDeadlineTimeoutExc()):
+                with Deadline(next_ping_interval, timeout_exc=IgnoreDeadlineTimeoutExc()) as d:
                     await self._transport.ping(conn)
+                    await conn.sleep_and_listen(d.surplus)
+                if self._faster_conn_cache_key:
+                    self._transport.app.cache.pop(self._faster_conn_cache_key, None)
             except asyncio.CancelledError:
                 return
             except Exception as e:
                 logger.debug(f"{conn} ping event error:{e}")
-
-            await conn.conn_future
 
     @property
     def is_close(self) -> bool:
@@ -244,40 +246,31 @@ class BaseEndpoint(object):
         """get conn by endpoint
         :param cnt: How many conn to get.
         """
+        if not self._conn_list:
+            raise ConnectionError("Endpoint Can not found available conn")
         cnt = min(self._connected_cnt, cnt)
-
         conn_list: List[Connection] = self._pick_conn(cnt)
-        return Picker(conn_list)
+        return Picker([conn for conn in conn_list if conn.available])
 
     def _pick_conn(self, cnt: int) -> List[Connection]:
         pass
 
     def _random_pick_conn(self, cnt: int) -> List[Connection]:
         """random get conn"""
-        if not self._conn_list:
-            raise ConnectionError("Endpoint Can not found available conn")
-        conn_list: List[Connection] = []
-        for _ in range(cnt):
-            conn: Connection = random.choice(self._conn_list)
-            if conn.available:
-                conn_list.append(conn)
-        return conn_list
+        return random.choices(self._conn_list, k=cnt)
 
     def _round_robin_pick_conn(self, cnt: int) -> List[Connection]:
         """get conn by round robin"""
-        conn_list: List[Connection] = []
-        if not self._conn_list:
-            raise ConnectionError("Endpoint Can not found available conn")
-        for _ in range(cnt):
-            self._round_robin_index += 1
-            index = self._round_robin_index % (len(self._conn_list))
-            conn: Connection = self._conn_list[index]
-            if conn.available:
-                conn_list.append(conn)
-        return conn_list
+        self._round_robin_index += 1
+        index: int = self._round_robin_index % (len(self._conn_list))
+        return self._conn_list[index : index + cnt]
 
     def _pick_faster_conn(self, cnt: int) -> List[Connection]:
-        return sorted(self._conn_list, key=lambda c: c.rtt)[:cnt]
+        conn_list: List[Connection] = self._transport.app.cache.get(self._faster_conn_cache_key, [])
+        if not conn_list:
+            conn_list = sorted(self._conn_list, key=lambda c: c.rtt)[:cnt]
+            self._transport.app.cache.add(self._faster_conn_cache_key, self._max_ping_interval, conn_list)
+        return conn_list
 
     def __len__(self) -> int:
         return self._connected_cnt

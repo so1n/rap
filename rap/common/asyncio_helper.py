@@ -246,9 +246,9 @@ class Deadline(object):
         return self._with_scope_future is not None
 
     @property
-    def surplus(self) -> Optional[float]:
+    def surplus(self) -> float:
         if self._end_loop_time is None:
-            return None
+            return 0.0
         return self._end_loop_time - self._loop.time()
 
     @property
