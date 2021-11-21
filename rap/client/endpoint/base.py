@@ -222,8 +222,7 @@ class BaseEndpoint(object):
 
     @staticmethod
     async def destroy(conn: Connection) -> None:
-        if not conn.is_closed():
-            await conn.await_close()
+        await conn.await_close()
 
     async def _start(self) -> None:
         self._is_close = False

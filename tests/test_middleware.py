@@ -25,19 +25,15 @@ async def clean_cache_ip_before_test(middleware: IpFilterMiddleware) -> None:
 
 class TestConnLimitMiddleware:
     async def test_conn_limit(self, rap_server: Server) -> None:
-        rap_server.load_middleware([ConnLimitMiddleware(max_conn=0)])
-
-        client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
-        setattr(client.transport, "listen", mock_func)
-
-        with pytest.raises(ConnectionError):
-            await client.start()
-
-    async def test_conn_limit_allow(self, rap_server: Server) -> None:
         rap_server.load_middleware([ConnLimitMiddleware(max_conn=1)])
-        client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
-        await client.start()
-        assert 3 == await client.raw_invoke("async_sum", [1, 2])
+
+        client_1: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
+        client_2: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
+        await client_1.start()
+        with pytest.raises(ConnectionError):
+            await client_2.start()
+        await client_1.stop()
+        await client_2.stop()
 
     async def test_conn_limit_method(self, rap_server: Server, rap_client: Client) -> None:
         middleware: ConnLimitMiddleware = ConnLimitMiddleware(max_conn=0)
@@ -70,20 +66,17 @@ class TestIpMaxConnMiddleware:
 
     async def test_ip_max_conn(self, rap_server: Server) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
-        middleware: IpMaxConnMiddleware = IpMaxConnMiddleware(redis, ip_max_conn=0)
-        rap_server.load_middleware([middleware])
-        client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
-        setattr(client.transport, "listen", mock_func)
-        with pytest.raises(ConnectionError):
-            await client.start()
-
-    async def test_ip_max_conn_allow(self, rap_server: Server) -> None:
-        redis: StrictRedis = StrictRedis.from_url("redis://localhost")
         middleware: IpMaxConnMiddleware = IpMaxConnMiddleware(redis, ip_max_conn=1)
+        for key in await redis.keys(middleware._key + "*"):
+            await redis.delete(key)
         rap_server.load_middleware([middleware])
-        client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
-        await client.start()
-        assert 3 == await client.raw_invoke("async_sum", [1, 2])
+        client_1: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
+        client_2: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
+        await client_1.start()
+        with pytest.raises(ConnectionError):
+            await client_2.start()
+        await client_1.stop()
+        await client_2.stop()
 
 
 class TestIpBlockMiddleware:
@@ -112,20 +105,18 @@ class TestIpBlockMiddleware:
 
         rap_server.load_middleware([middleware])
         await middleware.start_event_handle(rap_server)
+        # allow access
         client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
         await client.start()
         assert 3 == await client.raw_invoke("async_sum", [1, 2])
+        # block
+        await client.raw_invoke(
+            "remove_allow_ip",
+            [["localhost", "::1", "127.0.0.1", "192.168.0.0/31"]],
+            group=middleware.__class__.__name__,
+        )
+        await client.raw_invoke("add_allow_ip", ["1.1.1.1"], group=middleware.__class__.__name__)
         await client.stop()
-
-    async def test_ip_block_by_allow_ip_access(self, rap_server: Server) -> None:
-        redis: StrictRedis = StrictRedis.from_url("redis://localhost")
-        middleware: IpFilterMiddleware = IpFilterMiddleware(redis, allow_ip_list=["127.0.0.2"])
-        await clean_cache_ip_before_test(middleware)
-
-        rap_server.load_middleware([middleware])
-        await middleware.start_event_handle(rap_server)
-        client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
-        setattr(client.transport, "listen", mock_func)
         with pytest.raises(ConnectionError):
             await client.start()
 
@@ -139,7 +130,12 @@ class TestIpBlockMiddleware:
         client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
         await client.start()
         assert 3 == await client.raw_invoke("async_sum", [1, 2])
+        await client.raw_invoke(
+            "add_block_ip", [["localhost", "::1", "127.0.0.1", "192.168.0.0/31"]], group=middleware.__class__.__name__
+        )
         await client.stop()
+        with pytest.raises(ConnectionError):
+            await client.start()
 
     async def test_ip_block_by_black_ip_access(self, rap_server: Server) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
@@ -150,6 +146,6 @@ class TestIpBlockMiddleware:
         await middleware.start_event_handle(rap_server)
 
         client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
-        setattr(client.transport, "listen", mock_func)
         with pytest.raises(ConnectionError):
             await client.start()
+        await client.stop()

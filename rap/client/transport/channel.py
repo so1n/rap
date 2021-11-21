@@ -45,12 +45,9 @@ class Channel(BaseChannel[Response]):
         self.user_channel: UserChannel[Response] = UserChannel(self)
         self.state.user_channel = self.user_channel
         self.channel_conn_future: asyncio.Future = asyncio.Future()
-        self.channel_is_declare: bool = False
 
     async def create(self) -> None:
         """create and init channel, create session and listen conn exc"""
-        if self.channel_is_declare:
-            raise ChannelError("channel already create")
 
         def add_done_callback(f: asyncio.Future) -> None:
             if f.cancelled():
@@ -145,7 +142,6 @@ class Channel(BaseChannel[Response]):
             except ChannelCloseError:
                 pass
             return
-        self.channel_is_declare = False
 
         await self._base_write(None, constant.DROP)
 

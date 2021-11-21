@@ -1,11 +1,10 @@
-import asyncio
 from typing import Any
 
 import pytest
 from pytest_mock import MockerFixture
 
 from rap.client import Client, Response
-from rap.common.channel import UserChannel
+from rap.common.channel import ChannelCloseError, UserChannel
 from rap.common.exceptions import ChannelError, FuncNotFoundError
 from rap.common.utils import constant
 from rap.server import Response as ServerResponse
@@ -101,7 +100,7 @@ class TestChannel:
                     await channel.write("I don't know")
 
         rap_server.register(_async_channel, "async_channel")
-        with pytest.raises(ChannelError) as e:
+        with pytest.raises(ChannelCloseError) as e:
             await async_channel()
 
         exec_msg: str = e.value.args[0]
@@ -126,32 +125,10 @@ class TestChannel:
     async def test_channel_life_cycle_error(
         self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
-        async def test_server_channel(channel: ServerChannel) -> None:
-            while await channel.loop():
-                if await channel.read_body() == "close":
-                    return
-                await asyncio.sleep(0.1)
-
         @rap_client.register("test_channel")
         async def test_client_channel(channel: UserChannel) -> None:
             async for response in channel.iter():
                 await channel.write("close")
-
-        rap_server.register(test_server_channel, "test_channel")
-
-        # test channel already create
-        mocker.patch("rap.client.transport.channel.get_snowflake_id").return_value = 123
-        mocker.patch("rap.client.model.Request.to_msg").return_value = (
-            constant.CHANNEL_REQUEST,
-            "123",
-            "/default/test_channel",
-            {"channel_life_cycle": constant.DECLARE},
-            None,
-        )
-        with pytest.raises(ChannelError) as e:
-            await test_client_channel()
-        exec_msg: str = e.value.args[0]
-        assert exec_msg == "channel already create"
 
         mocker.patch("rap.client.transport.channel.get_snowflake_id").return_value = 234
         mocker.patch("rap.client.model.Request.to_msg").return_value = (

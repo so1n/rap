@@ -1,5 +1,5 @@
 import ipaddress
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from aredis import StrictRedis, StrictRedisCluster
 
@@ -12,6 +12,9 @@ from rap.server.sender import Sender
 if TYPE_CHECKING:
     from rap.server.core import Server
     from rap.server.types import SERVER_EVENT_FN
+
+
+_FilterIpType = Union[str, List, Tuple]
 
 
 class IpFilterMiddleware(BaseConnMiddleware):
@@ -72,7 +75,7 @@ class IpFilterMiddleware(BaseConnMiddleware):
             ip_list = [str(ip) for ip in ip_network.hosts()]
         return ip_list
 
-    def ip_handle(self, ip: Union[str, List]) -> List[str]:
+    def ip_handle(self, ip: _FilterIpType) -> List[str]:
         ip_list: List[str] = []
         if isinstance(ip, str):
             ip = [ip]
@@ -80,25 +83,25 @@ class IpFilterMiddleware(BaseConnMiddleware):
             ip_list.extend(self.ip_network_handle(_ip))
         return ip_list
 
-    async def _add_allow_ip(self, ip: Union[str, List]) -> None:
+    async def _add_allow_ip(self, ip: _FilterIpType) -> None:
         ip_list: List[str] = self.ip_handle(ip)
         async with await self._redis.pipeline() as pipe:
             await pipe.sadd(self.allow_key, ip_list[0], *ip_list[1:])
             await pipe.srem(self.block_key, ip_list[0], *ip_list[1:])
             await pipe.execute()
 
-    async def _add_block_ip(self, ip: Union[str, List]) -> None:
+    async def _add_block_ip(self, ip: _FilterIpType) -> None:
         ip_list: List[str] = self.ip_handle(ip)
         async with await self._redis.pipeline() as pipe:
             await pipe.sadd(self.block_key, ip_list[0], *ip_list[1:])
             await pipe.srem(self.allow_key, ip_list[0], *ip_list[1:])
             await pipe.execute()
 
-    async def _remove_allow_ip(self, ip: Union[str, List]) -> None:
+    async def _remove_allow_ip(self, ip: _FilterIpType) -> None:
         ip_list: List[str] = self.ip_handle(ip)
         await self._redis.srem(self.allow_key, ip_list[0], *ip_list[1:])
 
-    async def _remove_block_ip(self, ip: Union[str, List]) -> None:
+    async def _remove_block_ip(self, ip: _FilterIpType) -> None:
         ip_list: List[str] = self.ip_handle(ip)
         await self._redis.srem(self.block_key, ip_list[0], *ip_list[1:])
 

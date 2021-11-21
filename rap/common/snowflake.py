@@ -89,16 +89,15 @@ def get_snowflake_id(wait_sequence: bool = True) -> int:
     dc: int = hash(socket.gethostname())
     pid: int = os.getpid()
     dc_worker_key: Tuple[int, int] = (dc, pid)
-    with thread_lock:
-        if dc_worker_key not in _snowflake_cache:
-            _snowflake_cache[dc_worker_key] = _Snowflake(dc, pid)
-        while True:
-            try:
-                return _snowflake_cache[dc_worker_key].get_next_id()
-            except WaitNextSequenceExc as e:
-                if wait_sequence:
-                    time.sleep(0.001)
-                raise e
+    if dc_worker_key not in _snowflake_cache:
+        _snowflake_cache[dc_worker_key] = _Snowflake(dc, pid)
+    while True:
+        try:
+            return _snowflake_cache[dc_worker_key].get_next_id()
+        except WaitNextSequenceExc as e:
+            if wait_sequence:
+                time.sleep(0.001)
+            raise e
 
 
 async def async_get_snowflake_id(wait_sequence: bool = True) -> int:

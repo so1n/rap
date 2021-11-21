@@ -1,11 +1,12 @@
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator, AsyncIterator, Iterator, List
+from typing import Any, AsyncGenerator, AsyncIterator, List, Optional
 
 import pytest
 
 from rap.client import Client
 from rap.client.processor.base import BaseProcessor
+from rap.common.channel import UserChannel
 from rap.server import Server
 
 
@@ -14,87 +15,123 @@ class AnyStringWith(str):
         return self in other
 
 
-client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
+async def sync_sum(a: int, b: int) -> int:
+    return a + b
 
 
-def sync_sum(a: int, b: int) -> int:
-    pass
-
-
-@client.register()
 async def sync_gen(a: int) -> AsyncIterator[int]:
-    yield 0
+    for i in range(a):
+        yield i
 
 
-@client.register()
 async def async_sum(a: int, b: int) -> int:
-    pass
+    await asyncio.sleep(1)  # mock io time
+    return a + b
 
 
-@client.register()
 async def async_gen(a: int) -> AsyncIterator[int]:
-    yield 0
+    await asyncio.sleep(1)  # mock io time
+    for i in range(a):
+        yield i
 
 
-@client.register()
 async def raise_msg_exc(a: int, b: int) -> int:
     pass
 
 
-@client.register()
 async def raise_server_not_found_func_exc(a: int) -> None:
     pass
 
 
-@pytest.fixture
-async def rap_server() -> AsyncGenerator[Server, None]:
-    def _sync_sum(a: int, b: int) -> int:
-        return a + b
+async def sleep(second: int) -> None:
+    await asyncio.sleep(second)
 
-    def _sync_gen(a: int) -> Iterator[int]:
-        for i in range(a):
-            yield i
 
-    async def _async_sum(a: int, b: int) -> int:
-        await asyncio.sleep(1)  # mock io time
-        return a + b
-
-    async def _async_gen(a: int) -> AsyncIterator[int]:
-        for i in range(a):
-            yield i
-
+##########
+# server #
+##########
+async def _init_server(processor_list: Optional[List] = None) -> Server:
     def error_func() -> float:
         return 1 / 0
 
-    rpc_server = Server("test", ping_sleep_time=1)
-    rpc_server.register(_sync_sum, "sync_sum")
-    rpc_server.register(_async_sum, "async_sum")
-    rpc_server.register(_async_gen, "async_gen")
-    rpc_server.register(_sync_gen, "sync_gen")
+    async def test_channel(channel: UserChannel) -> None:
+        while await channel.loop():
+            if await channel.read_body() == "close":
+                return
+            await asyncio.sleep(0.1)
+
+    rpc_server = Server("test", ping_sleep_time=1, processor_list=processor_list or [])
+    rpc_server.register(sync_sum)
+    rpc_server.register(async_sum)
+    rpc_server.register(sync_gen)
+    rpc_server.register(async_gen)
     rpc_server.register(error_func)
-    server: Server = await rpc_server.create_server()
+    rpc_server.register(test_channel)
+    rpc_server.register(sleep)
+    return await rpc_server.create_server()
+
+
+@pytest.fixture
+async def rap_server() -> AsyncGenerator[Server, None]:
+    server: Server = await _init_server()
     try:
         yield server
     finally:
-        await rpc_server.shutdown()
+        await server.shutdown()
+
+
+@asynccontextmanager
+async def process_server(process_list: List[BaseProcessor]) -> AsyncGenerator[Server, None]:
+    server: Server = await _init_server(processor_list=process_list)
+    try:
+        yield server
+    finally:
+        await server.shutdown()
+
+
+##########
+# client #
+##########
+def _inject(client: Client) -> None:
+    client.inject(sync_gen)
+    client.inject(async_gen)
+    client.inject(sync_sum)
+    client.inject(async_sum)
+    client.inject(raise_server_not_found_func_exc)
+    client.inject(raise_msg_exc)
+    client.inject(sleep)
+
+
+def _recovery(client: Client) -> None:
+    client.recovery(sync_gen)  # type: ignore
+    client.recovery(async_gen)  # type: ignore
+    client.recovery(sync_sum)  # type: ignore
+    client.recovery(async_sum)  # type: ignore
+    client.recovery(raise_server_not_found_func_exc)  # type: ignore
+    client.recovery(raise_msg_exc)  # type: ignore
+    client.recovery(sleep)  # type: ignore
 
 
 @pytest.fixture
 async def rap_client() -> AsyncGenerator[Client, None]:
-    client.transport._processor_list = []
+    client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
+    _inject(client)
     await client.start()
     try:
         yield client
     finally:
+        _recovery(client)
         await client.stop()
 
 
 @asynccontextmanager
 async def process_client(process_list: List[BaseProcessor]) -> AsyncGenerator[Client, None]:
-    client.transport._processor_list = []
+    client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
+    _inject(client)
     client.load_processor(process_list)
     await client.start()
     try:
         yield client
     finally:
+        _recovery(client)
         await client.stop()

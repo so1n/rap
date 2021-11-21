@@ -38,7 +38,7 @@ class TestTransport:
         mocker.patch("rap.common.conn.Connection.read").return_value = mock_future
         mock_future.set_result(request_tuple)
 
-        for conn in client.endpoint._conn_dict.values():
+        for conn in client.endpoint._conn_list:
             await client.transport.response_handler(conn)
 
         mocker_obj.assert_called_once_with(once_target)
@@ -69,17 +69,6 @@ class TestTransport:
 
         exec_msg: str = e.value.args[0]
         assert exec_msg == "demo"
-
-    async def test_read_timeout(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
-        mock_future: asyncio.Future = asyncio.Future()
-        mocker.patch("rap.client.transport.transport.as_first_completed").return_value = mock_future
-        mock_future.set_exception(asyncio.TimeoutError())
-
-        with pytest.raises(asyncio.TimeoutError) as e:
-            await rap_client.raw_invoke("sync_sum", [1, 2])
-
-        exec_msg: str = e.value.args[0]
-        assert exec_msg.endswith("request timeout")
 
     async def test_read_none_msg(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
         mock_future: asyncio.Future = asyncio.Future()

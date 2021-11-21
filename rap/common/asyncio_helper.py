@@ -259,10 +259,13 @@ class Deadline(object):
     def end_loop_time(self) -> Optional[float]:
         return self._end_loop_time
 
-    async def wait_for(self, future: Union[asyncio.Future, Coroutine]) -> None:
+    async def wait_for(self, future: Union[asyncio.Future, Coroutine]) -> Any:
         """wait future completed or deadline"""
         try:
-            await asyncio.wait_for(future, self.surplus)
+            if self._delay is None:
+                return await future
+            else:
+                return await asyncio.wait_for(future, self.surplus)
         except asyncio.TimeoutError:
             if isinstance(self._timeout_exc, IgnoreDeadlineTimeoutExc):
                 return

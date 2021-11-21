@@ -5,44 +5,30 @@ import pytest
 from pytest_mock import MockerFixture
 
 from rap.client import Client
+from rap.common.asyncio_helper import Deadline
 from rap.server import Server
-
-from .conftest import AnyStringWith
 
 pytestmark = pytest.mark.asyncio
 
 
 class TestPingPong:
     async def test_ping_pong(self, rap_server: Server, rap_client: Client) -> None:
-        future: asyncio.Future = asyncio.Future()
-        rap_client_write = rap_client.transport.write_to_conn
-
-        async def mock_write(*args: Any, **kwargs: Any) -> Any:
-            if args[0].target.endswith("pong"):
-                future.set_result(True)
-            return await rap_client_write(*args, **kwargs)
-
-        setattr(rap_client.transport, "write_to_conn", mock_write)
-        assert True is await future
-        setattr(rap_client.transport, "write_to_conn", rap_client_write)
+        for conn in rap_client.endpoint._conn_list.copy():
+            await rap_client.transport.ping(conn, cnt=1)
 
     async def test_ping_pong_timeout(self, mocker: MockerFixture, rap_server: Server, rap_client: Client) -> None:
         rap_client_write = rap_client.transport.write_to_conn
 
         async def mock_write(*args: Any, **kwargs: Any) -> Any:
-            if not args[0].target.endswith("pong"):
+            if not args[0].target.endswith("ping"):
                 return await rap_client_write(*args, **kwargs)
 
         setattr(rap_client.transport, "write_to_conn", mock_write)
 
-        mocker_obj: Any = mocker.patch("rap.client.transport.transport.logging.exception")
         # until close
-        for conn in rap_client.endpoint._conn_dict.copy().values():
-            try:
-                await conn.listen_future
-            except asyncio.CancelledError:
-                # listen close event, listen will close and raise exc to conn
-                pass
-            mocker_obj.assert_called_once_with(AnyStringWith("recv close conn event"))
+        for conn in rap_client.endpoint._conn_list.copy():
+            with pytest.raises(asyncio.TimeoutError):
+                with Deadline(delay=0.5):
+                    await rap_client.transport.ping(conn, cnt=1)
 
         setattr(rap_client.transport, "write_to_conn", rap_client_write)
