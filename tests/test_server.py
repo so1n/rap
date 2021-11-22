@@ -5,11 +5,13 @@ from aredis import StrictRedis  # type: ignore
 from pytest_mock import MockerFixture
 
 from rap.client import Client
-from rap.common.exceptions import RpcRunTimeError, ServerError
+from rap.common.asyncio_helper import Deadline
+from rap.common.exceptions import RpcRunTimeError
 from rap.common.utils import EventEnum
 from rap.server import Server
 from rap.server.plugin.middleware.conn.limit import ConnLimitMiddleware
 from rap.server.plugin.processor import CryptoProcessor as ServerCryptoProcessor
+from tests.conftest import AnyStringWith
 
 pytestmark = pytest.mark.asyncio
 
@@ -66,41 +68,43 @@ class TestServerConnHandle:
         future: asyncio.Future = asyncio.Future()
         future.set_exception(Exception())
         mocker.patch("rap.server.receiver.Receiver.dispatch").return_value = future
-        with pytest.raises(ServerError):
-            await rap_client.raw_invoke("sync_sum", [1, 2])
+        error_log = mocker.patch("rap.client.transport.transport.logger.error")
+        with pytest.raises(asyncio.TimeoutError):
+            with Deadline(1):
+                await rap_client.raw_invoke("sync_sum", [1, 2])
+        error_log.assert_called_with(AnyStringWith("Can' dispatch response"))
 
-    async def test_receive_error_msg(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
-        mocker.patch("rap.server.model.Request.from_msg").side_effect = Exception()
-        with pytest.raises(ConnectionError) as e:
-            await rap_client.raw_invoke("sync_sum", [1, 2])
+    # async def test_receive_error_msg(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
+    #     mocker.patch("rap.server.model.Request.from_msg").side_effect = Exception()
+    #     with pytest.raises(ConnectionError) as e:
+    #         await rap_client.raw_invoke("sync_sum", [1, 2])
+    #
+    #     exec_msg = e.value.args[0]
+    #     assert exec_msg == "recv close conn event, event info:protocol error"
 
-        exec_msg = e.value.args[0]
-        assert exec_msg == "recv close conn event, event info:protocol error"
-
-    async def test_read_timeout(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
-        mock_future: asyncio.Future = asyncio.Future()
-        mocker.patch("rap.common.conn.ServerConnection.read").return_value = mock_future
-        mock_future.set_exception(asyncio.TimeoutError())
-
-        with pytest.raises(ConnectionError) as e:
-            await rap_client.raw_invoke("sync_sum", [1, 2])
-
-        exec_msg = e.value.args[0]
-        assert exec_msg == "recv close conn event, event info:keep alive timeout"
+    # async def test_read_timeout(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
+    #     with pytest.raises(ConnectionError) as e:
+    #         mock_future: asyncio.Future = asyncio.Future()
+    #         mocker.patch("rap.common.conn.ServerConnection.read").return_value = mock_future
+    #         mock_future.set_exception(asyncio.TimeoutError())
+    #         await rap_client.raw_invoke("sync_sum", [1, 2])
+    #
+    #     exec_msg = e.value.args[0]
+    #     assert exec_msg == "recv close conn event, event info:keep alive timeout"
 
 
 class TestRequestHandle:
-    async def test_request_dispatch_not_found(
-        self, rap_server: Server, rap_client: Client, mocker: MockerFixture
-    ) -> None:
-        mocker.patch("rap.client.model.Request.to_msg").return_value = (-1, "123", "/default/test", {}, None)
-        # self.msg_type, msg_id, self.correlation_id, self.target, self.header, self.body
-
-        with pytest.raises(ServerError) as e:
-            await rap_client.raw_invoke("sync_sum", [1, 2])
-
-        exec_msg = e.value.args[0]
-        assert exec_msg == "Illegal request"
+    # async def test_request_dispatch_not_found(
+    #     self, rap_server: Server, rap_client: Client, mocker: MockerFixture
+    # ) -> None:
+    #     mocker.patch("rap.client.model.Request.to_msg").return_value = (-1, "123", "/default/test", {}, None)
+    #     # self.msg_type, msg_id, self.correlation_id, self.target, self.header, self.body
+    #
+    #     with pytest.raises(ServerError) as e:
+    #         await rap_client.raw_invoke("sync_sum", [1, 2])
+    #
+    #     exec_msg = e.value.args[0]
+    #     assert exec_msg == "Illegal request"
 
     async def test_request_dispatch_func_error(
         self, rap_server: Server, rap_client: Client, mocker: MockerFixture
