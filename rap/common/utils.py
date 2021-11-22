@@ -130,7 +130,7 @@ def check_func_type(func_sig: inspect.Signature, param_list: Sequence[Any], defa
         else:
             value = default_param_dict.get(name, parameter.default)
         if not is_type(type(value), parameter.annotation):
-            raise TypeError(f"{default_param_dict[name]} type must: {parameter.annotation}")
+            raise TypeError(f"{value} type must: {parameter.annotation}")
 
 
 def param_handle(
