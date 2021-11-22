@@ -62,7 +62,7 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
         def upload_probability(stats_dict: Dict[Any, int]) -> None:
             _dict: Dict[str, Dict[str, int]] = {}
             for key, value in stats_dict.items():
-                if key.startswith(self._prefix):
+                if key.startswith("gauge_" + self._prefix):
                     _, index, type_ = key.split("|")
                     if index not in _dict:
                         _dict[index] = {}

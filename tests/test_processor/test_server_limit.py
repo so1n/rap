@@ -9,7 +9,6 @@ from rap.common.exceptions import ServerError, TooManyRequest
 from rap.server import Request, Response, Server
 from rap.server.plugin.processor import limit
 from rap.server.plugin.processor.base import BaseProcessor
-from tests.conftest import async_sum  # type: ignore
 
 pytestmark = pytest.mark.asyncio
 
@@ -25,6 +24,8 @@ class TestLimit:
 
         rap_server.load_processor([TestProcessor()])
         with pytest.raises(TooManyRequest) as e:
+            from tests.conftest import async_sum
+
             await async_sum(1, 2)
 
         exec_msg: str = e.value.args[0]
@@ -40,6 +41,8 @@ class TestLimit:
 
         rap_server.load_processor([TestProcessor()])
         with pytest.raises(ServerError) as e:
+            from tests.conftest import async_sum
+
             await async_sum(1, 2)
 
         exec_msg: str = e.value.args[0]
@@ -74,6 +77,8 @@ class TestLimit:
         if asyncio.iscoroutine(result):
             result = await result
         assert 0 == result
+
+        from tests.conftest import async_sum
 
         assert 3 == await async_sum(1, 2)
         with pytest.raises(TooManyRequest):

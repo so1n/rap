@@ -257,7 +257,7 @@ class BaseClient:
         :param group: func's group, default value is `default`
         """
         if isinstance(func, RapFunc):
-            raise RuntimeError(f"{func} already inject or register")
+            raise RuntimeError(f"{func.raw_func} already inject or register")
         new_func: RapFunc = self.register(name=name, group=group)(func)
         func_module: str = getattr(func, "__module__")
         if not func_module:
