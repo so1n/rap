@@ -1,8 +1,8 @@
 import asyncio
 import logging
-from typing import Optional
+from typing import List, Optional, Tuple
 
-from rap.client.endpoint.base import BalanceEnum, BaseEndpoint
+from rap.client.endpoint.base import BalanceEnum, BaseEndpoint, ConnGroup
 from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import done_future
 from rap.common.coordinator.consul import ConsulClient
@@ -73,12 +73,15 @@ class ConsulEndpoint(BaseEndpoint):
     async def _watch(self) -> None:
         async for conn_dict in self.consul_client.watch(self.server_name):
             if conn_dict:
-                for conn in self._conn_list:
-                    key: tuple = (conn.host, conn.port)
-                    if key not in conn_dict:
-                        await self.destroy(conn)
-                    else:
-                        conn_dict.pop(key, None)
+                pop_key_list: List[Tuple[str, int]] = []
+                for key, value in conn_dict:
+                    conn_group: Optional[ConnGroup] = self._conn_group_dict.pop(key, None)
+                    if conn_group:
+                        await conn_group.destroy()
+                        pop_key_list.append(key)
+                for key in pop_key_list:
+                    conn_dict.pop(key, None)
+
             for key, value in conn_dict.items():
                 await self.create(value["host"], value["port"], value["weight"])
 
@@ -92,11 +95,10 @@ class ConsulEndpoint(BaseEndpoint):
                 item["host"],
                 item["port"],
                 weight=item["weight"],
-                size=item.get("size"),
                 max_conn_inflight=item.get("max_conn_inflight"),
             )
 
-        if not self._conn_list:
+        if not self._conn_key_list:
             logger.warning(
                 f"Can not found conn info from consul, wait `{self.server_name}` server start and register to consul"
             )
@@ -106,7 +108,6 @@ class ConsulEndpoint(BaseEndpoint):
                         value["host"],
                         value["port"],
                         weight=value["weight"],
-                        size=value.get("size"),
                         max_conn_inflight=value.get("max_conn_inflight"),
                     )
                     return

@@ -1,8 +1,8 @@
 import asyncio
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
-from rap.client.endpoint.base import BalanceEnum, BaseEndpoint
+from rap.client.endpoint.base import BalanceEnum, BaseEndpoint, ConnGroup
 from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import del_future, done_future
 from rap.common.coordinator.etcd import ETCD_EVENT_VALUE_DICT_TYPE, EtcdClient
@@ -73,12 +73,11 @@ class EtcdEndpoint(BaseEndpoint):
                 item["host"],
                 item["port"],
                 weight=item["weight"],
-                size=item.get("size"),
                 max_conn_inflight=item.get("max_conn_inflight"),
             )
 
         wait_start_future: asyncio.Future = asyncio.Future()
-        if not self._conn_list:
+        if not self._conn_key_list:
             logger.warning(
                 f"Can not found conn info from etcd, wait {self.server_name} server start and register to etcd"
             )
@@ -93,7 +92,6 @@ class EtcdEndpoint(BaseEndpoint):
                 etcd_value_dict["value"]["host"],
                 etcd_value_dict["value"]["port"],
                 weight=etcd_value_dict["value"]["weight"],
-                size=etcd_value_dict["value"]["size"],
                 max_conn_inflight=etcd_value_dict["value"]["max_conn_inflight"],
             )
             if not wait_start_future.done():
@@ -103,10 +101,11 @@ class EtcdEndpoint(BaseEndpoint):
             conn_dict: dict = _cache_dict.pop(etcd_value_dict["key"], {})
             if not conn_dict:
                 raise KeyError(f"Can not found key:{etcd_value_dict['key']}")
-            for conn in self._conn_list:
-                if conn.host == conn_dict["host"] and conn.port == conn_dict["post"]:
-                    await self.destroy(conn)
-            if not self._conn_list:
+            key: Tuple[str, int] = (conn_dict["host"], conn_dict["post"])
+            conn_group: Optional[ConnGroup] = self._conn_group_dict.pop(key, None)
+            if conn_group:
+                await conn_group.destroy()
+            if not self._conn_key_list:
                 logger.warning("client not conn")
 
         self._watch_future = asyncio.ensure_future(self.etcd_client.watch(self.server_name, [create], [destroy]))

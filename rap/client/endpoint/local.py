@@ -64,7 +64,6 @@ class LocalEndpoint(BaseEndpoint):
                     conn_config_dict["ip"],
                     conn_config_dict["port"],
                     weight=conn_config_dict.get("weight", None),
-                    size=conn_config_dict.get("size", None),
                     max_conn_inflight=conn_config_dict.get("max_conn_inflight", None),
                 )
                 for conn_config_dict in self._conn_config_list

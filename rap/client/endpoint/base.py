@@ -2,8 +2,9 @@ import asyncio
 import logging
 import random
 import time
+from collections import deque
 from enum import Enum, auto
-from typing import Any, List, Optional
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import Deadline, IgnoreDeadlineTimeoutExc
@@ -22,6 +23,30 @@ class BalanceEnum(Enum):
     random = auto()
     round_robin = auto()
     faster = auto()
+
+
+class ConnGroup(object):
+    def __init__(self) -> None:
+        self._conn_deque: Deque[Connection] = deque()
+
+    @property
+    def conn(self) -> Connection:
+        conn: Connection = self._conn_deque[0]
+        self._conn_deque.rotate(1)
+        return conn
+
+    def add(self, conn: Connection) -> None:
+        self._conn_deque.append(conn)
+
+    def remove(self, conn: Connection) -> None:
+        self._conn_deque.remove(conn)
+
+    async def destroy(self) -> None:
+        while self._conn_deque:
+            await self._conn_deque.pop().await_close()
+
+    def __len__(self) -> int:
+        return len(self._conn_deque)
 
 
 class Picker(object):
@@ -100,7 +125,9 @@ class BaseEndpoint(object):
         self._wait_server_recover: bool = wait_server_recover
 
         self._connected_cnt: int = 0
-        self._conn_list: List[Connection] = []
+        # self._conn_list: List[Connection] = []
+        self._conn_key_list: List[Tuple[str, int]] = []
+        self._conn_group_dict: Dict[Tuple[str, int], ConnGroup] = {}
         self._round_robin_index: int = 0
         self._is_close: bool = True
 
@@ -111,9 +138,9 @@ class BaseEndpoint(object):
                 setattr(self, self._pick_conn.__name__, self._random_pick_conn)
             elif balance_enum == BalanceEnum.round_robin:
                 setattr(self, self._pick_conn.__name__, self._round_robin_pick_conn)
-            elif balance_enum == BalanceEnum.faster:
-                self._faster_conn_cache_key = "rap:endpoint:faster_conn"
-                setattr(self, self._pick_conn.__name__, self._pick_faster_conn)
+            # elif balance_enum == BalanceEnum.faster:
+            #     self._faster_conn_cache_key = "rap:endpoint:faster_conn"
+            #     setattr(self, self._pick_conn.__name__, self._pick_faster_conn)
 
     async def _listen_conn(self, conn: Connection) -> None:
         """listen server msg from conn"""
@@ -164,65 +191,70 @@ class BaseEndpoint(object):
         port: int,
         weight: Optional[int] = None,
         max_conn_inflight: Optional[int] = None,
-        size: Optional[int] = None,
     ) -> None:
         """create and init conn
         :param ip: server ip
         :param port: server port
         :param weight: select conn weight
         :param max_conn_inflight: Maximum number of connections per conn
-        :param size: connect server conn size
         """
         if not weight:
             weight = 10
         if not max_conn_inflight:
             max_conn_inflight = 100
-        if not size:
-            size = 1
 
-        for _ in range(size):
-            conn: Connection = Connection(
-                ip,
-                port,
-                weight,
-                ssl_crt_path=self._ssl_crt_path,
-                pack_param=self._pack_param,
-                unpack_param=self._unpack_param,
-                max_conn_inflight=max_conn_inflight,
-            )
+        key: Tuple[str, int] = (ip, port)
+        if key not in self._conn_group_dict:
+            self._conn_group_dict[key] = ConnGroup()
+            self._conn_key_list.append(key)
 
-            def _conn_done(f: asyncio.Future) -> None:
-                try:
-                    try:
-                        self._conn_list.remove(conn)
-                    except ValueError:
-                        pass
-                    self._connected_cnt -= 1
-                except Exception as _e:
-                    msg: str = f"close conn error: {_e}"
-                    if f.exception():
-                        msg += f", conn done exc:{f.exception()}"
-                    logger.exception(msg)
+        conn: Connection = Connection(
+            ip,
+            port,
+            weight,
+            ssl_crt_path=self._ssl_crt_path,
+            pack_param=self._pack_param,
+            unpack_param=self._unpack_param,
+            max_conn_inflight=max_conn_inflight,
+        )
 
+        def _conn_done(f: asyncio.Future) -> None:
             try:
-                with Deadline(self._declare_timeout, timeout_exc=asyncio.TimeoutError(f"conn:{conn} declare timeout")):
-                    await conn.connect()
-                    logger.debug("Connection to %s...", conn.connection_info)
-                    self._connected_cnt += 1
-                    conn.available = True
-                    conn.listen_future = asyncio.ensure_future(self._listen_conn(conn))
-                    conn.listen_future.add_done_callback(lambda f: _conn_done(f))
-                    await self._transport.declare(conn)
-            except Exception as e:
-                await self.destroy(conn)
-                raise e
-            conn.ping_future = asyncio.ensure_future(self._ping_event(conn))
-            conn.ping_future.add_done_callback(lambda f: conn.close())
-            self._conn_list.append(conn)
+                try:
+                    conn_group: Optional[ConnGroup] = self._conn_group_dict.get(key, None)
+                    if conn_group:
+                        conn_group.remove(conn)
+                        if not conn_group:
+                            self._conn_group_dict.pop(key)
+                            self._conn_key_list.remove(key)
+                except ValueError:
+                    pass
+                self._connected_cnt -= 1
+            except Exception as _e:
+                msg: str = f"close conn error: {_e}"
+                if f.exception():
+                    msg += f", conn done exc:{f.exception()}"
+                logger.exception(msg)
+
+        try:
+            with Deadline(self._declare_timeout, timeout_exc=asyncio.TimeoutError(f"conn:{conn} declare timeout")):
+                await conn.connect()
+                logger.debug("Connection to %s...", conn.connection_info)
+                self._connected_cnt += 1
+                conn.available = True
+                conn.listen_future = asyncio.ensure_future(self._listen_conn(conn))
+                conn.listen_future.add_done_callback(lambda f: _conn_done(f))
+                await self._transport.declare(conn)
+        except Exception as e:
+            await conn.await_close()
+            raise e
+        self._conn_group_dict[key].add(conn)
+        conn.ping_future = asyncio.ensure_future(self._ping_event(conn))
+        conn.ping_future.add_done_callback(lambda f: conn.close())
 
     @staticmethod
-    async def destroy(conn: Connection) -> None:
-        await conn.await_close()
+    async def destroy(conn_group: ConnGroup) -> None:
+        await conn_group.destroy()
 
     async def _start(self) -> None:
         self._is_close = False
@@ -233,17 +265,18 @@ class BaseEndpoint(object):
 
     async def stop(self) -> None:
         """stop endpoint and close all conn and cancel future"""
-        while self._conn_list:
-            await self.destroy(self._conn_list.pop())
+        while self._conn_key_list:
+            await self.destroy(self._conn_group_dict[self._conn_key_list.pop()])
 
-        self._conn_list = []
+        self._conn_key_list = []
+        self._conn_group_dict = {}
         self._is_close = True
 
     def picker(self, cnt: int = 3) -> Picker:
         """get conn by endpoint
         :param cnt: How many conn to get.
         """
-        if not self._conn_list:
+        if not self._conn_key_list:
             raise ConnectionError("Endpoint Can not found available conn")
         cnt = min(self._connected_cnt, cnt)
         conn_list: List[Connection] = self._pick_conn(cnt)
@@ -254,20 +287,22 @@ class BaseEndpoint(object):
 
     def _random_pick_conn(self, cnt: int) -> List[Connection]:
         """random get conn"""
-        return random.choices(self._conn_list, k=cnt)
+        key_list: List[Tuple[str, int]] = random.choices(self._conn_key_list, k=cnt)
+        return [self._conn_group_dict[key].conn for key in key_list]
 
     def _round_robin_pick_conn(self, cnt: int) -> List[Connection]:
         """get conn by round robin"""
         self._round_robin_index += 1
-        index: int = self._round_robin_index % (len(self._conn_list))
-        return self._conn_list[index : index + cnt]
+        index: int = self._round_robin_index % (len(self._conn_key_list))
+        key_list: List[Tuple[str, int]] = self._conn_key_list[index : index + cnt]
+        return [self._conn_group_dict[key].conn for key in key_list]
 
-    def _pick_faster_conn(self, cnt: int) -> List[Connection]:
-        conn_list: List[Connection] = self._transport.app.cache.get(self._faster_conn_cache_key, [])
-        if not conn_list:
-            conn_list = sorted(self._conn_list, key=lambda c: c.rtt)[:cnt]
-            self._transport.app.cache.add(self._faster_conn_cache_key, self._max_ping_interval, conn_list)
-        return conn_list
+    # def _pick_faster_conn(self, cnt: int) -> List[Connection]:
+    #     conn_list: List[Connection] = self._transport.app.cache.get(self._faster_conn_cache_key, [])
+    #     if not conn_list:
+    #         conn_list = sorted(self._conn_list, key=lambda c: c.rtt)[:cnt]
+    #         self._transport.app.cache.add(self._faster_conn_cache_key, self._max_ping_interval, conn_list)
+    #     return conn_list
 
     def __len__(self) -> int:
         return self._connected_cnt
