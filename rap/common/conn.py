@@ -3,7 +3,8 @@ import logging
 import random
 import ssl
 import time
-from typing import Any, Optional, Tuple
+from collections import deque
+from typing import Any, Deque, Optional, Tuple
 
 import msgpack
 
@@ -145,9 +146,11 @@ class Connection(BaseConnection):
         self.semaphore: Semaphore = Semaphore(max_conn_inflight or 100)
 
         # ping
+        self.inflight_load: Deque[int] = deque(maxlen=3)  # save history inflight(like Linux load)
         self.ping_future: asyncio.Future = done_future()
         self.available: bool = False
         self.last_ping_timestamp: float = time.time()
+        self.not_available_timestamp: float = time.time()
         self.rtt: float = 0.0
         self.mos: int = 5
 

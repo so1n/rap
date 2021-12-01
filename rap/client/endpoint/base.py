@@ -53,6 +53,7 @@ class Picker(object):
     """auto pick conn, refer to `Kratos` 1.x"""
 
     def __init__(self, conn_list: List[Connection]):
+        self._conn_list = conn_list
         self._conn: Connection = self._pick(conn_list)
         self._start_time: float = time.time()
 
@@ -100,6 +101,9 @@ class BaseEndpoint(object):
         max_ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
         wait_server_recover: bool = True,
+        not_available_conn_live_timeout: Optional[int] = None,
+        max_pool_size: Optional[int] = None,
+        min_poll_size: Optional[int] = None,
     ) -> None:
         """
         :param transport: client transport
@@ -123,9 +127,11 @@ class BaseEndpoint(object):
         self._max_ping_interval: int = max_ping_interval or 3
         self._ping_fail_cnt: int = ping_fail_cnt or 3
         self._wait_server_recover: bool = wait_server_recover
+        self._not_available_conn_live_timeout = not_available_conn_live_timeout or 60
+        self._max_pool_size: int = max_pool_size or 3
+        self._min_pool_size: int = min_poll_size or 1
 
         self._connected_cnt: int = 0
-        # self._conn_list: List[Connection] = []
         self._conn_key_list: List[Tuple[str, int]] = []
         self._conn_group_dict: Dict[Tuple[str, int], ConnGroup] = {}
         self._round_robin_index: int = 0
@@ -165,10 +171,23 @@ class BaseEndpoint(object):
             available: bool = diff_time < ping_fail_interval
             conn.available = available
             logger.debug("conn:%s available:%s rtt:%s", conn.peer_tuple, available, conn.rtt)
-            if not available and not self._wait_server_recover:
-                logger.error(f"ping {conn.sock_tuple} timeout... exit")
-                return
+            if not available:
+                if conn.not_available_timestamp < time.time():
+                    logger.error(f"ping {conn.sock_tuple} timeout... exit")
+                    return
+            else:
+                conn.not_available_timestamp = time.time() + self._not_available_conn_live_timeout
 
+                conn.inflight_load.append(conn.semaphore.inflight)
+                # Don't want to use pandas&numpy in the web framework
+                conn_group: ConnGroup = self._conn_group_dict[(conn.host, conn.port)]
+                avg_inflight: float = sum(conn.inflight_load) / len(conn.inflight_load)
+                if avg_inflight > 80 and len(conn_group) < self._max_pool_size:
+                    await self.create(conn.host, conn.port, conn.weight, conn.semaphore.raw_value)
+                elif 0 < avg_inflight < 20 and len(conn_group) > self._min_pool_size:
+                    conn.available = False
+
+            logger.debug("conn:%s available:%s rtt:%s", conn.peer_tuple, conn.available, conn.rtt)
             next_ping_interval: int = random.randint(self._min_ping_interval, self._max_ping_interval)
             try:
                 with Deadline(next_ping_interval, timeout_exc=IgnoreDeadlineTimeoutExc()) as d:
@@ -208,49 +227,53 @@ class BaseEndpoint(object):
             self._conn_group_dict[key] = ConnGroup()
             self._conn_key_list.append(key)
 
-        conn: Connection = Connection(
-            ip,
-            port,
-            weight,
-            ssl_crt_path=self._ssl_crt_path,
-            pack_param=self._pack_param,
-            unpack_param=self._unpack_param,
-            max_conn_inflight=max_conn_inflight,
-        )
+        create_size: int = 1
+        if not self._conn_group_dict[key]:
+            create_size = self._min_pool_size
+        for _ in range(create_size):
+            conn: Connection = Connection(
+                ip,
+                port,
+                weight,
+                ssl_crt_path=self._ssl_crt_path,
+                pack_param=self._pack_param,
+                unpack_param=self._unpack_param,
+                max_conn_inflight=max_conn_inflight,
+            )
 
-        def _conn_done(f: asyncio.Future) -> None:
-            try:
+            def _conn_done(f: asyncio.Future) -> None:
                 try:
-                    conn_group: Optional[ConnGroup] = self._conn_group_dict.get(key, None)
-                    if conn_group:
-                        conn_group.remove(conn)
-                        if not conn_group:
-                            self._conn_group_dict.pop(key)
-                            self._conn_key_list.remove(key)
-                except ValueError:
-                    pass
-                self._connected_cnt -= 1
-            except Exception as _e:
-                msg: str = f"close conn error: {_e}"
-                if f.exception():
-                    msg += f", conn done exc:{f.exception()}"
-                logger.exception(msg)
+                    try:
+                        conn_group: Optional[ConnGroup] = self._conn_group_dict.get(key, None)
+                        if conn_group:
+                            conn_group.remove(conn)
+                            if not conn_group:
+                                self._conn_group_dict.pop(key)
+                                self._conn_key_list.remove(key)
+                    except ValueError:
+                        pass
+                    self._connected_cnt -= 1
+                except Exception as _e:
+                    msg: str = f"close conn error: {_e}"
+                    if f.exception():
+                        msg += f", conn done exc:{f.exception()}"
+                    logger.exception(msg)
 
-        try:
-            with Deadline(self._declare_timeout, timeout_exc=asyncio.TimeoutError(f"conn:{conn} declare timeout")):
-                await conn.connect()
-                logger.debug("Connection to %s...", conn.connection_info)
-                self._connected_cnt += 1
-                conn.available = True
-                conn.listen_future = asyncio.ensure_future(self._listen_conn(conn))
-                conn.listen_future.add_done_callback(lambda f: _conn_done(f))
-                await self._transport.declare(conn)
-        except Exception as e:
-            await conn.await_close()
-            raise e
-        self._conn_group_dict[key].add(conn)
-        conn.ping_future = asyncio.ensure_future(self._ping_event(conn))
-        conn.ping_future.add_done_callback(lambda f: conn.close())
+            try:
+                with Deadline(self._declare_timeout, timeout_exc=asyncio.TimeoutError(f"conn:{conn} declare timeout")):
+                    await conn.connect()
+                    logger.debug("Connection to %s...", conn.connection_info)
+                    self._connected_cnt += 1
+                    conn.available = True
+                    conn.listen_future = asyncio.ensure_future(self._listen_conn(conn))
+                    conn.listen_future.add_done_callback(lambda f: _conn_done(f))
+                    await self._transport.declare(conn)
+            except Exception as e:
+                await conn.await_close()
+                raise e
+            self._conn_group_dict[key].add(conn)
+            conn.ping_future = asyncio.ensure_future(self._ping_event(conn))
+            conn.ping_future.add_done_callback(lambda f: conn.close())
 
     @staticmethod
     async def destroy(conn_group: ConnGroup) -> None:

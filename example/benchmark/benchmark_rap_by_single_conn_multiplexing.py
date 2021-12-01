@@ -26,7 +26,7 @@ def run_server() -> None:
 def run_client() -> None:
     loop: asyncio.AbstractEventLoop = uvloop.new_event_loop()
     asyncio.set_event_loop(loop)
-    client: Client = Client("example", [{"ip": "localhost", "port": "9000", "size": 10, "max_conn_inflight": 100}])
+    client: Client = Client("example", [{"ip": "localhost", "port": "9000", "max_conn_inflight": 1000}])
 
     @client.register()
     async def test_sum(a: int, b: int) -> int:
@@ -37,9 +37,10 @@ def run_client() -> None:
         await asyncio.gather(*task_list)
 
     loop.run_until_complete(client.start())
-    start: float = time.time()
-    loop.run_until_complete(request())
-    print("call: %d qps" % (NUM_CALLS / (time.time() - start)))
+    for _ in range(20):
+        start: float = time.time()
+        loop.run_until_complete(request())
+        print("call: %d qps" % (NUM_CALLS / (time.time() - start)))
     loop.run_until_complete(client.stop())
 
 
