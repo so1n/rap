@@ -24,7 +24,8 @@ class ConsulEndpoint(BaseEndpoint):
         min_ping_interval: Optional[int] = None,
         max_ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
-        wait_server_recover: bool = True,
+        max_pool_size: Optional[int] = None,
+        min_poll_size: Optional[int] = None,
         # consul client param
         consul_namespace: str = "rap",
         consul_ttl: int = 10,
@@ -60,7 +61,8 @@ class ConsulEndpoint(BaseEndpoint):
             ping_fail_cnt=ping_fail_cnt,
             min_ping_interval=min_ping_interval,
             max_ping_interval=max_ping_interval,
-            wait_server_recover=wait_server_recover,
+            max_pool_size=max_pool_size,
+            min_poll_size=min_poll_size,
         )
         self.server_name: str = server_name
 

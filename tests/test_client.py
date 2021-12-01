@@ -38,8 +38,8 @@ class TestTransport:
         mocker.patch("rap.common.conn.Connection.read").return_value = mock_future
         mock_future.set_result(request_tuple)
 
-        for conn in client.endpoint._conn_list:
-            await client.transport.response_handler(conn)
+        for key, conn_group in client.endpoint._conn_group_dict.items():
+            await client.transport.response_handler(conn_group.conn)
 
         mocker_obj.assert_called_once_with(once_target)
 

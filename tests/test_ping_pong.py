@@ -13,8 +13,8 @@ pytestmark = pytest.mark.asyncio
 
 class TestPingPong:
     async def test_ping_pong(self, rap_server: Server, rap_client: Client) -> None:
-        for conn in rap_client.endpoint._conn_list.copy():
-            await rap_client.transport.ping(conn, cnt=1)
+        for key, conn_group in rap_client.endpoint._conn_group_dict.copy().items():
+            await rap_client.transport.ping(conn_group.conn, cnt=1)
 
     async def test_ping_pong_timeout(self, mocker: MockerFixture, rap_server: Server, rap_client: Client) -> None:
         rap_client_write = rap_client.transport.write_to_conn
@@ -26,9 +26,9 @@ class TestPingPong:
         setattr(rap_client.transport, "write_to_conn", mock_write)
 
         # until close
-        for conn in rap_client.endpoint._conn_list.copy():
+        for key, conn_group in rap_client.endpoint._conn_group_dict.copy().items():
             with pytest.raises(asyncio.TimeoutError):
                 with Deadline(delay=0.5):
-                    await rap_client.transport.ping(conn, cnt=1)
+                    await rap_client.transport.ping(conn_group.conn, cnt=1)
 
         setattr(rap_client.transport, "write_to_conn", rap_client_write)

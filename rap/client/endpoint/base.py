@@ -17,12 +17,10 @@ class BalanceEnum(Enum):
     """Balance method
     random: random pick a conn
     round_robin: round pick conn
-    faster: pick response faster conn
     """
 
     random = auto()
     round_robin = auto()
-    faster = auto()
 
 
 class ConnGroup(object):
@@ -100,8 +98,6 @@ class BaseEndpoint(object):
         min_ping_interval: Optional[int] = None,
         max_ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
-        wait_server_recover: bool = True,
-        not_available_conn_live_timeout: Optional[int] = None,
         max_pool_size: Optional[int] = None,
         min_poll_size: Optional[int] = None,
     ) -> None:
@@ -115,7 +111,6 @@ class BaseEndpoint(object):
         :param min_ping_interval: send client ping min interval, default 1
         :param max_ping_interval: send client ping max interval, default 3
         :param ping_fail_cnt: How many times ping fails to judge as unavailable, default 3
-        :param wait_server_recover: If False, ping failure will close conn
         """
         self._transport: Transport = transport
         self._declare_timeout: int = declare_timeout or 9
@@ -126,8 +121,6 @@ class BaseEndpoint(object):
         self._min_ping_interval: int = min_ping_interval or 1
         self._max_ping_interval: int = max_ping_interval or 3
         self._ping_fail_cnt: int = ping_fail_cnt or 3
-        self._wait_server_recover: bool = wait_server_recover
-        self._not_available_conn_live_timeout = not_available_conn_live_timeout or 60
         self._max_pool_size: int = max_pool_size or 3
         self._min_pool_size: int = min_poll_size or 1
 
@@ -144,9 +137,6 @@ class BaseEndpoint(object):
                 setattr(self, self._pick_conn.__name__, self._random_pick_conn)
             elif balance_enum == BalanceEnum.round_robin:
                 setattr(self, self._pick_conn.__name__, self._round_robin_pick_conn)
-            # elif balance_enum == BalanceEnum.faster:
-            #     self._faster_conn_cache_key = "rap:endpoint:faster_conn"
-            #     setattr(self, self._pick_conn.__name__, self._pick_faster_conn)
 
     async def _listen_conn(self, conn: Connection) -> None:
         """listen server msg from conn"""
@@ -169,32 +159,31 @@ class BaseEndpoint(object):
             now_time: float = time.time()
             diff_time: float = now_time - conn.last_ping_timestamp
             available: bool = diff_time < ping_fail_interval
-            conn.available = available
             logger.debug("conn:%s available:%s rtt:%s", conn.peer_tuple, available, conn.rtt)
             if not available:
-                if conn.not_available_timestamp < time.time():
-                    logger.error(f"ping {conn.sock_tuple} timeout... exit")
-                    return
+                logger.error(f"ping {conn.sock_tuple} timeout... exit")
+                return
             else:
-                conn.not_available_timestamp = time.time() + self._not_available_conn_live_timeout
-
                 conn.inflight_load.append(conn.semaphore.inflight)
-                # Don't want to use pandas&numpy in the web framework
+                # Simple design, don't want to use pandas&numpy in the web framework
                 conn_group: ConnGroup = self._conn_group_dict[(conn.host, conn.port)]
                 avg_inflight: float = sum(conn.inflight_load) / len(conn.inflight_load)
                 if avg_inflight > 80 and len(conn_group) < self._max_pool_size:
                     await self.create(conn.host, conn.port, conn.weight, conn.semaphore.raw_value)
-                elif 0 < avg_inflight < 20 and len(conn_group) > self._min_pool_size:
-                    conn.available = False
+                elif avg_inflight < 20 and len(conn_group) > self._min_pool_size:
+                    # When conn is just created, inflight is 0
+                    conn.available_level -= 1
+                    if conn.available_level <= 0 and conn.available:
+                        conn.close_soon()
+                elif conn.available and conn.available_level < 5:
+                    conn.available_level += 1
 
-            logger.debug("conn:%s available:%s rtt:%s", conn.peer_tuple, conn.available, conn.rtt)
+            logger.debug("conn:%s available:%s rtt:%s", conn.peer_tuple, conn.available_level, conn.rtt)
             next_ping_interval: int = random.randint(self._min_ping_interval, self._max_ping_interval)
             try:
                 with Deadline(next_ping_interval, timeout_exc=IgnoreDeadlineTimeoutExc()) as d:
                     await self._transport.ping(conn)
                     await conn.sleep_and_listen(d.surplus)
-                if self._faster_conn_cache_key:
-                    self._transport.app.cache.pop(self._faster_conn_cache_key, None)
             except asyncio.CancelledError:
                 return
             except Exception as e:
@@ -227,6 +216,8 @@ class BaseEndpoint(object):
             self._conn_group_dict[key] = ConnGroup()
             self._conn_key_list.append(key)
 
+        if len(self._conn_group_dict[key]) >= self._max_pool_size:
+            return
         create_size: int = 1
         if not self._conn_group_dict[key]:
             create_size = self._min_pool_size
@@ -262,9 +253,7 @@ class BaseEndpoint(object):
             try:
                 with Deadline(self._declare_timeout, timeout_exc=asyncio.TimeoutError(f"conn:{conn} declare timeout")):
                     await conn.connect()
-                    logger.debug("Connection to %s...", conn.connection_info)
                     self._connected_cnt += 1
-                    conn.available = True
                     conn.listen_future = asyncio.ensure_future(self._listen_conn(conn))
                     conn.listen_future.add_done_callback(lambda f: _conn_done(f))
                     await self._transport.declare(conn)
@@ -319,13 +308,6 @@ class BaseEndpoint(object):
         index: int = self._round_robin_index % (len(self._conn_key_list))
         key_list: List[Tuple[str, int]] = self._conn_key_list[index : index + cnt]
         return [self._conn_group_dict[key].conn for key in key_list]
-
-    # def _pick_faster_conn(self, cnt: int) -> List[Connection]:
-    #     conn_list: List[Connection] = self._transport.app.cache.get(self._faster_conn_cache_key, [])
-    #     if not conn_list:
-    #         conn_list = sorted(self._conn_list, key=lambda c: c.rtt)[:cnt]
-    #         self._transport.app.cache.add(self._faster_conn_cache_key, self._max_ping_interval, conn_list)
-    #     return conn_list
 
     def __len__(self) -> int:
         return self._connected_cnt

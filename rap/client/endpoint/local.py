@@ -22,7 +22,8 @@ class LocalEndpoint(BaseEndpoint):
         min_ping_interval: Optional[int] = None,
         max_ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
-        wait_server_recover: bool = True,
+        max_pool_size: Optional[int] = None,
+        min_poll_size: Optional[int] = None,
     ):
         """
         :param conn_list: conn info list, 参数和默认值跟`BaseEndpoint.create`的参数保持一致
@@ -49,7 +50,8 @@ class LocalEndpoint(BaseEndpoint):
             ping_fail_cnt=ping_fail_cnt,
             min_ping_interval=min_ping_interval,
             max_ping_interval=max_ping_interval,
-            wait_server_recover=wait_server_recover,
+            max_pool_size=max_pool_size,
+            min_poll_size=min_poll_size,
         )
 
     async def start(self) -> None:

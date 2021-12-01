@@ -8,7 +8,7 @@ from typing import Any, Deque, Optional, Tuple
 
 import msgpack
 
-from rap.common.asyncio_helper import Semaphore, del_future, done_future, safe_del_future
+from rap.common.asyncio_helper import Semaphore, del_future, done_future, get_event_loop, safe_del_future
 from rap.common.state import State
 from rap.common.types import READER_TYPE, UNPACKER_TYPE, WRITER_TYPE
 from rap.common.utils import constant
@@ -148,9 +148,9 @@ class Connection(BaseConnection):
         # ping
         self.inflight_load: Deque[int] = deque(maxlen=3)  # save history inflight(like Linux load)
         self.ping_future: asyncio.Future = done_future()
+        self.available_level: int = 0
         self.available: bool = False
         self.last_ping_timestamp: float = time.time()
-        self.not_available_timestamp: float = time.time()
         self.rtt: float = 0.0
         self.mos: int = 5
 
@@ -175,6 +175,9 @@ class Connection(BaseConnection):
         self.peer_tuple = self._writer.get_extra_info("peername")
         self.conn_future: asyncio.Future = asyncio.Future()
         self._is_closed = False
+        self.available_level = 5
+        self.available = True
+        logger.debug("Connection to %s...", self.connection_info)
 
     def is_closed(self) -> bool:
         return super(Connection, self).is_closed() or self.listen_future.done()
@@ -183,6 +186,10 @@ class Connection(BaseConnection):
         safe_del_future(self.ping_future)
         del_future(self.listen_future)
         super(Connection, self).close()
+
+    def close_soon(self) -> None:
+        get_event_loop().call_later(60, self.close)
+        self.available = False
 
 
 class ServerConnection(BaseConnection):
