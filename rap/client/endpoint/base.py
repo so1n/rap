@@ -51,7 +51,6 @@ class Picker(object):
     """auto pick conn, refer to `Kratos` 1.x"""
 
     def __init__(self, conn_list: List[Connection]):
-        self._conn_list = conn_list
         self._conn: Connection = self._pick(conn_list)
         self._start_time: float = time.time()
 
@@ -68,8 +67,15 @@ class Picker(object):
                 conn_inflight: float = conn.semaphore.inflight
                 _score: float = conn.score
                 if conn_inflight:
-                    _score = _score / conn_inflight
-                logger.debug("conn:%s available:%s rtt:%s score:%s", conn.peer_tuple, conn.available, conn.rtt, _score)
+                    _score = _score * (1 - conn_inflight / conn.semaphore.raw_value)
+                logger.debug(
+                    "conn:%s available:%s available_level:%s rtt:%s score:%s",
+                    conn.peer_tuple,
+                    conn.available,
+                    conn.available_level,
+                    conn.rtt,
+                    _score,
+                )
                 if _score > score:
                     score = _score
                     pick_conn = conn
@@ -131,7 +137,6 @@ class BaseEndpoint(object):
         self._is_close: bool = True
 
         setattr(self, self._pick_conn.__name__, self._random_pick_conn)
-        self._faster_conn_cache_key: str = ""
         if balance_enum:
             if balance_enum == BalanceEnum.random:
                 setattr(self, self._pick_conn.__name__, self._random_pick_conn)
@@ -163,7 +168,7 @@ class BaseEndpoint(object):
             if not available:
                 logger.error(f"ping {conn.sock_tuple} timeout... exit")
                 return
-            else:
+            elif not (self._min_ping_interval == 1 and self._max_ping_interval == 1):
                 conn.inflight_load.append(conn.semaphore.inflight)
                 # Simple design, don't want to use pandas&numpy in the web framework
                 conn_group: ConnGroup = self._conn_group_dict[(conn.host, conn.port)]
@@ -173,10 +178,11 @@ class BaseEndpoint(object):
                 elif avg_inflight < 20 and len(conn_group) > self._min_pool_size:
                     # When conn is just created, inflight is 0
                     conn.available_level -= 1
-                    if conn.available_level <= 0 and conn.available:
-                        conn.close_soon()
                 elif conn.available and conn.available_level < 5:
                     conn.available_level += 1
+
+            if conn.available_level <= 0 and conn.available:
+                conn.close_soon()
 
             logger.debug("conn:%s available:%s rtt:%s", conn.peer_tuple, conn.available_level, conn.rtt)
             next_ping_interval: int = random.randint(self._min_ping_interval, self._max_ping_interval)
@@ -280,8 +286,8 @@ class BaseEndpoint(object):
         while self._conn_key_list:
             await self.destroy(self._conn_group_dict[self._conn_key_list.pop()])
 
-        self._conn_key_list = []
-        self._conn_group_dict = {}
+        assert not self._conn_key_list
+        assert not self._conn_group_dict
         self._is_close = True
 
     def picker(self, cnt: int = 3) -> Picker:
