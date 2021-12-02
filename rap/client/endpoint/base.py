@@ -52,26 +52,23 @@ class Picker(object):
 
     def __init__(self, conn_list: List[Connection]):
         self._conn: Connection = self._pick(conn_list)
-        self._start_time: float = time.time()
 
     @staticmethod
     def _pick(conn_list: List[Connection]) -> Connection:
         """pick by score"""
-        pick_conn: Optional[Connection] = None
+        pick_conn: Connection = conn_list[0]
         conn_len: int = len(conn_list)
         if conn_len == 1:
-            return conn_list[0]
+            return pick_conn
         elif conn_len > 1:
             score: float = 0.0
             for conn in conn_list:
                 conn_inflight: float = conn.semaphore.inflight
                 _score: float = conn.score
                 if conn_inflight:
-                    _score = _score * (1 - conn_inflight / conn.semaphore.raw_value)
+                    _score = _score * (1 - (conn_inflight / conn.semaphore.raw_value))
                 logger.debug(
                     "conn:%s available:%s available_level:%s rtt:%s score:%s",
-                    conn.peer_tuple,
-                    conn.available,
                     conn.available_level,
                     conn.rtt,
                     _score,
@@ -79,8 +76,6 @@ class Picker(object):
                 if _score > score:
                     score = _score
                     pick_conn = conn
-        if not pick_conn:
-            raise ValueError("Can not found available conn")
         return pick_conn
 
     async def __aenter__(self) -> Connection:
@@ -89,6 +84,22 @@ class Picker(object):
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self._conn.semaphore.release()
+        return None
+
+
+class PrivatePicker(Picker):
+    def __init__(self, endpoint: "BaseEndpoint", conn_list: List[Connection]):
+        self._endpoint: BaseEndpoint = endpoint
+        super().__init__(conn_list)
+
+    async def __aenter__(self) -> Connection:
+        self._conn = await self._endpoint.create_one(
+            self._conn.host, self._conn.port, self._conn.weight, self._conn.semaphore.raw_value
+        )
+        return self._conn
+
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        await self._conn.await_close()
         return None
 
 
@@ -199,6 +210,56 @@ class BaseEndpoint(object):
     def is_close(self) -> bool:
         return self._is_close
 
+    async def create_one(
+        self,
+        ip: str,
+        port: int,
+        weight: int,
+        max_conn_inflight: int,
+    ) -> Connection:
+        key: Tuple[str, int] = (ip, port)
+        conn: Connection = Connection(
+            ip,
+            port,
+            weight,
+            ssl_crt_path=self._ssl_crt_path,
+            pack_param=self._pack_param,
+            unpack_param=self._unpack_param,
+            max_conn_inflight=max_conn_inflight,
+        )
+
+        def _conn_done(f: asyncio.Future) -> None:
+            try:
+                try:
+                    conn_group: Optional[ConnGroup] = self._conn_group_dict.get(key, None)
+                    if conn_group:
+                        conn_group.remove(conn)
+                        if not conn_group:
+                            self._conn_group_dict.pop(key)
+                            self._conn_key_list.remove(key)
+                except ValueError:
+                    pass
+                self._connected_cnt -= 1
+            except Exception as _e:
+                msg: str = f"close conn error: {_e}"
+                if f.exception():
+                    msg += f", conn done exc:{f.exception()}"
+                logger.exception(msg)
+
+        try:
+            with Deadline(self._declare_timeout, timeout_exc=asyncio.TimeoutError(f"conn:{conn} declare timeout")):
+                await conn.connect()
+                self._connected_cnt += 1
+                conn.listen_future = asyncio.ensure_future(self._listen_conn(conn))
+                conn.listen_future.add_done_callback(lambda f: _conn_done(f))
+                await self._transport.declare(conn)
+        except Exception as e:
+            await conn.await_close()
+            raise e
+        conn.ping_future = asyncio.ensure_future(self._ping_event(conn))
+        conn.ping_future.add_done_callback(lambda f: conn.close())
+        return conn
+
     async def create(
         self,
         ip: str,
@@ -228,47 +289,13 @@ class BaseEndpoint(object):
         if not self._conn_group_dict[key]:
             create_size = self._min_pool_size
         for _ in range(create_size):
-            conn: Connection = Connection(
+            conn: Connection = await self.create_one(
                 ip,
                 port,
                 weight,
-                ssl_crt_path=self._ssl_crt_path,
-                pack_param=self._pack_param,
-                unpack_param=self._unpack_param,
                 max_conn_inflight=max_conn_inflight,
             )
-
-            def _conn_done(f: asyncio.Future) -> None:
-                try:
-                    try:
-                        conn_group: Optional[ConnGroup] = self._conn_group_dict.get(key, None)
-                        if conn_group:
-                            conn_group.remove(conn)
-                            if not conn_group:
-                                self._conn_group_dict.pop(key)
-                                self._conn_key_list.remove(key)
-                    except ValueError:
-                        pass
-                    self._connected_cnt -= 1
-                except Exception as _e:
-                    msg: str = f"close conn error: {_e}"
-                    if f.exception():
-                        msg += f", conn done exc:{f.exception()}"
-                    logger.exception(msg)
-
-            try:
-                with Deadline(self._declare_timeout, timeout_exc=asyncio.TimeoutError(f"conn:{conn} declare timeout")):
-                    await conn.connect()
-                    self._connected_cnt += 1
-                    conn.listen_future = asyncio.ensure_future(self._listen_conn(conn))
-                    conn.listen_future.add_done_callback(lambda f: _conn_done(f))
-                    await self._transport.declare(conn)
-            except Exception as e:
-                await conn.await_close()
-                raise e
             self._conn_group_dict[key].add(conn)
-            conn.ping_future = asyncio.ensure_future(self._ping_event(conn))
-            conn.ping_future.add_done_callback(lambda f: conn.close())
 
     @staticmethod
     async def destroy(conn_group: ConnGroup) -> None:
@@ -286,8 +313,8 @@ class BaseEndpoint(object):
         while self._conn_key_list:
             await self.destroy(self._conn_group_dict[self._conn_key_list.pop()])
 
-        assert not self._conn_key_list
-        assert not self._conn_group_dict
+        self._conn_key_list = []
+        self._conn_group_dict = {}
         self._is_close = True
 
     def picker(self, cnt: int = 3) -> Picker:
@@ -299,6 +326,16 @@ class BaseEndpoint(object):
         cnt = min(self._connected_cnt, cnt)
         conn_list: List[Connection] = self._pick_conn(cnt)
         return Picker([conn for conn in conn_list if conn.available])
+
+    def private_picker(self, cnt: int = 3) -> PrivatePicker:
+        """get conn by endpoint
+        :param cnt: How many conn to get.
+        """
+        if not self._conn_key_list:
+            raise ConnectionError("Endpoint Can not found available conn")
+        cnt = min(self._connected_cnt, cnt)
+        conn_list: List[Connection] = self._pick_conn(cnt)
+        return PrivatePicker(self, [conn for conn in conn_list if conn.available])
 
     def _pick_conn(self, cnt: int) -> List[Connection]:
         pass
