@@ -9,7 +9,7 @@ from rap.common import event
 from rap.common.asyncio_helper import Deadline
 from rap.common.cache import Cache
 from rap.common.collect_statistics import WindowStatistics
-from rap.common.conn import ServerConnection
+from rap.common.conn import CloseConnException, ServerConnection
 from rap.common.exceptions import ServerError
 from rap.common.signal_broadcast import add_signal_handler, remove_signal_handler
 from rap.common.snowflake import async_get_snowflake_id
@@ -347,7 +347,7 @@ class Server(object):
                 logging.error(f"recv data from {conn.peer_tuple} timeout. close conn")
                 await sender.send_event(event.CloseConnEvent("keep alive timeout"))
                 break
-            except IOError:
+            except (IOError, CloseConnException):
                 break
             except Exception as e:
                 logging.error(f"recv data from {conn.peer_tuple} error:{e}, conn has been closed")

@@ -4,17 +4,26 @@ import math
 import random
 import sys
 import time
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Type
+from collections import deque
+from typing import TYPE_CHECKING, Any, Deque, Dict, Optional, Sequence, Tuple, Type
 from uuid import uuid4
 
 from rap.client.model import Request, Response
-from rap.client.processor.base import BaseProcessor
 from rap.client.transport.channel import Channel
 from rap.client.utils import get_exc_status_code_dict, raise_rap_error
 from rap.common import event
 from rap.common import exceptions as rap_exc
-from rap.common.asyncio_helper import Deadline, as_first_completed, deadline_context, safe_del_future
-from rap.common.conn import Connection
+from rap.common.asyncio_helper import (
+    Deadline,
+    Semaphore,
+    as_first_completed,
+    deadline_context,
+    del_future,
+    done_future,
+    get_event_loop,
+    safe_del_future,
+)
+from rap.common.conn import CloseConnException, Connection
 from rap.common.exceptions import IgnoreNextProcessor, RPCError
 from rap.common.snowflake import async_get_snowflake_id
 from rap.common.state import State
@@ -28,14 +37,31 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 class Transport(object):
-    """base client transport, encapsulation of custom transport protocol"""
+    """base client transport, encapsulation of custom transport protocol and proxy _conn feature"""
 
     _decay_time: float = 600.0
 
-    def __init__(self, app: "BaseClient", read_timeout: Optional[int] = None):
+    def __init__(
+        self,
+        app: "BaseClient",
+        host: str,
+        port: int,
+        weight: int,
+        ssl_crt_path: Optional[str] = None,
+        pack_param: Optional[dict] = None,
+        unpack_param: Optional[dict] = None,
+        max_inflight: Optional[int] = None,
+        read_timeout: Optional[int] = None,
+    ):
         self.app: "BaseClient" = app
+        self._conn: Connection = Connection(
+            host,
+            port,
+            pack_param=pack_param,
+            unpack_param=unpack_param,
+            ssl_crt_path=ssl_crt_path,
+        )
         self._read_timeout = read_timeout or 1200
-        self._processor_list: List[BaseProcessor] = []
 
         self._max_msg_id: int = 65535
         self._msg_id: int = random.randrange(self._max_msg_id)
@@ -44,13 +70,85 @@ class Transport(object):
         self._resp_future_dict: Dict[str, asyncio.Future[Tuple[Response, Optional[Exception]]]] = {}
         self._channel_queue_dict: Dict[str, asyncio.Queue[Tuple[Response, Optional[Exception]]]] = {}
 
+        if weight > 10:
+            weight = 10
+        if weight < 0:
+            weight = 0
+        self.host: str = host
+        self.port: int = port
+        self.weight: int = weight
+        self._ssl_crt_path: Optional[str] = ssl_crt_path
+        self.score: float = 10.0
+
+        self.listen_future: asyncio.Future = done_future()
+        self.semaphore: Semaphore = Semaphore(max_inflight or 100)
+
+        # ping
+        self.inflight_load: Deque[int] = deque(maxlen=3)  # save history inflight(like Linux load)
+        self.ping_future: asyncio.Future = done_future()
+        self.available_level: int = 0
+        self.available: bool = False
+        self.last_ping_timestamp: float = time.time()
+        self.rtt: float = 0.0
+        self.mos: int = 5
+
+    ######################
+    # proxy _conn feature #
+    ######################
+    async def sleep_and_listen(self, delay: float) -> None:
+        await self._conn.sleep_and_listen(delay)
+
+    @property
+    def conn_future(self) -> asyncio.Future:
+        return self._conn.conn_future
+
+    @property
+    def connection_info(self) -> str:
+        return self._conn.connection_info
+
+    @property
+    def peer_tuple(self) -> Tuple[str, int]:
+        return self._conn.peer_tuple
+
+    @property
+    def sock_tuple(self) -> Tuple[str, int]:
+        return self._conn.sock_tuple
+
+    async def await_close(self) -> None:
+        await self._conn.await_close()
+
+    ############
+    # base api #
+    ############
+    def is_closed(self) -> bool:
+        return self._conn.is_closed() or self.listen_future.done()
+
+    def close(self) -> None:
+        safe_del_future(self.ping_future)
+        del_future(self.listen_future)
+        self._conn.close()
+
+    def close_soon(self) -> None:
+        get_event_loop().call_later(60, self.close)
+        self.available = False
+
+    async def connect(self) -> None:
+        await self._conn.connect()
+        self.available_level = 5
+        self.available = True
+        self.listen_future = asyncio.ensure_future(self.listen_conn())
+        await self.declare()
+
+    ##########################################
+    # rap interactive protocol encapsulation #
+    ##########################################
     async def process_response(self, response: Response, exc: Optional[Exception]) -> Response:
         """
         If this response is accompanied by an exception, handle the exception directly and throw it.
         """
         if not exc:
             try:
-                for processor in reversed(self._processor_list):
+                for processor in reversed(self.app.processor_list):
                     response = await processor.process_response(response)
             except IgnoreNextProcessor:
                 pass
@@ -60,7 +158,7 @@ class Transport(object):
                 response.tb = sys.exc_info()[2]
         if exc:
             # why mypy not support ????
-            for processor in reversed(self._processor_list):
+            for processor in reversed(self.app.processor_list):
                 raw_response: Response = response
                 try:
                     response, exc = await processor.process_exc(response, exc)  # type: ignore
@@ -74,17 +172,31 @@ class Transport(object):
             raise exc  # type: ignore
         return response
 
+    async def listen_conn(self) -> None:
+        """listen server msg from transport"""
+        logger.debug("listen:%s start", self._conn.peer_tuple)
+        try:
+            while not self._conn.is_closed():
+                await self.response_handler()
+        except (asyncio.CancelledError, CloseConnException):
+            pass
+        except Exception as e:
+            self._conn.set_reader_exc(e)
+            logger.exception(f"listen {self._conn.connection_info} error:{e}")
+            if not self._conn.is_closed():
+                await self._conn.await_close()
+
     # flake8: noqa: C901
-    async def response_handler(self, conn: Connection) -> None:
+    async def response_handler(self) -> None:
         """Distribute the response data to different consumers according to different conditions"""
         # read response msg
         try:
             response_msg: Optional[SERVER_BASE_MSG_TYPE] = await asyncio.wait_for(
-                conn.read(), timeout=self._read_timeout
+                self._conn.read(), timeout=self._read_timeout
             )
             logger.debug("recv raw data: %s", response_msg)
         except asyncio.TimeoutError as e:
-            logger.error(f"recv response from {conn.connection_info} timeout")
+            logger.error(f"recv response from {self._conn.connection_info} timeout")
             raise e
 
         if response_msg is None:
@@ -92,13 +204,13 @@ class Transport(object):
 
         # parse response
         try:
-            response: Response = Response.from_msg(self.app, conn, response_msg)
+            response: Response = Response.from_msg(self.app, self._conn, response_msg)
         except Exception as e:
             logger.error(f"recv wrong response:{response_msg}, ignore error:{e}")
             return
 
         # share state
-        correlation_id: str = f"{conn.sock_tuple}:{response.correlation_id}"
+        correlation_id: str = response.correlation_id
         state: Optional[State] = self._state_dict.get(correlation_id, None)
         if state:
             response.state = state
@@ -117,15 +229,13 @@ class Transport(object):
             # server event msg handle
             if response.func_name == constant.EVENT_CLOSE_CONN:
                 # server want to close...do not send data
-                logger.error(f"recv close conn event, event info:{response.body}")
-                conn.available = False
+                logger.error(f"recv close transport event, event info:{response.body}")
+                self.available = False
             elif response.func_name in (constant.DECLARE, constant.PONG_EVENT):
                 if correlation_id in self._resp_future_dict:
                     self._resp_future_dict[correlation_id].set_result((response, exc))
             elif response.func_name == constant.PING_EVENT:
-                await asyncio.wait_for(
-                    self.write_to_conn(Request.from_event(self.app, event.PongEvent("")), conn), timeout=3
-                )
+                await asyncio.wait_for(self.write_to_conn(Request.from_event(self.app, event.PongEvent(""))), timeout=3)
             else:
                 logger.error(f"recv not support event response:{response}")
         elif response.msg_type == constant.CHANNEL_RESPONSE and correlation_id in self._channel_queue_dict:
@@ -138,15 +248,14 @@ class Transport(object):
             logger.error(f"Can' dispatch response: {response}, ignore")
         return
 
-    async def declare(self, conn: Connection) -> None:
+    async def declare(self) -> None:
         """
-        After conn is initialized, connect to the server and initialize the connection resources.
-        Only include server_name and get conn id two functions, if you need to expand the function,
+        After transport is initialized, connect to the server and initialize the connection resources.
+        Only include server_name and get transport id two functions, if you need to expand the function,
           you need to process the request and response of the declared life cycle through the processor
         """
         response: Response = await self._base_request(
             Request.from_event(self.app, event.DeclareEvent({"server_name": self.app.server_name})),
-            conn,
         )
 
         if (
@@ -155,16 +264,15 @@ class Transport(object):
             and response.body.get("result", False)
             and "conn_id" in response.body
         ):
-            conn.conn_id = response.body["conn_id"]
+            self._conn.conn_id = response.body["conn_id"]
             return
-        raise ConnectionError(f"conn:{conn} declare error")
+        raise ConnectionError(f"transport:{self._conn} declare error")
 
-    async def ping(self, conn: Connection, cnt: int = 3) -> None:
+    async def ping(self, cnt: int = 3) -> None:
         """
         Send three requests to check the response time of the client and server.
         At the same time, obtain the current quality score of the server to help the client better realize automatic
          load balancing (if the server supports this function)
-        :param conn: client conn
         :param cnt: ping cnt
         """
         start_time: float = time.time()
@@ -174,7 +282,7 @@ class Transport(object):
         async def _ping() -> None:
             nonlocal mos
             nonlocal rtt
-            response: Response = await self._base_request(Request.from_event(self.app, event.PingEvent({})), conn)
+            response: Response = await self._base_request(Request.from_event(self.app, event.PingEvent({})))
             rtt += time.time() - start_time
             mos += response.body.get("mos", 5)
 
@@ -184,9 +292,9 @@ class Transport(object):
 
         # declare
         now_time: float = time.time()
-        old_last_ping_timestamp: float = conn.last_ping_timestamp
-        old_rtt: float = conn.rtt
-        old_mos: int = conn.mos
+        old_last_ping_timestamp: float = self.last_ping_timestamp
+        old_rtt: float = self.rtt
+        old_mos: int = self.mos
 
         # ewma
         td: float = now_time - old_last_ping_timestamp
@@ -197,52 +305,50 @@ class Transport(object):
         if old_rtt <= 0:
             w = 0
 
-        conn.rtt = old_rtt * w + rtt * (1 - w)
-        conn.mos = int(old_mos * w + mos * (1 - w))
-        conn.last_ping_timestamp = now_time
-        conn.score = (conn.weight * mos) / conn.rtt
+        self.rtt = old_rtt * w + rtt * (1 - w)
+        self.mos = int(old_mos * w + mos * (1 - w))
+        self.last_ping_timestamp = now_time
+        self.score = (self.weight * mos) / self.rtt
 
     ####################################
     # base one by one request response #
     ####################################
-    async def _base_request(self, request: Request, conn: Connection) -> Response:
+    async def _base_request(self, request: Request) -> Response:
         """Send data to the server and get the response from the server.
         :param request: client request obj
-        :param conn: client conn
 
         :return: return server response
         """
         correlation_id: str = str(await async_get_snowflake_id())
         request.correlation_id = correlation_id
         request.header["header_id"] = correlation_id
-        resp_future_id: str = f"{conn.sock_tuple}:{request.correlation_id}"
         try:
             response_future: asyncio.Future[Tuple[Response, Optional[Exception]]] = asyncio.Future()
-            self._resp_future_dict[resp_future_id] = response_future
-            self._state_dict[resp_future_id] = request.state
+            self._resp_future_dict[correlation_id] = response_future
+            self._state_dict[correlation_id] = request.state
             deadline: Optional[Deadline] = deadline_context.get()
             if self.app.through_deadline and deadline:
                 request.header["X-rap-deadline"] = deadline.end_timestamp
-            await self.write_to_conn(request, conn)
+            await self.write_to_conn(request)
             response, exc = await as_first_completed(
                 [response_future],
-                not_cancel_future_list=[conn.conn_future],
+                not_cancel_future_list=[self._conn.conn_future],
             )
             response = await self.process_response(response, exc)
             return response
         finally:
-            self._state_dict.pop(resp_future_id, None)
-            pop_future: Optional[asyncio.Future] = self._resp_future_dict.pop(resp_future_id, None)
+            self._state_dict.pop(correlation_id, None)
+            pop_future: Optional[asyncio.Future] = self._resp_future_dict.pop(correlation_id, None)
             if pop_future:
                 safe_del_future(pop_future)
 
     ##########################
     # base write_to_conn api #
     ##########################
-    async def write_to_conn(self, request: Request, conn: Connection) -> None:
-        """gen msg_id and seng msg to conn"""
-        request.conn = conn
-        request.header["host"] = conn.peer_tuple
+    async def write_to_conn(self, request: Request) -> None:
+        """gen msg_id and seng msg to transport"""
+        request.conn = self._conn
+        request.header["host"] = self._conn.peer_tuple
         request.header["version"] = constant.VERSION
         request.header["user_agent"] = constant.USER_AGENT
         if not request.header.get("request_id"):
@@ -251,10 +357,10 @@ class Transport(object):
         # Avoid too big numbers
         self._msg_id = msg_id & self._max_msg_id
 
-        for processor in self._processor_list:
+        for processor in self.app.processor_list:
             await processor.process_request(request)
 
-        await conn.write((msg_id, *request.to_msg()))
+        await self._conn.write((msg_id, *request.to_msg()))
 
     ######################
     # one by one request #
@@ -262,7 +368,6 @@ class Transport(object):
     async def request(
         self,
         func_name: str,
-        conn: Connection,
         arg_param: Optional[Sequence[Any]] = None,
         call_id: Optional[int] = None,
         group: Optional[str] = None,
@@ -270,7 +375,6 @@ class Transport(object):
     ) -> Response:
         """msg request handle
         :param func_name: rpc func name
-        :param conn: can write msg conn
         :param arg_param: rpc func param
         :param call_id: server gen func next id
         :param group: func's group
@@ -287,7 +391,7 @@ class Transport(object):
         )
         if header:
             request.header.update(header)
-        response: Response = await self._base_request(request, conn)
+        response: Response = await self._base_request(request)
         if response.msg_type != constant.MSG_RESPONSE:
             raise RPCError(f"response num must:{constant.MSG_RESPONSE} not {response.msg_type}")
         if "exc" in response.body:
@@ -298,15 +402,14 @@ class Transport(object):
                 raise rap_exc.RpcRunTimeError(exc_info)
         return response
 
-    def channel(self, func_name: str, conn: Connection, group: Optional[str] = None) -> "Channel":
+    def channel(self, func_name: str, group: Optional[str] = None) -> "Channel":
         """create and init channel
         :param func_name: rpc func name
-        :param conn: channel transport conn
         :param group: func's group
         """
         target: str = f"/{group or constant.DEFAULT_GROUP}/{func_name}"
-        channel: Channel = Channel(self, target, conn)  # type: ignore
-        correlation_id: str = f"{conn.sock_tuple}:{channel.channel_id}"
+        channel: Channel = Channel(self, target, self._conn)  # type: ignore
+        correlation_id: str = channel.channel_id
         self._channel_queue_dict[correlation_id] = channel.queue
         self._state_dict[correlation_id] = channel.state
 
@@ -316,14 +419,3 @@ class Transport(object):
 
         channel.channel_conn_future.add_done_callback(_clean_channel_resource)
         return channel
-
-    #############
-    # processor #
-    #############
-    def load_processor(self, processor_list: List[BaseProcessor]) -> None:
-        """load client processor"""
-        self._processor_list.extend(processor_list)
-
-    def remove_processor(self, processor_list: List[BaseProcessor]) -> None:
-        for processor in processor_list:
-            self._processor_list.remove(processor)

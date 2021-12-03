@@ -54,8 +54,8 @@ async def websocket_route_func(websocket: WebSocket) -> None:
 
     rap_client: Client = rap_client_dict[server_name]
     try:
-        async with rap_client.endpoint.picker() as conn:
-            async with rap_client.transport.channel(func_name, conn, group) as channel:
+        async with rap_client.endpoint.picker() as transport:
+            async with transport.channel(func_name, group) as channel:
                 await websocket.send_json({"code": 0, "data": "accept"})
 
                 async def send() -> None:

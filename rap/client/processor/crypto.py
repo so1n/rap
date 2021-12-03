@@ -45,7 +45,7 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
         self._nonce_timeout: int = nonce_timeout or BaseCryptoProcessor._nonce_timeout
 
     async def process_request(self, request: Request) -> Request:
-        assert request.conn is not None, "Not found conn from request"
+        assert request.conn is not None, "Not found transport from request"
         if request.msg_type == constant.CLIENT_EVENT and request.target.endswith(constant.DECLARE):
             crypto_key: str = gen_random_time_id(length=6, time_length=10)
             crypto_id: str = str(await async_get_snowflake_id())

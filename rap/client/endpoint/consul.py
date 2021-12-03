@@ -1,22 +1,22 @@
 import asyncio
 import logging
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from rap.client.endpoint.base import BalanceEnum, BaseEndpoint, ConnGroup
-from rap.client.transport.transport import Transport
+from rap.client.endpoint.base import BalanceEnum, BaseEndpoint, TransportGroup
 from rap.common.asyncio_helper import done_future
 from rap.common.coordinator.consul import ConsulClient
 
 logger: logging.Logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from rap.client.core import BaseClient
 
 
 class ConsulEndpoint(BaseEndpoint):
-    """The endpoint will maintain the conn in memory according to the changes in the conn data in consul"""
+    """The endpoint will maintain the transport in memory according to the changes in the transport data in consul"""
 
     def __init__(
         self,
-        server_name: str,
-        transport: Transport,
+        app: "BaseClient",
         ssl_crt_path: Optional[str] = None,
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
@@ -53,7 +53,7 @@ class ConsulEndpoint(BaseEndpoint):
         )
         self._watch_future: asyncio.Future = done_future()
         super().__init__(
-            transport,
+            app,
             ssl_crt_path=ssl_crt_path,
             balance_enum=balance_enum,
             pack_param=pack_param,
@@ -64,7 +64,6 @@ class ConsulEndpoint(BaseEndpoint):
             max_pool_size=max_pool_size,
             min_poll_size=min_poll_size,
         )
-        self.server_name: str = server_name
 
     async def stop(self) -> None:
         if not self._watch_future.done() and not self._watch_future.cancelled():
@@ -73,11 +72,11 @@ class ConsulEndpoint(BaseEndpoint):
         await super().stop()
 
     async def _watch(self) -> None:
-        async for conn_dict in self.consul_client.watch(self.server_name):
+        async for conn_dict in self.consul_client.watch(self._app.server_name):
             if conn_dict:
                 pop_key_list: List[Tuple[str, int]] = []
                 for key, value in conn_dict:
-                    conn_group: Optional[ConnGroup] = self._conn_group_dict.pop(key, None)
+                    conn_group: Optional[TransportGroup] = self._transport_group_dict.pop(key, None)
                     if conn_group:
                         await conn_group.destroy()
                         pop_key_list.append(key)
@@ -92,25 +91,26 @@ class ConsulEndpoint(BaseEndpoint):
             raise ConnectionError(f"{self.__class__.__name__} is running")
 
         logger.info(f"connect to consul:{self.consul_url}, wait discovery....")
-        async for item in self.consul_client.discovery(self.server_name):
+        async for item in self.consul_client.discovery(self._app.server_name):
             await self.create(
                 item["host"],
                 item["port"],
                 weight=item["weight"],
-                max_conn_inflight=item.get("max_conn_inflight"),
+                max_inflight=item.get("max_inflight"),
             )
 
-        if not self._conn_key_list:
+        if not self._transport_key_list:
             logger.warning(
-                f"Can not found conn info from consul, wait `{self.server_name}` server start and register to consul"
+                f"Can not found transport info from consul,"
+                f" wait `{self._app.server_name}` server start and register to consul"
             )
-            async for conn_dict in self.consul_client.watch(self.server_name):
+            async for conn_dict in self.consul_client.watch(self._app.server_name):
                 for key, value in conn_dict.items():
                     await self.create(
                         value["host"],
                         value["port"],
                         weight=value["weight"],
-                        max_conn_inflight=value.get("max_conn_inflight"),
+                        max_inflight=value.get("max_inflight"),
                     )
                     return
         self._watch_future = asyncio.ensure_future(self._watch())

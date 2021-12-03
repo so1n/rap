@@ -25,7 +25,7 @@
  - Fix: Client session.execute not execute coroutine bug
  - Fix: can not register asyncgen func
  - Refactor: server response api
- - Refactor: improvements 'as_first_complete' func and conn result_future
+ - Refactor: improvements 'as_first_complete' func and transport result_future
  - Remove: remove redis depend by server
  - Test: add test and support coverage 90%+
  - Style: add mypy
@@ -39,8 +39,8 @@
 
 ### 0.5.3.5
  - Remove: remove life cycle
- - Feature: add conn result future(listen conn exc)
- - Feature: read conn data add listen conn exc
+ - Feature: add transport result future(listen transport exc)
+ - Feature: read transport data add listen transport exc
  - Feature: print cli func list table
  - Feature: channel add method `iter_body` & `iter`
  - Refactor: refactor client session and add session execute
@@ -52,7 +52,7 @@
  - Fix: fix server channel crypto&future cancel bug
  - Feature: add load event
  - Feature: support mutli server
- - Feature: add conn sock name and modify client listen future id
+ - Feature: add transport sock name and modify client listen future id
  - Refactor: refactor func manager
  - Refactor: refactor server crypto nonce check
 
@@ -72,8 +72,8 @@
  - Feature: remove life cycle
  - Fix: keepalive time init error
  - Refactor: refactor server
- - Refactor: refactor client, support conn mutli server
- - Remove: remove server client_model(one conn one request object)
+ - Refactor: refactor client, support transport mutli server
+ - Remove: remove server client_model(one transport one request object)
 
 ### 0.5.3.1
  - description: request interface
@@ -86,7 +86,7 @@
  - Feature: server&client add aes middleware
  - Feature: add server.response middleware
  - Feature: middleware add redis support
- - Feature: Ping&Pong, conn keep alive
+ - Feature: Ping&Pong, transport keep alive
  - Refactor: server.load_middleware
 
 ### 0.5.2.2
@@ -98,13 +98,13 @@
 
 ### 0.5.2.1
  - description: hotfix
- - Fix: server conn read recv data bug
+ - Fix: server transport read recv data bug
  - Fix: crypto error when client reconnect
  - Fix: When the log level is not debug, the debug information will be calculated
 
 ### 0.5.2
  - description: Faster&Humanize
- - Feature: client&server support conn multiplexing(Faster~)
+ - Feature: client&server support transport multiplexing(Faster~)
  - Fix: read recv data bug
  - Refactor: remove connection pool and connection lock
 
@@ -123,7 +123,7 @@
  - Refactor: new protocol
 
 ### 0.3.2
- - Feature: add ip limit conn middleware
+ - Feature: add ip limit transport middleware
  - Refactor: split RequestHandle to request and response
 
 ### 0.3.1

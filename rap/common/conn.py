@@ -3,18 +3,21 @@ import logging
 import random
 import ssl
 import time
-from collections import deque
-from typing import Any, Deque, Optional, Tuple
+from typing import Any, Optional, Tuple
 
 import msgpack
 
-from rap.common.asyncio_helper import Semaphore, del_future, done_future, get_event_loop, safe_del_future
+from rap.common.asyncio_helper import done_future, safe_del_future
 from rap.common.state import State
 from rap.common.types import READER_TYPE, UNPACKER_TYPE, WRITER_TYPE
 from rap.common.utils import constant
 
-__all__ = ["Connection", "ServerConnection"]
+__all__ = ["Connection", "ServerConnection", "CloseConnException"]
 logger: logging.Logger = logging.getLogger(__name__)
+
+
+class CloseConnException(Exception):
+    pass
 
 
 class BaseConnection:
@@ -41,8 +44,8 @@ class BaseConnection:
         self.sock_tuple: Tuple[str, int] = ("", -1)
 
     async def sleep_and_listen(self, delay: float) -> None:
-        """Monitor the status of conn while sleeping.
-        When the listen of conn is cancelled or terminated, it will automatically exit from sleep
+        """Monitor the status of transport while sleeping.
+        When the listen of transport is cancelled or terminated, it will automatically exit from sleep
         """
         try:
             await asyncio.wait_for(asyncio.shield(self.conn_future), timeout=delay)
@@ -70,7 +73,7 @@ class BaseConnection:
             while True:
                 data = await self._reader.read(constant.SOCKET_RECV_SIZE)
                 if not data:
-                    raise ConnectionError(f"Connection to {self.peer_tuple} closed")
+                    raise CloseConnException(f"Connection to {self.peer_tuple} closed")
                 self._unpacker.feed(data)
                 try:
                     data = next(self._unpacker)
@@ -124,35 +127,15 @@ class Connection(BaseConnection):
         self,
         host: str,
         port: int,
-        weight: int,
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
         ssl_crt_path: Optional[str] = None,
-        max_conn_inflight: Optional[int] = None,
     ):
         super().__init__(pack_param, unpack_param)
         self._host: str = host
         self._port: int = port
-        if weight > 10:
-            weight = 10
-        if weight < 0:
-            weight = 0
-        self.weight: int = weight
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self.connection_info: str = f"{host}:{port}"
-        self.score: float = 10.0
-
-        self.listen_future: asyncio.Future = done_future()
-        self.semaphore: Semaphore = Semaphore(max_conn_inflight or 100)
-
-        # ping
-        self.inflight_load: Deque[int] = deque(maxlen=3)  # save history inflight(like Linux load)
-        self.ping_future: asyncio.Future = done_future()
-        self.available_level: int = 0
-        self.available: bool = False
-        self.last_ping_timestamp: float = time.time()
-        self.rtt: float = 0.0
-        self.mos: int = 5
 
     @property
     def host(self) -> str:
@@ -175,21 +158,7 @@ class Connection(BaseConnection):
         self.peer_tuple = self._writer.get_extra_info("peername")
         self.conn_future: asyncio.Future = asyncio.Future()
         self._is_closed = False
-        self.available_level = 5
-        self.available = True
         logger.debug("Connection to %s...", self.connection_info)
-
-    def is_closed(self) -> bool:
-        return super(Connection, self).is_closed() or self.listen_future.done()
-
-    def close(self) -> None:
-        safe_del_future(self.ping_future)
-        del_future(self.listen_future)
-        super(Connection, self).close()
-
-    def close_soon(self) -> None:
-        get_event_loop().call_later(60, self.close)
-        self.available = False
 
 
 class ServerConnection(BaseConnection):

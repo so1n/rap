@@ -5,6 +5,7 @@ import pytest
 from pytest_mock import MockerFixture
 
 from rap.client import Client
+from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import Deadline
 from rap.server import Server
 
@@ -13,22 +14,22 @@ pytestmark = pytest.mark.asyncio
 
 class TestPingPong:
     async def test_ping_pong(self, rap_server: Server, rap_client: Client) -> None:
-        for key, conn_group in rap_client.endpoint._conn_group_dict.copy().items():
-            await rap_client.transport.ping(conn_group.conn, cnt=1)
+        for key, transport_group in rap_client.endpoint._transport_group_dict.copy().items():
+            await transport_group.transport.ping(cnt=1)
 
     async def test_ping_pong_timeout(self, mocker: MockerFixture, rap_server: Server, rap_client: Client) -> None:
-        rap_client_write = rap_client.transport.write_to_conn
-
-        async def mock_write(*args: Any, **kwargs: Any) -> Any:
-            if not args[0].target.endswith("ping"):
-                return await rap_client_write(*args, **kwargs)
-
-        setattr(rap_client.transport, "write_to_conn", mock_write)
-
         # until close
-        for key, conn_group in rap_client.endpoint._conn_group_dict.copy().items():
+        for key, transport_group in rap_client.endpoint._transport_group_dict.copy().items():
+            transport: Transport = transport_group.transport
+            write_func = transport.write_to_conn
+
+            async def mock_write(*args: Any, **kwargs: Any) -> Any:
+                if not args[0].target.endswith("ping"):
+                    return await write_func(*args, **kwargs)
+
+            setattr(transport, "write_to_conn", mock_write)
+
             with pytest.raises(asyncio.TimeoutError):
                 with Deadline(delay=0.5):
-                    await rap_client.transport.ping(conn_group.conn, cnt=1)
-
-        setattr(rap_client.transport, "write_to_conn", rap_client_write)
+                    await transport_group.transport.ping(cnt=1)
+            setattr(transport, "write_to_conn", write_func)

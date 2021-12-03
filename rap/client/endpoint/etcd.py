@@ -1,22 +1,22 @@
 import asyncio
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
-from rap.client.endpoint.base import BalanceEnum, BaseEndpoint, ConnGroup
-from rap.client.transport.transport import Transport
+from rap.client.endpoint.base import BalanceEnum, BaseEndpoint, TransportGroup
 from rap.common.asyncio_helper import del_future, done_future
 from rap.common.coordinator.etcd import ETCD_EVENT_VALUE_DICT_TYPE, EtcdClient
 
 logger: logging.Logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from rap.client.core import BaseClient
 
 
 class EtcdEndpoint(BaseEndpoint):
-    """The endpoint will maintain the conn in memory according to the changes in the conn data in etcd"""
+    """The endpoint will maintain the transport in memory according to the changes in the transport data in etcd"""
 
     def __init__(
         self,
-        server_name: str,
-        transport: Transport,
+        app: "BaseClient",
         ssl_crt_path: Optional[str] = None,
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
@@ -47,7 +47,7 @@ class EtcdEndpoint(BaseEndpoint):
         )
         self._watch_future: asyncio.Future = done_future()
         super().__init__(
-            transport,
+            app,
             ssl_crt_path=ssl_crt_path,
             balance_enum=balance_enum,
             pack_param=pack_param,
@@ -58,7 +58,6 @@ class EtcdEndpoint(BaseEndpoint):
             max_pool_size=max_pool_size,
             min_poll_size=min_poll_size,
         )
-        self.server_name: str = server_name
 
     async def stop(self) -> None:
         del_future(self._watch_future)
@@ -66,22 +65,23 @@ class EtcdEndpoint(BaseEndpoint):
         await super().stop()
 
     async def start(self) -> None:
-        """create conn by etcd info and init watch etcd info future"""
+        """create transport by etcd info and init watch etcd info future"""
         if not self.is_close:
             raise ConnectionError(f"{self.__class__.__name__} is running")
         logger.info(f"connect to etcd:{self.etcd_url}, wait discovery....")
-        async for item in self.etcd_client.discovery(self.server_name):
+        async for item in self.etcd_client.discovery(self._app.server_name):
             await self.create(
                 item["host"],
                 item["port"],
                 weight=item["weight"],
-                max_conn_inflight=item.get("max_conn_inflight"),
+                max_inflight=item.get("max_inflight"),
             )
 
         wait_start_future: asyncio.Future = asyncio.Future()
-        if not self._conn_key_list:
+        if not self._transport_key_list:
             logger.warning(
-                f"Can not found conn info from etcd, wait {self.server_name} server start and register to etcd"
+                f"Can not found transport info from etcd,"
+                f" wait {self._app.server_name} server start and register to etcd"
             )
         else:
             wait_start_future.set_result(True)
@@ -94,7 +94,7 @@ class EtcdEndpoint(BaseEndpoint):
                 etcd_value_dict["value"]["host"],
                 etcd_value_dict["value"]["port"],
                 weight=etcd_value_dict["value"]["weight"],
-                max_conn_inflight=etcd_value_dict["value"]["max_conn_inflight"],
+                max_inflight=etcd_value_dict["value"]["max_inflight"],
             )
             if not wait_start_future.done():
                 wait_start_future.set_result(True)
@@ -104,11 +104,11 @@ class EtcdEndpoint(BaseEndpoint):
             if not conn_dict:
                 raise KeyError(f"Can not found key:{etcd_value_dict['key']}")
             key: Tuple[str, int] = (conn_dict["host"], conn_dict["post"])
-            conn_group: Optional[ConnGroup] = self._conn_group_dict.pop(key, None)
+            conn_group: Optional[TransportGroup] = self._transport_group_dict.pop(key, None)
             if conn_group:
                 await conn_group.destroy()
-            if not self._conn_key_list:
-                logger.warning("client not conn")
+            if not self._transport_key_list:
+                logger.warning("client not transport")
 
-        self._watch_future = asyncio.ensure_future(self.etcd_client.watch(self.server_name, [create], [destroy]))
+        self._watch_future = asyncio.ensure_future(self.etcd_client.watch(self._app.server_name, [create], [destroy]))
         await wait_start_future

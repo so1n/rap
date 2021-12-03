@@ -80,17 +80,17 @@ class TestServerConnHandle:
     #         await rap_client.raw_invoke("sync_sum", [1, 2])
     #
     #     exec_msg = e.value.args[0]
-    #     assert exec_msg == "recv close conn event, event info:protocol error"
+    #     assert exec_msg == "recv close transport event, event info:protocol error"
 
     # async def test_read_timeout(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
     #     with pytest.raises(ConnectionError) as e:
     #         mock_future: asyncio.Future = asyncio.Future()
-    #         mocker.patch("rap.common.conn.ServerConnection.read").return_value = mock_future
+    #         mocker.patch("rap.common.transport.ServerConnection.read").return_value = mock_future
     #         mock_future.set_exception(asyncio.TimeoutError())
     #         await rap_client.raw_invoke("sync_sum", [1, 2])
     #
     #     exec_msg = e.value.args[0]
-    #     assert exec_msg == "recv close conn event, event info:keep alive timeout"
+    #     assert exec_msg == "recv close transport event, event info:keep alive timeout"
 
 
 class TestRequestHandle:

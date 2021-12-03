@@ -1,7 +1,7 @@
 # rap
 rap(par[::-1]) is advanced and fast python async rpc
 
-`rap` achieves very fast communication through `msgpack` and `Python asyncio` and multiplexing conn, while supporting high concurrency.
+`rap` achieves very fast communication through `msgpack` and `Python asyncio` and multiplexing transport, while supporting high concurrency.
 Implement the `protobuf` of `Grpc` through Python functions and TypeHint.
 
 Note: The current `rap` API may change significantly in subsequent versions
@@ -167,7 +167,7 @@ async def demo1(a: int, b: int) -> int: pass
 
 
 # register async iterator fun, replace `pass` with `yield`
-# Since `async for` will make multiple requests to the same conn over time, it will check if the session is enabled and automatically reuse the current session if it is enabled, otherwise it will create a new session and use it.
+# Since `async for` will make multiple requests to the same transport over time, it will check if the session is enabled and automatically reuse the current session if it is enabled, otherwise it will create a new session and use it.
 @client.register()
 async def demo_gen(a: int) -> AsyncIterator: yield
 
@@ -184,7 +184,7 @@ async def demo2(a: int, b: int) -> int: pass
 ## 3.2.session
 [example](https://github.com/so1n/rap/tree/master/example/session)
 
-`rap` client support session function, after enabling the session, all requests will only be requested through the current session's conn to the corresponding server, while each request, the session_id in the header will set the current session id, convenient for the server to identify.
+`rap` client support session function, after enabling the session, all requests will only be requested through the current session's transport to the corresponding server, while each request, the session_id in the header will set the current session id, convenient for the server to identify.
 `rap` sessions support explicit and implicit settings, each with its own advantages and disadvantages, without mandatory restrictions.
 
 ```Python
@@ -259,7 +259,7 @@ async def run_once():
 channel supports client-server interaction in a duplex manner, similar to Http's WebSocket, it should be noted that the channel does not support group settings.
 
 Only `@client.register` is supported on the client side to register the channel function, which is characterized by a single argument of type `Channel`.
-The channel will maintain a session and will only communicate with the server via a conn from the time the channel is enabled to the time it is closed.
+The channel will maintain a session and will only communicate with the server via a transport from the time the channel is enabled to the time it is closed.
 To avoid the use of 'while True', the channel supports the use of 'async for' syntax and the use of 'while await channel.loop()` syntax instead of 'while True
 ```Python
 from rap.client import Channel, Client
@@ -342,9 +342,9 @@ server.load_after_stop_event([mock_stop()])
 ```
 ## 3.6.middleware
 `rap` currently supports 2 types of middleware::
-- Conn middleware: Used when creating conn, such as limiting the total number of links, etc...
+- Conn middleware: Used when creating transport, such as limiting the total number of links, etc...
   reference [block.py](https://github.com/so1n/rap/blob/master/rap/server/middleware/conn/block.py),
-  The `dispatch` method will pass in a conn object, and then determine whether to release it according to the rules (return await self.call_next(conn)) or reject it (await conn.close)
+  The `dispatch` method will pass in a transport object, and then determine whether to release it according to the rules (return await self.call_next(transport)) or reject it (await transport.close)
 - Message middleware: only supports normal function calls (no support for `Channel`), similar to the use of `starlette` middleware
   reference [access.py](https://github.com/so1n/rap/blob/master/rap/server/middleware/msg/access.py)
   Message middleware will pass in 4 parameters: request(current request object), call_id(current invoke id), func(current invoke function), param(current parameter) and request to return call_id and result(function execution result or exception object)
@@ -418,7 +418,7 @@ server = Server()
 # nonce_timeout: The expiration time of nonce, the recommended setting is greater than timeout
 server.load_processor([CryptoProcessor({"demo_id": "xxxxxxxxxxxxxxxx"}, timeout=60, nonce_timeout=120)])
 ```
-## 4.2. Limit the maximum number of conn
+## 4.2. Limit the maximum number of transport
 Server-side use only, you can limit the maximum number of links on the server side, more than the set value will not handle new requests
 
 ```Python
@@ -428,10 +428,10 @@ from rap.server.plugin.middleware import ConnLimitMiddleware, IpMaxConnMiddlewar
 server = Server()
 server.load_middleware(
     [
-        # max_conn: Current maximum number of conn
-        # block_timeout: Access ban time after exceeding the maximum number of conn
+        # max_conn: Current maximum number of transport
+        # block_timeout: Access ban time after exceeding the maximum number of transport
         ConnLimitMiddleware(max_conn=100, block_time=60),
-        # ip_max_conn: Maximum number of conn per ip
+        # ip_max_conn: Maximum number of transport per ip
         # timeout: The maximum statistics time for each ip, after the time no new requests come in, the relevant statistics will be cleared
         IpMaxConnMiddleware(ip_max_conn=10, timeout=60),
     ]

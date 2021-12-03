@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any, Coroutine, Optional, Tuple, Type
 from rap.client.model import Request, Response
 from rap.common.asyncio_helper import as_first_completed
 from rap.common.channel import BaseChannel, ChannelCloseError, UserChannel
-from rap.common.conn import Connection
 from rap.common.exceptions import ChannelError
 from rap.common.snowflake import get_snowflake_id
 from rap.common.state import State
@@ -27,16 +26,13 @@ class Channel(BaseChannel[Response]):
         self,
         transport: "Transport",
         target: str,
-        conn: Connection,
     ):
         """
         :param transport: rap client transport
         :param target: rap target
-        :param conn: rap client conn
         """
         self._transport: "Transport" = transport
         self._target: str = target
-        self._conn: Connection = conn
         self._drop_msg: str = "recv channel's drop event, close channel"
         self.state: State = State()
 
@@ -47,19 +43,19 @@ class Channel(BaseChannel[Response]):
         self.channel_conn_future: asyncio.Future = asyncio.Future()
 
     async def create(self) -> None:
-        """create and init channel, create session and listen conn exc"""
+        """create and init channel, create session and listen transport exc"""
 
         def add_done_callback(f: asyncio.Future) -> None:
             if f.cancelled():
-                self.set_exc(ChannelCloseError("channel's conn is close"))
+                self.set_exc(ChannelCloseError("channel's transport is close"))
             try:
                 f.exception()
             except Exception as e:
                 self.set_exc(e)
             else:
-                self.set_exc(ChannelCloseError("channel's conn is close"))
+                self.set_exc(ChannelCloseError("channel's transport is close"))
 
-        self._conn.conn_future.add_done_callback(add_done_callback)
+        self._transport._conn.conn_future.add_done_callback(add_done_callback)
 
         # init with server
         life_cycle: str = constant.DECLARE
@@ -69,9 +65,9 @@ class Channel(BaseChannel[Response]):
             raise ChannelError("channel life cycle error")
 
     async def _base_read(self, timeout: Optional[int] = None) -> Response:
-        """base read response msg from channel conn
+        """base read response msg from channel transport
         When a drop message is received , will raise `ChannelError`
-        :param timeout: read msg from channel conn timeout
+        :param timeout: read msg from channel transport timeout
         """
 
         if self.is_close:
@@ -112,7 +108,7 @@ class Channel(BaseChannel[Response]):
             header={"channel_life_cycle": life_cycle},
             state=self.state,
         )
-        coro: Coroutine = self._transport.write_to_conn(request, self._conn)
+        coro: Coroutine = self._transport.write_to_conn(request)
         await asyncio.wait_for(coro, timeout)
 
     async def read(self, timeout: Optional[int] = None) -> Response:
@@ -130,7 +126,7 @@ class Channel(BaseChannel[Response]):
         :param body: send body
         :param timeout: wait write timeout
             In general, the write method is very fast,
-            but in extreme cases conn has accumulated some requests and needs to wait
+            but in extreme cases transport has accumulated some requests and needs to wait
         """
         await self._base_write(body, constant.MSG, timeout=timeout)
 

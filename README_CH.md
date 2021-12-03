@@ -336,7 +336,7 @@ server.load_after_stop_event([mock_stop()])
 `rap`目前支持2种中间件:
 - 链接中间件: 创建链接时会使用,如限制链接总数等等...
   链接中间件可以参考[block.py](https://github.com/so1n/rap/blob/master/rap/server/middleware/conn/block.py),
-  `dispatch`方法会传入一个链接对象,再根据规则判断是否放行(return await self.call_next(conn)) 或者拒绝(await conn.close)
+  `dispatch`方法会传入一个链接对象,再根据规则判断是否放行(return await self.call_next(transport)) 或者拒绝(await transport.close)
 - 消息中间件: 仅支持普通的函数调用(不支`持Channel`), 类似于`starlette`的中间件使用
   消息中间件可以参考[access.py](https://github.com/so1n/rap/blob/master/rap/server/middleware/msg/access.py)
   消息中间件会传入4个参数:request(当前请求对象), call_id(当前调用id), func(当前调用函数), param(当前参数)以及要求返回call_id和result(函数的执行结果或者是异常对象)

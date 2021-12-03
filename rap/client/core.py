@@ -7,7 +7,8 @@ from rap.client.endpoint import BalanceEnum, BaseEndpoint, LocalEndpoint
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.transport.async_iterator import AsyncIteratorCall
-from rap.client.transport.transport import Transport
+
+# from rap.client.transport.transport import Transport
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common.cache import Cache
 from rap.common.channel import UserChannel
@@ -43,7 +44,7 @@ class BaseClient:
         :param through_deadline: enable through deadline to server
         """
         self.server_name: str = server_name
-        self.transport: Transport = Transport(self, read_timeout=keep_alive_timeout)  # type: ignore
+        # self.transport: Transport = Transport(self, read_timeout=keep_alive_timeout)  # type: ignore
         self._processor_list: List[BaseProcessor] = []
         self._through_deadline: bool = through_deadline
         self._event_dict: Dict[EventEnum, List[CLIENT_EVENT_FN]] = {
@@ -97,7 +98,11 @@ class BaseClient:
             processor.app = self  # type: ignore
             for event_type, handle in processor.event_dict.items():
                 self._event_dict[event_type].extend(handle)
-        self.transport.load_processor(processor_list)
+        self._processor_list.extend(processor_list)
+
+    @property
+    def processor_list(self) -> List[BaseProcessor]:
+        return self._processor_list
 
     #####################
     # register func api #
@@ -127,11 +132,10 @@ class BaseClient:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             header: Optional[dict] = kwargs.pop("header", None)
-            async with self.endpoint.picker() as conn:
+            async with self.endpoint.picker() as transport:
                 async for result in AsyncIteratorCall(
                     name,
-                    self,  # type: ignore
-                    conn,
+                    transport,
                     param_handle(func_sig, args, kwargs),
                     group=group,
                     header=header,
@@ -148,8 +152,8 @@ class BaseClient:
 
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            async with self.endpoint.picker() as conn:
-                async with self.transport.channel(name, conn, group) as channel:
+            async with self.endpoint.picker() as transport:
+                async with transport.channel(name, group) as channel:
                     return await func(channel)
 
         return RapFunc(wrapper, func)
@@ -176,8 +180,8 @@ class BaseClient:
         :param group: func's group
         :param header: request header
         """
-        async with self.endpoint.picker() as conn:
-            return await self.transport.request(name, conn, arg_param, group=group, header=header)
+        async with self.endpoint.picker() as transport:
+            return await transport.request(name, arg_param, group=group, header=header)
 
     async def raw_invoke(
         self,
@@ -239,11 +243,10 @@ class BaseClient:
         if not kwarg_param:
             kwarg_param = {}
 
-        async with self.endpoint.picker() as conn:
+        async with self.endpoint.picker() as transport:
             async for result in AsyncIteratorCall(
                 func.__name__,
-                self,  # type: ignore
-                conn,
+                transport,
                 param_handle(inspect.signature(func), arg_param, kwarg_param),
                 header=header,
                 group=group,
@@ -330,13 +333,13 @@ class Client(BaseClient):
     ):
         """
         server_name: server name
-        conn_list: client conn info
+        transport_list: client transport info
           include ip, port, weight
           ip: server ip
           port: server port
-          weight: select this conn weight
+          weight: select this transport weight
           e.g.  [{"ip": "localhost", "port": "9000", weight: 10}]
-        keep_alive_timeout: read msg from conn timeout
+        keep_alive_timeout: read msg from transport timeout
         """
 
         super().__init__(
@@ -350,7 +353,7 @@ class Client(BaseClient):
         )
         self.endpoint = LocalEndpoint(
             conn_list,
-            self.transport,
+            self,
             ssl_crt_path=ssl_crt_path,
             pack_param=None,
             unpack_param=None,

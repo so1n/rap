@@ -12,7 +12,7 @@ if __name__ == "__main__":
     parser.add_argument("-h", "--server_host", help="server host", default="localhost")
     parser.add_argument("-p", "--server_port", help="server port", default="9000")
     parser.add_argument("-S", "--server_name", help="server name")
-    parser.add_argument("-s", "--secret_key", default=None, help="conn server secret key")
+    parser.add_argument("-s", "--secret_key", default=None, help="transport server secret key")
     parser.add_argument("-m", "--mode", help="`d` display func list, `r` run func", choices=["d", "r"])
     parser.add_argument("-k", "--key", help="secret key")
 

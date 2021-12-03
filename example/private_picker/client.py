@@ -25,9 +25,9 @@ client.load_processor([check_conn_processor])
 
 async def main() -> None:
     await client.start()
-    async with client.endpoint.private_picker() as conn:
+    async with client.endpoint.private_picker() as transport:
         for _ in range(3):
-            assert 3 == (await client.transport.request("sync_sum", conn, [1, 2])).body["result"]
+            assert 3 == (await transport.request("sync_sum", [1, 2])).body["result"]
     await client.stop()
 
 

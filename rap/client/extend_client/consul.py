@@ -44,8 +44,7 @@ class Client(BaseClient):
             through_deadline=through_deadline,
         )
         self.endpoint = ConsulEndpoint(
-            server_name,
-            self.transport,
+            self,
             ssl_crt_path=ssl_crt_path,
             balance_enum=select_conn_method,
             ping_fail_cnt=ping_fail_cnt,
