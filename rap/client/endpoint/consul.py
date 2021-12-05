@@ -17,6 +17,7 @@ class ConsulEndpoint(BaseEndpoint):
     def __init__(
         self,
         app: "BaseClient",
+        read_timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
@@ -54,6 +55,7 @@ class ConsulEndpoint(BaseEndpoint):
         self._watch_future: asyncio.Future = done_future()
         super().__init__(
             app,
+            read_timeout=read_timeout,
             ssl_crt_path=ssl_crt_path,
             balance_enum=balance_enum,
             pack_param=pack_param,

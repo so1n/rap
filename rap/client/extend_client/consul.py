@@ -36,7 +36,6 @@ class Client(BaseClient):
     ):
         super().__init__(
             server_name,
-            keep_alive_timeout=keep_alive_timeout,
             cache_interval=cache_interval,
             ws_min_interval=ws_min_interval,
             ws_max_interval=ws_max_interval,
@@ -46,6 +45,7 @@ class Client(BaseClient):
         self.endpoint = ConsulEndpoint(
             self,
             ssl_crt_path=ssl_crt_path,
+            read_timeout=keep_alive_timeout,
             balance_enum=select_conn_method,
             ping_fail_cnt=ping_fail_cnt,
             min_ping_interval=min_ping_interval,

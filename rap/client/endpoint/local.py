@@ -17,6 +17,7 @@ class LocalEndpoint(BaseEndpoint):
         self,
         conn_list: List[dict],
         app: "BaseClient",
+        read_timeout: Optional[int] = None,
         declare_timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
         pack_param: Optional[dict] = None,
@@ -44,6 +45,7 @@ class LocalEndpoint(BaseEndpoint):
         super().__init__(
             app,
             declare_timeout=declare_timeout,
+            read_timeout=read_timeout,
             ssl_crt_path=ssl_crt_path,
             balance_enum=balance_enum,
             pack_param=pack_param,

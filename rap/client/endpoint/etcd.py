@@ -18,6 +18,7 @@ class EtcdEndpoint(BaseEndpoint):
         self,
         app: "BaseClient",
         ssl_crt_path: Optional[str] = None,
+        read_timeout: Optional[int] = None,
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
         balance_enum: BalanceEnum = BalanceEnum.random,
@@ -48,6 +49,7 @@ class EtcdEndpoint(BaseEndpoint):
         self._watch_future: asyncio.Future = done_future()
         super().__init__(
             app,
+            read_timeout=read_timeout,
             ssl_crt_path=ssl_crt_path,
             balance_enum=balance_enum,
             pack_param=pack_param,

@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import sys
 from functools import wraps
@@ -7,8 +8,6 @@ from rap.client.endpoint import BalanceEnum, BaseEndpoint, LocalEndpoint
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.transport.async_iterator import AsyncIteratorCall
-
-# from rap.client.transport.transport import Transport
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common.cache import Cache
 from rap.common.channel import UserChannel
@@ -28,7 +27,6 @@ class BaseClient:
     def __init__(
         self,
         server_name: str,
-        keep_alive_timeout: Optional[int] = None,
         cache_interval: Optional[float] = None,
         ws_min_interval: Optional[int] = None,
         ws_max_interval: Optional[int] = None,
@@ -44,16 +42,23 @@ class BaseClient:
         :param through_deadline: enable through deadline to server
         """
         self.server_name: str = server_name
-        # self.transport: Transport = Transport(self, read_timeout=keep_alive_timeout)  # type: ignore
         self._processor_list: List[BaseProcessor] = []
         self._through_deadline: bool = through_deadline
         self._event_dict: Dict[EventEnum, List[CLIENT_EVENT_FN]] = {
             value: [] for value in EventEnum.__members__.values()
         }
-        self.cache: Cache = Cache(interval=cache_interval)
-        self.window_statistics: WindowStatistics = WindowStatistics(
+        self._cache: Cache = Cache(interval=cache_interval)
+        self._window_statistics: WindowStatistics = WindowStatistics(
             interval=ws_min_interval, max_interval=ws_max_interval, statistics_interval=ws_statistics_interval
         )
+
+    @property
+    def cache(self) -> Cache:
+        return self._cache
+
+    @property
+    def window_statistics(self) -> WindowStatistics:
+        return self._window_statistics
 
     @property
     def through_deadline(self) -> bool:
@@ -65,18 +70,26 @@ class BaseClient:
     async def stop(self) -> None:
         """close client transport"""
         for handler in self._event_dict[EventEnum.before_end]:
-            handler(self)  # type: ignore
+            ret: Any = handler(self)  # type: ignore
+            if asyncio.iscoroutine(ret):
+                await ret
         await self.endpoint.stop()
         for handler in self._event_dict[EventEnum.after_end]:
-            handler(self)  # type: ignore
+            ret: Any = handler(self)  # type: ignore
+            if asyncio.iscoroutine(ret):
+                await ret
 
     async def start(self) -> None:
         """Create client transport"""
         for handler in self._event_dict[EventEnum.before_start]:
-            handler(self)  # type: ignore
+            ret: Any = handler(self)  # type: ignore
+            if asyncio.iscoroutine(ret):
+                await ret
         await self.endpoint.start()
         for handler in self._event_dict[EventEnum.after_start]:
-            handler(self)  # type: ignore
+            ret: Any = handler(self)  # type: ignore
+            if asyncio.iscoroutine(ret):
+                await ret
 
     def _check_run(self) -> None:
         if not self.is_close:
@@ -215,13 +228,8 @@ class BaseClient:
         :param group: func's group, default value is `default`
         :param header: request header
         """
-        if not arg_param:
-            arg_param = ()
-        if not kwarg_param:
-            kwarg_param = {}
-        return await self.raw_invoke(
-            func.__name__, param_handle(inspect.signature(func), arg_param, kwarg_param), group=group, header=header
-        )
+        arg_param = param_handle(inspect.signature(func), arg_param or (), kwarg_param or {})
+        return await self.raw_invoke(func.__name__, arg_param, group=group, header=header)
 
     async def iterator_invoke(
         self,
@@ -240,14 +248,11 @@ class BaseClient:
         """
         if not inspect.isasyncgenfunction(func):
             raise TypeError("func must be async gen function")
-        if not kwarg_param:
-            kwarg_param = {}
-
         async with self.endpoint.picker() as transport:
             async for result in AsyncIteratorCall(
                 func.__name__,
                 transport,
-                param_handle(inspect.signature(func), arg_param, kwarg_param),
+                param_handle(inspect.signature(func), arg_param or (), kwarg_param or {}),
                 header=header,
                 group=group,
             ):
@@ -344,7 +349,6 @@ class Client(BaseClient):
 
         super().__init__(
             server_name,
-            keep_alive_timeout=keep_alive_timeout,
             cache_interval=cache_interval,
             ws_min_interval=ws_min_interval,
             ws_max_interval=ws_max_interval,
@@ -353,10 +357,11 @@ class Client(BaseClient):
         )
         self.endpoint = LocalEndpoint(
             conn_list,
-            self,
+            self,  # type: ignore
             ssl_crt_path=ssl_crt_path,
             pack_param=None,
             unpack_param=None,
+            read_timeout=keep_alive_timeout,
             balance_enum=select_conn_method,
             ping_fail_cnt=ping_fail_cnt,
             min_ping_interval=min_ping_interval,
