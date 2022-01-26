@@ -97,7 +97,7 @@ class TestServerResponse:
 
     async def test_response_timeout(self, rap_server: Server, rap_client: Client, mocker: Any) -> None:
         mock_future: asyncio.Future = asyncio.Future()
-        mocker.patch("rap.common.transport.BaseConnection.write").return_value = mock_future
+        mocker.patch("rap.common.conn.BaseConnection.write").return_value = mock_future
         mock_future.set_exception(asyncio.TimeoutError())
         response: Sender = Sender(rap_server, BaseConnection(1), 1, processor_list=[])  # type: ignore
 

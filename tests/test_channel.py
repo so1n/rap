@@ -125,17 +125,18 @@ class TestChannel:
     async def test_channel_life_cycle_error(
         self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
+        mocker.patch("rap.client.transport.transport.Transport._gen_correlation_id").return_value = 234
+
         @rap_client.register("test_channel")
         async def test_client_channel(channel: UserChannel) -> None:
             async for response in channel.iter():
                 await channel.write("close")
 
-        mocker.patch("rap.client.transport.channel.get_snowflake_id").return_value = 234
         mocker.patch("rap.client.model.Request.to_msg").return_value = (
             constant.CHANNEL_REQUEST,
-            "234",
+            234,
             "/default/test_channel",
-            {"channel_life_cycle": constant.MSG, "channel_id": "234"},
+            {"channel_life_cycle": constant.MSG},
             None,
         )
         with pytest.raises(ChannelError) as e:
@@ -143,12 +144,11 @@ class TestChannel:
         exec_msg = e.value.args[0]
         assert exec_msg == "channel not create"
 
-        mocker.patch("rap.client.transport.channel.get_snowflake_id").return_value = 345
         mocker.patch("rap.client.model.Request.to_msg").return_value = (
             constant.CHANNEL_REQUEST,
-            "345",
+            234,
             "/default/test_channel",
-            {"channel_life_cycle": constant.DROP, "channel_id": "345"},
+            {"channel_life_cycle": constant.DROP},
             None,
         )
         with pytest.raises(ChannelError) as e:
@@ -156,12 +156,11 @@ class TestChannel:
         exec_msg = e.value.args[0]
         assert exec_msg == "channel not create"
 
-        mocker.patch("rap.client.transport.channel.get_snowflake_id").return_value = 456
         mocker.patch("rap.client.model.Request.to_msg").return_value = (
             constant.CHANNEL_REQUEST,
-            "456",
+            234,
             "/default/test_channel",
-            {"channel_life_cycle": -1, "channel_id": "456"},
+            {"channel_life_cycle": -1},
             None,
         )
         with pytest.raises(ChannelError) as e:

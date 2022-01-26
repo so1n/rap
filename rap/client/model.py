@@ -24,7 +24,7 @@ class Request(ClientMsgProtocol):
     msg_type: int
     target: str
     body: Any
-    correlation_id: str = ""
+    correlation_id: int = -1
     conn: Optional[Connection] = None
     header: dict = field(default_factory=lambda: dict())
 
@@ -42,9 +42,8 @@ class Request(ClientMsgProtocol):
 class Response(BaseMsgProtocol):
     app: "BaseClient"
     conn: Connection
-    msg_id: int
     msg_type: int
-    correlation_id: str
+    correlation_id: int
     target: str
     status_code: int
     header: dict

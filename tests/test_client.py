@@ -42,7 +42,7 @@ class TestTransport:
 
     async def test_read_conn_timeout(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
         mock_future: asyncio.Future = asyncio.Future()
-        mocker.patch("rap.common.transport.Connection.read").return_value = mock_future
+        mocker.patch("rap.common.conn.Connection.read").return_value = mock_future
         mock_future.set_exception(asyncio.TimeoutError())
 
         with pytest.raises(asyncio.TimeoutError):
@@ -50,7 +50,7 @@ class TestTransport:
 
     async def test_write_timeout(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
         mock_future: asyncio.Future = asyncio.Future()
-        mocker.patch("rap.common.transport.Connection.write").return_value = mock_future
+        mocker.patch("rap.common.conn.Connection.write").return_value = mock_future
         mock_future.set_exception(asyncio.TimeoutError())
 
         with pytest.raises(asyncio.TimeoutError):
@@ -58,7 +58,7 @@ class TestTransport:
 
     async def test_write_raise_exc(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
         mock_future: asyncio.Future = asyncio.Future()
-        mocker.patch("rap.common.transport.Connection.write").return_value = mock_future
+        mocker.patch("rap.common.conn.Connection.write").return_value = mock_future
         mock_future.set_exception(Exception("demo"))
 
         with pytest.raises(Exception) as e:
@@ -69,7 +69,7 @@ class TestTransport:
 
     async def test_read_none_msg(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
         mock_future: asyncio.Future = asyncio.Future()
-        mocker.patch("rap.common.transport.Connection.read").return_value = mock_future
+        mocker.patch("rap.common.conn.Connection.read").return_value = mock_future
         mock_future.set_result(None)
 
         with pytest.raises(ConnectionError) as e:

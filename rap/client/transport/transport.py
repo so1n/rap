@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import math
-import random
 import sys
 import time
 from collections import deque
@@ -25,7 +24,6 @@ from rap.common.asyncio_helper import (
 )
 from rap.common.conn import CloseConnException, Connection
 from rap.common.exceptions import IgnoreNextProcessor, RPCError
-from rap.common.snowflake import async_get_snowflake_id
 from rap.common.state import State
 from rap.common.types import SERVER_BASE_MSG_TYPE
 from rap.common.utils import constant
@@ -63,12 +61,12 @@ class Transport(object):
         )
         self._read_timeout = read_timeout or 1200
 
-        self._max_msg_id: int = 65535
-        self._msg_id: int = random.randrange(self._max_msg_id)
-        self._state_dict: Dict[str, State] = {}
+        self._max_correlation_id: int = 65535
+        self._correlation_id: int = 1
+        self._state_dict: Dict[int, State] = {}
         self._exc_status_code_dict: Dict[int, Type[rap_exc.BaseRapError]] = get_exc_status_code_dict()
-        self._resp_future_dict: Dict[str, asyncio.Future[Tuple[Response, Optional[Exception]]]] = {}
-        self._channel_queue_dict: Dict[str, asyncio.Queue[Tuple[Response, Optional[Exception]]]] = {}
+        self._resp_future_dict: Dict[int, asyncio.Future[Tuple[Response, Optional[Exception]]]] = {}
+        self._channel_queue_dict: Dict[int, asyncio.Queue[Tuple[Response, Optional[Exception]]]] = {}
 
         if weight > 10:
             weight = 10
@@ -115,6 +113,8 @@ class Transport(object):
         return self._conn.sock_tuple
 
     async def await_close(self) -> None:
+        safe_del_future(self.ping_future)
+        safe_del_future(self.listen_future)
         await self._conn.await_close()
 
     ############
@@ -186,6 +186,12 @@ class Transport(object):
             if not self._conn.is_closed():
                 await self._conn.await_close()
 
+    def _broadcast_server_event(self, response: Response, exc: Exception) -> None:
+        for _, future in self._resp_future_dict.items():
+            future.set_result((response, exc))
+        for _, queue in self._channel_queue_dict.items():
+            queue.put_nowait((response, exc))
+
     # flake8: noqa: C901
     async def response_handler(self) -> None:
         """Distribute the response data to different consumers according to different conditions"""
@@ -210,7 +216,7 @@ class Transport(object):
             return
 
         # share state
-        correlation_id: str = response.correlation_id
+        correlation_id: int = response.correlation_id
         state: Optional[State] = self._state_dict.get(correlation_id, None)
         if state:
             response.state = state
@@ -229,13 +235,20 @@ class Transport(object):
             # server event msg handle
             if response.func_name == constant.EVENT_CLOSE_CONN:
                 # server want to close...do not send data
-                logger.error(f"recv close transport event, event info:{response.body}")
+                logger.info(f"recv close transport event, event info:{response.body}")
                 self.available = False
+                exc = CloseConnException(response.body)
+                self._conn.set_reader_exc(exc)
+                self._broadcast_server_event(response, exc)
             elif response.func_name in (constant.DECLARE, constant.PONG_EVENT):
                 if correlation_id in self._resp_future_dict:
                     self._resp_future_dict[correlation_id].set_result((response, exc))
+                else:
+                    logger.error(f"recv event:{response.func_name}, but not handler")
             elif response.func_name == constant.PING_EVENT:
-                await asyncio.wait_for(self.write_to_conn(Request.from_event(self.app, event.PongEvent(""))), timeout=3)
+                request: Request = Request.from_event(self.app, event.PongEvent(""))
+                request.correlation_id = correlation_id
+                await asyncio.wait_for(self.write_to_conn(request), timeout=3)
             else:
                 logger.error(f"recv not support event response:{response}")
         elif response.msg_type == constant.CHANNEL_RESPONSE and correlation_id in self._channel_queue_dict:
@@ -319,9 +332,8 @@ class Transport(object):
 
         :return: return server response
         """
-        correlation_id: str = str(await async_get_snowflake_id())
+        correlation_id: int = self._gen_correlation_id()
         request.correlation_id = correlation_id
-        request.header["header_id"] = correlation_id
         try:
             response_future: asyncio.Future[Tuple[Response, Optional[Exception]]] = asyncio.Future()
             self._resp_future_dict[correlation_id] = response_future
@@ -342,6 +354,12 @@ class Transport(object):
             if pop_future:
                 safe_del_future(pop_future)
 
+    def _gen_correlation_id(self) -> int:
+        correlation_id: int = self._correlation_id + 2
+        # Avoid too big numbers
+        self._correlation_id = correlation_id & self._max_correlation_id
+        return correlation_id
+
     ##########################
     # base write_to_conn api #
     ##########################
@@ -353,14 +371,11 @@ class Transport(object):
         request.header["user_agent"] = constant.USER_AGENT
         if not request.header.get("request_id"):
             request.header["request_id"] = str(uuid4())
-        msg_id: int = self._msg_id + 1
-        # Avoid too big numbers
-        self._msg_id = msg_id & self._max_msg_id
 
         for processor in self.app.processor_list:
             await processor.process_request(request)
 
-        await self._conn.write((msg_id, *request.to_msg()))
+        await self._conn.write(request.to_msg())
 
     ######################
     # one by one request #
@@ -408,8 +423,8 @@ class Transport(object):
         :param group: func's group
         """
         target: str = f"/{group or constant.DEFAULT_GROUP}/{func_name}"
-        channel: Channel = Channel(self, target, self._conn)  # type: ignore
-        correlation_id: str = channel.channel_id
+        correlation_id: int = self._gen_correlation_id()
+        channel: Channel = Channel(self, target, correlation_id)  # type: ignore
         self._channel_queue_dict[correlation_id] = channel.queue
         self._state_dict[correlation_id] = channel.state
 

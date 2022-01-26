@@ -9,6 +9,6 @@ class BaseMsgProtocol(Protocol):
     msg_type: int
     target: str
     body: Any
-    correlation_id: str
+    correlation_id: int
     header: dict
     state: State

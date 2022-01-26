@@ -1,5 +1,5 @@
 import inspect
-from typing import Awaitable, List, Set, Tuple, Union
+from typing import Awaitable, List, Tuple, Union
 
 from rap.common.exceptions import TooManyRequest
 from rap.common.utils import constant
@@ -14,7 +14,6 @@ class LimitProcessor(BaseProcessor):
     def __init__(self, backend: BaseLimitBackend, rule_list: List[Tuple[RULE_FUNC_TYPE, Rule]]):
         self._backend: BaseLimitBackend = backend
         self._rule_list: List[Tuple[RULE_FUNC_TYPE, Rule]] = rule_list
-        self._ignore_request_num_set: Set = {constant.CHANNEL_REQUEST, constant.CLIENT_EVENT, constant.CHANNEL_RESPONSE}
 
     async def process_request(self, request: Request) -> Request:
         # not limit client event

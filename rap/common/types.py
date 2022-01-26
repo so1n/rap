@@ -5,13 +5,13 @@ from typing import Any, List, Optional, Set, Tuple, Type, Union, _GenericAlias  
 import msgpack  # type: ignore
 
 # msg_type, correlation_id, target, header, body
-MSG_TYPE = Tuple[int, str, str, dict, Any]
+MSG_TYPE = Tuple[int, int, str, dict, Any]
 # msg_type, correlation_id, target, status_code, header, body
-SERVER_MSG_TYPE = Tuple[int, str, str, int, dict, Any]
-# msg_id, msg_type, correlation_id, target, header, body
-BASE_MSG_TYPE = Tuple[int, int, str, str, dict, Any]
-# msg_id, msg_type, correlation_id, target, status_code, header, body
-SERVER_BASE_MSG_TYPE = Tuple[int, int, str, str, int, dict, Any]
+SERVER_MSG_TYPE = Tuple[int, int, str, int, dict, Any]
+# msg_type, correlation_id, target, header, body
+BASE_MSG_TYPE = Tuple[int, int, str, dict, Any]
+# msg_type, correlation_id, target, status_code, header, body
+SERVER_BASE_MSG_TYPE = Tuple[int, int, str, int, dict, Any]
 LOOP_TYPE = asyncio.get_event_loop
 READER_TYPE = asyncio.streams.StreamReader
 WRITER_TYPE = asyncio.streams.StreamWriter

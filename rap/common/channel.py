@@ -11,7 +11,7 @@ class ChannelCloseError(Exception):
 class BaseChannel(Generic[Read_T]):
     """Common method of rap client and server channel"""
 
-    channel_id: str
+    channel_id: int
     channel_conn_future: asyncio.Future
     queue: asyncio.Queue
 
@@ -124,7 +124,7 @@ class UserChannel(Generic[Read_T]):
         await self._channel.write(body)
 
     @property
-    def channel_id(self) -> str:
+    def channel_id(self) -> int:
         """channel id, each channel has a unique id"""
         return self._channel.channel_id
 

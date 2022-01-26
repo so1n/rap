@@ -1,5 +1,4 @@
 import logging
-import random
 from typing import TYPE_CHECKING, Any, List, Optional
 from uuid import uuid4
 
@@ -33,8 +32,8 @@ class Sender(object):
         :param
         """
         self._app: "Server" = app
-        self._max_msg_id: int = 65535
-        self._msg_id: int = random.randrange(self._max_msg_id)
+        self._max_correlation_id: int = 65535
+        self._correlation_id: int = 2
         self._conn: ServerConnection = conn
         self._timeout: Optional[int] = timeout
         self._processor_list: Optional[List[BaseProcessor]] = processor_list
@@ -88,14 +87,14 @@ class Sender(object):
         self.header_handle(resp)
         resp = await self._processor_response_handle(resp)
         logger.debug("resp: %s", resp)
-        msg_id: int = self._msg_id + 1
-        # Avoid too big numbers
-        self._msg_id = msg_id & self._max_msg_id
+        if resp.correlation_id == -1:
+            correlation_id: int = self._correlation_id + 2
+            self._correlation_id = correlation_id & self._max_correlation_id
         if not deadline:
             deadline = Deadline(self._timeout)
 
         with deadline:
-            await self._conn.write((msg_id, *resp.to_msg()))
+            await self._conn.write(resp.to_msg())
         if resp.target.endswith(constant.EVENT_CLOSE_CONN):
             if not self._conn.is_closed():
                 self._conn.close()

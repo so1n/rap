@@ -19,7 +19,7 @@ class Channel(BaseChannel["Request"]):
 
     def __init__(
         self,
-        channel_id: str,
+        channel_id: int,
         write: Callable[[Any, Dict[str, Any]], Coroutine[Any, Any, Any]],
         conn: ServerConnection,
         func: Callable[["Channel"], Any],
@@ -27,7 +27,7 @@ class Channel(BaseChannel["Request"]):
         self._write: Callable[[Any, Dict[str, Any]], Coroutine[Any, Any, Any]] = write
         self._conn: ServerConnection = conn
         self.queue: asyncio.Queue = asyncio.Queue()
-        self.channel_id: str = channel_id
+        self.channel_id: int = channel_id
         self.user_channel: UserChannel = UserChannel(self)
 
         # if conn close, channel future will done and channel not read & write_to_conn

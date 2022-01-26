@@ -69,6 +69,8 @@ class Picker(object):
                     _score = _score * (1 - (transport_inflight / transport.semaphore.raw_value))
                 logger.debug(
                     "transport:%s available:%s available_level:%s rtt:%s score:%s",
+                    transport,
+                    transport.available,
                     transport.available_level,
                     transport.rtt,
                     _score,

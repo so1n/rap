@@ -27,9 +27,8 @@ class ServerMsgProtocol(BaseMsgProtocol):
 class Request(ServerMsgProtocol):
     app: "Server"
     conn: ServerConnection
-    msg_id: int
     msg_type: int
-    correlation_id: str
+    correlation_id: int
     target: str
     header: dict
     body: Any
@@ -58,7 +57,7 @@ class Response(ServerMsgProtocol):
     app: "Server"
     target: str
     msg_type: int = constant.MSG_RESPONSE
-    correlation_id: str = ""
+    correlation_id: int = -1
     status_code: int = 200
     header: dict = field(default_factory=dict)
     body: Any = None

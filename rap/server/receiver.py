@@ -90,7 +90,7 @@ class Receiver(object):
         # now one conn one Request object
         self._keepalive_timestamp: int = int(time.time())
         self._generator_dict: Dict[int, Union[Generator, AsyncGenerator]] = {}
-        self._channel_dict: Dict[str, Channel] = {}
+        self._channel_dict: Dict[int, Channel] = {}
 
     async def _default_call_fun_permission_fn(self, request: Request) -> FuncModel:
         func_model: FuncModel = self._app.registry.get_func_model(
@@ -175,7 +175,7 @@ class Receiver(object):
     async def channel_handle(self, request: Request, response: Response) -> Optional[Response]:
         func: Callable = (await self._call_func_permission_fn(request)).func
         # declare var
-        channel_id: str = request.correlation_id
+        channel_id: int = request.correlation_id
         life_cycle: str = request.header.get("channel_life_cycle", "error")
         channel: Optional[Channel] = self._channel_dict.get(channel_id, None)
         if life_cycle == constant.MSG:
@@ -189,7 +189,6 @@ class Receiver(object):
                 raise ChannelError("channel already create")
 
             async def write(body: Any, header: Dict[str, Any]) -> None:
-                header["channel_id"] = channel_id
                 await self.sender(
                     Response(
                         app=self._app,
@@ -207,7 +206,7 @@ class Receiver(object):
             channel.channel_conn_future.add_done_callback(lambda f: self._channel_dict.pop(channel_id, None))
             self._channel_dict[channel_id] = channel
 
-            response.header = {"channel_id": channel_id, "channel_life_cycle": constant.DECLARE}
+            response.header = {"channel_life_cycle": constant.DECLARE}
             return response
         elif life_cycle == constant.DROP:
             if channel is None:

@@ -1,3 +1,4 @@
+import asyncio
 import time
 from abc import ABC
 from typing import Any, Awaitable, Callable, Coroutine, List, Optional, Union
@@ -62,7 +63,7 @@ class RedisFixedWindowBackend(BaseRedisBackend):
         return _expected_time()
 
 
-class RedisCellBackend(BaseRedisBackend):
+class BaseRedisCellBackend(BaseRedisBackend):
     """
     use redis-cell module
     learn more:https://github.com/brandur/redis-cell
@@ -89,15 +90,6 @@ class RedisCellBackend(BaseRedisBackend):
         )
         return result
 
-    def can_requests(self, key: str, rule: Rule, token_num: int = 1) -> Union[bool, Coroutine[Any, Any, bool]]:
-        async def _can_requests() -> bool:
-            result: List[int] = await self._call_cell(key, rule, token_num)
-            can_requests: bool = result[0] == 0
-            # await self._redis.expire(key, int(rule.total_second))
-            return can_requests
-
-        return self._block_time_handle(key, rule, _can_requests)
-
     def expected_time(self, key: str, rule: Rule) -> Union[float, Coroutine[Any, Any, float]]:
         async def _expected_time() -> float:
             block_time_key: str = key + ":block_time"
@@ -109,6 +101,28 @@ class RedisCellBackend(BaseRedisBackend):
             return float(max(result[3], 0))
 
         return _expected_time()
+
+
+class RedisCellBackend(BaseRedisCellBackend):
+    def can_requests(self, key: str, rule: Rule, token_num: int = 1) -> Union[bool, Coroutine[Any, Any, bool]]:
+        async def _can_requests() -> bool:
+            result: List[int] = await self._call_cell(key, rule, token_num)
+            can_requests: bool = result[0] == 0
+            if can_requests and result[4]:
+                await asyncio.sleep(4)
+            return can_requests
+
+        return self._block_time_handle(key, rule, _can_requests)
+
+
+class RedisCellLikeTokenBucketBackend(BaseRedisCellBackend):
+    def can_requests(self, key: str, rule: Rule, token_num: int = 1) -> Union[bool, Coroutine[Any, Any, bool]]:
+        async def _can_requests() -> bool:
+            result: List[int] = await self._call_cell(key, rule, token_num)
+            can_requests: bool = result[0] == 0
+            return can_requests
+
+        return self._block_time_handle(key, rule, _can_requests)
 
 
 class RedisTokenBucketBackend(BaseRedisBackend):

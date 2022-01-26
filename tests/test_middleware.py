@@ -5,6 +5,7 @@ import pytest
 from aredis import StrictRedis  # type: ignore
 
 from rap.client import Client
+from rap.common.conn import CloseConnException
 from rap.server import Server
 from rap.server.plugin.middleware.conn.ip_filter import IpFilterMiddleware
 from rap.server.plugin.middleware.conn.limit import ConnLimitMiddleware, IpMaxConnMiddleware
@@ -73,7 +74,7 @@ class TestIpMaxConnMiddleware:
         client_1: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
         client_2: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
         await client_1.start()
-        with pytest.raises(ConnectionError):
+        with pytest.raises(CloseConnException):
             await client_2.start()
         await client_1.stop()
         await client_2.stop()
@@ -117,8 +118,9 @@ class TestIpBlockMiddleware:
         )
         await client.raw_invoke("add_allow_ip", ["1.1.1.1"], group=middleware.__class__.__name__)
         await client.stop()
-        with pytest.raises(ConnectionError):
+        with pytest.raises(CloseConnException):
             await client.start()
+        await client.stop()
 
     async def test_ip_block_ip_not_in_block_list(self, rap_server: Server) -> None:
         redis: StrictRedis = StrictRedis.from_url("redis://localhost")
@@ -134,7 +136,7 @@ class TestIpBlockMiddleware:
             "add_block_ip", [["localhost", "::1", "127.0.0.1", "192.168.0.0/31"]], group=middleware.__class__.__name__
         )
         await client.stop()
-        with pytest.raises(ConnectionError):
+        with pytest.raises(CloseConnException):
             await client.start()
 
     async def test_ip_block_by_black_ip_access(self, rap_server: Server) -> None:
@@ -146,6 +148,6 @@ class TestIpBlockMiddleware:
         await middleware.start_event_handle(rap_server)
 
         client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
-        with pytest.raises(ConnectionError):
+        with pytest.raises(CloseConnException):
             await client.start()
         await client.stop()
