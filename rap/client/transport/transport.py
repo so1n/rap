@@ -374,7 +374,6 @@ class Transport(object):
 
         for processor in self.app.processor_list:
             await processor.process_request(request)
-
         await self._conn.write(request.to_msg())
 
     ######################
@@ -399,10 +398,10 @@ class Transport(object):
         call_id = call_id or -1
         arg_param = arg_param or []
         request: Request = Request(
-            self.app,
-            constant.MSG_REQUEST,
-            f"{self.app.server_name}/{group}/{func_name}",
-            {"call_id": call_id, "param": arg_param},
+            app=self.app,
+            msg_type=constant.MSG_REQUEST,
+            target=f"{self.app.server_name}/{group}/{func_name}",
+            body={"call_id": call_id, "param": arg_param},
         )
         if header:
             request.header.update(header)

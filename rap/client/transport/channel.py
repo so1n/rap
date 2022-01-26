@@ -96,10 +96,10 @@ class Channel(BaseChannel[Response]):
         if self.is_close:
             raise ChannelCloseError("channel is closed")
         request: Request = Request(
-            self._transport.app,
-            constant.CHANNEL_REQUEST,
-            self._target,
-            body,
+            app=self._transport.app,
+            msg_type=constant.CHANNEL_REQUEST,
+            target=self._target,
+            body=body,
             correlation_id=self.channel_id,
             header={"channel_life_cycle": life_cycle},
             state=self.state,

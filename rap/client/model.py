@@ -1,4 +1,3 @@
-from dataclasses import dataclass, field
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -18,54 +17,66 @@ class ClientMsgProtocol(BaseMsgProtocol):
     conn: Optional[Connection]
 
 
-@dataclass()
 class Request(ClientMsgProtocol):
-    app: "BaseClient"
-    msg_type: int
-    target: str
-    body: Any
-    correlation_id: int = -1
-    conn: Optional[Connection] = None
-    header: dict = field(default_factory=lambda: dict())
-
-    state: State = field(default_factory=State)
+    def __init__(
+        self,
+        *,
+        app: "BaseClient",
+        msg_type: int,
+        target: str,
+        body: Any,
+        correlation_id: int = -1,
+        conn: Optional[Connection] = None,
+        header: Optional[dict] = None,
+        state: Optional[State] = None,
+    ):
+        self.app: "BaseClient" = app
+        self.msg_type: int = msg_type
+        self.body: Any = body
+        self.correlation_id: int = correlation_id
+        self.conn = conn
+        self.header = header or {}
+        self.state = state or State()
+        self.header["target"] = target
+        self.target = target
 
     def to_msg(self) -> MSG_TYPE:
-        return self.msg_type, self.correlation_id, self.target, self.header, self.body
+        return self.msg_type, self.correlation_id, self.header, self.body
 
     @classmethod
     def from_event(cls, app: "BaseClient", event: Event) -> "Request":
-        return cls(app, msg_type=constant.CLIENT_EVENT, target=f"/_event/{event.event_name}", body=event.event_info)
+        request: "Request" = cls(
+            app=app, msg_type=constant.CLIENT_EVENT, target=f"/_event/{event.event_name}", body=event.event_info
+        )
+        return request
 
 
-@dataclass()
 class Response(BaseMsgProtocol):
-    app: "BaseClient"
-    conn: Connection
-    msg_type: int
-    correlation_id: int
-    target: str
-    status_code: int
-    header: dict
-    body: Any
+    def __init__(
+        self,
+        app: "BaseClient",
+        conn: Connection,
+        msg_type: int,
+        correlation_id: int,
+        header: dict,
+        body: Any,
+        state: Optional[State] = None,
+    ):
+        self.app: "BaseClient" = app
+        self.msg_type: int = msg_type
+        self.body: Any = body
+        self.correlation_id: int = correlation_id
+        self.conn = conn
+        self.header = header or {}
+        self.state = state or State()
 
-    state: State = field(default_factory=State)
-    _target_dict: dict = field(default_factory=dict)
+        self.target: str = self.header["target"]
+        self.status_code: int = self.header["status_code"]
+        _, self.group, self.func_name = self.target.split("/")
 
-    exc: Optional[Exception] = None
-    tb: Optional[TracebackType] = None
+        self.exc: Optional[Exception] = None
+        self.tb: Optional[TracebackType] = None
 
     @classmethod
     def from_msg(cls, app: "BaseClient", conn: Connection, msg: SERVER_BASE_MSG_TYPE) -> "Response":
-        resp: "Response" = cls(app, conn, *msg)
-        _, group, func_name = resp.target.split("/")
-        resp._target_dict = {"group": group, "func_name": func_name}
-        return resp
-
-    @property
-    def group(self) -> str:
-        return self._target_dict["group"]
-
-    @property
-    def func_name(self) -> str:
-        return self._target_dict["func_name"]
+        return cls(app, conn, *msg)

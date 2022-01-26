@@ -206,7 +206,7 @@ class Receiver(object):
             channel.channel_conn_future.add_done_callback(lambda f: self._channel_dict.pop(channel_id, None))
             self._channel_dict[channel_id] = channel
 
-            response.header = {"channel_life_cycle": constant.DECLARE}
+            response.header["channel_life_cycle"] = constant.DECLARE
             return response
         elif life_cycle == constant.DROP:
             if channel is None:

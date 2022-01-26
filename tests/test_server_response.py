@@ -23,7 +23,7 @@ class TestServerResponse:
     async def test_set_exc(self) -> None:
         test_server: Server = Server("test")
         target: str = "/_exc/exc"
-        response: Response = Response(test_server, target)
+        response: Response = Response(app=test_server, target=target)
         with pytest.raises(TypeError):
             response.set_exception(test_event)  # type: ignore
 
@@ -31,7 +31,7 @@ class TestServerResponse:
         assert response.body == str(test_exc)
         assert response.status_code == ServerError.status_code
 
-        response = Response(test_server, target)
+        response = Response(app=test_server, target=target)
         response.set_exception(test_rpc_exc)
         assert response.body == str(test_rpc_exc)
         assert response.status_code == RPCError.status_code
@@ -51,7 +51,7 @@ class TestServerResponse:
     async def test_set_event(self) -> None:
         test_server: Server = Server("test")
         target: str = "/_event/event"
-        response: Response = Response(test_server, target)
+        response: Response = Response(app=test_server, target=target)
         with pytest.raises(TypeError):
             response.set_event(test_exc)  # type: ignore
 
@@ -72,25 +72,25 @@ class TestServerResponse:
 
     async def test_set_body(self) -> None:
         test_server: Server = Server("test")
-        response: Response = Response(test_server, test_target)
+        response: Response = Response(app=test_server, target=test_target)
         body: dict = {"a": 1, "b": 2}
         response.set_body(body)
         assert body == response.body
 
     async def test_call__call__(self) -> None:
         test_server: Server = Server("test")
-        response: Response = Response(test_server, test_target)
+        response: Response = Response(app=test_server, target=test_target)
         body: dict = {"a": 1, "b": 2}
         response(body)
         assert body == response.body
 
-        response = Response(test_server, test_target)
+        response = Response(app=test_server, target=test_target)
         response(test_event)
         assert response.msg_type == constant.SERVER_EVENT
         assert response.target.endswith(test_event.event_name)
         assert response.body == test_event.event_info
 
-        response = Response(test_server, test_target)
+        response = Response(app=test_server, target=test_target)
         response(test_rpc_exc)
         assert response.body == str(test_rpc_exc)
         assert response.status_code == RPCError.status_code
@@ -101,7 +101,7 @@ class TestServerResponse:
         mock_future.set_exception(asyncio.TimeoutError())
         response: Sender = Sender(rap_server, BaseConnection(1), 1, processor_list=[])  # type: ignore
 
-        response_model: Response = Response(rap_server, test_target)
+        response_model: Response = Response(app=rap_server, target=test_target)
         response_model.set_body({"a": 1, "b": 2})
 
         with pytest.raises(asyncio.TimeoutError):

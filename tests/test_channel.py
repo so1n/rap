@@ -122,6 +122,48 @@ class TestChannel:
         exec_msg: str = e.value.args[0]
         assert exec_msg == "Not found func. name: async_channel"
 
+    async def test_channel_not_create_when_recv_msg(
+        self, rap_server: Server, rap_client: Client, mocker: MockerFixture
+    ) -> None:
+        mocker.patch("rap.client.transport.transport.Transport._gen_correlation_id").return_value = 234
+
+        @rap_client.register("test_channel")
+        async def test_client_channel(channel: UserChannel) -> None:
+            async for response in channel.iter():
+                await channel.write("close")
+
+        mocker.patch("rap.client.model.Request.to_msg").return_value = (
+            constant.CHANNEL_REQUEST,
+            234,
+            {"channel_life_cycle": constant.MSG, "target": "/default/test_channel"},
+            None,
+        )
+        with pytest.raises(ChannelError) as e:
+            await test_client_channel()
+        exec_msg = e.value.args[0]
+        assert exec_msg == "channel not create"
+
+    async def test_channel_not_create_when_recv_drop(
+        self, rap_server: Server, rap_client: Client, mocker: MockerFixture
+    ) -> None:
+        mocker.patch("rap.client.transport.transport.Transport._gen_correlation_id").return_value = 234
+
+        @rap_client.register("test_channel")
+        async def test_client_channel(channel: UserChannel) -> None:
+            async for response in channel.iter():
+                await channel.write("close")
+
+        mocker.patch("rap.client.model.Request.to_msg").return_value = (
+            constant.CHANNEL_REQUEST,
+            234,
+            {"channel_life_cycle": constant.DROP, "target": "/default/test_channel"},
+            None,
+        )
+        with pytest.raises(ChannelError) as e:
+            await test_client_channel()
+        exec_msg = e.value.args[0]
+        assert exec_msg == "channel not create"
+
     async def test_channel_life_cycle_error(
         self, rap_server: Server, rap_client: Client, mocker: MockerFixture
     ) -> None:
@@ -135,32 +177,7 @@ class TestChannel:
         mocker.patch("rap.client.model.Request.to_msg").return_value = (
             constant.CHANNEL_REQUEST,
             234,
-            "/default/test_channel",
-            {"channel_life_cycle": constant.MSG},
-            None,
-        )
-        with pytest.raises(ChannelError) as e:
-            await test_client_channel()
-        exec_msg = e.value.args[0]
-        assert exec_msg == "channel not create"
-
-        mocker.patch("rap.client.model.Request.to_msg").return_value = (
-            constant.CHANNEL_REQUEST,
-            234,
-            "/default/test_channel",
-            {"channel_life_cycle": constant.DROP},
-            None,
-        )
-        with pytest.raises(ChannelError) as e:
-            await test_client_channel()
-        exec_msg = e.value.args[0]
-        assert exec_msg == "channel not create"
-
-        mocker.patch("rap.client.model.Request.to_msg").return_value = (
-            constant.CHANNEL_REQUEST,
-            234,
-            "/default/test_channel",
-            {"channel_life_cycle": -1},
+            {"channel_life_cycle": -1, "target": "/default/test_channel"},
             None,
         )
         with pytest.raises(ChannelError) as e:

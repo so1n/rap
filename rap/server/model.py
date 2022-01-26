@@ -1,6 +1,5 @@
 import logging
 import sys
-from dataclasses import dataclass, field
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -23,48 +22,60 @@ class ServerMsgProtocol(BaseMsgProtocol):
     app: "Server"
 
 
-@dataclass()
 class Request(ServerMsgProtocol):
-    app: "Server"
-    conn: ServerConnection
-    msg_type: int
-    correlation_id: int
-    target: str
-    header: dict
-    body: Any
-    state: "State" = field(default_factory=State)
+    def __init__(
+        self,
+        app: "Server",
+        conn: ServerConnection,
+        msg_type: int,
+        correlation_id: int,
+        header: dict,
+        body: Any,
+        state: Optional[State] = None,
+    ):
+        self.app: "Server" = app
+        self.msg_type: int = msg_type
+        self.body: Any = body
+        self.correlation_id: int = correlation_id
+        self.conn = conn
+        self.header = header or {}
+        self.state = state or State()
 
-    _target_dict: dict = field(default_factory=dict)
+        self.target: str = self.header["target"]
+        _, self.group, self.func_name = self.target.split("/")
 
     @classmethod
     def from_msg(cls, app: "Server", msg: BASE_MSG_TYPE, conn: ServerConnection) -> "Request":
-        request: "Request" = cls(app, conn, *msg)
-        _, group, func_name = request.target.split("/")
-        request._target_dict = {"group": group, "func_name": func_name}
-        return request
-
-    @property
-    def group(self) -> str:
-        return self._target_dict["group"]
-
-    @property
-    def func_name(self) -> str:
-        return self._target_dict["func_name"]
+        return cls(app, conn, *msg)
 
 
-@dataclass()
 class Response(ServerMsgProtocol):
-    app: "Server"
-    target: str
-    msg_type: int = constant.MSG_RESPONSE
-    correlation_id: int = -1
-    status_code: int = 200
-    header: dict = field(default_factory=dict)
-    body: Any = None
-    state: "State" = field(default_factory=State)
-    conn: Optional[ServerConnection] = None
-    exc: Optional[Exception] = None
-    tb: Optional[TracebackType] = None
+    def __init__(
+        self,
+        *,
+        app: "Server",
+        target: str,
+        msg_type: int = constant.MSG_RESPONSE,
+        correlation_id: int = -1,
+        header: Optional[dict] = None,
+        body: Any = None,
+        state: Optional[State] = None,
+        conn: Optional[ServerConnection] = None,
+        exc: Optional[Exception] = None,
+        tb: Optional[TracebackType] = None,
+    ):
+        self.app: "Server" = app
+        self.msg_type: int = msg_type
+        self.body: Any = body
+        self.correlation_id: int = correlation_id
+        self.conn = conn
+        self.header = header or {}
+        if "status_code" not in self.header:
+            self.header["status_code"] = 200
+        self.state = state or State()
+        self.target = target
+        self.exc: Optional[Exception] = exc
+        self.tb: Optional[TracebackType] = tb
 
     def set_exception(self, exc: Exception) -> None:
         if not isinstance(exc, Exception):
@@ -89,7 +100,7 @@ class Response(ServerMsgProtocol):
 
     @classmethod
     def from_exc(cls, app: "Server", exc: Exception) -> "Response":
-        response: Response = cls(app, "/_exc/server_error")
+        response: Response = cls(app=app, target="/_exc/server_error")
         response.set_exception(exc)
         return response
 
@@ -97,12 +108,28 @@ class Response(ServerMsgProtocol):
     def from_event(cls, app: "Server", event: Event) -> "Response":
         if not isinstance(event, Event):
             raise TypeError(f"event type:{event} is not {Event}")
-        response: Response = cls(app, f"/_event/{event.event_name}")
+        response: Response = cls(app=app, target=f"/_event/{event.event_name}")
         response.set_event(event)
         return response
 
+    @property
+    def status_code(self) -> int:
+        return self.header["status_code"]
+
+    @status_code.setter
+    def status_code(self, value: int) -> None:
+        self.header["status_code"] = value
+
+    @property  # type: ignore
+    def target(self) -> str:  # type: ignore
+        return self.header["target"]
+
+    @target.setter
+    def target(self, value: str) -> None:
+        self.header["target"] = value
+
     def to_msg(self) -> SERVER_MSG_TYPE:
-        return self.msg_type, self.correlation_id, self.target, self.status_code, self.header, self.body
+        return self.msg_type, self.correlation_id, self.header, self.body
 
     def __call__(self, content: Any) -> None:
         if isinstance(content, Exception):
