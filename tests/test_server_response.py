@@ -51,11 +51,23 @@ class TestServerResponse:
     async def test_set_event(self) -> None:
         test_server: Server = Server("test")
         target: str = "/_event/event"
-        response: Response = Response(app=test_server, target=target)
+        response: Response = Response(app=test_server, target=target, msg_type=constant.CLIENT_EVENT)
         with pytest.raises(TypeError):
             response.set_event(test_exc)  # type: ignore
 
         response.set_event(test_event)
+        assert response.msg_type == constant.CLIENT_EVENT
+        assert response.target == target
+        assert response.body == test_event.event_info
+
+    async def test_set_server_event(self) -> None:
+        test_server: Server = Server("test")
+        target: str = "/_event/event"
+        response: Response = Response(app=test_server, target=target)
+        with pytest.raises(TypeError):
+            response.set_server_event(test_exc)  # type: ignore
+
+        response.set_server_event(test_event)
         assert response.msg_type == constant.SERVER_EVENT
         assert response.target.endswith(test_event.event_name)
         assert response.body == test_event.event_info

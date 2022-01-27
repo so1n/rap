@@ -87,7 +87,7 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
         raise NotImplementedError
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type == constant.CLIENT_EVENT:
+        if request.msg_type in (constant.CLIENT_EVENT, constant.SERVER_EVENT):
             # do not process event
             return request
         index: str = self.get_index_from_request(request)

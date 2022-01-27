@@ -90,6 +90,7 @@ class Sender(object):
         if resp.correlation_id == -1:
             correlation_id: int = self._correlation_id + 2
             self._correlation_id = correlation_id & self._max_correlation_id
+            resp.correlation_id = correlation_id
         if not deadline:
             deadline = Deadline(self._timeout)
 

@@ -13,6 +13,7 @@ from rap.common.conn import CloseConnException, ServerConnection
 from rap.common.exceptions import ServerError
 from rap.common.signal_broadcast import add_signal_handler, remove_signal_handler
 from rap.common.snowflake import async_get_snowflake_id
+from rap.common.state import State
 from rap.common.types import BASE_MSG_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utils import EventEnum, RapFunc
 from rap.server.model import Request, Response
@@ -320,8 +321,11 @@ class Server(object):
             if _request_msg is None:
                 await sender.send_event(event.CloseConnEvent("request is empty"))
                 return
+
+            state: Optional[State] = receiver.state_dict.get(_request_msg[1], None)
+
             try:
-                request: Request = Request.from_msg(self, _request_msg, conn)  # type: ignore
+                request: Request = Request.from_msg(self, _request_msg, conn, state=state)  # type: ignore
             except Exception as closer_e:
                 logger.error(f"{conn.peer_tuple} send bad msg:{_request_msg}, error:{closer_e}")
                 await sender.send_event(event.CloseConnEvent("protocol error"))

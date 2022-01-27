@@ -21,7 +21,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 class Channel(BaseChannel[Response]):
     """client channel support"""
 
-    def __init__(self, transport: "Transport", target: str, channel_id: int):
+    def __init__(self, *, transport: "Transport", target: str, channel_id: int, state: State):
         """
         :param transport: rap client transport
         :param target: rap target
@@ -30,7 +30,7 @@ class Channel(BaseChannel[Response]):
         self._transport: "Transport" = transport
         self._target: str = target
         self._drop_msg: str = "recv channel's drop event, close channel"
-        self.state: State = State()
+        self.state: State = state
 
         self.channel_id: int = channel_id
         self.queue: asyncio.Queue[Tuple[Response, Optional[Exception]]] = asyncio.Queue()
@@ -55,7 +55,7 @@ class Channel(BaseChannel[Response]):
 
         # init with server
         life_cycle: str = constant.DECLARE
-        await self._base_write(None, life_cycle)
+        await self._base_write(None, life_cycle, target=self._target)
         response: Response = await self._base_read()
         if response.header.get("channel_life_cycle") != life_cycle:
             raise ChannelError("channel life cycle error")
@@ -91,14 +91,16 @@ class Channel(BaseChannel[Response]):
             raise exc
         return response
 
-    async def _base_write(self, body: Any, life_cycle: str, timeout: Optional[int] = None) -> None:
+    async def _base_write(
+        self, body: Any, life_cycle: str, timeout: Optional[int] = None, target: Optional[str] = None
+    ) -> None:
         """base send body to channel"""
         if self.is_close:
             raise ChannelCloseError("channel is closed")
         request: Request = Request(
             app=self._transport.app,
             msg_type=constant.CHANNEL_REQUEST,
-            target=self._target,
+            target=target,
             body=body,
             correlation_id=self.channel_id,
             header={"channel_life_cycle": life_cycle},

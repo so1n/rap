@@ -90,7 +90,7 @@ class MosProcessor(BaseProcessor):
 
         if response.status_code >= 400:
             self.error_cnt_gauge.increment()
-        if response.target.endswith(constant.PONG_EVENT):
+        if response.msg_type == constant.CLIENT_EVENT and response.target.endswith(constant.PING_EVENT):
             mos: int = int(
                 5
                 * (1 - self._cpu_percent)

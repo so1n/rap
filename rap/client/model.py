@@ -23,7 +23,7 @@ class Request(ClientMsgProtocol):
         *,
         app: "BaseClient",
         msg_type: int,
-        target: str,
+        target: Optional[str],
         body: Any,
         correlation_id: int = -1,
         conn: Optional[Connection] = None,
@@ -37,8 +37,8 @@ class Request(ClientMsgProtocol):
         self.conn = conn
         self.header = header or {}
         self.state = state or State()
-        self.header["target"] = target
-        self.target = target
+        if target:
+            self.target = target
 
     def to_msg(self) -> MSG_TYPE:
         return self.msg_type, self.correlation_id, self.header, self.body
@@ -49,6 +49,15 @@ class Request(ClientMsgProtocol):
             app=app, msg_type=constant.CLIENT_EVENT, target=f"/_event/{event.event_name}", body=event.event_info
         )
         return request
+
+    @property  # type: ignore
+    def target(self) -> str:  # type: ignore
+        return self.header["target"]
+
+    @target.setter
+    def target(self, value: str) -> None:
+        self.header["target"] = value
+        self.state.target = value
 
 
 class Response(BaseMsgProtocol):
@@ -70,13 +79,17 @@ class Response(BaseMsgProtocol):
         self.header = header or {}
         self.state = state or State()
 
-        self.target: str = self.header["target"]
-        self.status_code: int = self.header["status_code"]
-        _, self.group, self.func_name = self.target.split("/")
+        self.target: str = self.header.get("target", None) or self.state.target
+        self.status_code: int = self.header.get("status_code", 0)
+        _, group, func_name = self.target.split("/")
+        self.group: str = group
+        self.func_name: str = func_name
 
         self.exc: Optional[Exception] = None
         self.tb: Optional[TracebackType] = None
 
     @classmethod
-    def from_msg(cls, app: "BaseClient", conn: Connection, msg: SERVER_BASE_MSG_TYPE) -> "Response":
-        return cls(app, conn, *msg)
+    def from_msg(
+        cls, app: "BaseClient", conn: Connection, msg: SERVER_BASE_MSG_TYPE, state: Optional[State] = None
+    ) -> "Response":
+        return cls(app, conn, *msg, state=state)

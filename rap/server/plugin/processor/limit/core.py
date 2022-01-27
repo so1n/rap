@@ -17,7 +17,7 @@ class LimitProcessor(BaseProcessor):
 
     async def process_request(self, request: Request) -> Request:
         # not limit client event
-        if request.msg_type == constant.CLIENT_EVENT:
+        if request.msg_type in (constant.CLIENT_EVENT, constant.SERVER_EVENT):
             return request
 
         for func, rule in self._rule_list:

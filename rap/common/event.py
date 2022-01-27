@@ -1,5 +1,7 @@
 from typing import Tuple, Union
 
+from rap.common.utils import constant
+
 
 class Event(object):
     event_name: str
@@ -14,35 +16,28 @@ class Event(object):
 
 
 class CloseConnEvent(Event):
-    event_name: str = "event_close_conn"
+    event_name: str = constant.EVENT_CLOSE_CONN
 
     def __init__(self, event_info: Union[str, dict]):
         super().__init__(event_info)
 
 
 class PingEvent(Event):
-    event_name: str = "ping"
-
-    def __init__(self, event_info: Union[str, dict]):
-        super().__init__(event_info)
-
-
-class PongEvent(Event):
-    event_name: str = "pong"
+    event_name: str = constant.PING_EVENT
 
     def __init__(self, event_info: Union[str, dict]):
         super().__init__(event_info)
 
 
 class DeclareEvent(Event):
-    event_name: str = "declare"
+    event_name: str = constant.DECLARE
 
     def __init__(self, event_info: Union[str, dict]):
         super().__init__(event_info)
 
 
 class DropEvent(Event):
-    event_name: str = "drop"
+    event_name: str = constant.DROP
 
     def __init__(self, event_info: Union[str, dict]):
         super().__init__(event_info)

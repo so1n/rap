@@ -22,7 +22,7 @@ from typing import (
 
 from rap.common.asyncio_helper import Deadline, get_event_loop
 from rap.common.conn import ServerConnection
-from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent, PongEvent
+from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent
 from rap.common.exceptions import (
     BaseRapError,
     ChannelError,
@@ -74,7 +74,7 @@ class Receiver(object):
         self._conn: ServerConnection = conn
         self._run_timeout: int = run_timeout
         self.sender: Sender = sender
-        self._state_dict: Dict[str, State] = {}
+        self.state_dict: Dict[int, State] = {}
         self._ping_sleep_time: int = ping_sleep_time
         self._ping_fail_cnt: int = ping_fail_cnt
         self._processor_list: Optional[List[BaseProcessor]] = processor_list
@@ -84,6 +84,7 @@ class Receiver(object):
 
         self.dispatch_func_dict: Dict[int, Callable] = {
             constant.CLIENT_EVENT: self.event,
+            constant.SERVER_EVENT: self.event,
             constant.MSG_REQUEST: self.msg_handle,
             constant.CHANNEL_REQUEST: self.channel_handle,
         }
@@ -104,22 +105,19 @@ class Receiver(object):
     async def dispatch(self, request: Request) -> Optional[Response]:
         """recv request, processor request and dispatch request by request msg type"""
         response_num: int = response_num_dict.get(request.msg_type, constant.SERVER_ERROR_RESPONSE)
-
         if request.msg_type == constant.CHANNEL_REQUEST:
-            correlation_id: str = f"{request.conn.peer_tuple}:{request.correlation_id}"
-            state: State = self._state_dict.get(correlation_id, request.state)
-            self._state_dict[correlation_id] = state
-            request.state = state
+            self.state_dict[request.correlation_id] = request.state
 
         # gen response object
         response: "Response" = Response(
             app=self._app,
-            target=request.target,
             msg_type=response_num,
             correlation_id=request.correlation_id,
             state=request.state,
         )
-        response.header.update(request.header)
+        if "request_id" in request.header:
+            response.header["request_id"] = request.header["request_id"]
+        # response.header.update(request.header)
 
         # check type_id
         if response.msg_type == constant.SERVER_ERROR_RESPONSE:
@@ -173,7 +171,6 @@ class Receiver(object):
                 return
 
     async def channel_handle(self, request: Request, response: Response) -> Optional[Response]:
-        func: Callable = (await self._call_func_permission_fn(request)).func
         # declare var
         channel_id: int = request.correlation_id
         life_cycle: str = request.header.get("channel_life_cycle", "error")
@@ -187,12 +184,12 @@ class Receiver(object):
         elif life_cycle == constant.DECLARE:
             if channel is not None:
                 raise ChannelError("channel already create")
+            func: Callable = (await self._call_func_permission_fn(request)).func
 
             async def write(body: Any, header: Dict[str, Any]) -> None:
                 await self.sender(
                     Response(
                         app=self._app,
-                        target=request.target,
                         msg_type=constant.CHANNEL_RESPONSE,
                         correlation_id=channel_id,
                         header=header,
@@ -213,8 +210,7 @@ class Receiver(object):
                 raise ChannelError("channel not create")
             else:
                 await channel.close()
-                correlation_id: str = f"{request.conn.peer_tuple}:{request.correlation_id}"
-                self._state_dict.pop(correlation_id, None)
+                self.state_dict.pop(channel_id, None)
                 self._channel_dict.pop(channel_id, None)
                 return None
         else:
@@ -306,14 +302,17 @@ class Receiver(object):
     async def event(self, request: Request, response: Response) -> Optional[Response]:
         """client event request handle"""
         # rap event handle
-        if request.func_name == constant.PONG_EVENT:
-            self._conn.keepalive_timestamp = int(time.time())
-            return None
-        elif request.func_name == constant.PING_EVENT:
-            response.set_event(PongEvent({}))
+        if request.func_name == constant.PING_EVENT:
+            if request.msg_type == constant.SERVER_EVENT:
+                self._conn.keepalive_timestamp = int(time.time())
+                return None
+            elif request.msg_type == constant.CLIENT_EVENT:
+                response.set_event(PingEvent({}))
+            else:
+                raise TypeError(f"Error msg type, {request.correlation_id}")
         elif request.func_name == constant.DECLARE:
             if request.body.get("server_name") != self._app.server_name:
-                response.set_event(CloseConnEvent("error server name"))
+                response.set_server_event(CloseConnEvent("error server name"))
             else:
                 response.set_event(DeclareEvent({"result": True, "conn_id": self._conn.conn_id}))
                 self._conn.keepalive_timestamp = int(time.time())

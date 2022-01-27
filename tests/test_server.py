@@ -72,7 +72,7 @@ class TestServerConnHandle:
         with pytest.raises(asyncio.TimeoutError):
             with Deadline(1):
                 await rap_client.raw_invoke("sync_sum", [1, 2])
-        error_log.assert_called_with(AnyStringWith("Can' dispatch response"))
+        error_log.assert_called_with(AnyStringWith("Can not dispatch response"))
 
     # async def test_receive_error_msg(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
     #     mocker.patch("rap.server.model.Request.from_msg").side_effect = Exception()

@@ -47,7 +47,6 @@ class _Constant(object):
     # event func name
     EVENT_CLOSE_CONN: str = "event_close_conn"
     PING_EVENT: str = "ping"
-    PONG_EVENT: str = "pong"
 
     # life cycle
     DECLARE: str = "declare"
@@ -117,7 +116,8 @@ def parse_error(exception: Exception) -> Tuple[str, str]:
 response_num_dict: Dict[int, int] = {
     constant.MSG_REQUEST: constant.MSG_RESPONSE,
     constant.CHANNEL_REQUEST: constant.CHANNEL_RESPONSE,
-    constant.CLIENT_EVENT: -1,
+    constant.CLIENT_EVENT: constant.CLIENT_EVENT,
+    constant.SERVER_EVENT: constant.SERVER_EVENT,
 }
 
 

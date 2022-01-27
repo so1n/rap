@@ -207,19 +207,16 @@ class Transport(object):
 
         if response_msg is None:
             raise ConnectionError("Connection has been closed")
+        # share state
+        correlation_id: int = response_msg[1]
+        state: Optional[State] = self._state_dict.get(correlation_id, None)
 
         # parse response
         try:
-            response: Response = Response.from_msg(self.app, self._conn, response_msg)
+            response: Response = Response.from_msg(self.app, self._conn, response_msg, state=state)
         except Exception as e:
-            logger.error(f"recv wrong response:{response_msg}, ignore error:{e}")
+            logger.exception(f"recv wrong response:{response_msg}, ignore error:{e}")
             return
-
-        # share state
-        correlation_id: int = response.correlation_id
-        state: Optional[State] = self._state_dict.get(correlation_id, None)
-        if state:
-            response.state = state
 
         exc: Optional[Exception] = None
         if response.msg_type == constant.SERVER_ERROR_RESPONSE or response.status_code in self._exc_status_code_dict:
@@ -240,15 +237,19 @@ class Transport(object):
                 exc = CloseConnException(response.body)
                 self._conn.set_reader_exc(exc)
                 self._broadcast_server_event(response, exc)
-            elif response.func_name in (constant.DECLARE, constant.PONG_EVENT):
+            elif response.func_name == constant.PING_EVENT:
+                request: Request = Request.from_event(self.app, event.PingEvent(""))
+                request.correlation_id = correlation_id
+                request.msg_type = constant.SERVER_EVENT
+                await asyncio.wait_for(self.write_to_conn(request), timeout=3)
+            else:
+                logger.error(f"recv not support event response:{response}")
+        elif response.msg_type == constant.CLIENT_EVENT:
+            if response.func_name in (constant.DECLARE, constant.PING_EVENT):
                 if correlation_id in self._resp_future_dict:
                     self._resp_future_dict[correlation_id].set_result((response, exc))
                 else:
                     logger.error(f"recv event:{response.func_name}, but not handler")
-            elif response.func_name == constant.PING_EVENT:
-                request: Request = Request.from_event(self.app, event.PongEvent(""))
-                request.correlation_id = correlation_id
-                await asyncio.wait_for(self.write_to_conn(request), timeout=3)
             else:
                 logger.error(f"recv not support event response:{response}")
         elif response.msg_type == constant.CHANNEL_RESPONSE and correlation_id in self._channel_queue_dict:
@@ -258,7 +259,7 @@ class Transport(object):
             # set msg to future_dict's `future`
             self._resp_future_dict[correlation_id].set_result((response, exc))
         else:
-            logger.error(f"Can' dispatch response: {response}, ignore")
+            logger.error(f"Can not dispatch response: {response}, ignore")
         return
 
     async def declare(self) -> None:
@@ -272,7 +273,7 @@ class Transport(object):
         )
 
         if (
-            response.msg_type == constant.SERVER_EVENT
+            response.msg_type == constant.CLIENT_EVENT
             and response.func_name == constant.DECLARE
             and response.body.get("result", False)
             and "conn_id" in response.body
@@ -423,9 +424,12 @@ class Transport(object):
         """
         target: str = f"/{group or constant.DEFAULT_GROUP}/{func_name}"
         correlation_id: int = self._gen_correlation_id()
-        channel: Channel = Channel(self, target, correlation_id)  # type: ignore
+        state: State = State()
+        channel: Channel = Channel(
+            transport=self, target=target, channel_id=correlation_id, state=state  # type: ignore
+        )
         self._channel_queue_dict[correlation_id] = channel.queue
-        self._state_dict[correlation_id] = channel.state
+        self._state_dict[correlation_id] = state
 
         def _clean_channel_resource(_: asyncio.Future) -> None:
             self._channel_queue_dict.pop(correlation_id, None)

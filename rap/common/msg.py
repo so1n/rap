@@ -12,3 +12,6 @@ class BaseMsgProtocol(Protocol):
     correlation_id: int
     header: dict
     state: State
+
+    def __str__(self) -> str:
+        return str({k: v for k, v in self.__dict__.items() if not k.startswith("__")})
