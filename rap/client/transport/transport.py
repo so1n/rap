@@ -4,10 +4,11 @@ import math
 import sys
 import time
 from collections import deque
+from types import TracebackType
 from typing import TYPE_CHECKING, Any, Deque, Dict, Optional, Sequence, Tuple, Type
 from uuid import uuid4
 
-from rap.client.model import Request, Response
+from rap.client.model import ClientContext, Request, Response
 from rap.client.transport.channel import Channel
 from rap.client.utils import get_exc_status_code_dict, raise_rap_error
 from rap.common import event
@@ -24,7 +25,6 @@ from rap.common.asyncio_helper import (
 )
 from rap.common.conn import CloseConnException, Connection
 from rap.common.exceptions import IgnoreNextProcessor, RPCError
-from rap.common.state import State
 from rap.common.types import SERVER_BASE_MSG_TYPE
 from rap.common.utils import constant
 
@@ -63,7 +63,7 @@ class Transport(object):
 
         self._max_correlation_id: int = 65535
         self._correlation_id: int = 1
-        self._state_dict: Dict[int, State] = {}
+        self._context_dict: Dict[int, ClientContext] = {}
         self._exc_status_code_dict: Dict[int, Type[rap_exc.BaseRapError]] = get_exc_status_code_dict()
         self._resp_future_dict: Dict[int, asyncio.Future[Tuple[Response, Optional[Exception]]]] = {}
         self._channel_queue_dict: Dict[int, asyncio.Queue[Tuple[Response, Optional[Exception]]]] = {}
@@ -209,11 +209,19 @@ class Transport(object):
             raise ConnectionError("Connection has been closed")
         # share state
         correlation_id: int = response_msg[1]
-        state: Optional[State] = self._state_dict.get(correlation_id, None)
-
+        context: Optional[ClientContext] = self._context_dict.get(correlation_id, None)
+        if not context:
+            if response_msg[0] == constant.SERVER_EVENT:
+                context = ClientContext()
+                context.app = self.app
+                context.conn = self._conn
+                context.correlation_id = correlation_id
+            else:
+                logger.error(f"Can not found context from {correlation_id}")
+                return
         # parse response
         try:
-            response: Response = Response.from_msg(self.app, self._conn, response_msg, state=state)
+            response: Response = Response.from_msg(msg=response_msg, context=context)
         except Exception as e:
             logger.exception(f"recv wrong response:{response_msg}, ignore error:{e}")
             return
@@ -238,8 +246,7 @@ class Transport(object):
                 self._conn.set_reader_exc(exc)
                 self._broadcast_server_event(response, exc)
             elif response.func_name == constant.PING_EVENT:
-                request: Request = Request.from_event(self.app, event.PingEvent(""))
-                request.correlation_id = correlation_id
+                request: Request = Request.from_event(event.PingEvent(""), context)
                 request.msg_type = constant.SERVER_EVENT
                 await asyncio.wait_for(self.write_to_conn(request), timeout=3)
             else:
@@ -262,15 +269,42 @@ class Transport(object):
             logger.error(f"Can not dispatch response: {response}, ignore")
         return
 
+    def context(self) -> "Any":
+        transport: "Transport" = self
+
+        class TransportContext(object):
+            correlation_id: int
+
+            def __enter__(self) -> "ClientContext":
+                self.correlation_id = transport._gen_correlation_id()
+                context = ClientContext()
+                context.app = transport.app
+                context.conn = transport._conn
+                context.correlation_id = self.correlation_id
+                transport._context_dict[self.correlation_id] = context
+                return context
+
+            def __exit__(
+                self,
+                exc_type: Optional[Type[BaseException]],
+                exc_val: Optional[BaseException],
+                exc_tb: Optional[TracebackType],
+            ) -> None:
+                transport._context_dict.pop(self.correlation_id)
+
+        return TransportContext()
+
     async def declare(self) -> None:
         """
         After transport is initialized, connect to the server and initialize the connection resources.
         Only include server_name and get transport id two functions, if you need to expand the function,
           you need to process the request and response of the declared life cycle through the processor
         """
-        response: Response = await self._base_request(
-            Request.from_event(self.app, event.DeclareEvent({"server_name": self.app.server_name})),
-        )
+
+        with self.context() as context:
+            response: Response = await self._base_request(
+                Request.from_event(event.DeclareEvent({"server_name": self.app.server_name}), context),
+            )
 
         if (
             response.msg_type == constant.CLIENT_EVENT
@@ -296,7 +330,8 @@ class Transport(object):
         async def _ping() -> None:
             nonlocal mos
             nonlocal rtt
-            response: Response = await self._base_request(Request.from_event(self.app, event.PingEvent({})))
+            with self.context() as context:
+                response: Response = await self._base_request(Request.from_event(event.PingEvent({}), context))
             rtt += time.time() - start_time
             mos += response.body.get("mos", 5)
 
@@ -333,12 +368,9 @@ class Transport(object):
 
         :return: return server response
         """
-        correlation_id: int = self._gen_correlation_id()
-        request.correlation_id = correlation_id
         try:
             response_future: asyncio.Future[Tuple[Response, Optional[Exception]]] = asyncio.Future()
-            self._resp_future_dict[correlation_id] = response_future
-            self._state_dict[correlation_id] = request.state
+            self._resp_future_dict[request.correlation_id] = response_future
             deadline: Optional[Deadline] = deadline_context.get()
             if self.app.through_deadline and deadline:
                 request.header["X-rap-deadline"] = deadline.end_timestamp
@@ -350,8 +382,7 @@ class Transport(object):
             response = await self.process_response(response, exc)
             return response
         finally:
-            self._state_dict.pop(correlation_id, None)
-            pop_future: Optional[asyncio.Future] = self._resp_future_dict.pop(correlation_id, None)
+            pop_future: Optional[asyncio.Future] = self._resp_future_dict.pop(request.correlation_id, None)
             if pop_future:
                 safe_del_future(pop_future)
 
@@ -366,7 +397,6 @@ class Transport(object):
     ##########################
     async def write_to_conn(self, request: Request) -> None:
         """gen msg_id and seng msg to transport"""
-        request.conn = self._conn
         request.header["host"] = self._conn.peer_tuple
         request.header["version"] = constant.VERSION
         request.header["user_agent"] = constant.USER_AGENT
@@ -398,15 +428,16 @@ class Transport(object):
         group = group or constant.DEFAULT_GROUP
         call_id = call_id or -1
         arg_param = arg_param or []
-        request: Request = Request(
-            app=self.app,
-            msg_type=constant.MSG_REQUEST,
-            target=f"{self.app.server_name}/{group}/{func_name}",
-            body={"call_id": call_id, "param": arg_param},
-        )
-        if header:
-            request.header.update(header)
-        response: Response = await self._base_request(request)
+        with self.context() as context:
+            request: Request = Request(
+                msg_type=constant.MSG_REQUEST,
+                target=f"{self.app.server_name}/{group}/{func_name}",
+                body={"call_id": call_id, "param": arg_param},
+                context=context,
+            )
+            if header:
+                request.header.update(header)
+            response: Response = await self._base_request(request)
         if response.msg_type != constant.MSG_RESPONSE:
             raise RPCError(f"response num must:{constant.MSG_RESPONSE} not {response.msg_type}")
         if "exc" in response.body:
@@ -423,17 +454,17 @@ class Transport(object):
         :param group: func's group
         """
         target: str = f"/{group or constant.DEFAULT_GROUP}/{func_name}"
-        correlation_id: int = self._gen_correlation_id()
-        state: State = State()
+        _context: Any = self.context()
+        context: ClientContext = _context.__enter__()
+        correlation_id: int = context.correlation_id
         channel: Channel = Channel(
-            transport=self, target=target, channel_id=correlation_id, state=state  # type: ignore
+            transport=self, target=target, channel_id=correlation_id, context=context  # type: ignore
         )
         self._channel_queue_dict[correlation_id] = channel.queue
-        self._state_dict[correlation_id] = state
 
         def _clean_channel_resource(_: asyncio.Future) -> None:
             self._channel_queue_dict.pop(correlation_id, None)
-            self._state_dict.pop(correlation_id, None)
+            _context.__exit__(None, None, None)
 
         channel.channel_conn_future.add_done_callback(_clean_channel_resource)
         return channel

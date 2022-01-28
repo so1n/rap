@@ -45,20 +45,20 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
         self._nonce_timeout: int = nonce_timeout or BaseCryptoProcessor._nonce_timeout
 
     async def process_request(self, request: Request) -> Request:
-        assert request.conn is not None, "Not found transport from request"
+        assert request.context.conn is not None, "Not found transport from request"
         if request.msg_type == constant.CLIENT_EVENT and request.target.endswith(constant.DECLARE):
             crypto_key: str = gen_random_time_id(length=6, time_length=10)
             crypto_id: str = str(await async_get_snowflake_id())
             request.body["crypto_id"] = crypto_id
             request.body["crypto_key"] = crypto_key
-            request.conn.state.crypto = Crypto(crypto_key)
+            request.context.conn.state.crypto = Crypto(crypto_key)
             check_id: int = random.randint(0, 999999)
-            request.body["check_id"] = request.conn.state.crypto.encrypt_object(check_id)
-            request.state.check_id = check_id
+            request.body["check_id"] = request.context.conn.state.crypto.encrypt_object(check_id)
+            request.context.check_id = check_id
             # self.app.cache.add(crypto_id, 10, check_id)
         elif request.msg_type in (constant.MSG_REQUEST, constant.CHANNEL_REQUEST):
             try:
-                crypto: Crypto = request.conn.state.crypto
+                crypto: Crypto = request.context.conn.state.crypto
                 request.body = {
                     "body": request.body,
                     "timestamp": int(time.time()),
@@ -70,10 +70,10 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
         return request
 
     async def process_response(self, response: Response) -> Response:
-        crypto: Crypto = response.conn.state.crypto
+        crypto: Crypto = response.context.conn.state.crypto
         try:
             if response.msg_type == constant.SERVER_EVENT and response.target.endswith(constant.DECLARE):
-                if crypto.decrypt_object(response.body["check_id"]) - 1 != response.state.check_id:
+                if crypto.decrypt_object(response.body["check_id"]) - 1 != response.context.state.check_id:
                     raise CryptoError("Check body error")
             elif response.msg_type in (constant.MSG_RESPONSE, constant.CHANNEL_RESPONSE) and response.status_code < 400:
                 response.body = crypto.decrypt_object(response.body)

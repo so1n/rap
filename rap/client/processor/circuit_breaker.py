@@ -113,7 +113,7 @@ class HostCircuitBreakerProcessor(BaseCircuitBreakerProcessor):
         return request.header["host"][0]
 
     def get_index_from_response(self, response: Response) -> str:
-        return response.conn.peer_tuple[0]
+        return response.context.conn.peer_tuple[0]
 
 
 class FuncCircuitBreakerProcessor(BaseCircuitBreakerProcessor):

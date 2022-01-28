@@ -12,9 +12,9 @@ class CheckConnProcessor(BaseProcessor):
         self.conn_set: Set[Connection] = set()
 
     async def process_request(self, request: Request) -> Request:
-        if request.conn and request.target.endswith("sync_sum"):
+        if request.context.conn and request.target.endswith("sync_sum"):
             # block event request
-            self.conn_set.add(request.conn)
+            self.conn_set.add(request.context.conn)
         return request
 
 

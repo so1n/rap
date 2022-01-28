@@ -40,17 +40,17 @@ class TracingProcessor(BaseProcessor):
         return scope
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type is constant.MSG_REQUEST and not request.state.get_value("scope", None):
-            request.state.scope = self._create_scope(request)
-        elif request.msg_type is constant.CHANNEL_REQUEST and not request.state.get_value("span", None):
+        if request.msg_type is constant.MSG_REQUEST and not request.context.get_value("scope", None):
+            request.context.scope = self._create_scope(request)
+        elif request.msg_type is constant.CHANNEL_REQUEST and not request.context.get_value("span", None):
             # A channel is a continuous activity that may involve the interaction of multiple coroutines
-            request.state.span = self._create_scope(request, finish_on_close=False).span
-            request.state.user_channel.add_done_callback(lambda f: request.state.span.finish())
+            request.context.span = self._create_scope(request, finish_on_close=False).span
+            request.context.user_channel.add_done_callback(lambda f: request.context.span.finish())
         return request
 
     async def process_response(self, response: Response) -> Response:
         if response.msg_type is constant.MSG_RESPONSE:
-            scope: Scope = response.state.scope
+            scope: Scope = response.context.scope
             status_code: int = response.status_code
             scope.span.set_tag("status_code", status_code)
             scope.span.set_tag(tags.ERROR, status_code >= 400)
@@ -58,7 +58,7 @@ class TracingProcessor(BaseProcessor):
         return response
 
     async def process_exc(self, response: Response, exc: Exception) -> Tuple[Response, Exception]:
-        scope: Optional[Scope] = response.state.get_value("scope", None)
+        scope: Optional[Scope] = response.context.get_value("scope", None)
         if scope and response.msg_type is constant.MSG_RESPONSE:
             status_code: int = response.status_code
             scope.span.set_tag("status_code", status_code)

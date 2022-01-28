@@ -32,3 +32,24 @@ class State(object):
             if default_value is MISSING:
                 raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{key}'")
             return default_value
+
+
+class Context(State):
+    target: str
+    correlation_id: int
+
+    def __getattr__(self, key: Any) -> Any:
+        try:
+            return self._state[key]
+        except KeyError:
+            raise AttributeError(f"'{self.__class__.__name__}<{self.correlation_id}>' object has no attribute '{key}'")
+
+    def get_value(self, key: Any, default_value: Any = MISSING) -> Any:
+        try:
+            return self._state[key]
+        except KeyError:
+            if default_value is MISSING:
+                raise AttributeError(
+                    f"'{self.__class__.__name__}<{self.correlation_id}>' object has no attribute '{key}'"
+                )
+            return default_value

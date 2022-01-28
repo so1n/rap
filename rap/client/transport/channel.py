@@ -3,11 +3,10 @@ import logging
 import traceback
 from typing import TYPE_CHECKING, Any, Coroutine, Optional, Tuple, Type
 
-from rap.client.model import Request, Response
+from rap.client.model import ClientContext, Request, Response
 from rap.common.asyncio_helper import as_first_completed
 from rap.common.channel import BaseChannel, ChannelCloseError, UserChannel
 from rap.common.exceptions import ChannelError
-from rap.common.state import State
 from rap.common.utils import constant
 
 if TYPE_CHECKING:
@@ -21,7 +20,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 class Channel(BaseChannel[Response]):
     """client channel support"""
 
-    def __init__(self, *, transport: "Transport", target: str, channel_id: int, state: State):
+    def __init__(self, *, transport: "Transport", target: str, channel_id: int, context: ClientContext):
         """
         :param transport: rap client transport
         :param target: rap target
@@ -30,12 +29,12 @@ class Channel(BaseChannel[Response]):
         self._transport: "Transport" = transport
         self._target: str = target
         self._drop_msg: str = "recv channel's drop event, close channel"
-        self.state: State = state
+        self.context: ClientContext = context
 
         self.channel_id: int = channel_id
         self.queue: asyncio.Queue[Tuple[Response, Optional[Exception]]] = asyncio.Queue()
         self.user_channel: UserChannel[Response] = UserChannel(self)
-        self.state.user_channel = self.user_channel
+        self.context.user_channel = self.user_channel
         self.channel_conn_future: asyncio.Future = asyncio.Future()
 
     async def create(self) -> None:
@@ -98,13 +97,11 @@ class Channel(BaseChannel[Response]):
         if self.is_close:
             raise ChannelCloseError("channel is closed")
         request: Request = Request(
-            app=self._transport.app,
             msg_type=constant.CHANNEL_REQUEST,
             target=target,
             body=body,
-            correlation_id=self.channel_id,
             header={"channel_life_cycle": life_cycle},
-            state=self.state,
+            context=self.context,
         )
         coro: Coroutine = self._transport.write_to_conn(request)
         await asyncio.wait_for(coro, timeout)
