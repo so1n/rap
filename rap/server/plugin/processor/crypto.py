@@ -83,7 +83,7 @@ class BaseCryptoProcessor(BaseProcessor):
     async def decrypt_request(self, request: Request) -> Request:
         """decrypt request body"""
         if request.msg_type in (constant.MSG_REQUEST, constant.CHANNEL_REQUEST):
-            crypto: Optional[Crypto] = request.conn.state.get_value("crypto", None)
+            crypto: Optional[Crypto] = request.context.conn.state.get_value("crypto", None)
             if crypto:
                 try:
                     request.body = crypto.decrypt_object(request.body)
@@ -105,7 +105,7 @@ class BaseCryptoProcessor(BaseProcessor):
                     request.body = request.body["body"]
 
                     # set share data
-                    request.state.crypto = crypto
+                    request.context.crypto = crypto
 
                 except Exception as e:
                     raise CryptoError(str(e)) from e
@@ -115,8 +115,7 @@ class BaseCryptoProcessor(BaseProcessor):
     async def encrypt_response(response: Response) -> Response:
         """encrypt response body"""
         if response.msg_type in (constant.MSG_RESPONSE, constant.CHANNEL_RESPONSE) and response.status_code <= 400:
-            assert response.conn is not None
-            crypto: Optional[Crypto] = response.conn.state.get_value("crypto", None)
+            crypto: Optional[Crypto] = response.context.conn.state.get_value("crypto", None)
             if not crypto:
                 return response
             response.body = crypto.encrypt_object(
@@ -138,7 +137,7 @@ class CryptoProcessor(BaseCryptoProcessor):
                         raise CryptoError()
                 except Exception:
                     raise CryptoError("key error")
-                request.conn.state.crypto = crypto
+                request.context.conn.state.crypto = crypto
         return await self.decrypt_request(request)
 
     async def process_response(self, response: Response) -> Response:
@@ -159,7 +158,6 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
         super(AutoCryptoProcessor, self).__init__({}, timeout=timeout, nonce_timeout=nonce_timeout)
 
     async def process_request(self, request: Request) -> Request:
-        assert request.conn is not None, "Not found conn from request"
         if request.msg_type == constant.CLIENT_EVENT and request.target.endswith(constant.DECLARE):
             check_id: bytes = request.body.get("check_id", b"")
             crypto_id: str = request.body.get("crypto_id", "")
@@ -168,22 +166,21 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
                 raise CryptoError("crypto param error")
             crypto: Crypto = Crypto(crypto_key)
             try:
-                request.state.check_id = crypto.decrypt_object(check_id)
+                request.context.check_id = crypto.decrypt_object(check_id)
             except Exception:
                 raise CryptoError("crypto check error")
-            request.conn.state.crypto = crypto
+            request.context.conn.state.crypto = crypto
             return request
         else:
             return await super().decrypt_request(request)
 
     async def process_response(self, response: Response) -> Response:
-        assert response.conn is not None, "Not found conn from response"
         if response.msg_type == constant.SERVER_EVENT and response.target.endswith(constant.DECLARE):
             try:
-                check_id: int = response.state.check_id
+                check_id: int = response.context.check_id
             except KeyError:
                 raise CryptoError("check id error")
-            response.body["check_id"] = response.conn.state.crypto.encrypt_object(check_id + 1)
+            response.body["check_id"] = response.context.conn.state.crypto.encrypt_object(check_id + 1)
             return response
         else:
             return await super().encrypt_response(response)

@@ -67,10 +67,10 @@ class Response(BaseMsgProtocol):
         body: Any,
         context: Context,
     ):
+        assert correlation_id == context.correlation_id, "correlation_id error"
         self.msg_type: int = msg_type
         self.body: Any = body
         self.header = header or {}
-        assert correlation_id == context.correlation_id, "correlation_id error"
         self.context: Context = context
 
         self.target: str = self.header.get("target", "")

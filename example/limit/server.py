@@ -46,7 +46,7 @@ def match_ip_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
     ):
         return None, True
     key: str = "127.0.0.1"
-    if request.conn.peer_tuple[0] == "127.0.0.1":
+    if request.context.conn.peer_tuple[0] == "127.0.0.1":
         return key, False
     else:
         return None, False

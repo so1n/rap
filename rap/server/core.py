@@ -13,10 +13,9 @@ from rap.common.conn import CloseConnException, ServerConnection
 from rap.common.exceptions import ServerError
 from rap.common.signal_broadcast import add_signal_handler, remove_signal_handler
 from rap.common.snowflake import async_get_snowflake_id
-from rap.common.state import State
 from rap.common.types import BASE_MSG_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utils import EventEnum, RapFunc
-from rap.server.model import Request, Response
+from rap.server.model import Request, Response, ServerContext
 from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware
 from rap.server.plugin.processor.base import BaseProcessor
 from rap.server.receiver import Receiver
@@ -322,10 +321,15 @@ class Server(object):
                 await sender.send_event(event.CloseConnEvent("request is empty"))
                 return
 
-            state: Optional[State] = receiver.state_dict.get(_request_msg[1], None)
-
             try:
-                request: Request = Request.from_msg(self, _request_msg, conn, state=state)  # type: ignore
+                correlation_id: int = _request_msg[1]
+                context: Optional[ServerContext] = receiver.context_dict.get(correlation_id, None)
+                if not context:
+                    context = ServerContext()
+                    context.app = self
+                    context.conn = conn
+                    context.correlation_id = correlation_id
+                request: Request = Request.from_msg(_request_msg, context=context)
             except Exception as closer_e:
                 logger.error(f"{conn.peer_tuple} send bad msg:{_request_msg}, error:{closer_e}")
                 await sender.send_event(event.CloseConnEvent("protocol error"))
@@ -337,7 +341,7 @@ class Server(object):
                 await sender(response)
             except Exception as closer_e:
                 logging.exception("raw_request handle error e")
-                await sender.send_exc(ServerError(str(closer_e)))
+                await sender.response_exc(ServerError(str(closer_e)), context)
 
         while not conn.is_closed():
             try:

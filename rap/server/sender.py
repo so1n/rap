@@ -6,7 +6,7 @@ from rap.common.asyncio_helper import Deadline
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import IgnoreNextProcessor
 from rap.common.utils import constant
-from rap.server.model import Event, Response
+from rap.server.model import Event, Response, ServerContext
 from rap.server.plugin.processor.base import BaseProcessor
 
 if TYPE_CHECKING:
@@ -83,14 +83,9 @@ class Sender(object):
         if resp is None:
             return False
 
-        resp.conn = self._conn
         self.header_handle(resp)
         resp = await self._processor_response_handle(resp)
         logger.debug("resp: %s", resp)
-        if resp.correlation_id == -1:
-            correlation_id: int = self._correlation_id + 2
-            self._correlation_id = correlation_id & self._max_correlation_id
-            resp.correlation_id = correlation_id
         if not deadline:
             deadline = Deadline(self._timeout)
 
@@ -101,10 +96,28 @@ class Sender(object):
                 self._conn.close()
         return True
 
+    async def response_event(self, event: Event, context: ServerContext, deadline: Optional[Deadline] = None) -> bool:
+        return await self.__call__(Response.from_event(event, context), deadline=deadline)
+
+    async def response_exc(self, exc: Exception, context: ServerContext, deadline: Optional[Deadline] = None) -> bool:
+        return await self.__call__(Response.from_exc(exc, context), deadline=deadline)
+
+    #############################
+    # Server-side push messages #
+    #############################
+    def _create_context(self) -> ServerContext:
+        context: ServerContext = ServerContext()
+        context.app = self._app
+        context.conn = self._conn
+        correlation_id: int = self._correlation_id + 2
+        self._correlation_id = correlation_id & self._max_correlation_id
+        context.correlation_id = correlation_id
+        return context
+
     async def send_event(self, event: Event, deadline: Optional[Deadline] = None) -> bool:
         """send event obj to client"""
-        return await self.__call__(Response.from_event(self._app, event), deadline=deadline)
+        return await self.__call__(Response.from_event(event, self._create_context()), deadline=deadline)
 
     async def send_exc(self, exc: Exception, deadline: Optional[Deadline] = None) -> bool:
         """send exc obj to client"""
-        return await self.__call__(Response.from_exc(self._app, exc), deadline=deadline)
+        return await self.__call__(Response.from_exc(exc, self._create_context()), deadline=deadline)

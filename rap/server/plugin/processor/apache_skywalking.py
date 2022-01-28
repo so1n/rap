@@ -54,16 +54,16 @@ class SkywalkingProcessor(BaseProcessor):
         return span
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type is constant.MSG_REQUEST and not request.state.get_value("span", None):
-            request.state.span = self._create_span(request)
-        elif request.msg_type is constant.CHANNEL_REQUEST and not request.state.get_value("span", None):
+        if request.msg_type is constant.MSG_REQUEST and not request.context.get_value("span", None):
+            request.context.span = self._create_span(request)
+        elif request.msg_type is constant.CHANNEL_REQUEST and not request.context.get_value("span", None):
             # A channel is a continuous activity that may involve the interaction of multiple coroutines
-            request.state.span = self._create_span(request)
+            request.context.span = self._create_span(request)
         return request
 
     async def process_response(self, response: Response) -> Response:
         if response.msg_type is constant.MSG_RESPONSE:
-            span: Span = response.state.span
+            span: Span = response.context.span
             status_code: int = response.status_code
             span.tag(TagStatusCode(status_code))
             span.error_occurred = status_code >= 400
@@ -73,11 +73,11 @@ class SkywalkingProcessor(BaseProcessor):
             and response.header.get("channel_life_cycle", "error") == constant.DECLARE
         ):
             # The channel is created after receiving the request
-            response.state.user_channel.add_done_callback(lambda f: response.state.span.stop())
+            response.context.user_channel.add_done_callback(lambda f: response.context.span.stop())
         return response
 
     async def process_exc(self, response: Response, exc: Exception) -> Tuple[Response, Exception]:
-        span: Optional[Span] = response.state.get_value("span", None)
+        span: Optional[Span] = response.context.get_value("span", None)
         if span:
             status_code: int = response.status_code
             span.tag(TagStatusCode(status_code))

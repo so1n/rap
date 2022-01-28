@@ -14,7 +14,7 @@ class AccessProcessor(BaseProcessor):
     async def process_request(self, request: Request) -> Request:
         host: str = request.header["host"]
         if request.msg_type == constant.MSG_REQUEST:
-            request.state.access_processor_start_time = time.time()
+            request.context.access_processor_start_time = time.time()
         elif (
             request.msg_type == constant.CHANNEL_REQUEST
             and request.header.get("channel_life_cycle", "error") == constant.DECLARE
@@ -28,7 +28,7 @@ class AccessProcessor(BaseProcessor):
         if response.msg_type == constant.MSG_RESPONSE:
             logger.info(
                 f"host:{host}, target: {response.target},"
-                f" time:{time.time() - response.state.access_processor_start_time }, status:{status_code >= 400}"
+                f" time:{time.time() - response.context.access_processor_start_time }, status:{status_code >= 400}"
             )
         elif (
             response.msg_type == constant.CHANNEL_RESPONSE

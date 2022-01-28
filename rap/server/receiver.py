@@ -32,11 +32,10 @@ from rap.common.exceptions import (
     RpcRunTimeError,
     ServerError,
 )
-from rap.common.state import State
 from rap.common.types import is_type
 from rap.common.utils import constant, param_handle, parse_error, response_num_dict
 from rap.server.channel import Channel
-from rap.server.model import Request, Response
+from rap.server.model import Request, Response, ServerContext
 from rap.server.plugin.processor.base import BaseProcessor
 from rap.server.registry import FuncModel
 from rap.server.sender import Sender
@@ -74,7 +73,7 @@ class Receiver(object):
         self._conn: ServerConnection = conn
         self._run_timeout: int = run_timeout
         self.sender: Sender = sender
-        self.state_dict: Dict[int, State] = {}
+        self.context_dict: Dict[int, ServerContext] = {}
         self._ping_sleep_time: int = ping_sleep_time
         self._ping_fail_cnt: int = ping_fail_cnt
         self._processor_list: Optional[List[BaseProcessor]] = processor_list
@@ -98,7 +97,7 @@ class Receiver(object):
             request, constant.NORMAL_TYPE if request.msg_type == constant.MSG_REQUEST else constant.CHANNEL_TYPE
         )
 
-        if func_model.is_private and request.conn.peer_tuple[0] not in ("::1", "127.0.0.1", "localhost"):
+        if func_model.is_private and request.context.conn.peer_tuple[0] not in ("::1", "127.0.0.1", "localhost"):
             raise FuncNotFoundError(f"No permission to call:`{request.func_name}`")
         return func_model
 
@@ -106,15 +105,10 @@ class Receiver(object):
         """recv request, processor request and dispatch request by request msg type"""
         response_num: int = response_num_dict.get(request.msg_type, constant.SERVER_ERROR_RESPONSE)
         if request.msg_type == constant.CHANNEL_REQUEST:
-            self.state_dict[request.correlation_id] = request.state
+            self.context_dict[request.correlation_id] = request.context
 
         # gen response object
-        response: "Response" = Response(
-            app=self._app,
-            msg_type=response_num,
-            correlation_id=request.correlation_id,
-            state=request.state,
-        )
+        response: "Response" = Response(msg_type=response_num, context=request.context)
         if "request_id" in request.header:
             response.header["request_id"] = request.header["request_id"]
         # response.header.update(request.header)
@@ -188,18 +182,11 @@ class Receiver(object):
 
             async def write(body: Any, header: Dict[str, Any]) -> None:
                 await self.sender(
-                    Response(
-                        app=self._app,
-                        msg_type=constant.CHANNEL_RESPONSE,
-                        correlation_id=channel_id,
-                        header=header,
-                        body=body,
-                        state=request.state,
-                    )
+                    Response(msg_type=constant.CHANNEL_RESPONSE, header=header, body=body, context=request.context)
                 )
 
             channel = Channel(channel_id, write, self._conn, func)
-            request.state.user_channel = channel.user_channel
+            request.context.user_channel = channel.user_channel
             channel.channel_conn_future.add_done_callback(lambda f: self._channel_dict.pop(channel_id, None))
             self._channel_dict[channel_id] = channel
 
@@ -210,7 +197,7 @@ class Receiver(object):
                 raise ChannelError("channel not create")
             else:
                 await channel.close()
-                self.state_dict.pop(channel_id, None)
+                self.context_dict.pop(channel_id, None)
                 self._channel_dict.pop(channel_id, None)
                 return None
         else:
@@ -319,5 +306,4 @@ class Receiver(object):
                 self._conn.ping_future = asyncio.ensure_future(self.ping_event())
         elif request.func_name == constant.DROP:
             response.set_event(DropEvent("success"))
-        response.correlation_id = request.correlation_id
         return response

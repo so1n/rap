@@ -7,7 +7,7 @@ from rap.common.conn import ServerConnection
 from rap.common.event import Event
 from rap.common.exceptions import BaseRapError, ServerError
 from rap.common.msg import BaseMsgProtocol
-from rap.common.state import State
+from rap.common.state import Context
 from rap.common.types import BASE_MSG_TYPE, SERVER_MSG_TYPE
 from rap.common.utils import constant
 
@@ -18,33 +18,35 @@ if TYPE_CHECKING:
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-class ServerMsgProtocol(BaseMsgProtocol):
+class ServerContext(Context):
     app: "Server"
+    conn: ServerConnection
+
+
+class ServerMsgProtocol(BaseMsgProtocol):
+    context: ServerContext
 
 
 class Request(ServerMsgProtocol):
     def __init__(
         self,
-        app: "Server",
-        conn: ServerConnection,
         msg_type: int,
         correlation_id: int,
         header: dict,
         body: Any,
-        state: Optional[State] = None,
+        context: ServerContext,
     ):
-        self.app: "Server" = app
+        assert correlation_id == context.correlation_id, "correlation_id error"
         self.msg_type: int = msg_type
         self.body: Any = body
         self.correlation_id: int = correlation_id
-        self.conn = conn
         self.header = header or {}
-        self.state = state or State()
+        self.context: ServerContext = context
 
         self.target: str = self.header.get("target", "")
-        state_target: Optional[str] = self.state.get_value("target", None)
+        state_target: Optional[str] = self.context.get_value("target", None)
         if self.target and not state_target:
-            self.state.target = self.target
+            self.context.target = self.target
         elif state_target:
             self.target = state_target
         else:
@@ -55,36 +57,28 @@ class Request(ServerMsgProtocol):
         self.func_name: str = func_name
 
     @classmethod
-    def from_msg(
-        cls, app: "Server", msg: BASE_MSG_TYPE, conn: ServerConnection, state: Optional[State] = None
-    ) -> "Request":
-        return cls(app, conn, *msg, state=state)
+    def from_msg(cls, msg: BASE_MSG_TYPE, context: ServerContext) -> "Request":
+        return cls(*msg, context=context)
 
 
 class Response(ServerMsgProtocol):
     def __init__(
         self,
         *,
-        app: "Server",
+        context: ServerContext,
         target: Optional[str] = None,
         msg_type: int = constant.MSG_RESPONSE,
-        correlation_id: int = -1,
         header: Optional[dict] = None,
         body: Any = None,
-        state: Optional[State] = None,
-        conn: Optional[ServerConnection] = None,
         exc: Optional[Exception] = None,
         tb: Optional[TracebackType] = None,
     ):
-        self.app: "Server" = app
         self.msg_type: int = msg_type
         self.body: Any = body
-        self.correlation_id: int = correlation_id
-        self.conn = conn
         self.header = header or {}
         if "status_code" not in self.header:
             self.header["status_code"] = 200
-        self.state = state or State()
+        self.context: ServerContext = context
         if target:
             self.target = target
         self.exc: Optional[Exception] = exc
@@ -107,26 +101,24 @@ class Response(ServerMsgProtocol):
         self.body = event.event_info
 
     def set_server_event(self, event: Event) -> None:
-        if not isinstance(event, Event):
-            raise TypeError(f"{event} type must {Event.__name__}")
+        self.set_event(event)
         self.msg_type = constant.SERVER_EVENT
         self.target = f"/_event/{event.event_name}"
-        self.body = event.event_info
 
     def set_body(self, body: Any) -> None:
         self.body = body
 
     @classmethod
-    def from_exc(cls, app: "Server", exc: Exception) -> "Response":
-        response: Response = cls(app=app, target="/_exc/server_error")
+    def from_exc(cls, exc: Exception, context: ServerContext) -> "Response":
+        response: Response = cls(context=context, target="/_exc/server_error", msg_type=constant.SERVER_ERROR_RESPONSE)
         response.set_exception(exc)
         return response
 
     @classmethod
-    def from_event(cls, app: "Server", event: Event) -> "Response":
+    def from_event(cls, event: Event, context: ServerContext) -> "Response":
         if not isinstance(event, Event):
             raise TypeError(f"event type:{event} is not {Event}")
-        response: Response = cls(app=app)
+        response: Response = cls(context=context)
         response.set_server_event(event)
         return response
 
@@ -139,8 +131,12 @@ class Response(ServerMsgProtocol):
         self.header["status_code"] = value
 
     @property  # type: ignore
+    def correlation_id(self) -> int:  # type: ignore
+        return self.context.correlation_id
+
+    @property  # type: ignore
     def target(self) -> str:  # type: ignore
-        return self.header.get("target", None) or self.state.target
+        return self.header.get("target", None) or self.context.target
 
     @target.setter
     def target(self, value: str) -> None:

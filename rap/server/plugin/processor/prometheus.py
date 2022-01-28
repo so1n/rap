@@ -44,7 +44,7 @@ class PrometheusProcessor(BaseProcessor):
         label_list: list = [self.app.server_name, self.host_name, request.target]
         request_count.labels(*label_list, request.msg_type).inc()
         if request.msg_type == constant.MSG_REQUEST:
-            request.state.start_time = time.time()
+            request.context.start_time = time.time()
             msg_request_count.labels(*label_list).inc()
             msg_request_in_progress.labels(*label_list).inc()
         return request
@@ -55,7 +55,7 @@ class PrometheusProcessor(BaseProcessor):
         if response.msg_type == constant.MSG_RESPONSE:
             msg_response_count.labels(*label_list, response.status_code).inc()
             msg_request_in_progress.labels(*label_list).dec()
-            msg_request_time.labels(*label_list).observe(time.time() - response.state.start_time)
+            msg_request_time.labels(*label_list).observe(time.time() - response.context.start_time)
         elif response.msg_type == constant.CHANNEL_RESPONSE:
             life_cycle: str = response.header.get("channel_life_cycle", "error")
             if life_cycle == constant.DECLARE:
@@ -71,5 +71,5 @@ class PrometheusProcessor(BaseProcessor):
         if response.msg_type == constant.MSG_RESPONSE:
             msg_response_count.labels(*label_list, response.status_code).inc()
             msg_request_in_progress.labels(*label_list).dec()
-            msg_request_time.labels(*label_list).observe(time.time() - response.state.start_time)
+            msg_request_time.labels(*label_list).observe(time.time() - response.context.start_time)
         return response, exc
