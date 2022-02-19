@@ -4,7 +4,7 @@ import random
 import time
 from collections import deque
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional, Tuple, Type
 
 from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import Deadline, IgnoreDeadlineTimeoutExc
@@ -313,25 +313,17 @@ class BaseEndpoint(object):
         self._transport_group_dict = {}
         self._is_close = True
 
-    def picker(self, cnt: int = 3) -> Picker:
+    def picker(self, cnt: int = 3, is_private: bool = False) -> Picker:
         """get transport by endpoint
         :param cnt: How many transport to get.
+        :param is_private: If the value is True, it will get transport for its own use only
         """
         if not self._transport_key_list:
             raise ConnectionError("Endpoint Can not found available transport")
         cnt = min(self._connected_cnt, cnt)
         transport_list: List[Transport] = self._pick_transport(cnt)
-        return Picker([transport for transport in transport_list if transport.available])
-
-    def private_picker(self, cnt: int = 3) -> PrivatePicker:
-        """get transport by endpoint
-        :param cnt: How many transport to get.
-        """
-        if not self._transport_key_list:
-            raise ConnectionError("Endpoint Can not found available transport")
-        cnt = min(self._connected_cnt, cnt)
-        transport_list: List[Transport] = self._pick_transport(cnt)
-        return PrivatePicker(self, [transport for transport in transport_list if transport.available])
+        picker: Type[Picker] = Picker if not is_private else PrivatePicker
+        return picker([transport for transport in transport_list if transport.available])
 
     def _pick_transport(self, cnt: int) -> List[Transport]:
         pass

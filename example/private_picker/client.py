@@ -23,12 +23,16 @@ client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
 client.load_processor([check_conn_processor])
 
 
+# in register, must use async def...
+@client.register()
+async def sync_sum(a: int, b: int) -> int:
+    pass
+
+
 async def main() -> None:
     await client.start()
-    async with client.endpoint.private_picker() as transport:
-        for _ in range(3):
-            assert 3 == (await transport.request("sync_sum", [1, 2])).body["result"]
-    await client.stop()
+    for _ in range(3):
+        assert 3 == await sync_sum(1, 2)
 
 
 if __name__ == "__main__":

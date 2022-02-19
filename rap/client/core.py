@@ -136,7 +136,9 @@ class BaseClient:
 
         return RapFunc(wrapper, func)
 
-    def _async_gen_register(self, func: Callable, group: Optional[str], name: str = "") -> RapFunc:
+    def _async_gen_register(
+        self, func: Callable, group: Optional[str], name: str = "", is_private: bool = False
+    ) -> RapFunc:
         """Decoration generator function"""
         name = name if name else func.__name__
         func_sig: inspect.Signature = inspect.signature(func)
@@ -145,7 +147,7 @@ class BaseClient:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             header: Optional[dict] = kwargs.pop("header", None)
-            async with self.endpoint.picker() as transport:
+            async with self.endpoint.picker(is_private=is_private) as transport:
                 async for result in AsyncIteratorCall(
                     name,
                     transport,
@@ -159,13 +161,15 @@ class BaseClient:
 
         return RapFunc(wrapper, func)
 
-    def _async_channel_register(self, func: CHANNEL_F, group: Optional[str], name: str = "") -> RapFunc:
+    def _async_channel_register(
+        self, func: CHANNEL_F, group: Optional[str], name: str = "", is_private: bool = False
+    ) -> RapFunc:
         """Decoration channel function"""
         name = name if name else func.__name__
 
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            async with self.endpoint.picker() as transport:
+            async with self.endpoint.picker(is_private=is_private) as transport:
                 async with transport.channel(name, group) as channel:
                     return await func(channel)
 
@@ -185,6 +189,7 @@ class BaseClient:
         arg_param: Optional[Sequence[Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
+        is_private: bool = False,
     ) -> Response:
         """rpc client base invoke method
         Note: This method does not support parameter type checking, not support channels;
@@ -192,8 +197,9 @@ class BaseClient:
         :param arg_param: rpc func param
         :param group: func's group
         :param header: request header
+        :param is_private: If the value is True, it will get transport for its own use only
         """
-        async with self.endpoint.picker() as transport:
+        async with self.endpoint.picker(is_private=is_private) as transport:
             return await transport.request(name, arg_param, group=group, header=header)
 
     async def raw_invoke(
@@ -238,6 +244,7 @@ class BaseClient:
         kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
+        is_private: bool = False,
     ) -> Any:
         """Python-specific generator invoke
         :param func: python func
@@ -245,10 +252,11 @@ class BaseClient:
         :param kwarg_param: func kwargs param
         :param group: func's group, default value is `default`
         :param header: request header
+        :param is_private: If the value is True, it will get transport for its own use only
         """
         if not inspect.isasyncgenfunction(func):
             raise TypeError("func must be async gen function")
-        async with self.endpoint.picker() as transport:
+        async with self.endpoint.picker(is_private=is_private) as transport:
             async for result in AsyncIteratorCall(
                 func.__name__,
                 transport,
