@@ -208,6 +208,7 @@ class BaseClient:
         arg_param: Optional[Sequence[Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
+        is_private: bool = False,
     ) -> Any:
         """rpc client base invoke method
         Note: This method does not support parameter type checking, not support channels;
@@ -215,8 +216,9 @@ class BaseClient:
         :param arg_param: rpc func param
         :param group: func's group
         :param header: request header
+        :param is_private: If the value is True, it will get transport for its own use only
         """
-        response: Response = await self.request(name, arg_param, group=group, header=header)
+        response: Response = await self.request(name, arg_param, group=group, header=header, is_private=is_private)
         return response.body["result"]
 
     async def invoke(
@@ -226,6 +228,7 @@ class BaseClient:
         kwarg_param: Optional[Dict[str, Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
+        is_private: bool = False,
     ) -> Any:
         """automatically resolve function names and call raw_invoke
         :param func: python func
@@ -233,6 +236,7 @@ class BaseClient:
         :param kwarg_param: func kwargs param
         :param group: func's group, default value is `default`
         :param header: request header
+        :param is_private: If the value is True, it will get transport for its own use only
         """
         arg_param = param_handle(inspect.signature(func), arg_param or (), kwarg_param or {})
         return await self.raw_invoke(func.__name__, arg_param, group=group, header=header)
