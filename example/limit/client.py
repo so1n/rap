@@ -12,15 +12,15 @@ client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
 # in register, must use async def...
 @client.register()
 async def demo(a: int, b: int) -> int:
-    pass
+    return 0
 
 
 @client.register()
 async def demo1(a: int, b: int) -> int:
-    pass
+    return 0
 
 
-@client.register()
+@client.register_channel()
 async def echo_body(channel: UserChannel) -> None:
     cnt: int = 0
     await channel.write(f"ping! {cnt}")

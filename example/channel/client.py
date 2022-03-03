@@ -10,7 +10,7 @@ client: Client = Client(
 client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
 
 
-@client.register()
+@client.register_channel()
 async def async_channel(channel: UserChannel) -> None:
     await channel.write("hello")
     cnt: int = 0
@@ -20,7 +20,7 @@ async def async_channel(channel: UserChannel) -> None:
     return
 
 
-@client.register()
+@client.register_channel()
 async def echo_body(channel: UserChannel) -> None:
     cnt: int = 0
     await channel.write(f"ping! {cnt}")
@@ -30,7 +30,7 @@ async def echo_body(channel: UserChannel) -> None:
         await channel.write(f"ping! {cnt}")
 
 
-@client.register()
+@client.register_channel()
 async def echo_response(channel: UserChannel) -> None:
     await channel.write("hi!")
     async for response in channel.iter():

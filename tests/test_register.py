@@ -34,7 +34,7 @@ class TestRegister:
         assert exec_msg == f"{demo.__name__} must use TypeHints"
 
         def demo1() -> RegistryManager:
-            pass
+            return RegistryManager()
 
         with pytest.raises(RegisteredError) as e:
             registry.register(demo1)
@@ -75,7 +75,7 @@ class TestRegister:
     async def test_reload_module(self, rap_server: Server, rap_client: Client) -> None:
         @rap_client.register()
         async def reload_sum_num(a: int, b: int) -> int:
-            pass
+            return 0
 
         def _reload_sum_num(a: int, b: int) -> int:
             return a + b

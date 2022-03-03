@@ -12,7 +12,7 @@ def get_exc_status_code_dict() -> Dict[int, Type[rap_exc.BaseRapError]]:
         if (
             inspect.isclass(class_)
             and issubclass(class_, rap_exc.BaseRapError)
-            and class_.__name__ != rap_exc.BaseRapError.__class__.__name__
+            and class_.__name__ != rap_exc.BaseRapError.__class__.__name__  # type: ignore
         ):
             exc_dict[class_.status_code] = class_
     return exc_dict

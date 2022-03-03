@@ -35,7 +35,7 @@ def done_future(loop: Optional[asyncio.AbstractEventLoop] = None) -> asyncio.Fut
 
 async def can_cancel_sleep(delay: float, *, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
     """Sleep method that can be cancelled"""
-    await asyncio.wait_for(asyncio.Future(), delay, loop=loop)
+    await asyncio.wait_for(asyncio.Future(), delay, loop=loop)  # type: ignore
 
 
 def gen_new_param_coro(coro: Coroutine, new_param_dict: Dict[str, Any]) -> Coroutine:

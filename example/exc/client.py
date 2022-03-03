@@ -10,7 +10,7 @@ client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
 # in register, must use async def...
 @client.register()
 async def raise_msg_exc(a: int, b: int) -> int:
-    pass
+    return 0
 
 
 # in register, must use async def...

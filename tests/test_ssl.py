@@ -12,7 +12,7 @@ client: Client = Client("test", [{"ip": "localhost", "port": "9000"}], ssl_crt_p
 # in register, must use async def...
 @client.register()
 async def sync_sum(a: int, b: int) -> int:
-    pass
+    return 0
 
 
 @pytest.fixture

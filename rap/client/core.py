@@ -12,14 +12,14 @@ from rap.client.types import CLIENT_EVENT_FN
 from rap.common.cache import Cache
 from rap.common.channel import UserChannel
 from rap.common.collect_statistics import WindowStatistics
-from rap.common.types import T_ParamSpec, T_ReturnType, is_type
+from rap.common.types import T_ParamSpec as P
+from rap.common.types import T_ReturnType as R_T
+from rap.common.types import is_type
 from rap.common.utils import EventEnum, RapFunc, param_handle
 
 __all__ = ["BaseClient", "Client"]
 CHANNEL_F = Callable[[UserChannel], Awaitable[None]]
 Callable_T = TypeVar("Callable_T")
-# Python version info < 3.9 not support Callable[P, T]
-# CHANNEL_F = Callable[Concatenate[UserChannel], Any]  # type: ignore
 
 
 class BaseClient:
@@ -123,16 +123,19 @@ class BaseClient:
     #####################
     # register func api #
     #####################
-    def _async_register(
-        self, func: Callable[T_ParamSpec, T_ReturnType], group: Optional[str], name: str = ""  # type: ignore
-    ) -> Callable[T_ParamSpec, Awaitable[T_ReturnType]]:  # type: ignore
+    def _wrapper_func(
+        self, func: Callable[P, R_T], group: Optional[str], name: str = ""  # type: ignore
+    ) -> Callable[P, Awaitable[R_T]]:  # type: ignore
         """Decorate normal function"""
         name = name if name else func.__name__
         func_sig: inspect.Signature = inspect.signature(func)
         return_type: Type = func_sig.return_annotation
 
+        if not inspect.iscoroutinefunction(func):
+            raise TypeError(f"func:{func.__name__} must coroutine function")
+
         @wraps(func)  # type: ignore
-        async def wrapper(*args: T_ParamSpec.args, **kwargs: T_ParamSpec.kwargs) -> T_ReturnType:  # type: ignore
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R_T:  # type: ignore
             # Mypy Can not know ParamSpecArgs like Sequence and ParamSpecKwargs like Dict
             _args: Sequence = args  # type: ignore
             _kwargs: Dict = kwargs  # type: ignore
@@ -147,16 +150,27 @@ class BaseClient:
 
         return wrapper
 
-    def _async_gen_register(
-        self, func: Callable[T_ParamSpec, T_ReturnType], group: Optional[str], name: str = ""  # type: ignore
-    ) -> Callable[T_ParamSpec, T_ReturnType]:  # type: ignore
+    def register_func(
+        self, name: str = "", group: Optional[str] = None
+    ) -> Callable[[Callable[P, R_T]], Callable[P, Awaitable[R_T]]]:  # type: ignore
+        def wrapper(func: Callable[P, R_T]) -> Callable[P, Awaitable[R_T]]:  # type: ignore
+            return self._wrapper_func(func, group=group, name=name)
+
+        return wrapper
+
+    def _wrapper_gen_func(
+        self, func: Callable[P, R_T], group: Optional[str], name: str = ""  # type: ignore
+    ) -> Callable[P, Awaitable[R_T]]:  # type: ignore
         """Decoration generator function"""
         name = name if name else func.__name__
         func_sig: inspect.Signature = inspect.signature(func)
         return_type: Type = func_sig.return_annotation
 
+        if inspect.isasyncgenfunction(func):
+            raise TypeError(f"func:{func.__name__} must async gen function")
+
         @wraps(func)  # type: ignore
-        async def wrapper(*args: T_ParamSpec.args, **kwargs: T_ParamSpec.kwargs) -> T_ReturnType:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R_T:  # type: ignore
             # Mypy Can not know ParamSpecArgs like Sequence and ParamSpecKwargs like Dict
             _args: Sequence = args  # type: ignore
             _kwargs: Dict = kwargs  # type: ignore
@@ -177,17 +191,61 @@ class BaseClient:
 
         return wrapper
 
-    def _async_channel_register(
+    def register_gen_func(
+        self, name: str = "", group: Optional[str] = None
+    ) -> Callable[[Callable[P, R_T]], Callable[P, Awaitable[R_T]]]:  # type: ignore
+        def wrapper(
+            func: Callable[P, R_T]  # type: ignore
+        ) -> Callable[P, Awaitable[R_T]]:  # type: ignore
+            return self._wrapper_gen_func(func, group=group, name=name)
+
+        return wrapper
+
+    def _wrapper_channel(
         self, func: CHANNEL_F, group: Optional[str], name: str = "", is_private: bool = False
     ) -> Callable:
         """Decoration channel function"""
         name = name if name else func.__name__
+        func_sig: inspect.Signature = inspect.signature(func)
+        func_arg_parameter: List[inspect.Parameter] = [i for i in func_sig.parameters.values() if i.default == i.empty]
+        if not (len(func_arg_parameter) == 1 and func_arg_parameter[0].annotation is UserChannel):
+            raise TypeError(f"func:{func.__name__} must channel function")
 
         @wraps(func)
         async def wrapper() -> None:
             async with self.endpoint.picker(is_private=is_private) as transport:
                 async with transport.channel(name, group) as channel:
                     await func(channel)
+
+        return wrapper
+
+    def register_channel(
+        self, name: str = "", group: Optional[str] = None, is_private: bool = False
+    ) -> Callable[[CHANNEL_F], Any]:
+        def wrapper(func: CHANNEL_F) -> Any:  # type: ignore
+            return self._wrapper_channel(func, group=group, name=name, is_private=is_private)
+
+        return wrapper
+
+    def register(self, name: str = "", group: Optional[str] = None) -> Callable:
+        """Using this method to decorate a fake function can help you use it better.
+        (such as ide completion, ide reconstruction and type hints)
+        and will be automatically registered according to the function type
+
+        Warning: This method does not work well with Type Hints and is not recommended.
+
+        :param name: rap func name
+        :param group: func's group, default value is `default`
+        """
+
+        def wrapper(func: Callable[P, R_T]) -> Callable:  # type: ignore
+            if not (inspect.iscoroutinefunction(func) or inspect.isasyncgenfunction(func)):
+                raise TypeError(f"func:{func.__name__} must coroutine function or async gen function")
+            if inspect.iscoroutinefunction(func):
+                return self._wrapper_func(func, group, name=name)  # type: ignore
+            elif inspect.isasyncgenfunction(func):
+                return self._wrapper_gen_func(func, group, name=name)  # type: ignore
+            raise TypeError(f"func:{func.__name__} must coroutine function or async gen function")
 
         return wrapper
 
@@ -239,11 +297,11 @@ class BaseClient:
 
     def invoke(
         self,
-        func: Callable[T_ParamSpec, T_ReturnType],  # type: ignore
+        func: Callable[P, R_T],  # type: ignore
         header: Optional[dict] = None,
         group: Optional[str] = None,
         is_private: bool = False,
-    ) -> Callable[T_ParamSpec, Awaitable[T_ReturnType]]:  # type: ignore
+    ) -> Callable[P, Awaitable[R_T]]:  # type: ignore
         """automatically resolve function names and call raw_invoke
         :param func: python func
         :param group: func's group, default value is `default`
@@ -251,7 +309,7 @@ class BaseClient:
         :param is_private: If the value is True, it will get transport for its own use only
         """
 
-        async def wrapper(*args: T_ParamSpec.args, **kwargs: T_ParamSpec.kwargs) -> T_ReturnType:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R_T:  # type: ignore
             # Mypy Can not know ParamSpecArgs like Sequence and ParamSpecKwargs like Dict
             _args: Sequence = args or ()  # type: ignore
             _kwargs: Dict = kwargs or {}  # type: ignore
@@ -324,32 +382,6 @@ class BaseClient:
         if not isinstance(func, RapFunc):
             raise TypeError(f"{func} is not {RapFunc}")
         return func.raw_func
-
-    def register(self, name: str = "", group: Optional[str] = None) -> Callable:
-        """Using this method to decorate a fake function can help you use it better.
-        (such as ide completion, ide reconstruction and type hints)
-        and will be automatically registered according to the function type
-
-        :param name: rap func name
-        :param group: func's group, default value is `default`
-        """
-
-        def wrapper(func: Callable[T_ParamSpec, T_ReturnType]) -> Callable:  # type: ignore
-            if not (inspect.iscoroutinefunction(func) or inspect.isasyncgenfunction(func)):
-                raise TypeError(f"func:{func.__name__} must coroutine function or async gen function")
-            func_sig: inspect.Signature = inspect.signature(func)
-            func_arg_parameter: List[inspect.Parameter] = [
-                i for i in func_sig.parameters.values() if i.default == i.empty
-            ]
-            if len(func_arg_parameter) == 1 and func_arg_parameter[0].annotation is UserChannel:
-                return self._async_channel_register(func, group, name=name)  # type: ignore
-            if inspect.iscoroutinefunction(func):
-                return self._async_register(func, group, name=name)  # type: ignore
-            elif inspect.isasyncgenfunction(func):
-                return self._async_gen_register(func, group, name=name)  # type: ignore
-            raise TypeError(f"func:{func.__name__} must coroutine function or async gen function")
-
-        return wrapper
 
 
 class Client(BaseClient):

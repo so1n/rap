@@ -7,7 +7,7 @@ client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
 
 @client.register()
 async def sync_sum(a: int, b: int) -> int:
-    pass
+    return 0
 
 
 async def main() -> None:

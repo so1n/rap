@@ -24,7 +24,7 @@ class TestUtil:
         state.demo = "123"
         assert 1 == len(state)
 
-        del state.demo
+        del state.demo  # type: ignore
 
         with pytest.raises(AttributeError) as e:
             state.demo  # type: ignore
@@ -59,7 +59,7 @@ class TestUtil:
 
     def test_check_func_type(self) -> None:
         def _demo(a: int, b: str, c: str = "") -> int:
-            pass
+            return 0
 
         with pytest.raises(TypeError):
             check_func_type(inspect.signature(_demo), (1, 2), {})

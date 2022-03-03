@@ -36,7 +36,7 @@ async def async_gen(a: int) -> AsyncIterator[int]:
 
 
 async def raise_msg_exc(a: int, b: int) -> int:
-    pass
+    return 0
 
 
 async def raise_server_not_found_func_exc(a: int) -> None:

@@ -41,6 +41,7 @@ flake8 = "^3.9.2"
 psutil = "^5.8.0"
 uvloop = "^0.16.0"
 msgpack-rpc-python = "^0.4.1"
+pyright = "^1.1.226"
 
 [tool.poetry.extras]
 crypto = ["pycrypto"]
@@ -93,6 +94,17 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "pass"
 ]
+
+[tool.pyright]
+include = [
+  "rap",
+  "example",
+  "tests"
+]
+venvPath = "./"
+venv = ".venv"
+
+pythonVersion = "3.7"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

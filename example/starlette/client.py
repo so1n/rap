@@ -10,7 +10,7 @@ client.inject(async_gen)
 
 @client.register(name="sync_sum")
 async def new_sync_sum(a: int, b: int) -> int:
-    pass
+    return 0
 
 
 @client.register(name="async_gen")

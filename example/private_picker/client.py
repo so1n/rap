@@ -26,7 +26,7 @@ client.load_processor([check_conn_processor])
 # in register, must use async def...
 @client.register()
 async def sync_sum(a: int, b: int) -> int:
-    pass
+    return 0
 
 
 async def main() -> None:

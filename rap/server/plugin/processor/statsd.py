@@ -11,6 +11,8 @@ if TYPE_CHECKING:
     from rap.server.core import Server
     from rap.server.types import SERVER_EVENT_FN
 
+__all__ = ["StatsdClient", "StatsdProcessor"]
+
 
 class StatsdProcessor(BaseProcessor):
     """Note: not test...

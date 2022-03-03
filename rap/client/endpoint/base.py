@@ -4,7 +4,7 @@ import random
 import time
 from collections import deque
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional, Tuple, Type
+from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional, Tuple
 
 from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import Deadline, IgnoreDeadlineTimeoutExc
@@ -322,11 +322,16 @@ class BaseEndpoint(object):
             raise ConnectionError("Endpoint Can not found available transport")
         cnt = min(self._connected_cnt, cnt)
         transport_list: List[Transport] = self._pick_transport(cnt)
-        picker: Type[Picker] = Picker if not is_private else PrivatePicker
-        return picker([transport for transport in transport_list if transport.available])
+        if is_private:
+            return PrivatePicker(
+                endpoint=self, transport_list=[transport for transport in transport_list if transport.available]
+            )
+        else:
+            return Picker([transport for transport in transport_list if transport.available])
 
     def _pick_transport(self, cnt: int) -> List[Transport]:
-        pass
+        """fake code"""
+        return [transport_group.transport for transport_group in self._transport_group_dict.values()]
 
     def _random_pick_transport(self, cnt: int) -> List[Transport]:
         """random get transport"""

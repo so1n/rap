@@ -25,7 +25,7 @@ client.load_processor([TracingProcessor(tracer)])
 # in register, must use async def...
 @client.register()
 async def async_sum(a: int, b: int) -> int:
-    pass
+    return 0
 
 
 @client.register()
@@ -33,7 +33,7 @@ async def not_found() -> None:
     pass
 
 
-@client.register()
+@client.register_channel()
 async def echo_body(channel: UserChannel) -> None:
     cnt: int = 0
     await channel.write(f"ping! {cnt}")

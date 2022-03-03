@@ -8,13 +8,13 @@ client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
 
 
 def sync_sum(a: int, b: int) -> int:
-    pass
+    return 0
 
 
 # in register, must use async def...
 @client.register()
 async def async_sum(a: int, b: int) -> int:
-    pass
+    return 0
 
 
 # in register, must use async def...

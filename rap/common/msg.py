@@ -1,9 +1,7 @@
 from typing import Any
 
-from typing_extensions import Protocol
 
-
-class BaseMsgProtocol(Protocol):
+class BaseMsgProtocol(object):
     msg_type: int
     target: str
     body: Any

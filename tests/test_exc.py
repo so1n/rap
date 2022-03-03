@@ -11,7 +11,7 @@ class TestExc:
     async def test_raise_msg_exc(self, rap_server: Server, rap_client: Client) -> None:
         @rap_client.register()
         async def raise_msg_exc(a: int, b: int) -> int:
-            pass
+            return 0
 
         def _raise_msg_exc(a: int, b: int) -> int:
             return int(1 / 0)

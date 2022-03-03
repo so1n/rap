@@ -18,7 +18,7 @@ class TestChannel:
     async def test_while_channel(self, rap_server: Server, rap_client: Client) -> None:
         msg: str = "hello!"
 
-        @rap_client.register()
+        @rap_client.register_channel()
         async def async_channel(channel: UserChannel) -> None:
             await channel.write(msg)
             cnt: int = 0
@@ -37,7 +37,7 @@ class TestChannel:
         await async_channel()
 
     async def test_echo_body(self, rap_server: Server, rap_client: Client) -> None:
-        @rap_client.register()
+        @rap_client.register_channel()
         async def echo_body(channel: UserChannel) -> None:
             msg: str = "hello!"
             cnt: int = 0
@@ -57,7 +57,7 @@ class TestChannel:
         await echo_body()
 
     async def test_echo_response(self, rap_server: Server, rap_client: Client) -> None:
-        @rap_client.register()
+        @rap_client.register_channel()
         async def echo_response(channel: UserChannel) -> None:
             msg: str = "hello!"
             cnt: int = 0
@@ -81,7 +81,7 @@ class TestChannel:
         await echo_response()
 
     async def test_while_channel_close(self, rap_server: Server, rap_client: Client) -> None:
-        @rap_client.register()
+        @rap_client.register_channel()
         async def async_channel(channel: UserChannel) -> None:
             await channel.write("hello")
             cnt: int = 0
@@ -107,7 +107,7 @@ class TestChannel:
         assert exec_msg == "recv channel's drop event, close channel"
 
     async def test_not_found_channel_func(self, rap_server: Server, rap_client: Client) -> None:
-        @rap_client.register()
+        @rap_client.register_channel()
         async def async_channel(channel: UserChannel) -> None:
             await channel.write("hello")
             cnt: int = 0
@@ -127,7 +127,7 @@ class TestChannel:
     ) -> None:
         mocker.patch("rap.client.transport.transport.Transport._gen_correlation_id").return_value = 234
 
-        @rap_client.register("test_channel")
+        @rap_client.register_channel("test_channel")
         async def test_client_channel(channel: UserChannel) -> None:
             async for response in channel.iter():
                 await channel.write("close")
@@ -148,7 +148,7 @@ class TestChannel:
     ) -> None:
         mocker.patch("rap.client.transport.transport.Transport._gen_correlation_id").return_value = 234
 
-        @rap_client.register("test_channel")
+        @rap_client.register_channel("test_channel")
         async def test_client_channel(channel: UserChannel) -> None:
             async for response in channel.iter():
                 await channel.write("close")
@@ -169,7 +169,7 @@ class TestChannel:
     ) -> None:
         mocker.patch("rap.client.transport.transport.Transport._gen_correlation_id").return_value = 234
 
-        @rap_client.register("test_channel")
+        @rap_client.register_channel("test_channel")
         async def test_client_channel(channel: UserChannel) -> None:
             async for response in channel.iter():
                 await channel.write("close")
