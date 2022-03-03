@@ -255,7 +255,7 @@ class Receiver(object):
                 if inspect.isgenerator(result):
                     result = next(result)
                 else:
-                    result = await result.__anext__()
+                    result = await result.__anext__()  # type: ignore
         return call_id, result
 
     async def msg_handle(self, request: Request, response: Response) -> Optional[Response]:

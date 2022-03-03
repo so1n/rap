@@ -24,10 +24,9 @@ async def async_gen(a: int) -> AsyncIterator[int]:
 
 
 async def _run_once() -> None:
-    print(f"sync result: {await client.invoke(sync_sum, [1, 2])}")
+    print(f"sync result: {await client.invoke(sync_sum)(1, 2)}")
     # print(f"reload :{ await client.raw_invoke('_root_reload', 'test_module', 'sync_sum')}")
     print(f"sync result: {await client.raw_invoke('sync_sum', [1, 2])}")
-
     print(f"async result: {await async_sum(1, 3)}")
     async for i in async_gen(10):
         print(f"async gen result:{i}")

@@ -75,7 +75,7 @@ class TestLimit:
             "test", limit.Rule(second=5, max_token=1, block_time=5)
         )
         if asyncio.iscoroutine(result):
-            result = await result
+            result = await result  # type: ignore
         assert 0 == result
 
         from tests.conftest import async_sum
@@ -107,7 +107,7 @@ class TestLimit:
             "test", limit.Rule(second=5, max_token=1, block_time=5)
         )
         if asyncio.iscoroutine(result):
-            result = await result
+            result = await result  # type: ignore
         assert 0 == result
         assert 3 == await rap_client.raw_invoke("sync_sum", [1, 2])
         with pytest.raises(TooManyRequest):
@@ -136,7 +136,7 @@ class TestLimit:
             "test", limit.Rule(second=5, max_token=1, block_time=5)
         )
         if asyncio.iscoroutine(result):
-            result = await result
+            result = await result  # type: ignore
         assert 0 == result
         assert 3 == await rap_client.raw_invoke("sync_sum", [1, 2])
         with pytest.raises(TooManyRequest):

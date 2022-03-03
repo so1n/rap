@@ -1,8 +1,25 @@
 import asyncio
+import sys
 from collections.abc import AsyncIterator, Iterator
-from typing import Any, List, Optional, Set, Tuple, Type, Union, _GenericAlias  # type: ignore
+from typing import _GenericAlias  # type: ignore
+from typing import Any, Awaitable
+from typing import Callable as _Callable  # type: ignore
+from typing import List, Optional, Set, Tuple, Type, TypeVar, Union
 
 import msgpack  # type: ignore
+
+if sys.version_info >= (3, 10):
+    from typing import ParamSpec
+else:
+    from typing_extensions import ParamSpec
+
+T_ParamSpec = ParamSpec("T_ParamSpec")
+T_ReturnType = TypeVar("T_ReturnType")
+
+# Mypy can't check Callable's alias
+# Python version info < 3.9 not support Callable[P, T]
+Callable = _Callable[T_ParamSpec, T_ReturnType]  # type: ignore
+AwaitableCallable = _Callable[T_ParamSpec, Awaitable[T_ReturnType]]  # type: ignore
 
 # msg_type, correlation_id, header, body
 MSG_TYPE = Tuple[int, int, dict, Any]

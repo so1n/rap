@@ -2,7 +2,7 @@ import asyncio
 import inspect
 import sys
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, Sequence, Type
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence, Type, TypeVar
 
 from rap.client.endpoint import BalanceEnum, BaseEndpoint, LocalEndpoint
 from rap.client.model import Response
@@ -12,11 +12,14 @@ from rap.client.types import CLIENT_EVENT_FN
 from rap.common.cache import Cache
 from rap.common.channel import UserChannel
 from rap.common.collect_statistics import WindowStatistics
-from rap.common.types import is_type
+from rap.common.types import T_ParamSpec, T_ReturnType, is_type
 from rap.common.utils import EventEnum, RapFunc, param_handle
 
 __all__ = ["BaseClient", "Client"]
-CHANNEL_F = Callable[[UserChannel], Any]
+CHANNEL_F = Callable[[UserChannel], Awaitable[None]]
+Callable_T = TypeVar("Callable_T")
+# Python version info < 3.9 not support Callable[P, T]
+# CHANNEL_F = Callable[Concatenate[UserChannel], Any]  # type: ignore
 
 
 class BaseClient:
@@ -72,24 +75,24 @@ class BaseClient:
         for handler in self._event_dict[EventEnum.before_end]:
             ret: Any = handler(self)  # type: ignore
             if asyncio.iscoroutine(ret):
-                await ret
+                await ret  # type: ignore
         await self.endpoint.stop()
         for handler in self._event_dict[EventEnum.after_end]:
             ret: Any = handler(self)  # type: ignore
             if asyncio.iscoroutine(ret):
-                await ret
+                await ret  # type: ignore
 
     async def start(self) -> None:
         """Create client transport"""
         for handler in self._event_dict[EventEnum.before_start]:
             ret: Any = handler(self)  # type: ignore
             if asyncio.iscoroutine(ret):
-                await ret
+                await ret  # type: ignore
         await self.endpoint.start()
         for handler in self._event_dict[EventEnum.after_start]:
             ret: Any = handler(self)  # type: ignore
             if asyncio.iscoroutine(ret):
-                await ret
+                await ret  # type: ignore
 
     def _check_run(self) -> None:
         if not self.is_close:
@@ -120,38 +123,51 @@ class BaseClient:
     #####################
     # register func api #
     #####################
-    def _async_register(self, func: Callable, group: Optional[str], name: str = "") -> RapFunc:
+    def _async_register(
+        self, func: Callable[T_ParamSpec, T_ReturnType], group: Optional[str], name: str = ""  # type: ignore
+    ) -> Callable[T_ParamSpec, Awaitable[T_ReturnType]]:  # type: ignore
         """Decorate normal function"""
         name = name if name else func.__name__
         func_sig: inspect.Signature = inspect.signature(func)
         return_type: Type = func_sig.return_annotation
 
-        @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            header: Optional[dict] = kwargs.pop("header", None)
-            result: Any = await self.raw_invoke(name, param_handle(func_sig, args, kwargs), group=group, header=header)
+        @wraps(func)  # type: ignore
+        async def wrapper(*args: T_ParamSpec.args, **kwargs: T_ParamSpec.kwargs) -> T_ReturnType:  # type: ignore
+            # Mypy Can not know ParamSpecArgs like Sequence and ParamSpecKwargs like Dict
+            _args: Sequence = args  # type: ignore
+            _kwargs: Dict = kwargs  # type: ignore
+
+            header: Optional[dict] = _kwargs.pop("header", None)
+            result: Any = await self.raw_invoke(
+                name, param_handle(func_sig, _args, _kwargs), group=group, header=header
+            )
             if not is_type(return_type, type(result)):
                 raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
             return result
 
-        return RapFunc(wrapper, func)
+        return wrapper
 
     def _async_gen_register(
-        self, func: Callable, group: Optional[str], name: str = "", is_private: bool = False
-    ) -> RapFunc:
+        self, func: Callable[T_ParamSpec, T_ReturnType], group: Optional[str], name: str = ""  # type: ignore
+    ) -> Callable[T_ParamSpec, T_ReturnType]:  # type: ignore
         """Decoration generator function"""
         name = name if name else func.__name__
         func_sig: inspect.Signature = inspect.signature(func)
         return_type: Type = func_sig.return_annotation
 
-        @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            header: Optional[dict] = kwargs.pop("header", None)
+        @wraps(func)  # type: ignore
+        async def wrapper(*args: T_ParamSpec.args, **kwargs: T_ParamSpec.kwargs) -> T_ReturnType:
+            # Mypy Can not know ParamSpecArgs like Sequence and ParamSpecKwargs like Dict
+            _args: Sequence = args  # type: ignore
+            _kwargs: Dict = kwargs  # type: ignore
+
+            header: Optional[dict] = _kwargs.pop("header", None)
+            is_private: bool = _kwargs.pop("is_private", False)
             async with self.endpoint.picker(is_private=is_private) as transport:
                 async for result in AsyncIteratorCall(
                     name,
                     transport,
-                    param_handle(func_sig, args, kwargs),
+                    param_handle(func_sig, _args, _kwargs),
                     group=group,
                     header=header,
                 ):
@@ -159,21 +175,21 @@ class BaseClient:
                         raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
                     yield result
 
-        return RapFunc(wrapper, func)
+        return wrapper
 
     def _async_channel_register(
         self, func: CHANNEL_F, group: Optional[str], name: str = "", is_private: bool = False
-    ) -> RapFunc:
+    ) -> Callable:
         """Decoration channel function"""
         name = name if name else func.__name__
 
         @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        async def wrapper() -> None:
             async with self.endpoint.picker(is_private=is_private) as transport:
                 async with transport.channel(name, group) as channel:
-                    return await func(channel)
+                    await func(channel)
 
-        return RapFunc(wrapper, func)
+        return wrapper
 
     ###################
     # client base api #
@@ -221,25 +237,29 @@ class BaseClient:
         response: Response = await self.request(name, arg_param, group=group, header=header, is_private=is_private)
         return response.body["result"]
 
-    async def invoke(
+    def invoke(
         self,
-        func: Callable,
-        arg_param: Sequence[Any] = None,
-        kwarg_param: Optional[Dict[str, Any]] = None,
+        func: Callable[T_ParamSpec, T_ReturnType],  # type: ignore
         header: Optional[dict] = None,
         group: Optional[str] = None,
         is_private: bool = False,
-    ) -> Any:
+    ) -> Callable[T_ParamSpec, Awaitable[T_ReturnType]]:  # type: ignore
         """automatically resolve function names and call raw_invoke
         :param func: python func
-        :param arg_param: rpc func param
-        :param kwarg_param: func kwargs param
         :param group: func's group, default value is `default`
         :param header: request header
         :param is_private: If the value is True, it will get transport for its own use only
         """
-        arg_param = param_handle(inspect.signature(func), arg_param or (), kwarg_param or {})
-        return await self.raw_invoke(func.__name__, arg_param, group=group, header=header)
+
+        async def wrapper(*args: T_ParamSpec.args, **kwargs: T_ParamSpec.kwargs) -> T_ReturnType:
+            # Mypy Can not know ParamSpecArgs like Sequence and ParamSpecKwargs like Dict
+            _args: Sequence = args or ()  # type: ignore
+            _kwargs: Dict = kwargs or {}  # type: ignore
+
+            arg_param = param_handle(inspect.signature(func), _args, _kwargs)
+            return await self.raw_invoke(func.__name__, arg_param, group=group, header=header, is_private=is_private)
+
+        return wrapper
 
     async def iterator_invoke(
         self,
@@ -270,30 +290,33 @@ class BaseClient:
             ):
                 yield result
 
-    def inject(self, func: Callable, name: str = "", group: Optional[str] = None) -> RapFunc:
+    def inject(self, func: Callable_T, name: str = "", group: Optional[str] = None) -> Callable_T:
         """Replace the function with `RapFunc` and inject it into the client at the same time
         :param func: Python func
         :param name: rap func name
         :param group: func's group, default value is `default`
         """
-        if isinstance(func, RapFunc):
-            raise RuntimeError(f"{func.raw_func} already inject or register")
-        new_func: RapFunc = self.register(name=name, group=group)(func)
-        func_module: str = getattr(func, "__module__")
+        if getattr(func, "raw_func", None):  # type: ignore
+            raise RuntimeError(f"{func} already inject or register")
+        func_module: Optional[str] = getattr(func, "__module__", None)
         if not func_module:
             raise AttributeError(f"{type(func)} object has no attribute '__module__'")
-        sys.modules[func_module].__setattr__(func.__name__, new_func)
+        new_func: Callable_T = self.register(name=name, group=group)(func)
+        setattr(new_func, "raw_func", func)
+        sys.modules[func_module].__setattr__(func.__name__, new_func)  # type: ignore
         return new_func
 
     @staticmethod
-    def recovery(func: RapFunc) -> None:
+    def recovery(func: Callable_T) -> Callable_T:
         """Restore functions that have been injected"""
-        if not isinstance(func, RapFunc):
-            raise RuntimeError(f"{func} is not {RapFunc}, which can not recovery")
-        func_module: str = getattr(func.raw_func, "__module__")
+        raw_func: Optional[Callable_T] = getattr(func, "raw_func", None)  # type: ignore
+        if not raw_func:
+            raise RuntimeError("The original func could not be found, and the operation could not be executed.")
+        func_module: Optional[str] = getattr(raw_func, "__module__", None)
         if not func_module:
             raise AttributeError(f"{type(func)} object has no attribute '__module__'")
-        sys.modules[func_module].__setattr__(func.__name__, func.raw_func)
+        sys.modules[func_module].__setattr__(func.__name__, raw_func)  # type: ignore
+        return raw_func
 
     @staticmethod
     def get_raw_func(func: RapFunc) -> Callable:
@@ -311,7 +334,7 @@ class BaseClient:
         :param group: func's group, default value is `default`
         """
 
-        def wrapper(func: Callable) -> RapFunc:
+        def wrapper(func: Callable[T_ParamSpec, T_ReturnType]) -> Callable:  # type: ignore
             if not (inspect.iscoroutinefunction(func) or inspect.isasyncgenfunction(func)):
                 raise TypeError(f"func:{func.__name__} must coroutine function or async gen function")
             func_sig: inspect.Signature = inspect.signature(func)
@@ -319,11 +342,11 @@ class BaseClient:
                 i for i in func_sig.parameters.values() if i.default == i.empty
             ]
             if len(func_arg_parameter) == 1 and func_arg_parameter[0].annotation is UserChannel:
-                return self._async_channel_register(func, group, name=name)
+                return self._async_channel_register(func, group, name=name)  # type: ignore
             if inspect.iscoroutinefunction(func):
-                return self._async_register(func, group, name=name)
+                return self._async_register(func, group, name=name)  # type: ignore
             elif inspect.isasyncgenfunction(func):
-                return self._async_gen_register(func, group, name=name)
+                return self._async_gen_register(func, group, name=name)  # type: ignore
             raise TypeError(f"func:{func.__name__} must coroutine function or async gen function")
 
         return wrapper

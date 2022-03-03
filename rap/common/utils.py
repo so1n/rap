@@ -100,6 +100,8 @@ class RapFunc(object):
         self.__name__ = self.func.__name__
 
     def __call__(self, *args: Any, **kwargs: Any) -> "_SubRapFunc":
+        if inspect.iscoroutinefunction(self.func):
+            return self.func(*args, **kwargs)
         return _SubRapFunc(self.func, self.raw_func, *args, **kwargs)
 
 

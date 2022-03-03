@@ -14,7 +14,7 @@ from rap.common.exceptions import ServerError
 from rap.common.signal_broadcast import add_signal_handler, remove_signal_handler
 from rap.common.snowflake import async_get_snowflake_id
 from rap.common.types import BASE_MSG_TYPE, READER_TYPE, WRITER_TYPE
-from rap.common.utils import EventEnum, RapFunc
+from rap.common.utils import EventEnum
 from rap.server.model import Request, Response, ServerContext
 from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware
 from rap.server.plugin.processor.base import BaseProcessor
@@ -182,9 +182,7 @@ class Server(object):
           but rap does not impose any mandatory restrictions
         :param doc: Describe what the function does
         """
-        if isinstance(func, RapFunc):
-            func = func.raw_func
-
+        func = getattr(func, "raw_func", func)
         self.registry.register(func, name, group=group, is_private=is_private, doc=doc)
 
     @property
@@ -200,7 +198,7 @@ class Server(object):
             try:
                 ret: Any = callback(self)  # type: ignore
                 if asyncio.iscoroutine(ret):
-                    await ret
+                    await ret  # type: ignore
             except Exception as e:
                 if is_raise:
                     raise e
@@ -359,6 +357,7 @@ class Server(object):
                 break
             except Exception as e:
                 logging.error(f"recv data from {conn.peer_tuple} error:{e}, conn has been closed")
+                await asyncio.sleep(0.01)
 
         if recv_msg_handle_future_set:
             logging.debug("wait recv msg handle future")

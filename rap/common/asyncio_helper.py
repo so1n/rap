@@ -3,7 +3,7 @@ import inspect
 import sys
 import time
 from contextvars import ContextVar, Token
-from types import TracebackType
+from types import FrameType, TracebackType
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Type, Union
 
 
@@ -48,9 +48,18 @@ def gen_new_param_coro(coro: Coroutine, new_param_dict: Dict[str, Any]) -> Corou
     """
     if not asyncio.iscoroutine(coro):
         raise TypeError("")
-    qualname: str = coro.__qualname__.split(".<locals>", 1)[0].rsplit(".", 1)[0]
-    func: Callable = getattr(inspect.getmodule(coro.cr_frame), qualname)
-    old_param_dict: Dict[str, Any] = coro.cr_frame.f_locals
+    qualname: Optional[str] = getattr(coro, "__qualname__")
+    if qualname:
+        qualname = qualname.split(".<locals>", 1)[0].rsplit(".", 1)[0]
+    if not qualname:
+        raise AttributeError(f"Can not found attribute `__qualname__` from {coro}")
+    cr_frame: Optional[FrameType] = getattr(coro, "cr_frame", None)
+    if not cr_frame:
+        raise AttributeError(f"Can not found attribute `cr_frame` from {coro}")
+    func: Optional[Callable] = getattr(inspect.getmodule(cr_frame), qualname)
+    if not func:
+        raise ValueError(f"Can not found func from {coro}")
+    old_param_dict: Dict[str, Any] = cr_frame.f_locals
     for key, value in new_param_dict.items():
         if key not in old_param_dict:
             raise KeyError(f"Not found {key} in {old_param_dict.keys()}")
