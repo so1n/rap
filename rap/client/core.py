@@ -146,13 +146,13 @@ class BaseClient:
             _kwargs: Dict = kwargs  # type: ignore
 
             _header = _kwargs.pop("header", header)
-            _kwargs.pop("header", is_private)
+            _is_private = _kwargs.pop("is_private", is_private)
             result: Any = await self.invoke_by_name(
                 name,
                 arg_param=param_handle(func_sig, _args, _kwargs),
                 group=group,
                 header=_header,
-                is_private=is_private,
+                is_private=_is_private,
             )
             if not is_type(return_type, type(result)):
                 raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
@@ -183,7 +183,7 @@ class BaseClient:
             _kwargs: Dict = kwargs  # type: ignore
 
             _header = _kwargs.pop("header", header)
-            _is_private = _kwargs.pop("header", is_private)
+            _is_private = _kwargs.pop("is_private", is_private)
             async with self.endpoint.picker(is_private=_is_private) as transport:
                 async for result in AsyncIteratorCall(
                     name,
