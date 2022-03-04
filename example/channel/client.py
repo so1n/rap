@@ -10,8 +10,17 @@ client: Client = Client(
 client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
 
 
-@client.register_channel()
 async def async_channel(channel: UserChannel) -> None:
+    await channel.write("hello")
+    cnt: int = 0
+    while await channel.loop(cnt < 3):
+        cnt += 1
+        print(await channel.read_body())
+    return
+
+
+@client.register_channel(name="async_channel")
+async def async_channel_(channel: UserChannel) -> None:
     await channel.write("hello")
     cnt: int = 0
     while await channel.loop(cnt < 3):
@@ -43,7 +52,8 @@ async def run_once() -> None:
     await client.start()
     await echo_body()
     await echo_response()
-    await async_channel()
+    await async_channel_()
+    await client.invoke_channel(async_channel)()
     await client.stop()
 
 

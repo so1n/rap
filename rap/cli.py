@@ -43,7 +43,7 @@ if __name__ == "__main__":
     loop.run_until_complete(client.start())
 
     if mode == "d":
-        result_tuple: Tuple[Dict[str, str]] = loop.run_until_complete(client.raw_invoke("list", group="registry"))
+        result_tuple: Tuple[Dict[str, str]] = loop.run_until_complete(client.invoke_by_name("list", group="registry"))
         print(json.dumps(result_tuple, indent=2))
         # column_list: List[str] = ["Name", "Group", "Type", "Path", "Module"]
         # display_table_list: List[List[str]] = [column_list]
@@ -53,6 +53,6 @@ if __name__ == "__main__":
         #     display_table_list.append([target, func_group, func_type, path_str, module_str])
         # print_table(display_table_list)
     elif mode == "r" and func_name:
-        print(loop.run_until_complete(client.raw_invoke(func_name, arg_param=arg_list, group=group)))
+        print(loop.run_until_complete(client.invoke_by_name(func_name, arg_param=arg_list, group=group)))
 
     loop.run_until_complete(client.stop())

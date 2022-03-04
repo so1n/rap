@@ -9,7 +9,7 @@ async def demo1(request: Request) -> JSONResponse:
     return JSONResponse(
         {
             sync_sum.__name__: await client.invoke(sync_sum)(1, 2),
-            async_gen.__name__: [i async for i in client.iterator_invoke(async_gen, [10])],  # type: ignore
+            async_gen.__name__: [i async for i in client.invoke_iterator(async_gen)(1)],
         }
     )
 

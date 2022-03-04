@@ -313,10 +313,10 @@ class BaseEndpoint(object):
         self._transport_group_dict = {}
         self._is_close = True
 
-    def picker(self, cnt: int = 3, is_private: bool = False) -> Picker:
+    def picker(self, cnt: int = 3, is_private: Optional[bool] = None) -> Picker:
         """get transport by endpoint
-        :param cnt: How many transport to get.
-        :param is_private: If the value is True, it will get transport for its own use only
+        :param cnt: How many transport to get
+        :param is_private: If the value is True, it will get transport for its own use only. default False
         """
         if not self._transport_key_list:
             raise ConnectionError("Endpoint Can not found available transport")

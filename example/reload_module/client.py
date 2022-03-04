@@ -13,8 +13,8 @@ async def sync_sum(a: int, b: int) -> int:
 async def main() -> None:
     await client.start()
     print(f"sync result: {await client.invoke(sync_sum)(1, 2)}")
-    print(f"reload :{ await client.raw_invoke('reload', ['test_module', 'sync_sum'], group='registry')}")
-    print(f"sync result: {await client.raw_invoke('sync_sum', [1, 2])}")
+    print(f"reload :{ await client.invoke_by_name('reload', ['test_module', 'sync_sum'], group='registry')}")
+    print(f"sync result: {await client.invoke_by_name('sync_sum', [1, 2])}")
 
 
 if __name__ == "__main__":

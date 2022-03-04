@@ -40,15 +40,17 @@ class TestConnLimitMiddleware:
         middleware: ConnLimitMiddleware = ConnLimitMiddleware(max_conn=0)
         rap_server.load_middleware([middleware])
         middleware.start_event_handle(rap_server)
-        await rap_client.raw_invoke("modify_max_conn", [10], group=middleware.__class__.__name__)
+        await rap_client.invoke_by_name("modify_max_conn", [10], group=middleware.__class__.__name__)
         assert middleware._max_conn == 10
-        await rap_client.raw_invoke("modify_release_timestamp", [1_600_000_000], group=middleware.__class__.__name__)
+        await rap_client.invoke_by_name(
+            "modify_release_timestamp", [1_600_000_000], group=middleware.__class__.__name__
+        )
         assert middleware._release_timestamp == 1_600_000_000
         assert {
             "conn_count": middleware._conn_count,
             "max_conn": 10,
             "release_timestamp": 1_600_000_000,
-        } == await rap_client.raw_invoke("get_conn_limit_info", group=middleware.__class__.__name__)
+        } == await rap_client.invoke_by_name("get_conn_limit_info", group=middleware.__class__.__name__)
 
 
 class TestIpMaxConnMiddleware:
@@ -57,11 +59,11 @@ class TestIpMaxConnMiddleware:
         middleware: IpMaxConnMiddleware = IpMaxConnMiddleware(redis, ip_max_conn=0)
         rap_server.load_middleware([middleware])
         middleware.start_event_handle(rap_server)
-        await rap_client.raw_invoke("modify_max_ip_max_conn", [10], group=middleware.__class__.__name__)
+        await rap_client.invoke_by_name("modify_max_ip_max_conn", [10], group=middleware.__class__.__name__)
         assert middleware._ip_max_conn == 10
-        await rap_client.raw_invoke("modify_ip_max_timeout", [10], group=middleware.__class__.__name__)
+        await rap_client.invoke_by_name("modify_ip_max_timeout", [10], group=middleware.__class__.__name__)
         assert middleware._timeout == 10
-        assert {"ip_max_conn": 10, "timeout": 10} == await rap_client.raw_invoke(
+        assert {"ip_max_conn": 10, "timeout": 10} == await rap_client.invoke_by_name(
             "get_info", group=middleware.__class__.__name__
         )
 
@@ -91,10 +93,10 @@ class TestIpBlockMiddleware:
 
         client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
         await client.start()
-        await client.raw_invoke("add_block_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
-        await client.raw_invoke("add_allow_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
-        await client.raw_invoke("remove_block_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
-        await client.raw_invoke("remove_allow_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
+        await client.invoke_by_name("add_block_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
+        await client.invoke_by_name("add_allow_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
+        await client.invoke_by_name("remove_block_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
+        await client.invoke_by_name("remove_allow_ip", ["127.0.0.1"], group=middleware.__class__.__name__)
         await client.stop()
 
     async def test_ip_block_ip_in_access_list(self, rap_server: Server) -> None:
@@ -109,14 +111,14 @@ class TestIpBlockMiddleware:
         # allow access
         client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
         await client.start()
-        assert 3 == await client.raw_invoke("async_sum", [1, 2])
+        assert 3 == await client.invoke_by_name("async_sum", [1, 2])
         # block
-        await client.raw_invoke(
+        await client.invoke_by_name(
             "remove_allow_ip",
             [["localhost", "::1", "127.0.0.1", "192.168.0.0/31"]],
             group=middleware.__class__.__name__,
         )
-        await client.raw_invoke("add_allow_ip", ["1.1.1.1"], group=middleware.__class__.__name__)
+        await client.invoke_by_name("add_allow_ip", ["1.1.1.1"], group=middleware.__class__.__name__)
         await client.stop()
         with pytest.raises(CloseConnException):
             await client.start()
@@ -131,8 +133,8 @@ class TestIpBlockMiddleware:
         await middleware.start_event_handle(rap_server)
         client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
         await client.start()
-        assert 3 == await client.raw_invoke("async_sum", [1, 2])
-        await client.raw_invoke(
+        assert 3 == await client.invoke_by_name("async_sum", [1, 2])
+        await client.invoke_by_name(
             "add_block_ip", [["localhost", "::1", "127.0.0.1", "192.168.0.0/31"]], group=middleware.__class__.__name__
         )
         await client.stop()

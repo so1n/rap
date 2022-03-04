@@ -35,6 +35,6 @@ class TestStatsd:
         try:
             await statsd_client.connect()
             rap_server.load_processor([StatsdProcessor(statsd_client=statsd_client)])
-            await rap_client.raw_invoke("sync_sum", arg_param=[1, 2])
+            await rap_client.invoke_by_name("sync_sum", arg_param=[1, 2])
         finally:
             await statsd_client.close()

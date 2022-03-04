@@ -109,11 +109,11 @@ class TestLimit:
         if asyncio.iscoroutine(result):
             result = await result  # type: ignore
         assert 0 == result
-        assert 3 == await rap_client.raw_invoke("sync_sum", [1, 2])
+        assert 3 == await rap_client.invoke_by_name("sync_sum", [1, 2])
         with pytest.raises(TooManyRequest):
-            assert 3 == await rap_client.raw_invoke("sync_sum", [1, 2])
+            assert 3 == await rap_client.invoke_by_name("sync_sum", [1, 2])
         with pytest.raises(TooManyRequest):
-            assert 3 == await rap_client.raw_invoke("sync_sum", [1, 2])
+            assert 3 == await rap_client.invoke_by_name("sync_sum", [1, 2])
 
     async def test_limit_by_redis_cell_backend(self, rap_server: Server, rap_client: Client) -> None:
         def match_ip_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
@@ -138,8 +138,8 @@ class TestLimit:
         if asyncio.iscoroutine(result):
             result = await result  # type: ignore
         assert 0 == result
-        assert 3 == await rap_client.raw_invoke("sync_sum", [1, 2])
+        assert 3 == await rap_client.invoke_by_name("sync_sum", [1, 2])
         with pytest.raises(TooManyRequest):
-            assert 3 == await rap_client.raw_invoke("sync_sum", [1, 2])
+            assert 3 == await rap_client.invoke_by_name("sync_sum", [1, 2])
         with pytest.raises(TooManyRequest):
-            assert 3 == await rap_client.raw_invoke("sync_sum", [1, 2])
+            assert 3 == await rap_client.invoke_by_name("sync_sum", [1, 2])

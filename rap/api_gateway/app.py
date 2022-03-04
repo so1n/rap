@@ -33,7 +33,7 @@ def create_app(
         for server_name, rap_client in rap_client_dict.items():
             if rap_client.is_close:
                 await rap_client.start()  # type: ignore
-            func_list: List[Dict[str, Any]] = await rap_client.raw_invoke("list", group="registry")
+            func_list: List[Dict[str, Any]] = await rap_client.invoke_by_name("list", group="registry")
             for func_dict in func_list:
                 group: str = func_dict["group"]
                 func_name: str = func_dict["func_name"]

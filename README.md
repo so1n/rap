@@ -57,7 +57,7 @@ except KeyboardInterrupt:
 ```
 
 ## Client
-The client supports to invoke the service by `raw_invoke` and `invoke` methods, but this can not fully use the functions of TypeHint, it is recommended to use `@client.register` to register the function and then invoke it.
+The client supports to invoke the service by `invoke_by_name` and `invoke` methods, but this can not fully use the functions of TypeHint, it is recommended to use `@client.register` to register the function and then invoke it.
 
 Note: For `rap.client` there is no distinction between `async def` and `def`, but functions registered with `@client.register` can be used directly by the user, so functions decorated with `@client.register` should be similar to:
 ```Python
@@ -95,13 +95,13 @@ async def async_gen(a: int) -> AsyncIterator:
 async def main():
   client.add_conn("localhost", 9000)
   await client.start()
-  # Call the invoke method; read the function name and then invoke `raw_invoke`.
+  # Call the invoke method; read the function name and then invoke `invoke_by_name`.
   print(f"invoke result: {await client.invoke(sync_sum, 1, 2)}")
   # Basic calls to rap.client
-  print(f"raw invoke result: {await client.raw_invoke('sync_sum', 1, 2)}")
+  print(f"raw invoke result: {await client.invoke_by_name('sync_sum', 1, 2)}")
 
   # Functions registered through `@client.register` can be used directly
-  # await async_sum(1,3) == await client.raw_invoke('async_sum', 1, 2)
+  # await async_sum(1,3) == await client.invoke_by_name('async_sum', 1, 2)
   # It is recommended to use the @client.register method, which can be used by tools such as IDE to determine whether the parameter type is wrong
   print(f"decorator result: {await sync_sum(1, 3)}")
   async_gen_result: list = []
@@ -150,7 +150,7 @@ server.register(demo2, name='demo2-alias')   # Register with the value of `name`
 server.register(demo2, group='new-correlation_id')    # Register and set the groups to be registered
 server.register(demo2, group='root', is_private=True)  # Register and set the correlation_id to be registered, and set it to private
 ```
-For clients, it is recommended to use `client.register` instead of `client.invoke`, `client.raw_invoke`.
+For clients, it is recommended to use `client.register` instead of `client.invoke`, `client.invoke_by_name`.
 `client.register` uses Python syntax to define function names, arguments, parameter types, and return value types,
 It allows the caller to invoke the function as if it were a normal function, and the function can be checked through tools using the TypeHint feature.
 Note: When using `client.register`, be sure to use `async def ... `.
@@ -222,7 +222,7 @@ async def no_param_run():
 async def param_run(session: "Session"):
   # By explicitly passing the session parameters in
   print(f"sync result: {await client.invoke(sync_sum, 1, 2, session=session)}")
-  print(f"sync result: {await client.raw_invoke('sync_sum', 1, 2, session=session)}")
+  print(f"sync result: {await client.invoke_by_name('sync_sum', 1, 2, session=session)}")
   # May be a bit unfriendly
   print(f"async result: {await async_sum(1, 3, session=session)}")
 

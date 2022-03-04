@@ -11,24 +11,35 @@ def sync_sum(a: int, b: int) -> int:
     return 0
 
 
-# in register, must use async def...
-@client.register()
 async def async_sum(a: int, b: int) -> int:
     return 0
 
 
 # in register, must use async def...
-@client.register()
+@client.register(name="async_sum")
+async def async_sum_(a: int, b: int) -> int:
+    return 0
+
+
 async def async_gen(a: int) -> AsyncIterator[int]:
+    yield 0
+
+
+# in register, must use async def...
+@client.register(name="async_gen")
+async def async_gen_(a: int) -> AsyncIterator[int]:
     yield 0
 
 
 async def _run_once() -> None:
     print(f"sync result: {await client.invoke(sync_sum)(1, 2)}")
-    # print(f"reload :{ await client.raw_invoke('_root_reload', 'test_module', 'sync_sum')}")
-    print(f"sync result: {await client.raw_invoke('sync_sum', [1, 2])}")
-    print(f"async result: {await async_sum(1, 3)}")
-    async for i in async_gen(10):
+    print(f"sync result: {await client.invoke_by_name('sync_sum', [1, 2])}")
+    print(f"async result: {await async_sum_(1, 3)}")
+    # print(f"reload :{ await client.invoke_by_name('_root_reload', 'test_module', 'sync_sum')}")
+
+    async for i in client.invoke_iterator(async_gen)(3):
+        print(f"async gen result:{i}")
+    async for i in async_gen_(3):
         print(f"async gen result:{i}")
 
 
