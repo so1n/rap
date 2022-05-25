@@ -229,8 +229,8 @@ class BaseClient:
 
     def register_gen_func(
         self, name: str = "", group: Optional[str] = None
-    ) -> Callable[[Callable[P, R_T]], Callable[P, AsyncGenerator[R_T]]]:  # type: ignore
-        def wrapper(func: Callable[P, R_T]) -> Callable[P, AsyncGenerator[R_T]]:  # type: ignore
+    ) -> Callable[[Callable[P, R_T]], Callable[P, AsyncGenerator[R_T, None]]]:  # type: ignore
+        def wrapper(func: Callable[P, R_T]) -> Callable[P, AsyncGenerator[R_T, None]]:  # type: ignore
             return self._wrapper_gen_func(func, group=group, name=name)
 
         return wrapper
@@ -330,7 +330,7 @@ class BaseClient:
         header: Optional[dict] = None,
         group: Optional[str] = None,
         is_private: bool = False,
-    ) -> Callable[P, AsyncGenerator[R_T]]:  # type: ignore
+    ) -> Callable[P, AsyncGenerator[R_T, None]]:  # type: ignore
         """Python-specific generator invoke
         :param func: python func
         :param group: func's group, default value is `default`

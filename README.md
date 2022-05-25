@@ -7,6 +7,10 @@ Implement the `protobuf` of `Grpc` through Python functions and TypeHint.
 Note: The current `rap` API may change significantly in subsequent versions
 > The rap first version feature idea comes from [aiorpc](https://github.com/choleraehyq/aiorpc)
 
+**Warning**
+There will be an architectural change in version 0.6
+
+
 [中文文档](https://github.com/so1n/rap/blob/master/README_CH.md)
 # 1.Installation
 ```Bash

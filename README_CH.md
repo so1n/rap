@@ -3,8 +3,10 @@ rap(par[::-1]) 是一个速度快且支持高级功能的rpc框架
 
 `rap`依赖于`msgpack`和`Python asyncio`以及本身实现的链接复用使得传输速度非常快,同时支持高并发.通过Python的函数和TypeHint实现类似于`Grpc`的`protobuf`.
 
-注意: 目前`rap`的后续版本API变动可能较大
+注意: 目前`rap`的0.6版本API变动可能较大
+
 > rap第一版功能思路来自于 [aiorpc](https://github.com/choleraehyq/aiorpc)
+
 # 1.安装
 ```Bash
 pip install rap
