@@ -17,9 +17,9 @@ class TestTypes:
         assert type(None) in set(_gen_list(parse_typing(Optional[Dict])))
         assert dict in set(_gen_list(parse_typing(Optional[dict])))
         assert type(None) in set(_gen_list(parse_typing(Optional[dict])))
-        assert dict is parse_typing(Union[dict, list])
-        assert dict is parse_typing(Union[Dict, List])
-        assert dict is parse_typing(Union[Dict[str, Any], List])
+        assert dict in parse_typing(Union[dict, list])
+        assert dict in parse_typing(Union[Dict, List])
+        assert dict in parse_typing(Union[Dict[str, Any], List])
 
     def test_is_json_type(self) -> None:
         assert is_json_type(dict)

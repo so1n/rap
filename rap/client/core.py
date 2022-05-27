@@ -2,7 +2,7 @@ import asyncio
 import inspect
 import sys
 from functools import wraps
-from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optional, Sequence, Type, TypeVar
+from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optional, Sequence, TypeVar
 
 from rap.client.endpoint import BalanceEnum, BaseEndpoint, LocalEndpoint
 from rap.client.model import Response
@@ -14,7 +14,6 @@ from rap.common.channel import UserChannel
 from rap.common.collect_statistics import WindowStatistics
 from rap.common.types import T_ParamSpec as P
 from rap.common.types import T_ReturnType as R_T
-from rap.common.types import is_type
 from rap.common.utils import EventEnum, param_handle
 
 __all__ = ["BaseClient", "Client"]
@@ -134,7 +133,7 @@ class BaseClient:
         """Decorate normal function"""
         name = name if name else func.__name__
         func_sig: inspect.Signature = inspect.signature(func)
-        return_type: Type = func_sig.return_annotation
+        # return_type: Type = func_sig.return_annotation
 
         if not inspect.iscoroutinefunction(func):
             raise TypeError(f"func:{func.__name__} must coroutine function")
@@ -154,8 +153,8 @@ class BaseClient:
                 header=_header,
                 is_private=_is_private,
             )
-            if not is_type(return_type, type(result)):
-                raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
+            # if not is_type(return_type, type(result)):
+            #     raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
             return result
 
         return wrapper
@@ -171,7 +170,7 @@ class BaseClient:
         """Decoration generator function"""
         name = name if name else func.__name__
         func_sig: inspect.Signature = inspect.signature(func)
-        return_type: Type = func_sig.return_annotation
+        # return_type: Type = func_sig.return_annotation
 
         if not inspect.isasyncgenfunction(func):
             raise TypeError(f"func:{func.__name__} must async gen function")
@@ -192,8 +191,8 @@ class BaseClient:
                     group=group,
                     header=_header,
                 ):
-                    if not is_type(return_type, type(result)):
-                        raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
+                    # if not is_type(return_type, type(result)):
+                    #     raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
                     yield result
 
         return wrapper

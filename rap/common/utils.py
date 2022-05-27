@@ -140,7 +140,7 @@ def param_handle(
 ) -> Tuple[Any, ...]:
     """Check whether the parameter is legal and whether the parameter type is correct"""
     new_param_list: Tuple[Any, ...] = func_sig.bind(*param_list, **default_param_dict).args
-    check_func_type(func_sig, param_list, default_param_dict)
+    # check_func_type(func_sig, param_list, default_param_dict)
     return new_param_list
 
 

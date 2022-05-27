@@ -1,5 +1,3 @@
-from typing import AsyncIterator
-
 import pytest
 
 from rap.client import Client
@@ -128,32 +126,34 @@ class TestRegister:
         with pytest.raises(TypeError):
             rap_client.register()(test_func)
 
-    async def test_register_func_check_type_error_in_runtime(self, rap_server: Server, rap_client: Client) -> None:
-        @rap_client.register()
-        async def demo1(a: int, b: int) -> str:
-            return a + b  # type: ignore
-
-        rap_server.register(demo1)
-        with pytest.raises(TypeError):
-            await demo1(1, "1")  # type: ignore
-
-        with pytest.raises(RuntimeError):
-            await demo1(1, 1)
-
-    async def test_register_gen_func_check_type_error_in_runtime(self, rap_server: Server, rap_client: Client) -> None:
-        @rap_client.register()
-        async def demo1(a: int) -> AsyncIterator[str]:
-            yield a  # type: ignore
-
-        async def _demo1(a: int) -> AsyncIterator[int]:
-            for i in range(a):
-                yield i
-
-        rap_server.register(_demo1, name="demo1")
-        with pytest.raises(TypeError):
-            async for i in demo1("1"):  # type: ignore
-                print(i)
-
-        with pytest.raises(RuntimeError):
-            async for i in demo1(10):
-                print(i)
+    # async def test_register_func_check_type_error_in_runtime(self, rap_server: Server, rap_client: Client) -> None:
+    #     @rap_client.register()
+    #     async def demo1(a: int, b: int) -> str:
+    #         return a + b  # type: ignore
+    #
+    #     rap_server.register(demo1)
+    #     with pytest.raises(TypeError):
+    #         await demo1(1, "1")  # type: ignore
+    #
+    #     with pytest.raises(RuntimeError):
+    #         await demo1(1, 1)
+    #
+    # async def test_register_gen_func_check_type_error_in_runtime(
+    #     self, rap_server: Server, rap_client: Client
+    # ) -> None:
+    #     @rap_client.register()
+    #     async def demo1(a: int) -> AsyncIterator[str]:
+    #         yield a  # type: ignore
+    #
+    #     async def _demo1(a: int) -> AsyncIterator[int]:
+    #         for i in range(a):
+    #             yield i
+    #
+    #     rap_server.register(_demo1, name="demo1")
+    #     with pytest.raises(TypeError):
+    #         async for i in demo1("1"):  # type: ignore
+    #             print(i)
+    #
+    #     with pytest.raises(RuntimeError):
+    #         async for i in demo1(10):
+    #             print(i)

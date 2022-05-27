@@ -32,7 +32,6 @@ from rap.common.exceptions import (
     RpcRunTimeError,
     ServerError,
 )
-from rap.common.types import is_type
 from rap.common.utils import constant, param_handle, parse_error, response_num_dict
 from rap.server.channel import Channel
 from rap.server.model import Request, Response, ServerContext
@@ -279,11 +278,11 @@ class Receiver(object):
                 response.body["exc"] = exc  # type: ignore
         else:
             response.body["result"] = result
-            if not is_type(func_model.return_type, type(result)):
-                logger.warning(
-                    f"{func_model.func} return type is {func_model.return_type}, but result type is {type(result)}"
-                )
-                response.status_code = 302
+            # if not is_type(func_model.return_type, type(result)):
+            #     logger.warning(
+            #         f"{func_model.func} return type is {func_model.return_type}, but result type is {type(result)}"
+            #     )
+            #     response.status_code = 302
         return response
 
     async def event(self, request: Request, response: Response) -> Optional[Response]:
