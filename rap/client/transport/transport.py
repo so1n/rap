@@ -443,6 +443,7 @@ class Transport(object):
         if "exc" in response.body:
             exc_info: str = response.body.get("exc_info", "")
             if response.header.get("user_agent") == constant.USER_AGENT:
+                # TODO 不放在body会不会好点
                 raise_rap_error(response.body["exc"], exc_info)
             else:
                 raise rap_exc.RpcRunTimeError(exc_info)

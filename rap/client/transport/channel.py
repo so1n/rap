@@ -50,7 +50,7 @@ class Channel(BaseChannel[Response]):
             else:
                 self.set_exc(ChannelCloseError("channel's transport is close"))
 
-        self._transport._conn.conn_future.add_done_callback(add_done_callback)
+        self._transport.conn_future.add_done_callback(add_done_callback)
 
         # init with server
         life_cycle: str = constant.DECLARE

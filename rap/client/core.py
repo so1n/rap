@@ -369,7 +369,7 @@ class BaseClient:
 
         for wrapper_func in [self._wrapper_func, self._wrapper_gen_func, self._wrapper_channel]:
             try:
-                new_func: Callable_T = wrapper_func(name=name, group=group)(func)
+                new_func: Callable_T = wrapper_func(func=func, name=name, group=group)
                 break
             except TypeError:
                 pass
