@@ -217,7 +217,7 @@ class Transport(object):
                 context.conn = self._conn
                 context.correlation_id = correlation_id
             else:
-                logger.error(f"Can not found context from {correlation_id}")
+                logger.error(f"Can not found context from {correlation_id}, {response_msg}")
                 return
         # parse response
         try:

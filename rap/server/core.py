@@ -6,7 +6,7 @@ import threading
 from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Set
 
 from rap.common import event
-from rap.common.asyncio_helper import Deadline
+from rap.common.asyncio_helper import Deadline, SetEvent
 from rap.common.cache import Cache
 from rap.common.collect_statistics import WindowStatistics
 from rap.common.conn import CloseConnException, ServerConnection
@@ -14,7 +14,7 @@ from rap.common.exceptions import ServerError
 from rap.common.signal_broadcast import add_signal_handler, remove_signal_handler
 from rap.common.snowflake import async_get_snowflake_id
 from rap.common.types import BASE_MSG_TYPE, READER_TYPE, WRITER_TYPE
-from rap.common.utils import EventEnum
+from rap.common.utils import EventEnum, constant
 from rap.server.model import Request, Response, ServerContext
 from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware
 from rap.server.plugin.processor.base import BaseProcessor
@@ -82,7 +82,7 @@ class Server(object):
         self._ping_fail_cnt: int = ping_fail_cnt
         self._ping_sleep_time: int = ping_sleep_time
         self._server: Optional[asyncio.AbstractServer] = None
-        self._connected_set: Set[ServerConnection] = set()
+        self._connected_set: SetEvent[ServerConnection] = SetEvent()
         self._run_event: asyncio.Event = asyncio.Event()
         self._run_event.set()
 
@@ -191,6 +191,7 @@ class Server(object):
         return self._run_event.is_set()
 
     async def run_event_list(self, event_type: EventEnum, is_raise: bool = False) -> None:
+        """Execute service object lifecycle events"""
         event_handle_list: Optional[List[SERVER_EVENT_FN]] = self._server_event_dict.get(event_type)
         if not event_handle_list:
             return
@@ -217,8 +218,11 @@ class Server(object):
         await self.run_event_list(EventEnum.after_start)
 
         # fix different loop event
+        # init event
         self._run_event.clear()
         self._run_event = asyncio.Event()
+        self._connected_set.clear()
+        self._connected_set = SetEvent()
         return self
 
     async def run_forever(self) -> None:
@@ -226,8 +230,15 @@ class Server(object):
         if self.is_closed:
             await self.create_server()
 
+        is_receive_signal: bool = False
+
         def _shutdown(signum: int, frame: Any) -> None:
-            logger.debug("Receive signal %s, run shutdown...", signum)
+            nonlocal is_receive_signal
+            if is_receive_signal:
+                logger.warning(f"Ignore signal:{signum}")
+                return
+            is_receive_signal = True
+            logger.debug("Receive signal %s frame %s, run shutdown...", signum, frame)
             asyncio.ensure_future(self.shutdown())
 
         if threading.current_thread() is not threading.main_thread():
@@ -273,12 +284,12 @@ class Server(object):
                 ]
                 if task_list:
                     logger.info("send shutdown event to client")
-                await asyncio.gather(*task_list)
+                    await asyncio.gather(*task_list)
 
                 # until connections close
                 logger.info(f"{self} Waiting for connections to close. (CTRL+C to force quit)")
-                while self._connected_set:
-                    await asyncio.sleep(0.1)
+                if self._connected_set.is_set():
+                    await self._connected_set.wait()
                 await self.run_event_list(EventEnum.after_end, is_raise=True)
         finally:
             self._run_event.set()
@@ -289,15 +300,13 @@ class Server(object):
             reader, writer, pack_param=self._pack_param, unpack_param=self._unpack_param
         )
         conn.conn_id = str(await async_get_snowflake_id())
-        try:
+        with self._connected_set.cm(conn):
             self._connected_set.add(conn)
             await self._conn_handle(conn)
             try:
                 conn.conn_future.result()
             except Exception:
                 pass
-        finally:
-            self._connected_set.remove(conn)
 
     async def _conn_handle(self, conn: ServerConnection) -> None:
         """Receive or send messages by conn"""
@@ -312,13 +321,12 @@ class Server(object):
             processor_list=self._processor_list,
             call_func_permission_fn=self._call_func_permission_fn,
         )
-        recv_msg_handle_future_set: Set[asyncio.Future] = set()
+        recv_msg_handle_future_set_event: SetEvent[asyncio.Future] = SetEvent()
 
         async def recv_msg_handle(_request_msg: Optional[BASE_MSG_TYPE]) -> None:
             if _request_msg is None:
                 await sender.send_event(event.CloseConnEvent("request is empty"))
                 return
-
             try:
                 correlation_id: int = _request_msg[1]
                 context: Optional[ServerContext] = receiver.context_dict.get(correlation_id, None)
@@ -331,15 +339,17 @@ class Server(object):
             except Exception as closer_e:
                 logger.error(f"{conn.peer_tuple} send bad msg:{_request_msg}, error:{closer_e}")
                 await sender.send_event(event.CloseConnEvent("protocol error"))
-                await conn.await_close()
                 return
 
             try:
                 response: Optional[Response] = await receiver.dispatch(request)
                 await sender(response)
             except Exception as closer_e:
-                logging.exception("raw_request handle error e")
-                await sender.response_exc(ServerError(str(closer_e)), context)
+                logging.exception(f"raw_request handle error e, {closer_e}")
+                if request.msg_type != constant.SERVER_EVENT:
+                    # If an event is received from the client in response,
+                    # it should not respond even if there is an error
+                    await sender.response_exc(ServerError(str(closer_e)), context)
 
         while not conn.is_closed():
             try:
@@ -347,8 +357,8 @@ class Server(object):
                     request_msg: Optional[BASE_MSG_TYPE] = await conn.read()
                 # create future handle msg
                 future: asyncio.Future = asyncio.ensure_future(recv_msg_handle(request_msg))
-                future.add_done_callback(lambda f: recv_msg_handle_future_set.remove(f))
-                recv_msg_handle_future_set.add(future)
+                future.add_done_callback(lambda f: recv_msg_handle_future_set_event.remove(f))
+                recv_msg_handle_future_set_event.add(future)
             except asyncio.TimeoutError:
                 logging.error(f"recv data from {conn.peer_tuple} timeout. close conn")
                 await sender.send_event(event.CloseConnEvent("keep alive timeout"))
@@ -359,10 +369,9 @@ class Server(object):
                 logging.error(f"recv data from {conn.peer_tuple} error:{e}, conn has been closed")
                 await asyncio.sleep(0.01)
 
-        if recv_msg_handle_future_set:
+        if recv_msg_handle_future_set_event.is_set():
             logging.debug("wait recv msg handle future")
-            while len(recv_msg_handle_future_set) > 0:
-                await asyncio.sleep(0.1)
+            await recv_msg_handle_future_set_event.wait()
         if not conn.is_closed():
-            conn.close()
+            await conn.await_close()
             logging.debug("close connection: %s", conn.peer_tuple)

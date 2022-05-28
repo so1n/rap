@@ -2,9 +2,10 @@ import asyncio
 import inspect
 import sys
 import time
+from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from types import FrameType, TracebackType
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Type, Union
+from typing import Any, Callable, Coroutine, Dict, Generic, Iterator, List, Optional, Set, Type, TypeVar, Union
 
 
 def current_task(loop: Optional[asyncio.AbstractEventLoop] = None) -> "Optional[asyncio.Task[Any]]":
@@ -280,3 +281,51 @@ class Deadline(object):
                 return
             else:
                 raise self._timeout_exc
+
+
+_T = TypeVar("_T")
+
+
+class SetEvent(Generic[_T]):
+    def __init__(self):
+        self._event: asyncio.Event = asyncio.Event()
+        self._set: Set[_T] = set()
+
+    @contextmanager
+    def cm(self, item: _T) -> Iterator[None]:
+        self.add(item)
+        try:
+            yield
+        finally:
+            self.remove(item)
+
+    def clear(self) -> None:
+        self._event.clear()
+        self._set.clear()
+
+    ##############
+    # set method #
+    ##############
+    def add(self, item: _T) -> None:
+        self._set.add(item)
+        self._event.set()
+
+    def remove(self, item: _T) -> None:
+        self._set.remove(item)
+        if not self._set:
+            self._event.clear()
+
+    def __contains__(self, item: _T) -> bool:
+        return item in self._set
+
+    def __iter__(self) -> Iterator[_T]:
+        return iter(self._set)
+
+    ################
+    # event method #
+    ################
+    def is_set(self) -> bool:
+        return self._event.is_set()
+
+    async def wait(self):
+        await self._event.wait()

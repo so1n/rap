@@ -29,7 +29,7 @@ class Sender(object):
         :param app: rap server
         :param conn: rap server conn
         :param timeout: send data timeout
-        :param
+        :param processor_list: rap server processor list
         """
         self._app: "Server" = app
         self._max_correlation_id: int = 65535
@@ -57,6 +57,7 @@ class Sender(object):
         if not self._processor_list:
             return resp
         if not resp.exc:
+            # Once there is an exception, the processing logic of the response is exited directly
             try:
                 for processor in reversed(self._processor_list):
                     resp = await processor.process_response(resp)
@@ -65,6 +66,7 @@ class Sender(object):
             except Exception as e:
                 resp.set_exception(e)
         if resp.exc:
+            # Ensure that each Processor can handle exceptions
             for processor in reversed(self._processor_list):
                 raw_resp: Response = resp
                 try:
@@ -92,8 +94,9 @@ class Sender(object):
         with deadline:
             await self._conn.write(resp.to_msg())
         if resp.target.endswith(constant.EVENT_CLOSE_CONN):
+            # conn will be closed after sending the close event
             if not self._conn.is_closed():
-                self._conn.close()
+                await self._conn.await_close()
         return True
 
     async def response_event(self, event: Event, context: ServerContext, deadline: Optional[Deadline] = None) -> bool:
@@ -116,8 +119,10 @@ class Sender(object):
 
     async def send_event(self, event: Event, deadline: Optional[Deadline] = None) -> bool:
         """send event obj to client"""
-        return await self.__call__(Response.from_event(event, self._create_context()), deadline=deadline)
+        response = Response.from_event(event, self._create_context())
+        return await self.__call__(response, deadline=deadline)
 
     async def send_exc(self, exc: Exception, deadline: Optional[Deadline] = None) -> bool:
         """send exc obj to client"""
-        return await self.__call__(Response.from_exc(exc, self._create_context()), deadline=deadline)
+        response = Response.from_exc(exc, self._create_context())
+        return await self.__call__(response, deadline=deadline)
