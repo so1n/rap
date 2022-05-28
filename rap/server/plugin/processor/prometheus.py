@@ -1,6 +1,6 @@
 import socket
 import time
-from typing import TYPE_CHECKING, Dict, List, Tuple
+from typing import TYPE_CHECKING, Dict, List
 
 from prometheus_client import Counter, Gauge, Histogram, start_http_server  # type: ignore
 
@@ -65,11 +65,11 @@ class PrometheusProcessor(BaseProcessor):
                 channel_in_progress.labels(*label_list).dec()
         return response
 
-    async def process_exc(self, response: Response, exc: Exception) -> Tuple[Response, Exception]:
+    async def process_exc(self, response: Response) -> Response:
         label_list: list = [self.app.server_name, self.host_name, response.target]
         response_count.labels(*label_list, response.msg_type, response.status_code).inc()
         if response.msg_type == constant.MSG_RESPONSE:
             msg_response_count.labels(*label_list, response.status_code).inc()
             msg_request_in_progress.labels(*label_list).dec()
             msg_request_time.labels(*label_list).observe(time.time() - response.context.start_time)
-        return response, exc
+        return response

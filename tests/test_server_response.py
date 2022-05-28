@@ -23,7 +23,7 @@ class TestServerResponse:
     async def test_set_exc(self) -> None:
         target: str = "/_exc/exc"
         response: Response = Response(context=ServerContext(), target=target)
-        with pytest.raises(TypeError):
+        with pytest.raises(AssertionError):
             response.set_exception(test_event)  # type: ignore
 
         response.set_exception(test_exc)
@@ -43,13 +43,13 @@ class TestServerResponse:
         assert response.body == str(test_rpc_exc)
         assert response.status_code == RPCError.status_code
 
-        with pytest.raises(TypeError):
+        with pytest.raises(AssertionError):
             Response.from_exc(test_event, ServerContext())  # type: ignore
 
     async def test_set_event(self) -> None:
         target: str = "/_event/event"
         response: Response = Response(context=ServerContext(), target=target, msg_type=constant.CLIENT_EVENT)
-        with pytest.raises(TypeError):
+        with pytest.raises(AssertionError):
             response.set_event(test_exc)  # type: ignore
 
         response.set_event(test_event)
@@ -60,7 +60,7 @@ class TestServerResponse:
     async def test_set_server_event(self) -> None:
         target: str = "/_event/event"
         response: Response = Response(context=ServerContext(), target=target)
-        with pytest.raises(TypeError):
+        with pytest.raises(AssertionError):
             response.set_server_event(test_exc)  # type: ignore
 
         response.set_server_event(test_event)
@@ -74,7 +74,7 @@ class TestServerResponse:
         assert response.target.endswith(test_event.event_name)
         assert response.body == test_event.event_info
 
-        with pytest.raises(TypeError):
+        with pytest.raises(AssertionError):
             Response.from_event(test_exc, ServerContext())  # type: ignore
 
     async def test_set_body(self) -> None:

@@ -1,5 +1,5 @@
 from traceback import format_tb
-from typing import Optional, Tuple
+from typing import Optional
 
 from skywalking import Component, Layer, Log, LogItem
 from skywalking.trace.carrier import Carrier
@@ -76,7 +76,7 @@ class SkywalkingProcessor(BaseProcessor):
             response.context.user_channel.add_done_callback(lambda f: response.context.span.stop())
         return response
 
-    async def process_exc(self, response: Response, exc: Exception) -> Tuple[Response, Exception]:
+    async def process_exc(self, response: Response) -> Response:
         span: Optional[Span] = response.context.get_value("span", None)
         if span:
             status_code: int = response.status_code
@@ -87,4 +87,4 @@ class SkywalkingProcessor(BaseProcessor):
             ]
             if response.msg_type is not constant.CHANNEL_RESPONSE:
                 span.stop()
-        return response, exc
+        return response

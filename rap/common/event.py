@@ -15,32 +15,25 @@ class Event(object):
         return self.event_name, self.event_info
 
 
-class CloseConnEvent(Event):
+class _RapEvent(Event):
+    def __init__(self, event_info: Union[str, dict]):
+        super().__init__(event_info)
+
+
+class CloseConnEvent(_RapEvent):
     event_name: str = constant.EVENT_CLOSE_CONN
 
-    def __init__(self, event_info: Union[str, dict]):
-        super().__init__(event_info)
 
-
-class PingEvent(Event):
+class PingEvent(_RapEvent):
     event_name: str = constant.PING_EVENT
 
-    def __init__(self, event_info: Union[str, dict]):
-        super().__init__(event_info)
 
-
-class DeclareEvent(Event):
+class DeclareEvent(_RapEvent):
     event_name: str = constant.DECLARE
 
-    def __init__(self, event_info: Union[str, dict]):
-        super().__init__(event_info)
 
-
-class DropEvent(Event):
+class DropEvent(_RapEvent):
     event_name: str = constant.DROP
-
-    def __init__(self, event_info: Union[str, dict]):
-        super().__init__(event_info)
 
 
 class ShutdownEvent(Event):

@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Optional
 
 from jaeger_client.span_context import SpanContext
 from jaeger_client.tracer import Tracer
@@ -58,11 +58,11 @@ class TracingProcessor(BaseProcessor):
             response.context.user_channel.add_done_callback(lambda f: response.context.span.finish())
         return response
 
-    async def process_exc(self, response: Response, exc: Exception) -> Tuple[Response, Exception]:
+    async def process_exc(self, response: Response) -> Response:
         scope: Optional[Scope] = response.context.get_value("scope", None)
         if scope and response.msg_type is constant.MSG_RESPONSE:
             status_code: int = response.status_code
             scope.span.set_tag("status_code", status_code)
-            scope.span._on_error(scope.span, type(exc), exc, response.tb)  # type: ignore
+            scope.span._on_error(scope.span, type(response.exc), response.exc, response.tb)  # type: ignore
             scope.close()
-        return response, exc
+        return response

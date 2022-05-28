@@ -68,7 +68,7 @@ class Sender(object):
             for processor in reversed(self._processor_list):
                 raw_resp: Response = resp
                 try:
-                    resp, resp.exc = await processor.process_exc(resp, resp.exc)  # type: ignore
+                    resp = await processor.process_exc(resp)
                 except IgnoreNextProcessor:
                     break
                 except Exception as e:

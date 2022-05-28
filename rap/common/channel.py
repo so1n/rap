@@ -158,7 +158,7 @@ class UserChannel(Generic[Read_T]):
     def iter_body(self) -> AsyncIterDataBody[Read_T]:
         """
         >>> async def channel_demo(channel: UserChannel):
-        ...     async for body in channel.iter():
+        ...     async for body in channel.iter_body():
         ...         print(body)
         """
         return AsyncIterDataBody(self._channel)

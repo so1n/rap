@@ -85,8 +85,8 @@ class Response(ServerMsgProtocol):
         self.tb: Optional[TracebackType] = tb
 
     def set_exception(self, exc: Exception) -> None:
-        if not isinstance(exc, Exception):
-            raise TypeError(f"{exc} type must Exception")
+        assert isinstance(exc, Exception), f"{exc} type must {Exception.__name__}"
+
         self.tb = sys.exc_info()[2]
         if not isinstance(exc, BaseRapError):
             logger.error(exc)
@@ -96,8 +96,8 @@ class Response(ServerMsgProtocol):
         self.status_code = exc.status_code
 
     def set_event(self, event: Event) -> None:
-        if not isinstance(event, Event):
-            raise TypeError(f"{event} type must {Event.__name__}")
+        assert isinstance(event, Event), f"{event} type must {Event.__name__}"
+
         self.body = event.event_info
 
     def set_server_event(self, event: Event) -> None:
@@ -116,8 +116,7 @@ class Response(ServerMsgProtocol):
 
     @classmethod
     def from_event(cls, event: Event, context: ServerContext) -> "Response":
-        if not isinstance(event, Event):
-            raise TypeError(f"event type:{event} is not {Event}")
+        assert isinstance(event, Event), f"{event} type must {Event.__name__}"
         response: Response = cls(context=context)
         response.set_server_event(event)
         return response
