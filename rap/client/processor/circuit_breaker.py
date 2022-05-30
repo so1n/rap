@@ -1,5 +1,5 @@
 import random
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from rap.client.model import Request, Response
 from rap.client.processor.base import BaseProcessor
@@ -100,10 +100,10 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
 
         return request
 
-    async def process_exc(self, response: Response, exc: Exception) -> Tuple[Response, Exception]:
+    async def process_exc(self, response: Response) -> Response:
         error_key: str = f"{self._prefix}|{self.get_index_from_response(response)}|error"
         self._window_statistics.set_gauge_value(error_key, self._expire, self._interval)
-        return response, exc
+        return response
 
 
 class HostCircuitBreakerProcessor(BaseCircuitBreakerProcessor):

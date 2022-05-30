@@ -157,11 +157,10 @@ class Transport(object):
                 response.exc = exc
                 response.tb = sys.exc_info()[2]
         if exc:
-            # why mypy not support ????
             for processor in reversed(self.app.processor_list):
                 raw_response: Response = response
                 try:
-                    response, exc = await processor.process_exc(response, exc)  # type: ignore
+                    response = await processor.process_exc(response)  # type: ignore
                 except IgnoreNextProcessor:
                     break
                 except Exception as e:

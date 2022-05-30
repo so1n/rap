@@ -80,7 +80,7 @@ class SkywalkingProcessor(BaseProcessor):
             span.stop()
         return response
 
-    async def process_exc(self, response: Response, exc: Exception) -> Tuple[Response, Exception]:
+    async def process_exc(self, response: Response) -> Response:
         span: Optional[Span] = response.context.get_value("span", None)
         if span:
             status_code: int = response.status_code
@@ -91,4 +91,4 @@ class SkywalkingProcessor(BaseProcessor):
             ]
             if response.msg_type is not constant.CHANNEL_RESPONSE:
                 span.stop()
-        return response, exc
+        return response

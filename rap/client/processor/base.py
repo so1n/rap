@@ -25,5 +25,5 @@ class BaseProcessor(object):
     async def process_response(self, response: Response) -> Response:
         return response
 
-    async def process_exc(self, response: Response, exc: Exception) -> Tuple[Response, Exception]:
-        return response, exc
+    async def process_exc(self, response: Response) -> Response:
+        return response
