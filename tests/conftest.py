@@ -1,6 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator, AsyncIterator, List, Optional
+from typing import Any, AsyncGenerator, AsyncIterator, List, Optional, Tuple
 
 import pytest
 
@@ -8,6 +8,7 @@ from rap.client import Client
 from rap.client.processor.base import BaseProcessor
 from rap.common.channel import UserChannel
 from rap.server import Server
+from rap.server.plugin.processor.base import BaseProcessor as ServerBaseProcessor
 
 
 class AnyStringWith(str):
@@ -81,7 +82,7 @@ async def rap_server() -> AsyncGenerator[Server, None]:
 
 
 @asynccontextmanager
-async def process_server(process_list: List[BaseProcessor]) -> AsyncGenerator[Server, None]:
+async def process_server(process_list: List[ServerBaseProcessor]) -> AsyncGenerator[Server, None]:
     server: Server = await _init_server(processor_list=process_list)
     try:
         yield server
@@ -135,3 +136,12 @@ async def process_client(process_list: List[BaseProcessor]) -> AsyncGenerator[Cl
     finally:
         _recovery(client)
         await client.stop()
+
+
+@asynccontextmanager
+async def load_process(
+    server_process: List[ServerBaseProcessor], client_process: List[BaseProcessor]
+) -> AsyncGenerator[Tuple[Client, Server], None]:
+    async with process_server(server_process) as server:
+        async with process_client(client_process) as client:
+            yield client, server
