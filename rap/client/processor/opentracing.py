@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Optional
 
 from jaeger_client.span_context import SpanContext
 from jaeger_client.tracer import Tracer

@@ -1,5 +1,5 @@
 from traceback import format_tb
-from typing import Optional, Tuple
+from typing import Optional
 
 from skywalking import Component, Layer, Log, LogItem
 from skywalking.trace.carrier import Carrier

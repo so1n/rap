@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Dict, List, Tuple
+from typing import TYPE_CHECKING, Dict, List
 
 from rap.client.model import Request, Response
 from rap.client.types import CLIENT_EVENT_FN
