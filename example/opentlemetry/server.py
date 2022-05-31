@@ -23,7 +23,6 @@ async def echo_body(channel: UserChannel) -> None:
 
 
 async def async_sum(a: int, b: int) -> int:
-    raise RuntimeError("aaa")
     await asyncio.sleep(0.01)  # mock io time
     return a + b
 
