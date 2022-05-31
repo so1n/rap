@@ -1,11 +1,16 @@
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional
+from types import TracebackType
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Type
 
-from rap.server.model import Request, Response
+from rap.server.model import Request, Response, ServerContext
 
 if TYPE_CHECKING:
     from rap.common.utils import EventEnum
     from rap.server.core import Server
     from rap.server.types import SERVER_EVENT_FN
+
+
+def belong_to_base_method(func: Callable) -> bool:
+    return getattr(func, "__module__", "") == __name__
 
 
 class BaseProcessor(object):
@@ -23,6 +28,18 @@ class BaseProcessor(object):
         if not name:
             name = func.__name__.strip("_")
         self.app.register(func, name=name, group=group, is_private=True)
+
+    async def on_context_enter(self, context: ServerContext) -> None:
+        pass
+
+    async def on_context_exit(
+        self,
+        context: ServerContext,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
+        pass
 
     async def process_request(self, request: Request) -> Request:
         return request

@@ -4,12 +4,14 @@ import math
 import sys
 import time
 from collections import deque
+from contextlib import asynccontextmanager
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Deque, Dict, Optional, Sequence, Tuple, Type
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Deque, Dict, Optional, Sequence, Tuple, Type
 from uuid import uuid4
 
 from rap.client.model import ClientContext, Request, Response
-from rap.client.transport.channel import Channel
+from rap.client.processor.base import belong_to_base_method
+from rap.client.transport.channel import Channel, UserChannel
 from rap.client.utils import get_exc_status_code_dict, raise_rap_error
 from rap.common import event
 from rap.common import exceptions as rap_exc
@@ -81,6 +83,23 @@ class Transport(object):
         self.listen_future: asyncio.Future = done_future()
         self.semaphore: Semaphore = Semaphore(max_inflight or 100)
 
+        # processor
+        self.on_context_enter_processor_list: Sequence[Callable] = [
+            i.on_context_enter for i in self.app.processor_list if not belong_to_base_method(i.on_context_enter)
+        ]
+        self.on_context_exit_processor_list: Sequence[Callable] = [
+            i.on_context_exit for i in self.app.processor_list if not belong_to_base_method(i.on_context_exit)
+        ]
+        self.process_request_processor_list: Sequence[Callable] = [
+            i.process_request for i in self.app.processor_list if not belong_to_base_method(i.process_request)
+        ]
+        self.process_response_processor_list: Sequence[Callable] = [
+            i.process_response for i in self.app.processor_list if not belong_to_base_method(i.process_response)
+        ]
+        self.process_exception_processor_list: Sequence[Callable] = [
+            i.process_exc for i in self.app.processor_list if not belong_to_base_method(i.process_exc)
+        ]
+
         # ping
         self.inflight_load: Deque[int] = deque(maxlen=3)  # save history inflight(like Linux load)
         self.ping_future: asyncio.Future = done_future()
@@ -148,8 +167,8 @@ class Transport(object):
         """
         if not exc:
             try:
-                for processor in reversed(self.app.processor_list):
-                    response = await processor.process_response(response)
+                for process_response in reversed(self.process_response_processor_list):
+                    response = await process_response(response)
             except IgnoreNextProcessor:
                 pass
             except Exception as e:
@@ -157,15 +176,15 @@ class Transport(object):
                 response.exc = exc
                 response.tb = sys.exc_info()[2]
         if exc:
-            for processor in reversed(self.app.processor_list):
+            for process_exception in reversed(self.process_exception_processor_list):
                 raw_response: Response = response
                 try:
-                    response = await processor.process_exc(response)  # type: ignore
+                    response = await process_exception(response)  # type: ignore
                 except IgnoreNextProcessor:
                     break
                 except Exception as e:
                     logger.exception(
-                        f"processor:{processor.__class__.__name__} handle response:{response.correlation_id} error:{e}"
+                        f"processor:{process_exception} handle response:{response.correlation_id} error:{e}"
                     )
                     response = raw_response
             raise exc  # type: ignore
@@ -274,22 +293,35 @@ class Transport(object):
         class TransportContext(object):
             correlation_id: int
 
-            def __enter__(self) -> "ClientContext":
+            def __init__(self) -> None:
                 self.correlation_id = transport._gen_correlation_id()
-                context = ClientContext()
-                context.app = transport.app
-                context.conn = transport._conn
-                context.correlation_id = self.correlation_id
-                transport._context_dict[self.correlation_id] = context
-                return context
+                self.context: ClientContext = ClientContext()
+                self.context.app = transport.app
+                self.context.conn = transport._conn
+                self.context.correlation_id = self.correlation_id
+                transport._context_dict[self.correlation_id] = self.context
+                super().__init__()
 
-            def __exit__(
+            async def __aenter__(self) -> "ClientContext":
+                for on_context_enter in transport.on_context_enter_processor_list:
+                    try:
+                        await on_context_enter(self)
+                    except Exception as e:
+                        logger.exception(f"on_context_enter error:{e}")
+                return self.context
+
+            async def __aexit__(
                 self,
                 exc_type: Optional[Type[BaseException]],
                 exc_val: Optional[BaseException],
                 exc_tb: Optional[TracebackType],
             ) -> None:
-                transport._context_dict.pop(self.correlation_id)
+                transport._context_dict.pop(self.correlation_id, None)
+                for on_context_exit in reversed(transport.on_context_exit_processor_list):
+                    try:
+                        await on_context_exit(self.context, exc_type, exc_val, exc_tb)
+                    except Exception as e:
+                        logger.exception(f"on_context_exit error:{e}")
 
         return TransportContext()
 
@@ -300,7 +332,7 @@ class Transport(object):
           you need to process the request and response of the declared life cycle through the processor
         """
 
-        with self.context() as context:
+        async with self.context() as context:
             response: Response = await self._base_request(
                 Request.from_event(event.DeclareEvent({"server_name": self.app.server_name}), context),
             )
@@ -329,7 +361,7 @@ class Transport(object):
         async def _ping() -> None:
             nonlocal mos
             nonlocal rtt
-            with self.context() as context:
+            async with self.context() as context:
                 response: Response = await self._base_request(Request.from_event(event.PingEvent({}), context))
             rtt += time.time() - start_time
             mos += response.body.get("mos", 5)
@@ -402,8 +434,8 @@ class Transport(object):
         if not request.header.get("request_id"):
             request.header["request_id"] = str(uuid4())
 
-        for processor in self.app.processor_list:
-            await processor.process_request(request)
+        for process_request in self.process_request_processor_list:
+            await process_request(request)
         await self._conn.write(request.to_msg())
 
     ######################
@@ -427,7 +459,7 @@ class Transport(object):
         group = group or constant.DEFAULT_GROUP
         call_id = call_id or -1
         arg_param = arg_param or []
-        with self.context() as context:
+        async with self.context() as context:
             request: Request = Request(
                 msg_type=constant.MSG_REQUEST,
                 target=f"{self.app.server_name}/{group}/{func_name}",
@@ -448,23 +480,21 @@ class Transport(object):
                 raise rap_exc.RpcRunTimeError(exc_info)
         return response
 
-    def channel(self, func_name: str, group: Optional[str] = None) -> "Channel":
+    @asynccontextmanager
+    async def channel(self, func_name: str, group: Optional[str] = None) -> AsyncGenerator["UserChannel", None]:
         """create and init channel
         :param func_name: rpc func name
         :param group: func's group
         """
         target: str = f"/{group or constant.DEFAULT_GROUP}/{func_name}"
-        _context: Any = self.context()
-        context: ClientContext = _context.__enter__()
-        correlation_id: int = context.correlation_id
-        channel: Channel = Channel(
-            transport=self, target=target, channel_id=correlation_id, context=context  # type: ignore
-        )
-        self._channel_queue_dict[correlation_id] = channel.queue
 
-        def _clean_channel_resource(_: asyncio.Future) -> None:
-            self._channel_queue_dict.pop(correlation_id, None)
-            _context.__exit__(None, None, None)
+        async with self.context() as context:
+            correlation_id: int = context.correlation_id
+            channel: Channel = Channel(
+                transport=self, target=target, channel_id=correlation_id, context=context  # type: ignore
+            )
+            self._channel_queue_dict[correlation_id] = channel.queue
+            channel.channel_conn_future.add_done_callback(lambda f: self._channel_queue_dict.pop(correlation_id, None))
 
-        channel.channel_conn_future.add_done_callback(_clean_channel_resource)
-        return channel
+            async with channel as user_channel:
+                yield user_channel

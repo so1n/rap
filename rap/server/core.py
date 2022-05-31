@@ -10,12 +10,11 @@ from rap.common.asyncio_helper import Deadline, SetEvent
 from rap.common.cache import Cache
 from rap.common.collect_statistics import WindowStatistics
 from rap.common.conn import CloseConnException, ServerConnection
-from rap.common.exceptions import ServerError
 from rap.common.signal_broadcast import add_signal_handler, remove_signal_handler
 from rap.common.snowflake import async_get_snowflake_id
 from rap.common.types import BASE_MSG_TYPE, READER_TYPE, WRITER_TYPE
-from rap.common.utils import EventEnum, constant
-from rap.server.model import Request, Response, ServerContext
+from rap.common.utils import EventEnum
+from rap.server.model import Request
 from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware
 from rap.server.plugin.processor.base import BaseProcessor
 from rap.server.receiver import Receiver
@@ -323,40 +322,12 @@ class Server(object):
         )
         recv_msg_handle_future_set_event: SetEvent[asyncio.Future] = SetEvent()
 
-        async def recv_msg_handle(_request_msg: Optional[BASE_MSG_TYPE]) -> None:
-            if _request_msg is None:
-                await sender.send_event(event.CloseConnEvent("request is empty"))
-                return
-            try:
-                correlation_id: int = _request_msg[1]
-                context: Optional[ServerContext] = receiver.context_dict.get(correlation_id, None)
-                if not context:
-                    context = ServerContext()
-                    context.app = self
-                    context.conn = conn
-                    context.correlation_id = correlation_id
-                request: Request = Request.from_msg(_request_msg, context=context)
-            except Exception as closer_e:
-                logger.error(f"{conn.peer_tuple} send bad msg:{_request_msg}, error:{closer_e}")
-                await sender.send_event(event.CloseConnEvent("protocol error"))
-                return
-
-            try:
-                response: Optional[Response] = await receiver.dispatch(request)
-                await sender(response)
-            except Exception as closer_e:
-                logging.exception(f"raw_request handle error e, {closer_e}")
-                if request.msg_type != constant.SERVER_EVENT:
-                    # If an event is received from the client in response,
-                    # it should not respond even if there is an error
-                    await sender.response_exc(ServerError(str(closer_e)), context)
-
         while not conn.is_closed():
             try:
                 with Deadline(self._keep_alive):
                     request_msg: Optional[BASE_MSG_TYPE] = await conn.read()
                 # create future handle msg
-                future: asyncio.Future = asyncio.ensure_future(recv_msg_handle(request_msg))
+                future: asyncio.Future = asyncio.ensure_future(receiver(request_msg))
                 future.add_done_callback(lambda f: recv_msg_handle_future_set_event.remove(f))
                 recv_msg_handle_future_set_event.add(future)
             except asyncio.TimeoutError:

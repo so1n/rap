@@ -1,11 +1,16 @@
-from typing import TYPE_CHECKING, Dict, List
+from types import TracebackType
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Type
 
-from rap.client.model import Request, Response
+from rap.client.model import ClientContext, Request, Response
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common.utils import EventEnum
 
 if TYPE_CHECKING:
     from rap.client.core import BaseClient
+
+
+def belong_to_base_method(func: Callable) -> bool:
+    return getattr(func, "__module__", "") == __name__
 
 
 class BaseProcessor(object):
@@ -18,6 +23,18 @@ class BaseProcessor(object):
 
     app: "BaseClient"
     event_dict: Dict["EventEnum", List[CLIENT_EVENT_FN]] = {}
+
+    async def on_context_enter(self, context: ClientContext) -> None:
+        pass
+
+    async def on_context_exit(
+        self,
+        context: ClientContext,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
+        pass
 
     async def process_request(self, request: Request) -> Request:
         return request

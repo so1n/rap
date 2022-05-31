@@ -2,9 +2,11 @@ import asyncio
 import inspect
 import logging
 import random
+import sys
 import time
 import traceback
 from functools import partial
+from types import TracebackType
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -17,6 +19,7 @@ from typing import (
     List,
     Optional,
     Tuple,
+    Type,
     Union,
 )
 
@@ -32,10 +35,11 @@ from rap.common.exceptions import (
     RpcRunTimeError,
     ServerError,
 )
+from rap.common.types import BASE_MSG_TYPE
 from rap.common.utils import constant, param_handle, parse_error, response_num_dict
 from rap.server.channel import Channel
 from rap.server.model import Request, Response, ServerContext
-from rap.server.plugin.processor.base import BaseProcessor
+from rap.server.plugin.processor.base import BaseProcessor, belong_to_base_method
 from rap.server.registry import FuncModel
 from rap.server.sender import Sender
 
@@ -44,6 +48,7 @@ if TYPE_CHECKING:
 
 __all__ = ["Receiver"]
 logger: logging.Logger = logging.getLogger(__name__)
+DISPATCH_FUNC_TYPE = Callable[[Request, Response], Coroutine[Tuple[Optional[Response], bool], Any, Any]]
 
 
 class Receiver(object):
@@ -75,12 +80,11 @@ class Receiver(object):
         self.context_dict: Dict[int, ServerContext] = {}
         self._ping_sleep_time: int = ping_sleep_time
         self._ping_fail_cnt: int = ping_fail_cnt
-        self._processor_list: Optional[List[BaseProcessor]] = processor_list
         self._call_func_permission_fn: Callable[[Request], Awaitable[FuncModel]] = (
             call_func_permission_fn if call_func_permission_fn else self._default_call_fun_permission_fn
         )
 
-        self.dispatch_func_dict: Dict[int, Callable] = {
+        self.dispatch_func_dict: Dict[int, DISPATCH_FUNC_TYPE] = {
             constant.CLIENT_EVENT: self.event,
             constant.SERVER_EVENT: self.event,
             constant.MSG_REQUEST: self.msg_handle,
@@ -91,6 +95,19 @@ class Receiver(object):
         self._generator_dict: Dict[int, Union[Generator, AsyncGenerator]] = {}
         self._channel_dict: Dict[int, Channel] = {}
 
+        # processor
+        # self._processor_list: Optional[List[BaseProcessor]] = processor_list
+        processor_list = processor_list or []
+        self.on_context_enter_processor_list: List[Callable] = [
+            i.on_context_enter for i in processor_list if not belong_to_base_method(i.on_context_enter)
+        ]
+        self.on_context_exit_processor_list: List[Callable] = [
+            i.on_context_exit for i in processor_list if not belong_to_base_method(i.on_context_exit)
+        ]
+        self.process_request_processor_list: List[Callable] = [
+            i.process_request for i in processor_list if not belong_to_base_method(i.process_request)
+        ]
+
     async def _default_call_fun_permission_fn(self, request: Request) -> FuncModel:
         func_model: FuncModel = self._app.registry.get_func_model(
             request, constant.NORMAL_TYPE if request.msg_type == constant.MSG_REQUEST else constant.CHANNEL_TYPE
@@ -100,7 +117,68 @@ class Receiver(object):
             raise FuncNotFoundError(f"No permission to call:`{request.func_name}`")
         return func_model
 
-    async def dispatch(self, request: Request) -> Optional[Response]:
+    async def close_context(
+        self,
+        correlation_id: int,
+        exc: Optional[Exception] = None,
+    ):
+        context: Optional[ServerContext] = self.context_dict.pop(correlation_id, None)
+        if context:
+            if exc:
+                exc_type: Optional[Type[BaseException]] = None
+                exc_val: Optional[BaseException] = None
+                exc_tb: Optional[TracebackType] = None
+            else:
+                exc_type, exc_val, exc_tb = sys.exc_info()
+                if exc_val != exc:
+                    logger.error(f"context error: {exc} != {exc_val}")
+            for on_context_exit in reversed(self.on_context_exit_processor_list):
+                try:
+                    await on_context_exit(context, exc_type, exc_val, exc_tb)
+                except Exception as e:
+                    logger.exception(f"on_context_exit error:{e}")
+        else:
+            logger.error(f"Can not found {correlation_id} context")
+
+    async def __call__(self, request_msg: Optional[BASE_MSG_TYPE]) -> None:
+        if request_msg is None:
+            await self.sender.send_event(CloseConnEvent("request is empty"))
+            return
+        correlation_id: int = request_msg[1]
+        context: Optional[ServerContext] = self.context_dict.get(correlation_id, None)
+        if not context:
+            # create context
+            context = ServerContext()
+            context.app = self  # type: ignore
+            context.conn = self._conn
+            context.correlation_id = correlation_id
+            for on_context_enter in self.on_context_enter_processor_list:
+                try:
+                    await on_context_enter(context)
+                except Exception as e:
+                    logger.exception(f"on_context_enter error:{e}")
+        try:
+            request: Request = Request.from_msg(request_msg, context=context)
+        except Exception as e:
+            logger.error(f"{self._conn.peer_tuple} send bad msg:{request_msg}, error:{e}")
+            await self.sender.send_event(CloseConnEvent("protocol error"))
+            await self.close_context(correlation_id, e)
+            return
+
+        try:
+            response, close_context_flag = await self.dispatch(request)
+            await self.sender(response)
+            if close_context_flag:
+                await self.close_context(correlation_id)
+        except Exception as e:
+            logging.exception(f"raw_request handle error e, {e}")
+            if request.msg_type != constant.SERVER_EVENT:
+                # If an event is received from the client in response,
+                # it should not respond even if there is an error
+                await self.sender.response_exc(ServerError(str(e)), context)
+            await self.close_context(correlation_id, e)
+
+    async def dispatch(self, request: Request) -> Tuple[Optional[Response], bool]:
         """recv request, processor request and dispatch request by request msg type"""
         response_num: int = response_num_dict.get(request.msg_type, constant.SERVER_ERROR_RESPONSE)
         if request.msg_type == constant.CHANNEL_REQUEST:
@@ -116,29 +194,29 @@ class Receiver(object):
         if response.msg_type == constant.SERVER_ERROR_RESPONSE:
             logger.error(f"parse request data: {request} from {self._conn.peer_tuple} error")
             response.set_exception(ServerError("Illegal request"))
-            return response
+            return response, True
 
-        if self._processor_list:
+        if self.process_request_processor_list:
             try:
-                for processor in self._processor_list:
-                    request = await processor.process_request(request)
+                for process_request in self.process_request_processor_list:
+                    request = await process_request(request)
             except Exception as e:
                 if not isinstance(e, BaseRapError):
                     logger.exception(e)
                 response.set_exception(e)
-                return response
+                return response, True
 
         try:
-            dispatch_func: Callable = self.dispatch_func_dict[request.msg_type]
+            dispatch_func: DISPATCH_FUNC_TYPE = self.dispatch_func_dict[request.msg_type]
             return await dispatch_func(request, response)
         except BaseRapError as e:
             response.set_exception(e)
-            return response
+            return response, True
         except Exception as e:
             logger.debug(e)
             logger.debug(traceback.format_exc())
             response.set_exception(RpcRunTimeError())
-            return response
+            return response, True
 
     async def ping_event(self) -> None:
         """send ping event to conn"""
@@ -163,7 +241,7 @@ class Receiver(object):
                 logger.exception(f"{self._conn} ping event exit.. error:<{e.__class__.__name__}>[{e}]")
                 return
 
-    async def channel_handle(self, request: Request, response: Response) -> Optional[Response]:
+    async def channel_handle(self, request: Request, response: Response) -> Tuple[Optional[Response], bool]:
         # declare var
         channel_id: int = request.correlation_id
         life_cycle: str = request.header.get("channel_life_cycle", "error")
@@ -173,7 +251,7 @@ class Receiver(object):
             if channel is None:
                 raise ChannelError("channel not create")
             await channel.queue.put(request)
-            return None
+            return None, False
         elif life_cycle == constant.DECLARE:
             if channel is not None:
                 raise ChannelError("channel already create")
@@ -190,15 +268,14 @@ class Receiver(object):
             self._channel_dict[channel_id] = channel
 
             response.header["channel_life_cycle"] = constant.DECLARE
-            return response
+            return response, False
         elif life_cycle == constant.DROP:
             if channel is None:
                 raise ChannelError("channel not create")
             else:
                 await channel.close()
-                self.context_dict.pop(channel_id, None)
-                self._channel_dict.pop(channel_id, None)
-                return None
+                await self.close_context(channel_id)
+                return None, False
         else:
             raise ChannelError("channel life cycle error")
 
@@ -257,25 +334,29 @@ class Receiver(object):
                     result = await result.__anext__()  # type: ignore
         return call_id, result
 
-    async def msg_handle(self, request: Request, response: Response) -> Optional[Response]:
+    async def msg_handle(self, request: Request, response: Response) -> Tuple[Optional[Response], bool]:
         """根据函数类型分发请求，以及会对函数结果进行封装"""
         func_model: FuncModel = await self._call_func_permission_fn(request)
 
+        close_context_flag: bool = False
         call_id: int = request.body.get("call_id", -1)
         if call_id in self._generator_dict:
             new_call_id, result = await self._gen_msg_handle(call_id)
         elif call_id == -1:
             new_call_id, result = await self._msg_handle(request, call_id, func_model)
+            close_context_flag = True
         else:
             raise ProtocolError("Error call id")
         response.body = {"call_id": new_call_id}
         if isinstance(result, StopAsyncIteration) or isinstance(result, StopIteration):
             response.status_code = 301
+            close_context_flag = True
         elif isinstance(result, Exception):
             exc, exc_info = parse_error(result)
             response.body["exc_info"] = exc_info  # type: ignore
             if request.header.get("user_agent") == constant.USER_AGENT:
                 response.body["exc"] = exc  # type: ignore
+            close_context_flag = True
         else:
             response.body["result"] = result
             # if not is_type(func_model.return_type, type(result)):
@@ -283,15 +364,15 @@ class Receiver(object):
             #         f"{func_model.func} return type is {func_model.return_type}, but result type is {type(result)}"
             #     )
             #     response.status_code = 302
-        return response
+        return response, close_context_flag
 
-    async def event(self, request: Request, response: Response) -> Optional[Response]:
+    async def event(self, request: Request, response: Response) -> Tuple[Optional[Response], bool]:
         """client event request handle"""
         # rap event handle
         if request.func_name == constant.PING_EVENT:
             if request.msg_type == constant.SERVER_EVENT:
                 self._conn.keepalive_timestamp = int(time.time())
-                return None
+                return None, True
             elif request.msg_type == constant.CLIENT_EVENT:
                 response.set_event(PingEvent({}))
             else:
@@ -305,4 +386,4 @@ class Receiver(object):
                 self._conn.ping_future = asyncio.ensure_future(self.ping_event())
         elif request.func_name == constant.DROP:
             response.set_event(DropEvent("success"))
-        return response
+        return response, True

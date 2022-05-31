@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, List, Optional
 from uuid import uuid4
 
 from rap.common.asyncio_helper import Deadline
@@ -7,7 +7,7 @@ from rap.common.conn import ServerConnection
 from rap.common.exceptions import IgnoreNextProcessor
 from rap.common.utils import constant
 from rap.server.model import Event, Response, ServerContext
-from rap.server.plugin.processor.base import BaseProcessor
+from rap.server.plugin.processor.base import BaseProcessor, belong_to_base_method
 
 if TYPE_CHECKING:
     from rap.server.core import Server
@@ -36,7 +36,15 @@ class Sender(object):
         self._correlation_id: int = 2
         self._conn: ServerConnection = conn
         self._timeout: Optional[int] = timeout
+
         self._processor_list: Optional[List[BaseProcessor]] = processor_list
+        processor_list = processor_list or []
+        self.process_response_processor_list: List[Callable] = [
+            i.process_response for i in processor_list if not belong_to_base_method(i.process_response)
+        ]
+        self.process_exception_processor_list: List[Callable] = [
+            i.process_exc for i in processor_list if not belong_to_base_method(i.process_exc)
+        ]
 
     @staticmethod
     def header_handle(resp: Response) -> None:
@@ -59,24 +67,22 @@ class Sender(object):
         if not resp.exc:
             # Once there is an exception, the processing logic of the response is exited directly
             try:
-                for processor in reversed(self._processor_list):
-                    resp = await processor.process_response(resp)
+                for process_response in reversed(self.process_response_processor_list):
+                    resp = await process_response(resp)
             except IgnoreNextProcessor:
                 pass
             except Exception as e:
                 resp.set_exception(e)
         if resp.exc:
             # Ensure that each Processor can handle exceptions
-            for processor in reversed(self._processor_list):
+            for process_exc in reversed(self.process_exception_processor_list):
                 raw_resp: Response = resp
                 try:
-                    resp = await processor.process_exc(resp)
+                    resp = await process_exc(resp)
                 except IgnoreNextProcessor:
                     break
                 except Exception as e:
-                    logger.exception(
-                        f"processor:{processor.__class__.__name__} handle response:{resp.correlation_id} error:{e}"
-                    )
+                    logger.exception(f"processor:{process_exc} handle response:{resp.correlation_id} error:{e}")
                     resp = raw_resp
         return resp
 
