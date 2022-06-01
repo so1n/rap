@@ -117,6 +117,24 @@ class Receiver(object):
             raise FuncNotFoundError(f"No permission to call:`{request.func_name}`")
         return func_model
 
+    async def create_context(self, correlation_id: int) -> ServerContext:
+        context: Optional[ServerContext] = self.context_dict.get(correlation_id, None)
+        if not context:
+            # create context
+            context = ServerContext()
+            context.app = self  # type: ignore
+            context.conn = self._conn
+            context.correlation_id = correlation_id
+            self.context_dict[correlation_id] = context
+            logger.debug("create %s context", correlation_id)
+
+            for on_context_enter in self.on_context_enter_processor_list:
+                try:
+                    await on_context_enter(context)
+                except Exception as e:
+                    logger.exception(f"on_context_enter error:{e}")
+        return context
+
     async def close_context(
         self,
         correlation_id: int,
@@ -124,6 +142,7 @@ class Receiver(object):
     ):
         context: Optional[ServerContext] = self.context_dict.pop(correlation_id, None)
         if context:
+            logger.debug("close %s context", correlation_id)
             if exc:
                 exc_type: Optional[Type[BaseException]] = None
                 exc_val: Optional[BaseException] = None
@@ -144,19 +163,9 @@ class Receiver(object):
         if request_msg is None:
             await self.sender.send_event(CloseConnEvent("request is empty"))
             return
+
         correlation_id: int = request_msg[1]
-        context: Optional[ServerContext] = self.context_dict.get(correlation_id, None)
-        if not context:
-            # create context
-            context = ServerContext()
-            context.app = self  # type: ignore
-            context.conn = self._conn
-            context.correlation_id = correlation_id
-            for on_context_enter in self.on_context_enter_processor_list:
-                try:
-                    await on_context_enter(context)
-                except Exception as e:
-                    logger.exception(f"on_context_enter error:{e}")
+        context: ServerContext = await self.create_context(correlation_id)
         try:
             request: Request = Request.from_msg(request_msg, context=context)
         except Exception as e:
@@ -180,23 +189,12 @@ class Receiver(object):
 
     async def dispatch(self, request: Request) -> Tuple[Optional[Response], bool]:
         """recv request, processor request and dispatch request by request msg type"""
-        response_num: int = response_num_dict.get(request.msg_type, constant.SERVER_ERROR_RESPONSE)
-        if request.msg_type == constant.CHANNEL_REQUEST:
-            self.context_dict[request.correlation_id] = request.context
-
+        response_msg_type: int = response_num_dict.get(request.msg_type, constant.SERVER_ERROR_RESPONSE)
         # gen response object
-        response: "Response" = Response(msg_type=response_num, context=request.context)
-        if "request_id" in request.header:
-            response.header["request_id"] = request.header["request_id"]
-        # response.header.update(request.header)
-
-        # check type_id
-        if response.msg_type == constant.SERVER_ERROR_RESPONSE:
-            logger.error(f"parse request data: {request} from {self._conn.peer_tuple} error")
-            response.set_exception(ServerError("Illegal request"))
-            return response, True
+        response: "Response" = Response(msg_type=response_msg_type, context=request.context)
 
         if self.process_request_processor_list:
+            # If the processor does not pass the check, then an error is thrown and the error is returned directly
             try:
                 for process_request in self.process_request_processor_list:
                     request = await process_request(request)
@@ -205,6 +203,12 @@ class Receiver(object):
                     logger.exception(e)
                 response.set_exception(e)
                 return response, True
+
+        # check type_id
+        if response.msg_type == constant.SERVER_ERROR_RESPONSE:
+            logger.error(f"parse request data: {request} from {self._conn.peer_tuple} error")
+            response.set_exception(ServerError("Illegal request"))
+            return response, True
 
         try:
             dispatch_func: DISPATCH_FUNC_TYPE = self.dispatch_func_dict[request.msg_type]
@@ -263,10 +267,20 @@ class Receiver(object):
                 )
 
             channel = Channel(channel_id, write, self._conn, func)
-            request.context.user_channel = channel.user_channel
-            channel.channel_conn_future.add_done_callback(lambda f: self._channel_dict.pop(channel_id, None))
             self._channel_dict[channel_id] = channel
+            request.context.user_channel = channel.user_channel
 
+            async def wait_channel_close() -> None:
+                # Recycling Channel Resources
+                try:
+                    await channel.func_future
+                    await channel.channel_conn_future
+                except Exception:
+                    pass
+                self._channel_dict.pop(channel_id, None)
+                await self.close_context(channel_id)
+
+            asyncio.create_task(wait_channel_close())
             response.header["channel_life_cycle"] = constant.DECLARE
             return response, False
         elif life_cycle == constant.DROP:
@@ -274,7 +288,6 @@ class Receiver(object):
                 raise ChannelError("channel not create")
             else:
                 await channel.close()
-                await self.close_context(channel_id)
                 return None, False
         else:
             raise ChannelError("channel life cycle error")

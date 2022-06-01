@@ -36,7 +36,7 @@ class Channel(BaseChannel["Request"]):
 
         self._conn.conn_future.add_done_callback(lambda f: self.set_exc(ChannelError("connection already close")))
 
-        self._func_future: asyncio.Future = asyncio.ensure_future(self._run_func(func))
+        self.func_future: asyncio.Future = asyncio.ensure_future(self._run_func(func))
 
     async def _run_func(self, func: Callable) -> None:
         try:
@@ -74,4 +74,4 @@ class Channel(BaseChannel["Request"]):
             await self._write(None, {"channel_life_cycle": constant.DROP})
 
         # Actively cancel the future may not be successful, such as cancel asyncio.sleep
-        del_future(self._func_future)
+        del_future(self.func_future)
