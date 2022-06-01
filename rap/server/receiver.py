@@ -80,7 +80,7 @@ class Receiver(object):
         self.context_dict: Dict[int, ServerContext] = {}
         self._ping_sleep_time: int = ping_sleep_time
         self._ping_fail_cnt: int = ping_fail_cnt
-        self._call_func_permission_fn: Callable[[Request], Awaitable[FuncModel]] = (
+        self._get_func_from_request: Callable[[Request], Awaitable[FuncModel]] = (
             call_func_permission_fn if call_func_permission_fn else self._default_call_fun_permission_fn
         )
 
@@ -109,10 +109,14 @@ class Receiver(object):
         ]
 
     async def _default_call_fun_permission_fn(self, request: Request) -> FuncModel:
-        func_model: FuncModel = self._app.registry.get_func_model(
-            request, constant.NORMAL_TYPE if request.msg_type == constant.MSG_REQUEST else constant.CHANNEL_TYPE
+        func_key: str = self._app.registry.gen_key(
+            request.group,
+            request.func_name,
+            constant.NORMAL_TYPE if request.msg_type == constant.MSG_REQUEST else constant.CHANNEL_TYPE,
         )
-
+        if func_key not in self._app.registry.func_dict:
+            raise FuncNotFoundError(extra_msg=f"name: {request.func_name}")
+        func_model: FuncModel = self._app.registry.func_dict[func_key]
         if func_model.is_private and request.context.conn.peer_tuple[0] not in ("::1", "127.0.0.1", "localhost"):
             raise FuncNotFoundError(f"No permission to call:`{request.func_name}`")
         return func_model
@@ -259,7 +263,7 @@ class Receiver(object):
         elif life_cycle == constant.DECLARE:
             if channel is not None:
                 raise ChannelError("channel already create")
-            func: Callable = (await self._call_func_permission_fn(request)).func
+            func: Callable = (await self._get_func_from_request(request)).func
 
             async def write(body: Any, header: Dict[str, Any]) -> None:
                 await self.sender(
@@ -349,7 +353,7 @@ class Receiver(object):
 
     async def msg_handle(self, request: Request, response: Response) -> Tuple[Optional[Response], bool]:
         """根据函数类型分发请求，以及会对函数结果进行封装"""
-        func_model: FuncModel = await self._call_func_permission_fn(request)
+        func_model: FuncModel = await self._get_func_from_request(request)
 
         close_context_flag: bool = False
         call_id: int = request.body.get("call_id", -1)

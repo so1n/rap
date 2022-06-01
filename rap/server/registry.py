@@ -7,10 +7,9 @@ from types import FunctionType
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 from rap.common.channel import UserChannel
-from rap.common.exceptions import FuncNotFoundError, RegisteredError
+from rap.common.exceptions import RegisteredError
 from rap.common.types import is_json_type
 from rap.common.utils import constant
-from rap.server.model import Request
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -87,14 +86,6 @@ class RegistryManager(object):
             # ignore error TypeError: issubclass() arg 1 must be a class
             pass
         return func_type
-
-    def get_func_model(self, request: Request, func_type: str) -> FuncModel:
-        func_key: str = self.gen_key(request.group, request.func_name, func_type)
-        if func_key not in self.func_dict:
-            raise FuncNotFoundError(extra_msg=f"name: {request.func_name}")
-
-        func_model: FuncModel = self.func_dict[func_key]
-        return func_model
 
     def register(
         self,
