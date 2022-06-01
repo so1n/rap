@@ -287,7 +287,7 @@ class Server(object):
 
                 # until connections close
                 logger.info(f"{self} Waiting for connections to close. (CTRL+C to force quit)")
-                if self._connected_set.is_set():
+                if not self._connected_set.is_set():
                     await self._connected_set.wait()
                 await self.run_event_list(EventEnum.after_end, is_raise=True)
         finally:
@@ -300,7 +300,6 @@ class Server(object):
         )
         conn.conn_id = str(await async_get_snowflake_id())
         with self._connected_set.cm(conn):
-            self._connected_set.add(conn)
             await self._conn_handle(conn)
             try:
                 conn.conn_future.result()
@@ -340,9 +339,10 @@ class Server(object):
                 logging.error(f"recv data from {conn.peer_tuple} error:{e}, conn has been closed")
                 await asyncio.sleep(0.01)
 
-        if recv_msg_handle_future_set_event.is_set():
+        if not recv_msg_handle_future_set_event.is_set():
             logging.debug("wait recv msg handle future")
             await recv_msg_handle_future_set_event.wait()
         if not conn.is_closed():
             await conn.await_close()
             logging.debug("close connection: %s", conn.peer_tuple)
+        await receiver.await_resource_release()

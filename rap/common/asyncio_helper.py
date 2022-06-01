@@ -290,6 +290,7 @@ class SetEvent(Generic[_T]):
     def __init__(self):
         self._event: asyncio.Event = asyncio.Event()
         self._set: Set[_T] = set()
+        self.clear()
 
     @contextmanager
     def cm(self, item: _T) -> Iterator[None]:
@@ -300,7 +301,7 @@ class SetEvent(Generic[_T]):
             self.remove(item)
 
     def clear(self) -> None:
-        self._event.clear()
+        self._event.set()
         self._set.clear()
 
     ##############
@@ -308,12 +309,12 @@ class SetEvent(Generic[_T]):
     ##############
     def add(self, item: _T) -> None:
         self._set.add(item)
-        self._event.set()
+        self._event.clear()
 
     def remove(self, item: _T) -> None:
         self._set.remove(item)
         if not self._set:
-            self._event.clear()
+            self._event.set()
 
     def __contains__(self, item: _T) -> bool:
         return item in self._set

@@ -23,7 +23,7 @@ from typing import (
     Union,
 )
 
-from rap.common.asyncio_helper import Deadline, get_event_loop
+from rap.common.asyncio_helper import Deadline, SetEvent, get_event_loop
 from rap.common.conn import ServerConnection
 from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent
 from rap.common.exceptions import (
@@ -107,6 +107,8 @@ class Receiver(object):
         self.process_request_processor_list: List[Callable] = [
             i.process_request for i in processor_list if not belong_to_base_method(i.process_request)
         ]
+        # Store resources that cannot be controlled by the current concurrent process
+        self._used_resources: SetEvent = SetEvent()
 
     async def _default_call_fun_permission_fn(self, request: Request) -> FuncModel:
         func_key: str = self._app.registry.gen_key(
@@ -278,13 +280,19 @@ class Receiver(object):
                 # Recycling Channel Resources
                 try:
                     await channel.func_future
+                except Exception:
+                    pass
+                try:
                     await channel.channel_conn_future
                 except Exception:
                     pass
                 self._channel_dict.pop(channel_id, None)
                 await self.close_context(channel_id)
 
-            asyncio.create_task(wait_channel_close())
+            wait_channel_future = asyncio.create_task(wait_channel_close())
+            self._used_resources.add(wait_channel_future)
+            wait_channel_future.add_done_callback(lambda future: self._used_resources.remove(future))
+
             response.header["channel_life_cycle"] = constant.DECLARE
             return response, False
         elif life_cycle == constant.DROP:
@@ -404,3 +412,6 @@ class Receiver(object):
         elif request.func_name == constant.DROP:
             response.set_event(DropEvent("success"))
         return response, True
+
+    async def await_resource_release(self) -> None:
+        return await self._used_resources.wait()
