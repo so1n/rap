@@ -4,7 +4,6 @@ import inspect
 import pytest
 
 from rap.client.utils import raise_rap_error
-from rap.common.asyncio_helper import gen_new_param_coro
 from rap.common.cache import Cache
 from rap.common.event import Event
 from rap.common.exceptions import RPCError
@@ -35,21 +34,6 @@ class TestUtil:
     def test_event_to_tuple(self) -> None:
         event: Event = Event(event_info="info", event_name="name")
         assert ("name", "info") == event.to_tuple()
-
-    async def test_gen_new_param_coro(self) -> None:
-
-        value1: int = await demo(1, 3)
-        new_coro = demo(1, 5)
-
-        with pytest.raises(TypeError):
-            gen_new_param_coro(1, {"d": 3})  # type: ignore
-
-        with pytest.raises(KeyError):
-            await gen_new_param_coro(new_coro, {"d": 3})
-
-        value2: int = await gen_new_param_coro(new_coro, {"b": 3})
-        assert 6 == await new_coro
-        assert value1 == value2
 
     def test_raise_customer_exc(self) -> None:
         with pytest.raises(RPCError) as e:

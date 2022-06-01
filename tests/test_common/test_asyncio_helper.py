@@ -1,6 +1,6 @@
 import asyncio
 import time
-from typing import Coroutine, Optional
+from typing import Optional
 
 import pytest
 
@@ -37,13 +37,6 @@ class TestAsyncioHelper:
         except Exception as e:
             exc = e
         assert isinstance(exc, asyncio.CancelledError)
-
-    async def test_gen_new_param_coro(self) -> None:
-        value1: int = await demo(1, 3)
-        coro: Coroutine = demo(1, 5)
-        value2: int = await asyncio_helper.gen_new_param_coro(coro, {"b": 3})
-        coro.close()
-        assert value1 == value2
 
     async def test_as_first_completed(self) -> None:
         def set_future_true(f: asyncio.Future) -> None:
