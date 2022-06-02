@@ -279,10 +279,7 @@ class Receiver(object):
                 self._channel_dict.pop(channel_id, None)
                 await self.close_context(channel_id)
 
-            wait_channel_future = asyncio.create_task(wait_channel_close())
-            self._used_resources.add(wait_channel_future)
-            wait_channel_future.add_done_callback(lambda future: self._used_resources.remove(future))
-
+            self.create_future_by_resource(wait_channel_close())
             response.header["channel_life_cycle"] = constant.DECLARE
             return response, False
         elif life_cycle == constant.DROP:
@@ -347,10 +344,18 @@ class Receiver(object):
                     DeclareEvent({"result": True, "conn_id": self._conn.conn_id, "server_info": self._server_info})
                 )
                 self._conn.keepalive_timestamp = int(time.time())
-                self._conn.ping_future = asyncio.ensure_future(self.ping_event())
+
+                ping_future: asyncio.Future = self.create_future_by_resource(self.ping_event())
+                self._conn.conn_future.add_done_callback(lambda _: ping_future.cancel())
         elif request.func_name == constant.DROP:
             response.set_event(DropEvent("success"))
         return response, True
+
+    def create_future_by_resource(self, coro: Coroutine) -> asyncio.Future:
+        future: asyncio.Future = asyncio.create_task(coro)
+        future.add_done_callback(lambda f: self._used_resources.remove(f))
+        self._used_resources.add(future)
+        return future
 
     async def await_resource_release(self) -> None:
         return await self._used_resources.wait()

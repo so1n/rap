@@ -7,7 +7,6 @@ from typing import Any, Optional, Tuple
 
 import msgpack
 
-from rap.common.asyncio_helper import done_future, safe_del_future
 from rap.common.state import State
 from rap.common.types import READER_TYPE, UNPACKER_TYPE, WRITER_TYPE
 from rap.common.utils import constant
@@ -178,9 +177,4 @@ class ServerConnection(BaseConnection):
         self.sock_tuple: Tuple[str, int] = self._writer.get_extra_info("sockname")
         self.conn_future = asyncio.Future()
         self._is_closed = False
-        self.ping_future: asyncio.Future = done_future()
         self.keepalive_timestamp = int(time.time())
-
-    def close(self) -> None:
-        safe_del_future(self.ping_future)
-        super(ServerConnection, self).close()
