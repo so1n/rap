@@ -23,7 +23,7 @@ class ContextProcessor(BaseProcessor):
         elif request.msg_type is constant.CHANNEL_REQUEST and self._context.channel is None:
             # channel can not reset token
             request.context.context_token = rap_context.set({})
-            self._context.channel = request.context.user_channel
+            self._context.channel = request.context.context_channel
         return request
 
     async def process_response(self, response: Response) -> Response:

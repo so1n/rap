@@ -73,7 +73,7 @@ class SkywalkingProcessor(BaseProcessor):
             and response.header.get("channel_life_cycle", "error") == constant.DECLARE
         ):
             # The channel is created after receiving the request
-            response.context.user_channel.add_done_callback(lambda f: response.context.span.stop())
+            response.context.context_channel.add_done_callback(lambda f: response.context.span.stop())
         return response
 
     async def process_exc(self, response: Response) -> Response:

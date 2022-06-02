@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from rap.client.model import ClientContext, Request, Response
 from rap.client.processor.base import belong_to_base_method
-from rap.client.transport.channel import Channel, UserChannel
+from rap.client.transport.channel import Channel
 from rap.client.utils import get_exc_status_code_dict, raise_rap_error
 from rap.common import event
 from rap.common import exceptions as rap_exc
@@ -481,11 +481,8 @@ class Transport(object):
         return response
 
     @asynccontextmanager
-    async def channel(
-        self, func_name: str, group: Optional[str] = None, func: Optional[Callable] = None
-    ) -> AsyncGenerator["UserChannel", None]:
+    async def channel(self, func_name: str, group: Optional[str] = None) -> AsyncGenerator["Channel", None]:
         """create and init channel
-        :param func: rpc func
         :param func_name: rpc func name
         :param group: func's group
         """
@@ -494,10 +491,10 @@ class Transport(object):
         async with self.context() as context:
             correlation_id: int = context.correlation_id
             channel: Channel = Channel(
-                func=func, transport=self, target=target, channel_id=correlation_id, context=context  # type: ignore
+                transport=self, target=target, channel_id=correlation_id, context=context  # type: ignore
             )
             self._channel_queue_dict[correlation_id] = channel.queue
             channel.channel_conn_future.add_done_callback(lambda f: self._channel_queue_dict.pop(correlation_id, None))
 
-            async with channel as user_channel:
-                yield user_channel  # type: ignore
+            async with channel as channel:
+                yield channel

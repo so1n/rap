@@ -45,7 +45,7 @@ class TracingProcessor(BaseProcessor):
         elif request.msg_type is constant.CHANNEL_REQUEST and not request.context.get_value("span", None):
             # A channel is a continuous activity that may involve the interaction of multiple coroutines
             request.context.span = self._create_scope(request, finish_on_close=False).span
-            request.context.user_channel.add_done_callback(lambda f: request.context.span.finish())
+            request.context.context_channel.add_done_callback(lambda f: request.context.span.finish())
         return request
 
     async def process_response(self, response: Response) -> Response:

@@ -1,6 +1,6 @@
 import asyncio
 import inspect
-from typing import Any, Callable, Generic, List, Type, TypeVar, Union
+from typing import Any, Awaitable, Callable, Generic, List, Optional, Type, TypeVar, Union, overload
 
 from typing_extensions import Self
 
@@ -54,6 +54,47 @@ class BaseChannel(Generic[_Read_T]):
         if self.channel_conn_future and not self.channel_conn_future.done():
             self.channel_conn_future.set_result(True)
 
+    ###############
+    # Get Channel #
+    ###############
+    @overload
+    def get_user_channel_from_func(self, func: None) -> "UserChannel":
+        ...
+
+    @overload
+    def get_user_channel_from_func(self, func: Callable[["ReadChannel"], Awaitable[None]]) -> "ReadChannel":
+        ...
+
+    @overload
+    def get_user_channel_from_func(self, func: Callable[["WriteChannel"], Awaitable[None]]) -> "WriteChannel":
+        ...
+
+    @overload
+    def get_user_channel_from_func(self, func: Callable[["UserChannel"], Awaitable[None]]) -> "UserChannel":
+        ...
+
+    def get_user_channel_from_func(self, func):
+        user_channel: Optional[BaseUserChannel] = getattr(self, "_user_channel", None)
+        if user_channel is None:
+            if func is None:
+                user_channel = UserChannel(self)
+            else:
+                user_channel = get_corresponding_channel_class(func)(self)
+            setattr(self, "_user_channel", user_channel)
+        return user_channel
+
+    def get_read_channel(self) -> "ReadChannel":
+        return ReadChannel(self)
+
+    def get_write_channel(self) -> "WriteChannel":
+        return WriteChannel(self)
+
+    def get_user_channel(self) -> "UserChannel":
+        return UserChannel(self)
+
+    def get_context_channel(self) -> "ContextChannel":
+        return ContextChannel(self)
+
 
 class _AsyncIterData(Generic[_Read_T]):
     def __init__(self, channel: "BaseChannel "):
@@ -77,7 +118,7 @@ class _AsyncIterDataBody(_AsyncIterData[_Read_T]):
             raise StopAsyncIteration()
 
 
-class _BaseChannelHelper(Generic[_Read_T]):
+class BaseUserChannel(Generic[_Read_T]):
     def __init__(self, channel: "BaseChannel[_Read_T]"):
         self._channel: BaseChannel[_Read_T] = channel
 
@@ -182,20 +223,24 @@ class _WriteChannelMixin(Generic[_Read_T]):
         await self._channel.write(body)
 
 
-class ReadChannel(_BaseChannelHelper[_Read_T], _ReadChannelMixin):
+class ContextChannel(BaseUserChannel[_Read_T]):
     pass
 
 
-class WriteChannel(_BaseChannelHelper[_Read_T], _WriteChannelMixin):
+class ReadChannel(BaseUserChannel[_Read_T], _ReadChannelMixin):
     pass
 
 
-class UserChannel(_BaseChannelHelper[_Read_T], _WriteChannelMixin, _ReadChannelMixin):
+class WriteChannel(BaseUserChannel[_Read_T], _WriteChannelMixin):
+    pass
+
+
+class UserChannel(BaseUserChannel[_Read_T], _WriteChannelMixin, _ReadChannelMixin):
     """Only expose the user interface of BaseChannel"""
 
 
 UserChannelType = Union[ReadChannel, WriteChannel, UserChannel]
-UserChannelCovariantType = TypeVar("UserChannelCovariantType", bound=_BaseChannelHelper, covariant=True)
+UserChannelCovariantType = TypeVar("UserChannelCovariantType", bound=BaseUserChannel, covariant=True)
 UserChannelContravariantType = TypeVar("UserChannelContravariantType", bound=UserChannel, contravariant=True)
 
 

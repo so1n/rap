@@ -274,7 +274,7 @@ class Receiver(object):
 
             channel = Channel(channel_id, write, self._conn, func)
             self._channel_dict[channel_id] = channel
-            request.context.user_channel = channel.user_channel
+            request.context.context_channel = channel.get_context_channel()
 
             async def wait_channel_close() -> None:
                 # Recycling Channel Resources

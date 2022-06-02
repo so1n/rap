@@ -68,7 +68,7 @@ class OpenTelemetryProcessor(BaseProcessor):
             and response.header.get("channel_life_cycle", "error") == constant.DECLARE
         ):
             # The channel is created after receiving the request
-            response.context.user_channel.add_done_callback(lambda f: self._end_span(response))
+            response.context.context_channel.add_done_callback(lambda f: self._end_span(response))
         return response
 
     async def process_exc(self, response: Response) -> Response:

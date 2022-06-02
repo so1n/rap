@@ -32,5 +32,5 @@ class ContextProcessor(BaseProcessor):
             and response.header.get("channel_life_cycle", "error") == constant.DECLARE
         ):
             # The channel is created after receiving the request
-            self._context.channel = response.context.user_channel
+            self._context.channel = response.context.context_channel
         return response

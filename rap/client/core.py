@@ -207,8 +207,8 @@ class BaseClient:
         @wraps(func)
         async def wrapper() -> None:
             async with self.endpoint.picker(is_private=is_private) as transport:
-                async with transport.channel(name, group, func=func) as channel:
-                    await func(channel)
+                async with transport.channel(name, group) as channel:
+                    await func(channel.get_user_channel_from_func(func))
 
         return wrapper
 
