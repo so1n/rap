@@ -1,6 +1,6 @@
 import asyncio
 import inspect
-from typing import Any, Awaitable, Callable, Generic, List, Optional, Type, TypeVar, Union, overload
+from typing import Any, Awaitable, Callable, Generic, List, Type, TypeVar, Union, overload
 
 from typing_extensions import Self
 
@@ -74,13 +74,10 @@ class BaseChannel(Generic[_Read_T]):
         ...
 
     def get_user_channel_from_func(self, func):
-        user_channel: Optional[BaseUserChannel] = getattr(self, "_user_channel", None)
-        if user_channel is None:
-            if func is None:
-                user_channel = UserChannel(self)
-            else:
-                user_channel = get_corresponding_channel_class(func)(self)
-            setattr(self, "_user_channel", user_channel)
+        if func is None:
+            user_channel = UserChannel(self)
+        else:
+            user_channel = get_corresponding_channel_class(func)(self)
         return user_channel
 
     def get_read_channel(self) -> "ReadChannel":

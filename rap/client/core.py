@@ -7,10 +7,9 @@ from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optiona
 from rap.client.endpoint import BalanceEnum, BaseEndpoint, LocalEndpoint
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
-from rap.client.transport.async_iterator import AsyncIteratorCall
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common.cache import Cache
-from rap.common.channel import UserChannelCovariantType, get_corresponding_channel_class
+from rap.common.channel import ReadChannel, UserChannelCovariantType, get_corresponding_channel_class
 from rap.common.collect_statistics import WindowStatistics
 from rap.common.types import T_ParamSpec as P
 from rap.common.types import T_ReturnType as R_T
@@ -133,10 +132,6 @@ class BaseClient:
         """Decorate normal function"""
         name = name if name else func.__name__
         func_sig: inspect.Signature = inspect.signature(func)
-        # return_type: Type = func_sig.return_annotation
-
-        if not inspect.iscoroutinefunction(func):
-            raise TypeError(f"func:{func.__name__} must coroutine function")
 
         @wraps(func)  # type: ignore
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R_T:  # type: ignore
@@ -153,8 +148,6 @@ class BaseClient:
                 header=_header,
                 is_private=_is_private,
             )
-            # if not is_type(return_type, type(result)):
-            #     raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
             return result
 
         return wrapper
@@ -163,14 +156,12 @@ class BaseClient:
         self,
         func: Callable[P, R_T],  # type: ignore
         group: Optional[str],
-        header: Optional[dict] = None,
         is_private: Optional[bool] = None,
         name: str = "",
     ) -> Callable[P, AsyncGenerator[R_T, None]]:  # type: ignore
         """Decoration generator function"""
         name = name if name else func.__name__
         func_sig: inspect.Signature = inspect.signature(func)
-        # return_type: Type = func_sig.return_annotation
 
         if not inspect.isasyncgenfunction(func):
             raise TypeError(f"func:{func.__name__} must async gen function")
@@ -181,19 +172,13 @@ class BaseClient:
             _args: Sequence = args  # type: ignore
             _kwargs: Dict = kwargs  # type: ignore
 
-            _header = _kwargs.pop("header", header)
             _is_private = _kwargs.pop("is_private", is_private)
             async with self.endpoint.picker(is_private=_is_private) as transport:
-                async for result in AsyncIteratorCall(
-                    name,
-                    transport,
-                    param_handle(func_sig, _args, _kwargs),
-                    group=group,
-                    header=_header,
-                ):
-                    # if not is_type(return_type, type(result)):
-                    #     raise RuntimeError(f"{func} return type is {return_type}, but result type is {type(result)}")
-                    yield result
+                async with transport.channel(name, group) as channel:
+                    await channel.write(param_handle(func_sig, _args, _kwargs))
+                    read_channel: ReadChannel = channel.get_read_channel()
+                    async for result in read_channel:
+                        yield result
 
         return wrapper
 
@@ -219,6 +204,8 @@ class BaseClient:
         self, name: str = "", group: Optional[str] = None
     ) -> Callable[[Callable[P, R_T]], Callable[P, Awaitable[R_T]]]:  # type: ignore
         def wrapper(func: Callable[P, R_T]) -> Callable[P, Awaitable[R_T]]:  # type: ignore
+            if not inspect.iscoroutinefunction(func):
+                raise TypeError(f"func:{func.__name__} must coroutine function")
             return self._wrapper_func(func, group=group, name=name)
 
         return wrapper
@@ -323,17 +310,15 @@ class BaseClient:
     def invoke_iterator(
         self,
         func: Callable[P, R_T],  # type: ignore
-        header: Optional[dict] = None,
         group: Optional[str] = None,
         is_private: bool = False,
     ) -> Callable[P, AsyncGenerator[R_T, None]]:  # type: ignore
         """Python-specific generator invoke
         :param func: python func
         :param group: func's group, default value is `default`
-        :param header: request header
         :param is_private: If the value is True, it will get transport for its own use only. default False
         """
-        return self._wrapper_gen_func(func, group=group, header=header, is_private=is_private)
+        return self._wrapper_gen_func(func, group=group, is_private=is_private)
 
     def invoke_channel(
         self,

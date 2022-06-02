@@ -1,5 +1,4 @@
 import asyncio
-import inspect
 import logging
 import random
 import sys
@@ -7,21 +6,7 @@ import time
 import traceback
 from functools import partial
 from types import TracebackType
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    AsyncGenerator,
-    Awaitable,
-    Callable,
-    Coroutine,
-    Dict,
-    Generator,
-    List,
-    Optional,
-    Tuple,
-    Type,
-    Union,
-)
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Tuple, Type, Union
 
 from rap.common.asyncio_helper import Deadline, SetEvent, get_event_loop
 from rap.common.conn import ServerConnection
@@ -31,7 +16,6 @@ from rap.common.exceptions import (
     ChannelError,
     FuncNotFoundError,
     ParseError,
-    ProtocolError,
     RpcRunTimeError,
     ServerError,
 )
@@ -92,11 +76,9 @@ class Receiver(object):
         }
         # now one conn one Request object
         self._keepalive_timestamp: int = int(time.time())
-        self._generator_dict: Dict[int, Union[Generator, AsyncGenerator]] = {}
         self._channel_dict: Dict[int, Channel] = {}
 
         # processor
-        # self._processor_list: Optional[List[BaseProcessor]] = processor_list
         processor_list = processor_list or []
         self.on_context_enter_processor_list: List[Callable] = [
             i.on_context_enter for i in processor_list if not belong_to_base_method(i.on_context_enter)
@@ -304,19 +286,6 @@ class Receiver(object):
         else:
             raise ChannelError("channel life cycle error")
 
-    async def _gen_msg_handle(self, call_id: int) -> Tuple[int, Any]:
-        # run generator func next
-        try:
-            result: Any = self._generator_dict[call_id]
-            if inspect.isgenerator(result):
-                result = next(result)
-            elif inspect.isasyncgen(result):
-                result = await result.__anext__()
-        except (StopAsyncIteration, StopIteration) as e:
-            del self._generator_dict[call_id]
-            result = e
-        return call_id, result
-
     async def _msg_handle(self, request: Request, call_id: int, func_model: FuncModel) -> Tuple[int, Exception]:
         """fun call handle"""
         param: list = request.body.get("param", [])
@@ -345,51 +314,23 @@ class Receiver(object):
         except Exception as e:
             return call_id, e
 
-        # generator fun support
-        if inspect.isgenerator(result) or inspect.isasyncgen(result):
-            user_agent: str = request.header.get("user_agent", "None")
-            if user_agent != constant.USER_AGENT:
-                result = ProtocolError(f"{user_agent} not support generator")
-            else:
-                call_id = id(result)
-                self._generator_dict[call_id] = result
-                if inspect.isgenerator(result):
-                    result = next(result)
-                else:
-                    result = await result.__anext__()  # type: ignore
         return call_id, result
 
     async def msg_handle(self, request: Request, response: Response) -> Tuple[Optional[Response], bool]:
         """根据函数类型分发请求，以及会对函数结果进行封装"""
         func_model: FuncModel = await self._get_func_from_request(request)
 
-        close_context_flag: bool = False
         call_id: int = request.body.get("call_id", -1)
-        if call_id in self._generator_dict:
-            new_call_id, result = await self._gen_msg_handle(call_id)
-        elif call_id == -1:
-            new_call_id, result = await self._msg_handle(request, call_id, func_model)
-            close_context_flag = True
-        else:
-            raise ProtocolError("Error call id")
+        new_call_id, result = await self._msg_handle(request, call_id, func_model)
         response.body = {"call_id": new_call_id}
-        if isinstance(result, StopAsyncIteration) or isinstance(result, StopIteration):
-            response.status_code = 301
-            close_context_flag = True
-        elif isinstance(result, Exception):
+        if isinstance(result, Exception):
             exc, exc_info = parse_error(result)
             response.body["exc_info"] = exc_info  # type: ignore
             if request.header.get("user_agent") == constant.USER_AGENT:
                 response.body["exc"] = exc  # type: ignore
-            close_context_flag = True
         else:
             response.body["result"] = result
-            # if not is_type(func_model.return_type, type(result)):
-            #     logger.warning(
-            #         f"{func_model.func} return type is {func_model.return_type}, but result type is {type(result)}"
-            #     )
-            #     response.status_code = 302
-        return response, close_context_flag
+        return response, True
 
     async def event(self, request: Request, response: Response) -> Tuple[Optional[Response], bool]:
         """client event request handle"""

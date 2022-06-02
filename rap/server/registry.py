@@ -77,8 +77,11 @@ class RegistryManager(object):
         """get func type, normal or channel"""
         func_type: str = constant.NORMAL_TYPE
         try:
-            get_corresponding_channel_class(func)
-            func_type = constant.CHANNEL_TYPE
+            if inspect.isasyncgenfunction(func):
+                func_type = constant.CHANNEL_TYPE
+            else:
+                get_corresponding_channel_class(func)
+                func_type = constant.CHANNEL_TYPE
         except TypeError:
             # ignore error TypeError: issubclass() arg 1 must be a class
             pass
@@ -129,12 +132,25 @@ class RegistryManager(object):
 
         if group is None:
             group = constant.DEFAULT_GROUP
-
         func_key: str = self.gen_key(group, name, func_type)
         if func_key in self.func_dict:
             raise RegisteredError(f"`{func_key}` Already register")
+
+        if inspect.isasyncgenfunction(func) and func_type == constant.CHANNEL_TYPE:
+            from rap.common.channel import UserChannel
+
+            async def _(channel: UserChannel):
+                func_param: tuple = await channel.read_body()
+                print(func_param, func)
+                async for result in func(*func_param):
+                    await channel.write(result)
+
+            register_func = _
+        else:
+            register_func = func
+
         self.func_dict[func_key] = FuncModel(
-            group=group, func_type=func_type, func_name=name, func=func, is_private=is_private, doc=doc
+            group=group, func_type=func_type, func_name=name, func=register_func, is_private=is_private, doc=doc
         )
         logger.debug(f"register `{func_key}` success")
 
