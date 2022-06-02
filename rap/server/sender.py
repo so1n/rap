@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, Any, Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 from rap.common.asyncio_helper import Deadline
 from rap.common.conn import ServerConnection
@@ -45,20 +45,6 @@ class Sender(object):
             i.process_exc for i in processor_list if not belong_to_base_method(i.process_exc)
         ]
 
-    @staticmethod
-    def header_handle(resp: Response) -> None:
-        """response header handle"""
-
-        def set_header_value(header_key: str, header_value: Any, is_cover: bool = False) -> None:
-            """set header value"""
-            if is_cover:
-                resp.header[header_key] = header_value
-            elif header_key not in resp.header:
-                resp.header[header_key] = header_value
-
-        set_header_value("version", constant.VERSION, is_cover=True)
-        set_header_value("user_agent", constant.USER_AGENT, is_cover=True)
-
     async def _processor_response_handle(self, resp: Response) -> Response:
         if not self._processor_list:
             return resp
@@ -89,7 +75,6 @@ class Sender(object):
         if resp is None:
             return False
 
-        self.header_handle(resp)
         resp = await self._processor_response_handle(resp)
         logger.debug("resp: %s", resp)
         if not deadline:

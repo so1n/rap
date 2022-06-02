@@ -91,6 +91,12 @@ class Receiver(object):
         ]
         # Store resources that cannot be controlled by the current concurrent process
         self._used_resources: SetEvent = SetEvent()
+        self._server_info: Dict[str, Any] = {
+            "host": self._conn.peer_tuple,
+            "version": constant.VERSION,
+            "user_agent": constant.USER_AGENT,
+        }
+        self._client_info: Dict[str, Any] = {}
 
     async def _default_call_fun_permission_fn(self, request: Request) -> FuncModel:
         func_key: str = self._app.registry.gen_key(
@@ -113,6 +119,8 @@ class Receiver(object):
             context.app = self  # type: ignore
             context.conn = self._conn
             context.correlation_id = correlation_id
+            context.server_info = self._server_info.copy()
+            context.client_info = self._client_info.copy()
             self.context_dict[correlation_id] = context
             logger.debug("create %s context", correlation_id)
 
@@ -286,22 +294,21 @@ class Receiver(object):
         else:
             raise ChannelError("channel life cycle error")
 
-    async def _msg_handle(self, request: Request, call_id: int, func_model: FuncModel) -> Tuple[int, Exception]:
-        """fun call handle"""
-        param: list = request.body.get("param", [])
-
+    async def msg_handle(self, request: Request, response: Response) -> Tuple[Optional[Response], bool]:
+        """根据函数类型分发请求，以及会对函数结果进行封装"""
+        func_model: FuncModel = await self._get_func_from_request(request)
         # Check param type
         try:
-            param_tuple: tuple = param_handle(func_model.func_sig, param, {})
+            param_tuple: tuple = param_handle(func_model.func_sig, request.body, {})
         except TypeError as e:
             raise ParseError(extra_msg=str(e))
 
-        # called func
         if asyncio.iscoroutinefunction(func_model.func):
             coroutine: Union[Awaitable, Coroutine] = func_model.func(*param_tuple)
         else:
             coroutine = get_event_loop().run_in_executor(None, partial(func_model.func, *param_tuple))
 
+        # called func
         try:
             deadline_timestamp: int = request.header.get("X-rap-deadline", 0)
             if deadline_timestamp:
@@ -310,26 +317,15 @@ class Receiver(object):
                 timeout = self._run_timeout
             result: Any = await asyncio.wait_for(coroutine, timeout)
         except asyncio.TimeoutError:
-            return call_id, RpcRunTimeError(f"Call {func_model.func.__name__} timeout")
+            result = RpcRunTimeError(f"Call {func_model.func.__name__} timeout")
         except Exception as e:
-            return call_id, e
+            result = e
 
-        return call_id, result
-
-    async def msg_handle(self, request: Request, response: Response) -> Tuple[Optional[Response], bool]:
-        """根据函数类型分发请求，以及会对函数结果进行封装"""
-        func_model: FuncModel = await self._get_func_from_request(request)
-
-        call_id: int = request.body.get("call_id", -1)
-        new_call_id, result = await self._msg_handle(request, call_id, func_model)
-        response.body = {"call_id": new_call_id}
         if isinstance(result, Exception):
             exc, exc_info = parse_error(result)
-            response.body["exc_info"] = exc_info  # type: ignore
-            if request.header.get("user_agent") == constant.USER_AGENT:
-                response.body["exc"] = exc  # type: ignore
+            response.body = {"exc_info": exc_info, "exc": exc}
         else:
-            response.body["result"] = result
+            response.body = {"result": result}
         return response, True
 
     async def event(self, request: Request, response: Response) -> Tuple[Optional[Response], bool]:
@@ -347,7 +343,9 @@ class Receiver(object):
             if request.body.get("server_name") != self._app.server_name:
                 response.set_server_event(CloseConnEvent("error server name"))
             else:
-                response.set_event(DeclareEvent({"result": True, "conn_id": self._conn.conn_id}))
+                response.set_event(
+                    DeclareEvent({"result": True, "conn_id": self._conn.conn_id, "server_info": self._server_info})
+                )
                 self._conn.keepalive_timestamp = int(time.time())
                 self._conn.ping_future = asyncio.ensure_future(self.ping_event())
         elif request.func_name == constant.DROP:

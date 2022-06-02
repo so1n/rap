@@ -110,10 +110,10 @@ class HostCircuitBreakerProcessor(BaseCircuitBreakerProcessor):
     exc: Exception = CircuitBreakerExc("Service Unavailable")
 
     def get_index_from_request(self, request: Request) -> str:
-        return request.header["host"][0]
+        return request.context.server_info["host"][0]
 
     def get_index_from_response(self, response: Response) -> str:
-        return response.context.conn.peer_tuple[0]
+        return response.context.server_info["host"][0]
 
 
 class FuncCircuitBreakerProcessor(BaseCircuitBreakerProcessor):

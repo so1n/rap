@@ -5,6 +5,7 @@ import time
 from enum import Enum, auto
 from typing import Any, Callable, Dict, Optional, Sequence, Tuple
 
+from rap import __version__
 from rap.common.types import is_type
 
 __all__ = [
@@ -32,7 +33,7 @@ class _Constant(object):
             raise RuntimeError("Can not support initialized")
 
     VERSION: str = "0.1"  # protocol version
-    USER_AGENT: str = "Python3-0.5.3"
+    USER_AGENT: str = f"Python3-{__version__}"
     SOCKET_RECV_SIZE: int = 1024 ** 1
 
     # msg type

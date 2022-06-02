@@ -37,6 +37,8 @@ class State(object):
 class Context(State):
     target: str
     correlation_id: int
+    client_info: Dict[str, Any]
+    server_info: Dict[str, Any]
 
     def __getattr__(self, key: Any) -> Any:
         try:

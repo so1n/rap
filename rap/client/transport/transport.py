@@ -108,6 +108,13 @@ class Transport(object):
         self.rtt: float = 0.0
         self.mos: int = 5
 
+        self._client_info: Dict[str, Any] = {
+            "host": self._conn.peer_tuple,
+            "version": constant.VERSION,
+            "user_agent": constant.USER_AGENT,
+        }
+        self._server_info: Dict[str, Any] = {}
+
     ######################
     # proxy _conn feature #
     ######################
@@ -298,6 +305,8 @@ class Transport(object):
                 self.context.app = transport.app
                 self.context.conn = transport._conn
                 self.context.correlation_id = self.correlation_id
+                self.context.server_info = transport._server_info.copy()
+                self.context.client_info = transport._client_info.copy()
                 transport._context_dict[self.correlation_id] = self.context
                 super().__init__()
 
@@ -333,7 +342,10 @@ class Transport(object):
 
         async with self.context() as context:
             response: Response = await self._base_request(
-                Request.from_event(event.DeclareEvent({"server_name": self.app.server_name}), context),
+                Request.from_event(
+                    event.DeclareEvent({"server_name": self.app.server_name, "client_info": context.client_info}),
+                    context,
+                )
             )
 
         if (
@@ -343,6 +355,7 @@ class Transport(object):
             and "conn_id" in response.body
         ):
             self._conn.conn_id = response.body["conn_id"]
+            self._server_info = response.body["server_info"]
             return
         raise ConnectionError(f"transport:{self._conn} declare error")
 
@@ -427,16 +440,6 @@ class Transport(object):
     ##########################
     async def write_to_conn(self, request: Request) -> None:
         """gen msg_id and seng msg to transport"""
-
-        set_header_flag: bool = True
-        if request.msg_type == constant.CHANNEL_REQUEST:
-            if request.header.get("channel_life_cycle", None) != constant.DECLARE:
-                set_header_flag = False
-        if set_header_flag:
-            request.header["host"] = self._conn.peer_tuple
-            request.header["version"] = constant.VERSION
-            request.header["user_agent"] = constant.USER_AGENT
-
         for process_request in self.process_request_processor_list:
             await process_request(request)
         await self._conn.write(request.to_msg())
@@ -448,25 +451,22 @@ class Transport(object):
         self,
         func_name: str,
         arg_param: Optional[Sequence[Any]] = None,
-        call_id: Optional[int] = None,
         group: Optional[str] = None,
         header: Optional[dict] = None,
     ) -> Response:
         """msg request handle
         :param func_name: rpc func name
         :param arg_param: rpc func param
-        :param call_id: server gen func next id
         :param group: func's group
         :param header: request header
         """
         group = group or constant.DEFAULT_GROUP
-        call_id = call_id or -1
         arg_param = arg_param or []
         async with self.context() as context:
             request: Request = Request(
                 msg_type=constant.MSG_REQUEST,
                 target=f"{self.app.server_name}/{group}/{func_name}",
-                body={"call_id": call_id, "param": arg_param},
+                body=arg_param,
                 context=context,
             )
             if header:
@@ -476,11 +476,7 @@ class Transport(object):
             raise RPCError(f"response num must:{constant.MSG_RESPONSE} not {response.msg_type}")
         if "exc" in response.body:
             exc_info: str = response.body.get("exc_info", "")
-            if response.header.get("user_agent") == constant.USER_AGENT:
-                # TODO 不放在body会不会好点
-                raise_rap_error(response.body["exc"], exc_info)
-            else:
-                raise rap_exc.RpcRunTimeError(exc_info)
+            raise_rap_error(response.body["exc"], exc_info)
         return response
 
     @asynccontextmanager
