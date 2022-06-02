@@ -3,7 +3,7 @@ import random
 import string
 import time
 from enum import Enum, auto
-from typing import Any, Callable, Dict, Sequence, Tuple
+from typing import Any, Callable, Dict, Optional, Sequence, Tuple
 
 from rap.common.types import is_type
 
@@ -142,6 +142,14 @@ def param_handle(
     new_param_list: Tuple[Any, ...] = func_sig.bind(*param_list, **default_param_dict).args
     # check_func_type(func_sig, param_list, default_param_dict)
     return new_param_list
+
+
+def get_func_sig(func: Callable) -> inspect.Signature:
+    func_sig: Optional[inspect.Signature] = getattr(func, "_func_sig", None)
+    if func_sig is None:
+        func_sig = inspect.signature(func)
+        setattr(func, "_func_sig", func_sig)
+    return func_sig
 
 
 class EventEnum(Enum):

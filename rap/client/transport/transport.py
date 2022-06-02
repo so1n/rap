@@ -7,7 +7,6 @@ from collections import deque
 from contextlib import asynccontextmanager
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Deque, Dict, Optional, Sequence, Tuple, Type
-from uuid import uuid4
 
 from rap.client.model import ClientContext, Request, Response
 from rap.client.processor.base import belong_to_base_method
@@ -428,11 +427,15 @@ class Transport(object):
     ##########################
     async def write_to_conn(self, request: Request) -> None:
         """gen msg_id and seng msg to transport"""
-        request.header["host"] = self._conn.peer_tuple
-        request.header["version"] = constant.VERSION
-        request.header["user_agent"] = constant.USER_AGENT
-        if not request.header.get("request_id"):
-            request.header["request_id"] = str(uuid4())
+
+        set_header_flag: bool = True
+        if request.msg_type == constant.CHANNEL_REQUEST:
+            if request.header.get("channel_life_cycle", None) != constant.DECLARE:
+                set_header_flag = False
+        if set_header_flag:
+            request.header["host"] = self._conn.peer_tuple
+            request.header["version"] = constant.VERSION
+            request.header["user_agent"] = constant.USER_AGENT
 
         for process_request in self.process_request_processor_list:
             await process_request(request)

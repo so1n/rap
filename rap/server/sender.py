@@ -1,6 +1,5 @@
 import logging
 from typing import TYPE_CHECKING, Any, Callable, List, Optional
-from uuid import uuid4
 
 from rap.common.asyncio_helper import Deadline
 from rap.common.conn import ServerConnection
@@ -59,7 +58,6 @@ class Sender(object):
 
         set_header_value("version", constant.VERSION, is_cover=True)
         set_header_value("user_agent", constant.USER_AGENT, is_cover=True)
-        set_header_value("request_id", str(uuid4()), is_cover=resp.msg_type is constant.CHANNEL_RESPONSE)
 
     async def _processor_response_handle(self, resp: Response) -> Response:
         if not self._processor_list:

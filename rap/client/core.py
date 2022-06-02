@@ -9,11 +9,11 @@ from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common.cache import Cache
-from rap.common.channel import ReadChannel, UserChannelCovariantType, get_corresponding_channel_class
+from rap.common.channel import UserChannelCovariantType, get_corresponding_channel_class
 from rap.common.collect_statistics import WindowStatistics
 from rap.common.types import T_ParamSpec as P
 from rap.common.types import T_ReturnType as R_T
-from rap.common.utils import EventEnum, param_handle
+from rap.common.utils import EventEnum, get_func_sig, param_handle
 
 __all__ = ["BaseClient", "Client"]
 CHANNEL_F = Callable[[UserChannelCovariantType], Awaitable[None]]
@@ -131,7 +131,7 @@ class BaseClient:
     ) -> Callable[P, Awaitable[R_T]]:  # type: ignore
         """Decorate normal function"""
         name = name if name else func.__name__
-        func_sig: inspect.Signature = inspect.signature(func)
+        func_sig: inspect.Signature = get_func_sig(func)
 
         @wraps(func)  # type: ignore
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R_T:  # type: ignore
@@ -161,7 +161,7 @@ class BaseClient:
     ) -> Callable[P, AsyncGenerator[R_T, None]]:  # type: ignore
         """Decoration generator function"""
         name = name if name else func.__name__
-        func_sig: inspect.Signature = inspect.signature(func)
+        func_sig: inspect.Signature = get_func_sig(func)
 
         if not inspect.isasyncgenfunction(func):
             raise TypeError(f"func:{func.__name__} must async gen function")
@@ -176,8 +176,7 @@ class BaseClient:
             async with self.endpoint.picker(is_private=_is_private) as transport:
                 async with transport.channel(name, group) as channel:
                     await channel.write(param_handle(func_sig, _args, _kwargs))
-                    read_channel: ReadChannel = channel.get_read_channel()
-                    async for result in read_channel:
+                    async for result in channel.get_read_channel():
                         yield result
 
         return wrapper
