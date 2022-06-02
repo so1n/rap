@@ -1,11 +1,17 @@
 import asyncio
 import logging
 import traceback
-from typing import TYPE_CHECKING, Any, Coroutine, Optional, Tuple, Type
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Optional, Tuple, Type
 
 from rap.client.model import ClientContext, Request, Response
 from rap.common.asyncio_helper import as_first_completed
-from rap.common.channel import BaseChannel, ChannelCloseError, UserChannel
+from rap.common.channel import (
+    BaseChannel,
+    ChannelCloseError,
+    UserChannel,
+    UserChannelType,
+    get_corresponding_channel_class,
+)
 from rap.common.exceptions import ChannelError
 from rap.common.utils import constant
 
@@ -20,12 +26,23 @@ logger: logging.Logger = logging.getLogger(__name__)
 class Channel(BaseChannel[Response]):
     """client channel support"""
 
-    def __init__(self, *, transport: "Transport", target: str, channel_id: int, context: ClientContext):
+    _user_channel: UserChannel
+
+    def __init__(
+        self,
+        *,
+        transport: "Transport",
+        target: str,
+        channel_id: int,
+        context: ClientContext,
+        func: Optional[Callable] = None,
+    ):
         """
         :param transport: rap client transport
         :param target: rap target
         :param channel_id: transport correlation_id
         """
+        self._func: Optional[Callable] = func
         self._transport: "Transport" = transport
         self._target: str = target
         self._drop_msg: str = "recv channel's drop event, close channel"
@@ -33,7 +50,6 @@ class Channel(BaseChannel[Response]):
 
         self.channel_id: int = channel_id
         self.queue: asyncio.Queue[Tuple[Response, Optional[Exception]]] = asyncio.Queue()
-        self.user_channel: UserChannel[Response] = UserChannel(self)
         self.context.user_channel = self.user_channel
         self.channel_conn_future: asyncio.Future = asyncio.Future()
 
@@ -153,7 +169,7 @@ class Channel(BaseChannel[Response]):
     ######################
     # async with support #
     ######################
-    async def __aenter__(self) -> UserChannel[Response]:
+    async def __aenter__(self) -> UserChannelType:
         await self.create()
         return self.user_channel
 
@@ -163,3 +179,14 @@ class Channel(BaseChannel[Response]):
         else:
             self.set_success_finish()
         await self.close()
+
+    @property
+    def user_channel(self) -> UserChannel:
+        user_channel: Optional[UserChannel] = getattr(self, "_user_channel", None)
+        if not user_channel:
+            if self._func is None:
+                user_channel = UserChannel(self)
+            else:
+                user_channel = get_corresponding_channel_class(self._func)(self)  # type: ignore
+            setattr(self, "_user_channel", user_channel)
+        return user_channel  # type: ignore

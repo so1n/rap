@@ -3,8 +3,14 @@ from typing import Any
 
 from aredis import StrictRedis  # type: ignore
 
+from rap.common.channel import WriteChannel
 from rap.server import Server, UserChannel
 from rap.server.plugin.processor import CryptoProcessor
+
+
+async def read_channel(channel: WriteChannel) -> None:
+    for i in range(10):
+        await channel.write(f"hello {i}")
 
 
 async def async_channel(channel: UserChannel) -> None:
@@ -56,18 +62,21 @@ if __name__ == "__main__":
     rpc_server_1.register(async_channel)
     rpc_server_1.register(echo_body)
     rpc_server_1.register(echo_response)
+    rpc_server_1.register(read_channel)
 
     rpc_server_2: Server = Server("example", port=9001)
     rpc_server_2.load_processor([CryptoProcessor({"test": "keyskeyskeyskeys"})])
     rpc_server_2.register(async_channel)
     rpc_server_2.register(echo_body)
     rpc_server_2.register(echo_response)
+    rpc_server_2.register(read_channel)
 
     rpc_server_3: Server = Server("example", port=9002)
     rpc_server_3.load_processor([CryptoProcessor({"test": "keyskeyskeyskeys"})])
     rpc_server_3.register(async_channel)
     rpc_server_3.register(echo_body)
     rpc_server_3.register(echo_response)
+    rpc_server_3.register(read_channel)
 
     async def run_forever() -> None:
         await asyncio.gather(*[rpc_server_1.run_forever(), rpc_server_2.run_forever(), rpc_server_3.run_forever()])

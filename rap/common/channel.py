@@ -1,21 +1,24 @@
 import asyncio
-from typing import Any, Callable, Generic, TypeVar
+import inspect
+from typing import Any, Callable, Generic, List, Type, TypeVar, Union
 
-Read_T = TypeVar("Read_T")
+from typing_extensions import Self
+
+_Read_T = TypeVar("_Read_T")
 
 
 class ChannelCloseError(Exception):
     """channel is close"""
 
 
-class BaseChannel(Generic[Read_T]):
+class BaseChannel(Generic[_Read_T]):
     """Common method of rap client and server channel"""
 
     channel_id: int
     channel_conn_future: asyncio.Future
     queue: asyncio.Queue
 
-    async def read(self) -> Read_T:
+    async def read(self) -> _Read_T:
         """read msg obj from channel"""
         raise NotImplementedError
 
@@ -52,33 +55,31 @@ class BaseChannel(Generic[Read_T]):
             self.channel_conn_future.set_result(True)
 
 
-class AsyncIterData(Generic[Read_T]):
-    def __init__(self, channel: "BaseChannel"):
+class _AsyncIterData(Generic[_Read_T]):
+    def __init__(self, channel: "BaseChannel "):
         self.channel = channel
 
-    def __aiter__(self) -> "AsyncIterData":
+    def __aiter__(self) -> "Self":
         return self
 
-    async def __anext__(self) -> "Read_T":
+    async def __anext__(self) -> "_Read_T":
         try:
             return await self.channel.read()
         except ChannelCloseError:
             raise StopAsyncIteration()
 
 
-class AsyncIterDataBody(AsyncIterData[Read_T]):
-    async def __anext__(self) -> "Read_T":
+class _AsyncIterDataBody(_AsyncIterData[_Read_T]):
+    async def __anext__(self) -> "_Read_T":
         try:
             return await self.channel.read_body()
         except ChannelCloseError:
             raise StopAsyncIteration()
 
 
-class UserChannel(Generic[Read_T]):
-    """Only expose the user interface of BaseChannel"""
-
-    def __init__(self, channel: "BaseChannel[Read_T]"):
-        self._channel: BaseChannel[Read_T] = channel
+class _BaseChannelHelper(Generic[_Read_T]):
+    def __init__(self, channel: "BaseChannel[_Read_T]"):
+        self._channel: BaseChannel[_Read_T] = channel
 
     async def loop(self, flag: bool = True) -> bool:
         """In the channel function, elegantly replace `while True`
@@ -111,18 +112,6 @@ class UserChannel(Generic[Read_T]):
         else:
             return flag
 
-    async def read(self) -> Read_T:
-        """read msg obj from channel"""
-        return await self._channel.read()
-
-    async def read_body(self) -> Any:
-        """read body obj from channel's msg obj"""
-        return await self._channel.read_body()
-
-    async def write(self, body: Any) -> Any:
-        """write_to_conn body to channel"""
-        await self._channel.write(body)
-
     @property
     def channel_id(self) -> int:
         """channel id, each channel has a unique id"""
@@ -143,22 +132,96 @@ class UserChannel(Generic[Read_T]):
     def remove_done_callback(self, fn: Callable[[asyncio.Future], None]) -> None:
         self._channel.channel_conn_future.remove_done_callback(fn)
 
+
+class _ReadChannelMixin(Generic[_Read_T]):
+    _channel: "BaseChannel[_Read_T]"
+
+    async def read(self) -> _Read_T:
+        """read msg obj from channel"""
+        return await self._channel.read()
+
+    async def read_body(self) -> Any:
+        """read body obj from channel's msg obj"""
+        return await self._channel.read_body()
+
     #####################
     # async for support #
     #####################
-    def iter(self) -> AsyncIterData[Read_T]:
+    def iter(self) -> _AsyncIterData[_Read_T]:
         """
         >>> async def channel_demo(channel: UserChannel):
         ...     async for response in channel.iter():
         ...         response.body
         ...         response.header
         """
-        return AsyncIterData(self._channel)
+        return _AsyncIterData(self._channel)
 
-    def iter_body(self) -> AsyncIterDataBody[Read_T]:
+    def iter_body(self) -> _AsyncIterDataBody[_Read_T]:
         """
         >>> async def channel_demo(channel: UserChannel):
         ...     async for body in channel.iter_body():
         ...         print(body)
         """
-        return AsyncIterDataBody(self._channel)
+        return _AsyncIterDataBody(self._channel)
+
+    def __aiter__(self) -> "Self":
+        return self
+
+    async def __anext__(self) -> Any:
+        try:
+            return await self._channel.read_body()
+        except ChannelCloseError:
+            raise StopAsyncIteration()
+
+
+class _WriteChannelMixin(Generic[_Read_T]):
+    _channel: "BaseChannel[_Read_T]"
+
+    async def write(self, body: Any) -> Any:
+        """write_to_conn body to channel"""
+        await self._channel.write(body)
+
+
+class ReadChannel(_BaseChannelHelper[_Read_T], _ReadChannelMixin):
+    pass
+
+
+class WriteChannel(_BaseChannelHelper[_Read_T], _WriteChannelMixin):
+    pass
+
+
+class UserChannel(_BaseChannelHelper[_Read_T], _WriteChannelMixin, _ReadChannelMixin):
+    """Only expose the user interface of BaseChannel"""
+
+
+UserChannelType = Union[ReadChannel, WriteChannel, UserChannel]
+UserChannelCovariantType = TypeVar("UserChannelCovariantType", bound=_BaseChannelHelper, covariant=True)
+UserChannelContravariantType = TypeVar("UserChannelContravariantType", bound=UserChannel, contravariant=True)
+
+
+def get_opposite_channel_class(
+    channel_class: Type[Union[WriteChannel, ReadChannel]]
+) -> Type[Union[WriteChannel, ReadChannel]]:
+    if channel_class == ReadChannel:
+        return WriteChannel
+    elif channel_class == WriteChannel:
+        return ReadChannel
+    else:
+        raise TypeError(f"{channel_class} is not a valid channel class")
+
+
+def get_corresponding_channel_class(func: Callable) -> Type[UserChannelType]:
+    param_type: Any = getattr(func, "__channel_class__", None)
+    if param_type:
+        return param_type
+    func_sig: inspect.Signature = inspect.signature(func)
+    func_arg_parameter: List[inspect.Parameter] = [i for i in func_sig.parameters.values() if i.default == i.empty]
+    if len(func_arg_parameter) != 1:
+        raise TypeError(f"func:{func.__name__} must channel function")
+    param_type = func_arg_parameter[0].annotation
+    if isinstance(param_type, str):
+        param_type = locals().get(param_type, None)
+    if param_type not in (ReadChannel, WriteChannel, UserChannel):
+        raise TypeError(f"func:{func.__name__} must channel function")
+    setattr(func, "__channel_class__", param_type)
+    return param_type

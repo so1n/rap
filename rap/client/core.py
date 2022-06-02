@@ -10,14 +10,14 @@ from rap.client.processor.base import BaseProcessor
 from rap.client.transport.async_iterator import AsyncIteratorCall
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common.cache import Cache
-from rap.common.channel import UserChannel
+from rap.common.channel import UserChannelCovariantType, get_corresponding_channel_class
 from rap.common.collect_statistics import WindowStatistics
 from rap.common.types import T_ParamSpec as P
 from rap.common.types import T_ReturnType as R_T
 from rap.common.utils import EventEnum, param_handle
 
 __all__ = ["BaseClient", "Client"]
-CHANNEL_F = Callable[[UserChannel], Awaitable[None]]
+CHANNEL_F = Callable[[UserChannelCovariantType], Awaitable[None]]
 Callable_T = TypeVar("Callable_T")
 
 
@@ -202,15 +202,12 @@ class BaseClient:
     ) -> Callable[..., Awaitable[None]]:
         """Decoration channel function"""
         name = name if name else func.__name__
-        func_sig: inspect.Signature = inspect.signature(func)
-        func_arg_parameter: List[inspect.Parameter] = [i for i in func_sig.parameters.values() if i.default == i.empty]
-        if not (len(func_arg_parameter) == 1 and func_arg_parameter[0].annotation is UserChannel):
-            raise TypeError(f"func:{func.__name__} must channel function")
+        get_corresponding_channel_class(func)
 
         @wraps(func)
         async def wrapper() -> None:
             async with self.endpoint.picker(is_private=is_private) as transport:
-                async with transport.channel(name, group) as channel:
+                async with transport.channel(name, group, func=func) as channel:
                     await func(channel)
 
         return wrapper
@@ -340,7 +337,7 @@ class BaseClient:
 
     def invoke_channel(
         self,
-        func: CHANNEL_F,
+        func: Callable[[UserChannelCovariantType], Awaitable[None]],
         group: Optional[str] = None,
         is_private: bool = False,
     ) -> Callable[..., Awaitable[None]]:

@@ -2,7 +2,7 @@ import asyncio
 
 from rap.client import Client, Response
 from rap.client.processor import CryptoProcessor
-from rap.common.channel import UserChannel
+from rap.common.channel import ReadChannel, UserChannel
 
 client: Client = Client(
     "example", [{"ip": "localhost", "port": 9000}, {"ip": "localhost", "port": 9001}, {"ip": "localhost", "port": 9002}]
@@ -30,6 +30,12 @@ async def async_channel_(channel: UserChannel) -> None:
 
 
 @client.register_channel()
+async def read_channel(channel: ReadChannel) -> None:
+    async for body in channel.iter_body():
+        print(body)
+
+
+@client.register_channel()
 async def echo_body(channel: UserChannel) -> None:
     cnt: int = 0
     await channel.write(f"ping! {cnt}")
@@ -54,6 +60,7 @@ async def run_once() -> None:
     await echo_response()
     await async_channel_()
     await client.invoke_channel(async_channel)()
+    await read_channel()
     await client.stop()
 
 

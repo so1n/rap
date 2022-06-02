@@ -6,7 +6,7 @@ from collections import OrderedDict
 from types import FunctionType
 from typing import Any, Callable, Dict, List, Optional, Type, Union
 
-from rap.common.channel import UserChannel
+from rap.common.channel import get_corresponding_channel_class
 from rap.common.exceptions import RegisteredError
 from rap.common.types import is_json_type
 from rap.common.utils import constant
@@ -75,13 +75,10 @@ class RegistryManager(object):
     @staticmethod
     def _get_func_type(func: Callable) -> str:
         """get func type, normal or channel"""
-        sig: "inspect.Signature" = inspect.signature(func)
-        func_arg_parameter: List[inspect.Parameter] = [i for i in sig.parameters.values() if i.default == i.empty]
-
         func_type: str = constant.NORMAL_TYPE
         try:
-            if len(func_arg_parameter) == 1 and issubclass(func_arg_parameter[0].annotation, UserChannel):
-                func_type = constant.CHANNEL_TYPE
+            get_corresponding_channel_class(func)
+            func_type = constant.CHANNEL_TYPE
         except TypeError:
             # ignore error TypeError: issubclass() arg 1 must be a class
             pass

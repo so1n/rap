@@ -481,8 +481,11 @@ class Transport(object):
         return response
 
     @asynccontextmanager
-    async def channel(self, func_name: str, group: Optional[str] = None) -> AsyncGenerator["UserChannel", None]:
+    async def channel(
+        self, func_name: str, group: Optional[str] = None, func: Optional[Callable] = None
+    ) -> AsyncGenerator["UserChannel", None]:
         """create and init channel
+        :param func: rpc func
         :param func_name: rpc func name
         :param group: func's group
         """
@@ -491,10 +494,10 @@ class Transport(object):
         async with self.context() as context:
             correlation_id: int = context.correlation_id
             channel: Channel = Channel(
-                transport=self, target=target, channel_id=correlation_id, context=context  # type: ignore
+                func=func, transport=self, target=target, channel_id=correlation_id, context=context  # type: ignore
             )
             self._channel_queue_dict[correlation_id] = channel.queue
             channel.channel_conn_future.add_done_callback(lambda f: self._channel_queue_dict.pop(correlation_id, None))
 
             async with channel as user_channel:
-                yield user_channel
+                yield user_channel  # type: ignore
