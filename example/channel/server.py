@@ -1,5 +1,4 @@
 import asyncio
-from typing import Any
 
 from aredis import StrictRedis  # type: ignore
 
@@ -19,8 +18,8 @@ async def write_channel(channel: ReadChannel) -> None:
 
 async def async_channel(channel: UserChannel) -> None:
     while await channel.loop():
-        body: Any = await channel.read_body()
-        if body == "hello":
+        resp = await channel.read()
+        if resp.body == "hello":
             cnt: int = 0
             await channel.write(f"hello {cnt}")
             while await channel.loop(cnt < 10):

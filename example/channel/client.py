@@ -1,8 +1,7 @@
 import asyncio
 
-from rap.client import Client, Response
+from rap.client import Client, ReadChannel, Response, UserChannel, WriteChannel
 from rap.client.processor import CryptoProcessor
-from rap.common.channel import ReadChannel, UserChannel, WriteChannel
 
 client: Client = Client(
     "example", [{"ip": "localhost", "port": 9000}, {"ip": "localhost", "port": 9001}, {"ip": "localhost", "port": 9002}]
@@ -11,7 +10,7 @@ client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
 
 
 async def async_channel(channel: UserChannel) -> None:
-    await channel.write("hello")
+    await channel.write("hello", header={"key": "value"})
     cnt: int = 0
     while await channel.loop(cnt < 3):
         cnt += 1

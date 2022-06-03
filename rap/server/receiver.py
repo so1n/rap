@@ -292,7 +292,6 @@ class Receiver(object):
             raise ChannelError("channel life cycle error")
 
     async def msg_handle(self, request: Request, response: Response) -> Tuple[Optional[Response], bool]:
-        """根据函数类型分发请求，以及会对函数结果进行封装"""
         func_model: FuncModel = await self._get_func_from_request(request)
         # Check param type
         try:

@@ -1,17 +1,21 @@
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, Union
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, Optional, Union
 
 from rap.common.asyncio_helper import del_future
-from rap.common.channel import BaseChannel, UserChannel, get_corresponding_channel_class
+from rap.common.channel import BaseChannel
+from rap.common.channel import UserChannel as _UserChannel
+from rap.common.channel import get_corresponding_channel_class
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import ChannelError
 from rap.common.utils import constant
+from rap.server.model import Response
 
 if TYPE_CHECKING:
     from rap.server import Request
 
 logger: logging.Logger = logging.getLogger(__name__)
+UserChannel = _UserChannel[Response]
 
 
 class Channel(BaseChannel["Request"]):
@@ -49,10 +53,12 @@ class Channel(BaseChannel["Request"]):
             if not self.is_close:
                 await self.close()
 
-    async def write(self, body: Any) -> None:
+    async def write(self, body: Any, header: Optional[dict] = None) -> None:
         if self.is_close:
             raise ChannelError(f"channel<{self.channel_id}> is close")
-        await self._write(body, {"channel_life_cycle": constant.MSG})
+        header = header or {}
+        header["channel_life_cycle"] = constant.MSG
+        await self._write(body, header)
 
     async def read(self) -> "Request":
         if self.is_close:

@@ -7,13 +7,15 @@ from typing_extensions import Self
 
 from rap.client.model import ClientContext, Request, Response
 from rap.common.asyncio_helper import as_first_completed
-from rap.common.channel import BaseChannel, ChannelCloseError, UserChannel
+from rap.common.channel import BaseChannel, ChannelCloseError
+from rap.common.channel import UserChannel as _UserChannel
 from rap.common.exceptions import ChannelError
 from rap.common.utils import constant
 
 if TYPE_CHECKING:
     from .transport import Transport
-__all__ = ["Channel"]
+__all__ = ["Channel", "UserChannel"]
+UserChannel = _UserChannel[Response]
 
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -101,16 +103,23 @@ class Channel(BaseChannel[Response]):
         return response
 
     async def _base_write(
-        self, body: Any, life_cycle: str, timeout: Optional[int] = None, target: Optional[str] = None
+        self,
+        body: Any,
+        life_cycle: str,
+        timeout: Optional[int] = None,
+        target: Optional[str] = None,
+        header: Optional[dict] = None,
     ) -> None:
         """base send body to channel"""
         if self.is_close:
             raise ChannelCloseError("channel is closed")
+        header = header or {}
+        header["channel_life_cycle"] = life_cycle
         request: Request = Request(
             msg_type=constant.CHANNEL_REQUEST,
             target=target,
             body=body,
-            header={"channel_life_cycle": life_cycle},
+            header=header,
             context=self.context,
         )
         coro: Coroutine = self._transport.write_to_conn(request)
@@ -126,14 +135,14 @@ class Channel(BaseChannel[Response]):
         response: Response = await self.read(timeout=timeout)
         return response.body
 
-    async def write(self, body: Any, timeout: Optional[int] = None) -> None:
+    async def write(self, body: Any, header: Optional[dict] = None, timeout: Optional[int] = None) -> None:
         """
         :param body: send body
         :param timeout: wait write timeout
             In general, the write method is very fast,
             but in extreme cases transport has accumulated some requests and needs to wait
         """
-        await self._base_write(body, constant.MSG, timeout=timeout)
+        await self._base_write(body, constant.MSG, header=header, timeout=timeout)
 
     async def close(self) -> None:
         """Actively send a close message and close the channel"""

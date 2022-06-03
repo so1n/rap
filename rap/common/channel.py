@@ -1,6 +1,7 @@
 import asyncio
 import inspect
-from typing import Any, Awaitable, Callable, Generic, List, Type, TypeVar, Union, overload
+import sys
+from typing import Any, Awaitable, Callable, ForwardRef, Generic, List, Optional, Type, TypeVar, Union, overload
 
 from typing_extensions import Self
 
@@ -26,7 +27,7 @@ class BaseChannel(Generic[_Read_T]):
         """read body obj from channel's msg obj"""
         raise NotImplementedError
 
-    async def write(self, body: Any) -> Any:
+    async def write(self, body: Any, header: Optional[dict] = None) -> Any:
         """write_to_conn body to channel"""
         raise NotImplementedError
 
@@ -215,9 +216,9 @@ class _ReadChannelMixin(Generic[_Read_T]):
 class _WriteChannelMixin(Generic[_Read_T]):
     _channel: "BaseChannel[_Read_T]"
 
-    async def write(self, body: Any) -> Any:
+    async def write(self, body: Any, header: Optional[dict] = None) -> Any:
         """write_to_conn body to channel"""
-        await self._channel.write(body)
+        await self._channel.write(body, header)
 
 
 class ContextChannel(BaseUserChannel[_Read_T]):
@@ -260,10 +261,17 @@ def get_corresponding_channel_class(func: Callable) -> Type[UserChannelType]:
     func_arg_parameter: List[inspect.Parameter] = [i for i in func_sig.parameters.values() if i.default == i.empty]
     if len(func_arg_parameter) != 1:
         raise TypeError(f"func:{func.__name__} must channel function")
-    param_type = func_arg_parameter[0].annotation
-    if isinstance(param_type, str):
-        param_type = locals().get(param_type, None)
-    if param_type not in (ReadChannel, WriteChannel, UserChannel):
+    annotation = func_arg_parameter[0].annotation
+    # get real type
+    if isinstance(annotation, str):
+        value: ForwardRef = ForwardRef(annotation, is_argument=False)
+        annotation = value._evaluate(sys.modules[func.__module__].__dict__, None)  # type: ignore
+        if not annotation:
+            raise RuntimeError(f"get real annotation from {func} fail")  # pragma: no cover
+    origin_type = getattr(annotation, "__origin__", None)
+    if origin_type:
+        annotation = origin_type
+    if annotation not in (ReadChannel, WriteChannel, UserChannel):
         raise TypeError(f"func:{func.__name__} must channel function")
-    setattr(func, "__channel_class__", param_type)
+    setattr(func, "__channel_class__", annotation)
     return param_type
