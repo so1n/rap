@@ -27,7 +27,7 @@ from rap.common.asyncio_helper import (
 from rap.common.conn import CloseConnException, Connection
 from rap.common.exceptions import IgnoreNextProcessor, RPCError
 from rap.common.types import SERVER_BASE_MSG_TYPE
-from rap.common.utils import constant
+from rap.common.utils import InmutableDict, constant
 
 if TYPE_CHECKING:
     from rap.client.core import BaseClient
@@ -108,12 +108,12 @@ class Transport(object):
         self.rtt: float = 0.0
         self.mos: int = 5
 
-        self._client_info: Dict[str, Any] = {
-            "host": self._conn.peer_tuple,
-            "version": constant.VERSION,
-            "user_agent": constant.USER_AGENT,
-        }
-        self._server_info: Dict[str, Any] = {}
+        self._client_info: InmutableDict = InmutableDict(
+            host=self._conn.peer_tuple,
+            version=constant.VERSION,
+            user_agent=constant.USER_AGENT,
+        )
+        self._server_info: InmutableDict = InmutableDict()
 
     ######################
     # proxy _conn feature #
@@ -305,8 +305,8 @@ class Transport(object):
                 self.context.app = transport.app
                 self.context.conn = transport._conn
                 self.context.correlation_id = self.correlation_id
-                self.context.server_info = transport._server_info.copy()
-                self.context.client_info = transport._client_info.copy()
+                self.context.server_info = transport._server_info
+                self.context.client_info = transport._client_info
                 transport._context_dict[self.correlation_id] = self.context
                 super().__init__()
 
@@ -355,7 +355,7 @@ class Transport(object):
             and "conn_id" in response.body
         ):
             self._conn.conn_id = response.body["conn_id"]
-            self._server_info = response.body["server_info"]
+            self._server_info = InmutableDict(response.body["server_info"])
             return
         raise ConnectionError(f"transport:{self._conn} declare error")
 

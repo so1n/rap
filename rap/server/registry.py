@@ -141,7 +141,6 @@ class RegistryManager(object):
 
             async def _(channel: UserChannel):
                 func_param: tuple = await channel.read_body()
-                print(func_param, func)
                 async for result in func(*func_param):
                     await channel.write(result)
 

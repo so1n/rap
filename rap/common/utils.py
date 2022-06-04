@@ -158,3 +158,8 @@ class EventEnum(Enum):
     after_start = auto()
     before_end = auto()
     after_end = auto()
+
+
+class InmutableDict(dict):
+    def __setitem__(self, key, value):
+        raise TypeError("inmutable dict can not be modify")

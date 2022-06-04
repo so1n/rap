@@ -20,7 +20,7 @@ from rap.common.exceptions import (
     ServerError,
 )
 from rap.common.types import BASE_MSG_TYPE
-from rap.common.utils import constant, param_handle, parse_error, response_num_dict
+from rap.common.utils import InmutableDict, constant, param_handle, parse_error, response_num_dict
 from rap.server.channel import Channel
 from rap.server.model import Request, Response, ServerContext
 from rap.server.plugin.processor.base import BaseProcessor, belong_to_base_method
@@ -91,12 +91,12 @@ class Receiver(object):
         ]
         # Store resources that cannot be controlled by the current concurrent process
         self._used_resources: SetEvent = SetEvent()
-        self._server_info: Dict[str, Any] = {
-            "host": self._conn.peer_tuple,
-            "version": constant.VERSION,
-            "user_agent": constant.USER_AGENT,
-        }
-        self._client_info: Dict[str, Any] = {}
+        self._server_info: InmutableDict = InmutableDict(
+            host=self._conn.peer_tuple,
+            version=constant.VERSION,
+            user_agent=constant.USER_AGENT,
+        )
+        self._client_info: InmutableDict = InmutableDict()
 
     async def _default_call_fun_permission_fn(self, request: Request) -> FuncModel:
         func_key: str = self._app.registry.gen_key(
@@ -119,8 +119,8 @@ class Receiver(object):
             context.app = self  # type: ignore
             context.conn = self._conn
             context.correlation_id = correlation_id
-            context.server_info = self._server_info.copy()
-            context.client_info = self._client_info.copy()
+            context.server_info = self._server_info
+            context.client_info = self._client_info
             self.context_dict[correlation_id] = context
             logger.debug("create %s context", correlation_id)
 
@@ -339,6 +339,7 @@ class Receiver(object):
             if request.body.get("server_name") != self._app.server_name:
                 response.set_server_event(CloseConnEvent("error server name"))
             else:
+                self._client_info = InmutableDict(request.body["client_info"])
                 response.set_event(
                     DeclareEvent({"result": True, "conn_id": self._conn.conn_id, "server_info": self._server_info})
                 )
