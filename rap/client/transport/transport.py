@@ -25,7 +25,7 @@ from rap.common.asyncio_helper import (
     safe_del_future,
 )
 from rap.common.conn import CloseConnException, Connection
-from rap.common.exceptions import IgnoreNextProcessor, RPCError
+from rap.common.exceptions import IgnoreNextProcessor, InvokeError, RPCError
 from rap.common.types import SERVER_BASE_MSG_TYPE
 from rap.common.utils import InmutableDict, constant
 
@@ -66,8 +66,8 @@ class Transport(object):
         self._correlation_id: int = 1
         self._context_dict: Dict[int, ClientContext] = {}
         self._exc_status_code_dict: Dict[int, Type[rap_exc.BaseRapError]] = get_exc_status_code_dict()
-        self._resp_future_dict: Dict[int, asyncio.Future[Tuple[Response, Optional[Exception]]]] = {}
-        self._channel_queue_dict: Dict[int, asyncio.Queue[Tuple[Response, Optional[Exception]]]] = {}
+        self._resp_future_dict: Dict[int, asyncio.Future[Response]] = {}
+        self._channel_queue_dict: Dict[int, asyncio.Queue[Response]] = {}
 
         if weight > 10:
             weight = 10
@@ -167,21 +167,20 @@ class Transport(object):
     ##########################################
     # rap interactive protocol encapsulation #
     ##########################################
-    async def process_response(self, response: Response, exc: Optional[Exception]) -> Response:
+    async def process_response(self, response: Response) -> Response:
         """
         If this response is accompanied by an exception, handle the exception directly and throw it.
         """
-        if not exc:
+        if not response.exc:
             try:
                 for process_response in reversed(self.process_response_processor_list):
                     response = await process_response(response)
             except IgnoreNextProcessor:
                 pass
             except Exception as e:
-                exc = e
-                response.exc = exc
+                response.exc = e
                 response.tb = sys.exc_info()[2]
-        if exc:
+        if response.exc:
             for process_exception in reversed(self.process_exception_processor_list):
                 raw_response: Response = response
                 try:
@@ -193,7 +192,6 @@ class Transport(object):
                         f"processor:{process_exception} handle response:{response.correlation_id} error:{e}"
                     )
                     response = raw_response
-            raise exc  # type: ignore
         return response
 
     async def listen_conn(self) -> None:
@@ -210,11 +208,11 @@ class Transport(object):
             if not self._conn.is_closed():
                 await self._conn.await_close()
 
-    def _broadcast_server_event(self, response: Response, exc: Exception) -> None:
+    def _broadcast_server_event(self, response: Response) -> None:
         for _, future in self._resp_future_dict.items():
-            future.set_result((response, exc))
+            future.set_result(response)
         for _, queue in self._channel_queue_dict.items():
-            queue.put_nowait((response, exc))
+            queue.put_nowait(response)
 
     # flake8: noqa: C901
     async def response_handler(self) -> None:
@@ -250,15 +248,13 @@ class Transport(object):
             logger.exception(f"recv wrong response:{response_msg}, ignore error:{e}")
             return
 
-        exc: Optional[Exception] = None
         if response.msg_type == constant.SERVER_ERROR_RESPONSE or response.status_code in self._exc_status_code_dict:
             # Generate rap standard error
             exc_class: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(
                 response.status_code, rap_exc.BaseRapError
             )
-            exc = exc_class(response.body)
-            response.exc = exc
-            response.tb = sys.exc_info()[2]
+            response.exc = exc_class.build(response.body)
+        response = await self.process_response(response)
         # dispatch response
         if response.msg_type == constant.SERVER_EVENT:
             # server event msg handle
@@ -268,7 +264,8 @@ class Transport(object):
                 self.available = False
                 exc = CloseConnException(response.body)
                 self._conn.set_reader_exc(exc)
-                self._broadcast_server_event(response, exc)
+                response.exc = exc
+                self._broadcast_server_event(response)
             elif response.func_name == constant.PING_EVENT:
                 request: Request = Request.from_event(event.PingEvent(""), context)
                 request.msg_type = constant.SERVER_EVENT
@@ -278,17 +275,17 @@ class Transport(object):
         elif response.msg_type == constant.CLIENT_EVENT:
             if response.func_name in (constant.DECLARE, constant.PING_EVENT):
                 if correlation_id in self._resp_future_dict:
-                    self._resp_future_dict[correlation_id].set_result((response, exc))
+                    self._resp_future_dict[correlation_id].set_result(response)
                 else:
                     logger.error(f"recv event:{response.func_name}, but not handler")
             else:
                 logger.error(f"recv not support event response:{response}")
         elif response.msg_type == constant.CHANNEL_RESPONSE and correlation_id in self._channel_queue_dict:
             # put msg to channel
-            self._channel_queue_dict[correlation_id].put_nowait((response, exc))
+            self._channel_queue_dict[correlation_id].put_nowait(response)
         elif response.msg_type == constant.MSG_RESPONSE and correlation_id in self._resp_future_dict:
             # set msg to future_dict's `future`
-            self._resp_future_dict[correlation_id].set_result((response, exc))
+            self._resp_future_dict[correlation_id].set_result(response)
         else:
             logger.error(f"Can not dispatch response: {response}, ignore")
         return
@@ -412,18 +409,16 @@ class Transport(object):
         :return: return server response
         """
         try:
-            response_future: asyncio.Future[Tuple[Response, Optional[Exception]]] = asyncio.Future()
+            response_future: asyncio.Future[Response] = asyncio.Future()
             self._resp_future_dict[request.correlation_id] = response_future
             deadline: Optional[Deadline] = deadline_context.get()
             if self.app.through_deadline and deadline:
                 request.header["X-rap-deadline"] = deadline.end_timestamp
             await self.write_to_conn(request)
-            response, exc = await as_first_completed(
+            return await as_first_completed(
                 [response_future],
                 not_cancel_future_list=[self._conn.conn_future],
             )
-            response = await self.process_response(response, exc)
-            return response
         finally:
             pop_future: Optional[asyncio.Future] = self._resp_future_dict.pop(request.correlation_id, None)
             if pop_future:
@@ -472,11 +467,13 @@ class Transport(object):
             if header:
                 request.header.update(header)
             response: Response = await self._base_request(request)
-        if response.msg_type != constant.MSG_RESPONSE:
-            raise RPCError(f"response num must:{constant.MSG_RESPONSE} not {response.msg_type}")
-        if "exc" in response.body:
-            exc_info: str = response.body.get("exc_info", "")
-            raise_rap_error(response.body["exc"], exc_info)
+            if response.msg_type != constant.MSG_RESPONSE:
+                raise RPCError(f"response num must:{constant.MSG_RESPONSE} not {response.msg_type}")
+            if response.exc:
+                if isinstance(response.exc, InvokeError):
+                    raise_rap_error(response.exc.exc_name, response.exc.exc_info)
+                else:
+                    raise response.exc
         return response
 
     @asynccontextmanager

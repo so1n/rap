@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional
 
 
 class BaseRapError(Exception):
@@ -11,6 +11,14 @@ class BaseRapError(Exception):
         if extra_msg:
             message += f". {extra_msg}"
         super().__init__(message)
+
+    @classmethod
+    def build(cls, body: Any) -> "BaseRapError":
+        return cls(body)
+
+    @property
+    def body(self) -> Any:
+        return str(self)
 
 
 class AuthError(BaseRapError):
@@ -71,6 +79,23 @@ class CryptoError(BaseRapError):
 class ChannelError(BaseRapError):
     status_code: int = 508
     message: str = "Channel Error"
+
+
+class InvokeError(BaseRapError):
+    status_code: int = 301
+
+    def __init__(self, exc: str, exc_info: str) -> None:
+        self.exc_name: str = exc
+        self.exc_info: str = exc_info
+        super().__init__(str({"exc_name": exc, "exc_info": exc_info}))
+
+    @property
+    def body(self) -> Any:
+        return self.exc_name, self.exc_info
+
+    @classmethod
+    def build(cls, body: Any) -> "BaseRapError":
+        return cls(*body)
 
 
 class IgnoreNextProcessor(Exception):

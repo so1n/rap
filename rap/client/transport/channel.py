@@ -1,15 +1,16 @@
 import asyncio
 import logging
 import traceback
-from typing import TYPE_CHECKING, Any, Coroutine, Optional, Tuple, Type
+from typing import TYPE_CHECKING, Any, Coroutine, Optional, Type
 
 from typing_extensions import Self
 
 from rap.client.model import ClientContext, Request, Response
+from rap.client.utils import raise_rap_error
 from rap.common.asyncio_helper import as_first_completed
 from rap.common.channel import BaseChannel, ChannelCloseError
 from rap.common.channel import UserChannel as _UserChannel
-from rap.common.exceptions import ChannelError
+from rap.common.exceptions import ChannelError, InvokeError
 from rap.common.utils import constant
 
 if TYPE_CHECKING:
@@ -45,7 +46,7 @@ class Channel(BaseChannel[Response]):
         self.context: ClientContext = context
 
         self.channel_id: int = channel_id
-        self.queue: asyncio.Queue[Tuple[Response, Optional[Exception]]] = asyncio.Queue()
+        self.queue: asyncio.Queue[Response] = asyncio.Queue()
         self.context.context_channel = self.get_context_channel()
         self.channel_conn_future: asyncio.Future = asyncio.Future()
 
@@ -80,21 +81,21 @@ class Channel(BaseChannel[Response]):
         if self.is_close:
             raise ChannelCloseError("channel is closed")
 
-        async def _read_by_queue() -> Response:
-            """read response or exc from queue"""
-            _response, _exc = await self.queue.get()
-            _response = await self._transport.process_response(_response, _exc)
-            return _response
-
         try:
             response: Response = await as_first_completed(
-                [asyncio.wait_for(_read_by_queue(), timeout=timeout)],
+                [asyncio.wait_for(self.queue.get(), timeout=timeout)],
                 not_cancel_future_list=[self.channel_conn_future],
             )
         except asyncio.TimeoutError:
             raise ChannelError(f"channel<{self.channel_id}> read response timeout")
         except Exception as e:
             raise e
+
+        if response.exc:
+            if isinstance(response.exc, InvokeError):
+                raise_rap_error(response.exc.exc_name, response.exc.exc_info)
+            else:
+                raise response.exc
 
         if response.header.get("channel_life_cycle") == constant.DROP:
             exc: ChannelCloseError = ChannelCloseError(self._drop_msg)

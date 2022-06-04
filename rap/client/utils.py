@@ -2,7 +2,7 @@ import inspect
 from typing import Dict, Optional, Type
 
 from rap.common import exceptions as rap_exc
-from rap.common.exceptions import RPCError
+from rap.common.exceptions import InvokeError
 
 
 def get_exc_status_code_dict() -> Dict[int, Type[rap_exc.BaseRapError]]:
@@ -24,6 +24,6 @@ def raise_rap_error(exc_name: str, exc_info: str = "") -> None:
     if exc is None:
         exc = globals()["__builtins__"].get(exc_name, None)
     if exc is None:
-        raise RPCError(exc_info)
+        raise InvokeError(exc_name, exc_info)
     else:
         raise exc(exc_info)

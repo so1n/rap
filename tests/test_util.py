@@ -6,7 +6,7 @@ import pytest
 from rap.client.utils import raise_rap_error
 from rap.common.cache import Cache
 from rap.common.event import Event
-from rap.common.exceptions import RPCError
+from rap.common.exceptions import InvokeError
 from rap.common.state import State
 from rap.common.utils import check_func_type
 
@@ -36,10 +36,10 @@ class TestUtil:
         assert ("name", "info") == event.to_tuple()
 
     def test_raise_customer_exc(self) -> None:
-        with pytest.raises(RPCError) as e:
+        with pytest.raises(InvokeError) as e:
             raise_rap_error("customer_exc", "customer_info")
         exec_msg: str = e.value.args[0]
-        assert exec_msg == "customer_info"
+        assert exec_msg == "{'exc_name': 'customer_exc', 'exc_info': 'customer_info'}"
 
     def test_check_func_type(self) -> None:
         def _demo(a: int, b: str, c: str = "") -> int:

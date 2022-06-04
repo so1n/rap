@@ -92,7 +92,7 @@ class Response(ServerMsgProtocol):
             logger.error(exc)
             exc = ServerError(str(exc))
         self.exc = exc
-        self.body = str(exc)
+        self.body = exc.body
         self.status_code = exc.status_code
 
     def set_event(self, event: Event) -> None:

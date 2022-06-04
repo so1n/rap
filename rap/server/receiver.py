@@ -15,6 +15,7 @@ from rap.common.exceptions import (
     BaseRapError,
     ChannelError,
     FuncNotFoundError,
+    InvokeError,
     ParseError,
     RpcRunTimeError,
     ServerError,
@@ -319,9 +320,9 @@ class Receiver(object):
 
         if isinstance(result, Exception):
             exc, exc_info = parse_error(result)
-            response.body = {"exc_info": exc_info, "exc": exc}
+            response.set_exception(InvokeError(exc, exc_info))
         else:
-            response.body = {"result": result}
+            response.body = result
         return response, True
 
     async def event(self, request: Request, response: Response) -> Tuple[Optional[Response], bool]:

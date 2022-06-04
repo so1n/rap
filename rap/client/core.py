@@ -289,7 +289,7 @@ class BaseClient:
         :param is_private: If the value is True, it will get transport for its own use only. default False
         """
         response: Response = await self.request(name, arg_param, group=group, header=header, is_private=is_private)
-        return response.body["result"]
+        return response.body
 
     def invoke(
         self,
