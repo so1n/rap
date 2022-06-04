@@ -411,14 +411,17 @@ class Transport(object):
         try:
             response_future: asyncio.Future[Response] = asyncio.Future()
             self._resp_future_dict[request.correlation_id] = response_future
-            deadline: Optional[Deadline] = deadline_context.get()
-            if self.app.through_deadline and deadline:
-                request.header["X-rap-deadline"] = deadline.end_timestamp
             await self.write_to_conn(request)
-            return await as_first_completed(
+            response: Response = await as_first_completed(
                 [response_future],
                 not_cancel_future_list=[self._conn.conn_future],
             )
+            if response.exc:
+                if isinstance(response.exc, InvokeError):
+                    raise_rap_error(response.exc.exc_name, response.exc.exc_info)
+                else:
+                    raise response.exc
+            return response
         finally:
             pop_future: Optional[asyncio.Future] = self._resp_future_dict.pop(request.correlation_id, None)
             if pop_future:
@@ -435,6 +438,9 @@ class Transport(object):
     ##########################
     async def write_to_conn(self, request: Request) -> None:
         """gen msg_id and seng msg to transport"""
+        deadline: Optional[Deadline] = deadline_context.get()
+        if self.app.through_deadline and deadline:
+            request.header["X-rap-deadline"] = deadline.end_timestamp
         for process_request in self.process_request_processor_list:
             await process_request(request)
         await self._conn.write(request.to_msg())
@@ -469,11 +475,6 @@ class Transport(object):
             response: Response = await self._base_request(request)
             if response.msg_type != constant.MSG_RESPONSE:
                 raise RPCError(f"response num must:{constant.MSG_RESPONSE} not {response.msg_type}")
-            if response.exc:
-                if isinstance(response.exc, InvokeError):
-                    raise_rap_error(response.exc.exc_name, response.exc.exc_info)
-                else:
-                    raise response.exc
         return response
 
     @asynccontextmanager

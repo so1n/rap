@@ -8,7 +8,7 @@ from functools import partial
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Tuple, Type, Union
 
-from rap.common.asyncio_helper import Deadline, SetEvent, get_event_loop
+from rap.common.asyncio_helper import Deadline, SetEvent, get_deadline, get_event_loop
 from rap.common.conn import ServerConnection
 from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent
 from rap.common.exceptions import (
@@ -258,9 +258,10 @@ class Receiver(object):
                 raise ChannelError("channel already create")
             func: Callable = (await self._get_func_from_request(request)).func
 
-            async def write(body: Any, header: Dict[str, Any]) -> None:
+            async def write(body: Any, header: Dict[str, Any], timeout: Optional[int] = None) -> None:
                 await self.sender(
-                    Response(msg_type=constant.CHANNEL_RESPONSE, header=header, body=body, context=request.context)
+                    Response(msg_type=constant.CHANNEL_RESPONSE, header=header, body=body, context=request.context),
+                    deadline=get_deadline(timeout),
                 )
 
             channel = Channel(channel_id, write, self._conn, func)

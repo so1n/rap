@@ -1,13 +1,13 @@
 import asyncio
 import logging
 import traceback
-from typing import TYPE_CHECKING, Any, Coroutine, Optional, Type
+from typing import TYPE_CHECKING, Any, Optional, Type
 
 from typing_extensions import Self
 
 from rap.client.model import ClientContext, Request, Response
 from rap.client.utils import raise_rap_error
-from rap.common.asyncio_helper import as_first_completed
+from rap.common.asyncio_helper import as_first_completed, get_deadline
 from rap.common.channel import BaseChannel, ChannelCloseError
 from rap.common.channel import UserChannel as _UserChannel
 from rap.common.exceptions import ChannelError, InvokeError
@@ -83,7 +83,7 @@ class Channel(BaseChannel[Response]):
 
         try:
             response: Response = await as_first_completed(
-                [asyncio.wait_for(self.queue.get(), timeout=timeout)],
+                [get_deadline(timeout).wait_for(self.queue.get())],
                 not_cancel_future_list=[self.channel_conn_future],
             )
         except asyncio.TimeoutError:
@@ -123,8 +123,7 @@ class Channel(BaseChannel[Response]):
             header=header,
             context=self.context,
         )
-        coro: Coroutine = self._transport.write_to_conn(request)
-        await asyncio.wait_for(coro, timeout)
+        await get_deadline(timeout).wait_for(self._transport.write_to_conn(request))
 
     async def read(self, timeout: Optional[int] = None) -> Response:
         response: Response = await self._base_read(timeout=timeout)

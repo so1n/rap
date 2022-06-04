@@ -2,20 +2,19 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, Optional, Union
 
-from rap.common.asyncio_helper import del_future
+from rap.common.asyncio_helper import del_future, get_deadline
 from rap.common.channel import BaseChannel
 from rap.common.channel import UserChannel as _UserChannel
 from rap.common.channel import get_corresponding_channel_class
 from rap.common.conn import ServerConnection
 from rap.common.exceptions import ChannelError
 from rap.common.utils import constant
-from rap.server.model import Response
 
 if TYPE_CHECKING:
     from rap.server import Request
 
 logger: logging.Logger = logging.getLogger(__name__)
-UserChannel = _UserChannel[Response]
+UserChannel = _UserChannel["Request"]
 
 
 class Channel(BaseChannel["Request"]):
@@ -26,11 +25,11 @@ class Channel(BaseChannel["Request"]):
     def __init__(
         self,
         channel_id: int,
-        write: Callable[[Any, Dict[str, Any]], Coroutine[Any, Any, Any]],
+        write: Callable[[Any, Dict[str, Any], Optional[int]], Coroutine[Any, Any, Any]],
         conn: ServerConnection,
         func: Callable[["Channel"], Any],
     ):
-        self._write: Callable[[Any, Dict[str, Any]], Coroutine[Any, Any, Any]] = write
+        self._write: Callable[[Any, Dict[str, Any], Optional[int]], Coroutine[Any, Any, Any]] = write
         self._conn: ServerConnection = conn
         self._func: Callable = func
         self.queue: asyncio.Queue = asyncio.Queue()
@@ -53,22 +52,24 @@ class Channel(BaseChannel["Request"]):
             if not self.is_close:
                 await self.close()
 
-    async def write(self, body: Any, header: Optional[dict] = None) -> None:
+    async def write(self, body: Any, header: Optional[dict] = None, timeout: Optional[int] = None) -> None:
         if self.is_close:
             raise ChannelError(f"channel<{self.channel_id}> is close")
         header = header or {}
         header["channel_life_cycle"] = constant.MSG
-        await self._write(body, header)
+        await self._write(body, header, timeout)
 
-    async def read(self) -> "Request":
+    async def read(self, timeout: Optional[int] = None) -> "Request":
         if self.is_close:
             raise ChannelError(f"<channel{self.channel_id}> is close")
-        result: Union["Request", Exception] = await self.queue.get()
-        if isinstance(result, Exception):
-            raise result
-        return result
 
-    async def read_body(self) -> Any:
+        with get_deadline(timeout):
+            result: Union["Request", Exception] = await self.queue.get()
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+    async def read_body(self, timeout: Optional[int] = None) -> Any:
         request: "Request" = await self.read()
         return request.body
 
@@ -79,7 +80,7 @@ class Channel(BaseChannel["Request"]):
         self.set_exc(ChannelError(f"channel {self.channel_id} is close"))
 
         if not self._conn.is_closed():
-            await self._write(None, {"channel_life_cycle": constant.DROP})
+            await self._write(None, {"channel_life_cycle": constant.DROP}, None)
 
         # Actively cancel the future may not be successful, such as cancel asyncio.sleep
         del_future(self.func_future)

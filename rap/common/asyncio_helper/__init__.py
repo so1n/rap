@@ -1,4 +1,4 @@
-from .deadline import Deadline, IgnoreDeadlineTimeoutExc, deadline_context
+from .deadline import Deadline, IgnoreDeadlineTimeoutExc, deadline_context, get_deadline
 from .semaphore import Semaphore
 from .set_event import SetEvent
 from .util import (

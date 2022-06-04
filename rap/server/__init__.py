@@ -7,7 +7,7 @@ from .model import Request, Response
 from .receiver import Receiver
 from .sender import Sender
 
-ReadChannel = _ReadChannel[Response]
+ReadChannel = _ReadChannel[Request]
 WriteChannel = _WriteChannel[Request]
 
 __all__ = ["UserChannel", "ReadChannel", "WriteChannel", "Server", "Request", "Response", "Receiver", "Sender"]

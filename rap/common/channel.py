@@ -19,15 +19,15 @@ class BaseChannel(Generic[_Read_T]):
     channel_conn_future: asyncio.Future
     queue: asyncio.Queue
 
-    async def read(self) -> _Read_T:
+    async def read(self, timeout: Optional[int] = None) -> _Read_T:
         """read msg obj from channel"""
         raise NotImplementedError
 
-    async def read_body(self) -> Any:
+    async def read_body(self, timeout: Optional[int] = None) -> Any:
         """read body obj from channel's msg obj"""
         raise NotImplementedError
 
-    async def write(self, body: Any, header: Optional[dict] = None) -> Any:
+    async def write(self, body: Any, header: Optional[dict] = None, timeout: Optional[int] = None) -> Any:
         """write_to_conn body to channel"""
         raise NotImplementedError
 
@@ -95,15 +95,16 @@ class BaseChannel(Generic[_Read_T]):
 
 
 class _AsyncIterData(Generic[_Read_T]):
-    def __init__(self, channel: "BaseChannel "):
+    def __init__(self, channel: "BaseChannel", timeout: Optional[int] = None):
         self.channel = channel
+        self.timeout: Optional[int] = timeout
 
     def __aiter__(self) -> "Self":
         return self
 
     async def __anext__(self) -> "_Read_T":
         try:
-            return await self.channel.read()
+            return await self.channel.read(timeout=self.timeout)
         except ChannelCloseError:
             raise StopAsyncIteration()
 
@@ -111,7 +112,7 @@ class _AsyncIterData(Generic[_Read_T]):
 class _AsyncIterDataBody(_AsyncIterData[_Read_T]):
     async def __anext__(self) -> "_Read_T":
         try:
-            return await self.channel.read_body()
+            return await self.channel.read_body(timeout=self.timeout)
         except ChannelCloseError:
             raise StopAsyncIteration()
 
@@ -175,33 +176,33 @@ class BaseUserChannel(Generic[_Read_T]):
 class _ReadChannelMixin(Generic[_Read_T]):
     _channel: "BaseChannel[_Read_T]"
 
-    async def read(self) -> _Read_T:
+    async def read(self, timeout: Optional[int] = None) -> _Read_T:
         """read msg obj from channel"""
-        return await self._channel.read()
+        return await self._channel.read(timeout=timeout)
 
-    async def read_body(self) -> Any:
+    async def read_body(self, timeout: Optional[int] = None) -> Any:
         """read body obj from channel's msg obj"""
-        return await self._channel.read_body()
+        return await self._channel.read_body(timeout=timeout)
 
     #####################
     # async for support #
     #####################
-    def iter(self) -> _AsyncIterData[_Read_T]:
+    def iter(self, timeout: Optional[int] = None) -> _AsyncIterData[_Read_T]:
         """
         >>> async def channel_demo(channel: UserChannel):
         ...     async for response in channel.iter():
         ...         response.body
         ...         response.header
         """
-        return _AsyncIterData(self._channel)
+        return _AsyncIterData(self._channel, timeout=timeout)
 
-    def iter_body(self) -> _AsyncIterDataBody[_Read_T]:
+    def iter_body(self, timeout: Optional[int] = None) -> _AsyncIterDataBody[_Read_T]:
         """
         >>> async def channel_demo(channel: UserChannel):
         ...     async for body in channel.iter_body():
         ...         print(body)
         """
-        return _AsyncIterDataBody(self._channel)
+        return _AsyncIterDataBody(self._channel, timeout=timeout)
 
     def __aiter__(self) -> "Self":
         return self
@@ -216,9 +217,9 @@ class _ReadChannelMixin(Generic[_Read_T]):
 class _WriteChannelMixin(Generic[_Read_T]):
     _channel: "BaseChannel[_Read_T]"
 
-    async def write(self, body: Any, header: Optional[dict] = None) -> Any:
+    async def write(self, body: Any, header: Optional[dict] = None, timeout: Optional[int] = None) -> Any:
         """write_to_conn body to channel"""
-        await self._channel.write(body, header)
+        await self._channel.write(body, header=header, timeout=timeout)
 
 
 class ContextChannel(BaseUserChannel[_Read_T]):

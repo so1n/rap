@@ -164,3 +164,14 @@ class Deadline(object):
                 return
             else:
                 raise self._timeout_exc
+
+
+def get_deadline(
+    delay: Optional[float],
+    loop: Optional[asyncio.AbstractEventLoop] = None,
+    timeout_exc: Optional[Exception] = None,
+) -> Deadline:
+    deadline: Optional[Deadline] = deadline_context.get()
+    if not deadline:
+        deadline = Deadline(delay, loop=loop, timeout_exc=timeout_exc)
+    return deadline
