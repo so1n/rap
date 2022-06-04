@@ -155,17 +155,11 @@ class Channel(BaseChannel[Response]):
 
         await self._base_write(None, constant.DROP)
 
-        async def wait_drop_response() -> None:
-            try:
-                while True:
-                    response: Response = await self._base_read()
-                    logger.debug("drop msg:%s" % response)
-            except ChannelError as e:
-                if str(e) != self._drop_msg:
-                    raise e
-
         try:
-            await asyncio.wait_for(wait_drop_response(), 3)
+            await asyncio.wait_for(self.wait_close(), 3)
+        except ChannelError as e:
+            if str(e) != self._drop_msg:
+                raise e
         except asyncio.TimeoutError:
             logger.warning("wait drop response timeout")
 
