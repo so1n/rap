@@ -48,39 +48,10 @@ class TransportGroup(object):
 
 
 class Picker(object):
-    """auto pick transport, refer to `Kratos` 1.x"""
-
     def __init__(self, transport_list: List[Transport]):
         if not transport_list:
             raise ConnectionError("Endpoint Can not found available transport")
-        self._transport: Transport = self._pick(transport_list)
-
-    @staticmethod
-    def _pick(transport_list: List[Transport]) -> Transport:
-        """pick by score"""
-        pick_transport: Transport = transport_list[0]
-        transport_len: int = len(transport_list)
-        if transport_len == 1:
-            return pick_transport
-        elif transport_len > 1:
-            score: float = 0.0
-            for transport in transport_list:
-                transport_inflight: float = transport.semaphore.inflight
-                _score: float = transport.score
-                if transport_inflight:
-                    _score = _score * (1 - (transport_inflight / transport.semaphore.raw_value))
-                logger.debug(
-                    "transport:%s available:%s available_level:%s rtt:%s score:%s",
-                    transport,
-                    transport.available,
-                    transport.available_level,
-                    transport.rtt,
-                    _score,
-                )
-                if _score > score:
-                    score = _score
-                    pick_transport = transport
-        return pick_transport
+        self._transport: Transport = max(transport_list, key=lambda x: x.pick_score)
 
     async def __aenter__(self) -> Transport:
         await self._transport.semaphore.acquire()
@@ -174,7 +145,7 @@ class BaseEndpoint(object):
                 return
             elif not (self._min_ping_interval == 1 and self._max_ping_interval == 1):
                 transport.inflight_load.append(transport.semaphore.inflight)
-                # Simple design, don't want to use pandas&numpy in the web framework
+                # Simple design, don't want to use pandas&numpy in the app framework
                 transport_group: TransportGroup = self._transport_group_dict[(transport.host, transport.port)]
                 avg_inflight: float = sum(transport.inflight_load) / len(transport.inflight_load)
                 if avg_inflight > 80 and len(transport_group) < self._max_pool_size:

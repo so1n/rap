@@ -116,6 +116,11 @@ class Transport(object):
         )
         self._server_info: InmutableDict = InmutableDict()
 
+    @property
+    def pick_score(self) -> float:
+        # Combine the scores obtained through the server side and the usage of the client side to calculate the score
+        return self.score * (1 - (self.semaphore.inflight / self.semaphore.raw_value))
+
     ######################
     # proxy _conn feature #
     ######################
