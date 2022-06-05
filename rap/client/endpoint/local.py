@@ -74,4 +74,4 @@ class LocalEndpoint(BaseEndpoint):
                 for conn_config_dict in self._conn_config_list
             ]
         )
-        await self._start()
+        self._start()

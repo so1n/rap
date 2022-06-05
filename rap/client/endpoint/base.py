@@ -51,6 +51,8 @@ class Picker(object):
     """auto pick transport, refer to `Kratos` 1.x"""
 
     def __init__(self, transport_list: List[Transport]):
+        if not transport_list:
+            raise ConnectionError("Endpoint Can not found available transport")
         self._transport: Transport = self._pick(transport_list)
 
     @staticmethod
@@ -149,7 +151,8 @@ class BaseEndpoint(object):
         self._transport_key_list: List[Tuple[str, int]] = []
         self._transport_group_dict: Dict[Tuple[str, int], TransportGroup] = {}
         self._round_robin_index: int = 0
-        self._is_close: bool = True
+
+        self._run_event: asyncio.Event = asyncio.Event()
 
         setattr(self, self._pick_transport.__name__, self._random_pick_transport)
         if balance_enum:
@@ -205,7 +208,10 @@ class BaseEndpoint(object):
 
     @property
     def is_close(self) -> bool:
-        return self._is_close
+        return not self._run_event.is_set()
+
+    async def await_start(self) -> None:
+        await self._run_event.wait()
 
     async def create_one(
         self,
@@ -232,9 +238,8 @@ class BaseEndpoint(object):
                     transport_group: Optional[TransportGroup] = self._transport_group_dict.get(key, None)
                     if transport_group:
                         transport_group.remove(transport)
-                        if not transport_group:
-                            self._transport_group_dict.pop(key)
-                            self._transport_key_list.remove(key)
+                    else:
+                        self._transport_key_list.remove(key)
                 except ValueError:
                     pass
                 self._connected_cnt -= 1
@@ -247,11 +252,11 @@ class BaseEndpoint(object):
         try:
             with Deadline(self._declare_timeout, timeout_exc=asyncio.TimeoutError(f"transport:{key} declare timeout")):
                 await transport.connect()
-                transport.listen_future.add_done_callback(lambda f: _transport_done(f))
         except Exception as e:
             await transport.await_close()
             raise e
         self._connected_cnt += 1
+        transport.listen_future.add_done_callback(lambda f: _transport_done(f))
         transport.ping_future = asyncio.ensure_future(self._ping_event(transport))
         transport.ping_future.add_done_callback(lambda f: transport.close())
         return transport
@@ -297,8 +302,8 @@ class BaseEndpoint(object):
     async def destroy(transport_group: TransportGroup) -> None:
         await transport_group.destroy()
 
-    async def _start(self) -> None:
-        self._is_close = False
+    def _start(self) -> None:
+        self._run_event.set()
 
     async def start(self) -> None:
         """start endpoint and create&init transport"""
@@ -311,7 +316,7 @@ class BaseEndpoint(object):
 
         self._transport_key_list = []
         self._transport_group_dict = {}
-        self._is_close = True
+        self._run_event.clear()
 
     def picker(self, cnt: int = 3, is_private: Optional[bool] = None) -> Picker:
         """get transport by endpoint

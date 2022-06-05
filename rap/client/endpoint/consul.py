@@ -115,4 +115,5 @@ class ConsulEndpoint(BaseEndpoint):
                         max_inflight=value.get("max_inflight"),
                     )
                     return
+        self._start()
         self._watch_future = asyncio.ensure_future(self._watch())

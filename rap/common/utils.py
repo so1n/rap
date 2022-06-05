@@ -17,6 +17,7 @@ __all__ = [
     "parse_error",
     "param_handle",
     "response_num_dict",
+    "InmutableDict",
 ]
 
 

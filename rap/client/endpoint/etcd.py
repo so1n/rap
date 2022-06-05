@@ -112,5 +112,6 @@ class EtcdEndpoint(BaseEndpoint):
             if not self._transport_key_list:
                 logger.warning("client not transport")
 
+        self._start()
         self._watch_future = asyncio.ensure_future(self.etcd_client.watch(self._app.server_name, [create], [destroy]))
         await wait_start_future

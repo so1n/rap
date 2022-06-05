@@ -21,6 +21,7 @@ from rap.common.asyncio_helper import (
     deadline_context,
     del_future,
     done_future,
+    get_deadline,
     get_event_loop,
     safe_del_future,
 )
@@ -238,6 +239,8 @@ class Transport(object):
                 context.app = self.app
                 context.conn = self._conn
                 context.correlation_id = correlation_id
+                context.server_info = self._server_info
+                context.client_info = self._client_info
             else:
                 logger.error(f"Can not found context from {correlation_id}, {response_msg}")
                 return
@@ -269,7 +272,12 @@ class Transport(object):
             elif response.func_name == constant.PING_EVENT:
                 request: Request = Request.from_event(event.PingEvent(""), context)
                 request.msg_type = constant.SERVER_EVENT
-                await asyncio.wait_for(self.write_to_conn(request), timeout=3)
+
+                async def _send_server_event():
+                    with get_deadline(3):
+                        await self.write_to_conn(request)
+
+                asyncio.create_task(_send_server_event())
             else:
                 logger.error(f"recv not support event response:{response}")
         elif response.msg_type == constant.CLIENT_EVENT:
