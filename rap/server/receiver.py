@@ -22,7 +22,7 @@ from rap.common.exceptions import (
 )
 from rap.common.types import BASE_MSG_TYPE
 from rap.common.utils import InmutableDict, constant, param_handle, parse_error, response_num_dict
-from rap.server.channel import Channel
+from rap.server.channel import Channel, get_corresponding_channel_class
 from rap.server.model import Request, Response, ServerContext
 from rap.server.plugin.processor.base import BaseProcessor, belong_to_base_method
 from rap.server.registry import FuncModel
@@ -257,6 +257,11 @@ class Receiver(object):
             if channel is not None:
                 raise ChannelError("channel already create")
             func: Callable = (await self._get_func_from_request(request)).func
+
+            try:
+                get_corresponding_channel_class(func)
+            except Exception as e:
+                raise ChannelError(str(e))
 
             async def write(body: Any, header: Dict[str, Any], timeout: Optional[int] = None) -> None:
                 await self.sender(

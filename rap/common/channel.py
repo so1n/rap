@@ -255,9 +255,9 @@ def get_opposite_channel_class(
 
 
 def get_corresponding_channel_class(func: Callable) -> Type[UserChannelType]:
-    param_type: Any = getattr(func, "__channel_class__", None)
-    if param_type:
-        return param_type
+    annotation: Any = getattr(func, "__channel_class__", None)
+    if annotation:
+        return annotation
     func_sig: inspect.Signature = inspect.signature(func)
     func_arg_parameter: List[inspect.Parameter] = [i for i in func_sig.parameters.values() if i.default == i.empty]
     if len(func_arg_parameter) != 1:
@@ -275,4 +275,4 @@ def get_corresponding_channel_class(func: Callable) -> Type[UserChannelType]:
     if annotation not in (ReadChannel, WriteChannel, UserChannel):
         raise TypeError(f"func:{func.__name__} must channel function")
     setattr(func, "__channel_class__", annotation)
-    return param_type
+    return annotation
