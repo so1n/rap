@@ -345,7 +345,7 @@ class Transport(object):
             async def __aenter__(self) -> "ClientContext":
                 for on_context_enter in transport.on_context_enter_processor_list:
                     try:
-                        await on_context_enter(self)
+                        await on_context_enter(self.context)
                     except Exception as e:
                         logger.exception(f"on_context_enter error:{e}")
                 return self.context
@@ -356,12 +356,12 @@ class Transport(object):
                 exc_val: Optional[BaseException],
                 exc_tb: Optional[TracebackType],
             ) -> None:
-                transport._context_dict.pop(self.correlation_id, None)
                 for on_context_exit in reversed(transport.on_context_exit_processor_list):
                     try:
                         await on_context_exit(self.context, exc_type, exc_val, exc_tb)
                     except Exception as e:
                         logger.exception(f"on_context_exit error:{e}")
+                transport._context_dict.pop(self.correlation_id, None)
 
         return TransportContext()
 
@@ -380,16 +380,16 @@ class Transport(object):
                 )
             )
 
-        if (
-            response.msg_type == constant.CLIENT_EVENT
-            and response.func_name == constant.DECLARE
-            and response.body.get("result", False)
-            and "conn_id" in response.body
-        ):
-            self._conn.conn_id = response.body["conn_id"]
-            self._server_info = InmutableDict(response.body["server_info"])
-            return
-        raise ConnectionError(f"transport:{self._conn} declare error")
+            if (
+                response.msg_type == constant.CLIENT_EVENT
+                and response.func_name == constant.DECLARE
+                and response.body.get("result", False)
+                and "conn_id" in response.body
+            ):
+                self._conn.conn_id = response.body["conn_id"]
+                self._server_info = InmutableDict(response.body["server_info"])
+                return
+            raise ConnectionError(f"transport:{self._conn} declare error")
 
     async def ping(self, cnt: int = 3) -> None:
         """

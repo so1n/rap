@@ -113,9 +113,7 @@ class BaseEndpoint(object):
         """client ping-pong handler, check transport is available"""
         ping_fail_interval: int = int(self._max_ping_interval * self._ping_fail_cnt)
         while True:
-            now_time: float = time.time()
-            diff_time: float = now_time - transport.last_ping_timestamp
-            available: bool = diff_time < ping_fail_interval
+            available: bool = (time.time() - transport.last_ping_timestamp) < ping_fail_interval
             logger.debug("transport:%s available:%s rtt:%s", transport.connection_info, available, transport.rtt)
             transport_group: TransportGroup = self._transport_group_dict[(transport.host, transport.port)]
             if not available:
@@ -192,16 +190,15 @@ class BaseEndpoint(object):
         )
 
         def _transport_done(f: asyncio.Future) -> None:
+            self._connected_cnt -= 1
             try:
-                try:
-                    transport_group: Optional[TransportGroup] = self._transport_group_dict.get(key, None)
-                    if transport_group:
-                        transport_group.remove(transport)
-                    if transport_group is None or len(transport_group) == 0:
-                        self._transport_key_list.remove(key)
-                except ValueError:
-                    pass
-                self._connected_cnt -= 1
+                transport_group: Optional[TransportGroup] = self._transport_group_dict.get(key, None)
+                if transport_group:
+                    transport_group.remove(transport)
+                if transport_group is None or len(transport_group) == 0:
+                    self._transport_key_list.remove(key)
+            except ValueError:
+                pass
             except Exception as _e:
                 msg: str = f"close transport error: {_e}"
                 if f.exception():
