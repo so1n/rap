@@ -2,7 +2,8 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
-from rap.client.endpoint.base import BalanceEnum, BaseEndpoint, TransportGroup
+from rap.client.endpoint.base import BalanceEnum, BaseEndpoint
+from rap.client.transport.transport import TransportGroup
 from rap.common.asyncio_helper import del_future, done_future
 from rap.common.coordinator.etcd import ETCD_EVENT_VALUE_DICT_TYPE, EtcdClient
 

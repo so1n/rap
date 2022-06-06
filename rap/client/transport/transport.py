@@ -33,7 +33,7 @@ from rap.common.utils import InmutableDict, constant
 
 if TYPE_CHECKING:
     from rap.client.core import BaseClient
-__all__ = ["Transport"]
+__all__ = ["Transport", "TransportGroup"]
 logger: logging.Logger = logging.getLogger(__name__)
 
 
@@ -525,3 +525,33 @@ class Transport(object):
 
             async with channel as channel:
                 yield channel
+
+
+class TransportGroup(object):
+    def __init__(self) -> None:
+        self._transport_deque: Deque[Transport] = deque()
+
+    @property
+    def transport(self) -> Optional[Transport]:
+        self._transport_deque.rotate(1)
+        while True:
+            if not self._transport_deque:
+                return None
+            transport: Transport = self._transport_deque[0]
+            if not transport.available:
+                self._transport_deque.popleft()
+            else:
+                return transport
+
+    def add(self, transport: Transport) -> None:
+        self._transport_deque.append(transport)
+
+    def remove(self, transport: Transport) -> None:
+        self._transport_deque.remove(transport)
+
+    async def destroy(self) -> None:
+        while self._transport_deque:
+            await self._transport_deque.pop().await_close()
+
+    def __len__(self) -> int:
+        return len(self._transport_deque)

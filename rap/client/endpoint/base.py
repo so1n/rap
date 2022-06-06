@@ -2,12 +2,12 @@ import asyncio
 import logging
 import random
 import time
-from collections import deque
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from rap.client.transport.transport import Transport
+from rap.client.transport.transport import Transport, TransportGroup
 from rap.common.asyncio_helper import Deadline, IgnoreDeadlineTimeoutExc
+from rap.common.number_range import get_value_by_range
 
 logger: logging.Logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
@@ -22,29 +22,6 @@ class BalanceEnum(Enum):
 
     random = auto()
     round_robin = auto()
-
-
-class TransportGroup(object):
-    def __init__(self) -> None:
-        self._transport_deque: Deque[Transport] = deque()
-
-    @property
-    def transport(self) -> Transport:
-        self._transport_deque.rotate(1)
-        return self._transport_deque[0]
-
-    def add(self, transport: Transport) -> None:
-        self._transport_deque.append(transport)
-
-    def remove(self, transport: Transport) -> None:
-        self._transport_deque.remove(transport)
-
-    async def destroy(self) -> None:
-        while self._transport_deque:
-            await self._transport_deque.pop().await_close()
-
-    def __len__(self) -> int:
-        return len(self._transport_deque)
 
 
 class Picker(object):
@@ -140,13 +117,13 @@ class BaseEndpoint(object):
             diff_time: float = now_time - transport.last_ping_timestamp
             available: bool = diff_time < ping_fail_interval
             logger.debug("transport:%s available:%s rtt:%s", transport.connection_info, available, transport.rtt)
+            transport_group: TransportGroup = self._transport_group_dict[(transport.host, transport.port)]
             if not available:
                 logger.error(f"ping {transport.sock_tuple} timeout... exit")
                 return
             elif not (self._min_ping_interval == 1 and self._max_ping_interval == 1):
                 transport.inflight_load.append(transport.semaphore.inflight)
                 # Simple design, don't want to use pandas&numpy in the app framework
-                transport_group: TransportGroup = self._transport_group_dict[(transport.host, transport.port)]
                 avg_inflight: float = sum(transport.inflight_load) / len(transport.inflight_load)
                 if avg_inflight > 80 and len(transport_group) < self._max_pool_size:
                     # The current transport is under too much pressure and
@@ -170,7 +147,10 @@ class BaseEndpoint(object):
                 # The current transport availability level is 0,
                 # which means that it is not available and will be marked as unavailable
                 # and will be automatically closed later.
-                transport.close_soon()
+
+                # transport.close_soon()
+                transport.available = False
+                return
 
             logger.debug(
                 "transport:%s available:%s rtt:%s", transport.peer_tuple, transport.available_level, transport.rtt
@@ -217,7 +197,7 @@ class BaseEndpoint(object):
                     transport_group: Optional[TransportGroup] = self._transport_group_dict.get(key, None)
                     if transport_group:
                         transport_group.remove(transport)
-                    else:
+                    if transport_group is None or len(transport_group) == 0:
                         self._transport_key_list.remove(key)
                 except ValueError:
                     pass
@@ -253,21 +233,24 @@ class BaseEndpoint(object):
         :param weight: select transport weight
         :param max_inflight: Maximum number of connections per transport
         """
-        if not weight:
-            weight = 10
-        if not max_inflight:
-            max_inflight = 100
+        weight = get_value_by_range(weight, 0, 10) if weight else 10
+        max_inflight = get_value_by_range(max_inflight, 0) if max_inflight else 100
 
         key: Tuple[str, int] = (ip, port)
         if key not in self._transport_group_dict:
             self._transport_group_dict[key] = TransportGroup()
             self._transport_key_list.append(key)
 
-        if len(self._transport_group_dict[key]) >= self._max_pool_size:
+        transport_group_len: int = len(self._transport_group_dict[key])
+        if transport_group_len >= self._max_pool_size:
             return
-        create_size: int = 1
         if not self._transport_group_dict[key]:
             create_size = self._min_pool_size
+        elif transport_group_len > self._min_pool_size:
+            create_size = 1
+        else:
+            create_size = self._min_pool_size - transport_group_len
+
         for _ in range(create_size):
             transport: Transport = await self.create_one(
                 ip,
@@ -306,28 +289,42 @@ class BaseEndpoint(object):
             raise ConnectionError("Endpoint Can not found available transport")
         cnt = min(self._connected_cnt, cnt)
         transport_list: List[Transport] = self._pick_transport(cnt)
+        if not transport_list:
+            raise ConnectionError("Endpoint Can not found available transport")
         if is_private:
-            return PrivatePicker(
-                endpoint=self, transport_list=[transport for transport in transport_list if transport.available]
-            )
+            return PrivatePicker(endpoint=self, transport_list=transport_list)
         else:
-            return Picker([transport for transport in transport_list if transport.available])
+            return Picker(transport_list)
 
     def _pick_transport(self, cnt: int) -> List[Transport]:
         """fake code"""
-        return [transport_group.transport for transport_group in self._transport_group_dict.values()]
+        return [
+            transport_group.transport
+            for transport_group in self._transport_group_dict.values()
+            if transport_group.transport
+        ]
 
     def _random_pick_transport(self, cnt: int) -> List[Transport]:
         """random get transport"""
         key_list: List[Tuple[str, int]] = random.choices(self._transport_key_list, k=cnt)
-        return [self._transport_group_dict[key].transport for key in key_list]
+        transport_list: List[Transport] = []
+        for key in key_list:
+            transport: Optional[Transport] = self._transport_group_dict[key].transport
+            if transport:
+                transport_list.append(transport)
+        return transport_list
 
     def _round_robin_pick_transport(self, cnt: int) -> List[Transport]:
         """get transport by round robin"""
         self._round_robin_index += 1
         index: int = self._round_robin_index % (len(self._transport_key_list))
         key_list: List[Tuple[str, int]] = self._transport_key_list[index : index + cnt]
-        return [self._transport_group_dict[key].transport for key in key_list]
+        transport_list: List[Transport] = []
+        for key in key_list:
+            transport: Optional[Transport] = self._transport_group_dict[key].transport
+            if transport:
+                transport_list.append(transport)
+        return transport_list
 
     def __len__(self) -> int:
         return self._connected_cnt

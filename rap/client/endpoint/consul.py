@@ -2,7 +2,8 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from rap.client.endpoint.base import BalanceEnum, BaseEndpoint, TransportGroup
+from rap.client.endpoint.base import BalanceEnum, BaseEndpoint
+from rap.client.transport.transport import TransportGroup
 from rap.common.asyncio_helper import done_future
 from rap.common.coordinator.consul import ConsulClient
 
