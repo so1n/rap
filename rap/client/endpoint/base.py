@@ -149,6 +149,8 @@ class BaseEndpoint(object):
                 transport_group: TransportGroup = self._transport_group_dict[(transport.host, transport.port)]
                 avg_inflight: float = sum(transport.inflight_load) / len(transport.inflight_load)
                 if avg_inflight > 80 and len(transport_group) < self._max_pool_size:
+                    # The current transport is under too much pressure and
+                    # a transport needs to be created to divert the traffic
                     await self.create(
                         transport.peer_tuple[0],
                         transport.peer_tuple[1],
@@ -156,12 +158,18 @@ class BaseEndpoint(object):
                         transport.semaphore.raw_value,
                     )
                 elif avg_inflight < 20 and len(transport_group) > self._min_pool_size:
-                    # When transport is just created, inflight is 0
+                    # When transport is just created, inflight is 5.
+                    # The current transport is not handling too many requests and needs to lower its priority
                     transport.available_level -= 1
                 elif transport.available and transport.available_level < 5:
+                    # If the current transport load is moderate and the
+                    # priority is not optimal (priority less than 5), then increase its priority.
                     transport.available_level += 1
 
             if transport.available_level <= 0 and transport.available:
+                # The current transport availability level is 0,
+                # which means that it is not available and will be marked as unavailable
+                # and will be automatically closed later.
                 transport.close_soon()
 
             logger.debug(

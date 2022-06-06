@@ -27,6 +27,7 @@ from rap.common.asyncio_helper import (
 )
 from rap.common.conn import CloseConnException, Connection
 from rap.common.exceptions import IgnoreNextProcessor, InvokeError, RPCError
+from rap.common.number_range import NumberRange, get_value_by_range
 from rap.common.types import SERVER_BASE_MSG_TYPE
 from rap.common.utils import InmutableDict, constant
 
@@ -40,6 +41,13 @@ class Transport(object):
     """base client transport, encapsulation of custom transport protocol and proxy _conn feature"""
 
     _decay_time: float = 600.0
+    weight: int = NumberRange.i(10, 0, 10)
+    mos: int = NumberRange.i(5, 0, 5)
+
+    # Mark whether transport is available,
+    # if not, no new requests can be initiated (does not affect requests in use)
+    _available: bool = False
+    _available_level: int = NumberRange.i(0, 0, 5)
 
     def __init__(
         self,
@@ -70,10 +78,6 @@ class Transport(object):
         self._resp_future_dict: Dict[int, asyncio.Future[Response]] = {}
         self._channel_queue_dict: Dict[int, asyncio.Queue[Response]] = {}
 
-        if weight > 10:
-            weight = 10
-        if weight < 0:
-            weight = 0
         self.host: str = host
         self.port: int = port
         self.weight: int = weight
@@ -101,13 +105,10 @@ class Transport(object):
         ]
 
         # ping
-        self.inflight_load: Deque[int] = deque(maxlen=3)  # save history inflight(like Linux load)
+        self.inflight_load: Deque[int] = deque(maxlen=5)  # save history inflight(like Linux load)
         self.ping_future: asyncio.Future = done_future()
-        self.available_level: int = 0
-        self.available: bool = False
         self.last_ping_timestamp: float = time.time()
         self.rtt: float = 0.0
-        self.mos: int = 5
 
         self._client_info: InmutableDict = InmutableDict(
             host=self._conn.peer_tuple,
@@ -147,6 +148,27 @@ class Transport(object):
         safe_del_future(self.ping_future)
         safe_del_future(self.listen_future)
         await self._conn.await_close()
+
+    #################
+    # available api #
+    #################
+    @property
+    def available(self) -> bool:
+        return self._available
+
+    @available.setter
+    def available(self, value: bool) -> None:
+        self._available = value
+
+    @property
+    def available_level(self) -> int:
+        return self._available_level
+
+    @available_level.setter
+    def available_level(self, value: int) -> None:
+        self._available_level = value
+        if self._available_level <= 0:
+            self._available = False
 
     ############
     # base api #
@@ -389,8 +411,8 @@ class Transport(object):
             mos += response.body.get("mos", 5)
 
         await asyncio.gather(*[_ping() for _ in range(cnt)])
-        mos = mos // cnt
-        rtt = rtt / cnt
+        mos = get_value_by_range(mos // cnt, 0, 5)
+        rtt = get_value_by_range(rtt / cnt, 0)
 
         # declare
         now_time: float = time.time()
@@ -400,12 +422,7 @@ class Transport(object):
 
         # ewma
         td: float = now_time - old_last_ping_timestamp
-        w: float = math.exp(-td / self._decay_time)
-
-        if rtt < 0:
-            rtt = 0
-        if old_rtt <= 0:
-            w = 0
+        w: float = get_value_by_range(math.exp(-td / self._decay_time), 0)
 
         self.rtt = old_rtt * w + rtt * (1 - w)
         self.mos = int(old_mos * w + mos * (1 - w))
