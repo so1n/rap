@@ -3,7 +3,7 @@ import logging
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from rap.client.endpoint.base import BalanceEnum, BaseEndpoint
-from rap.client.transport.transport import TransportGroup
+from rap.client.transport.pool import Pool
 from rap.common.asyncio_helper import done_future
 from rap.common.coordinator.consul import ConsulClient
 
@@ -79,9 +79,9 @@ class ConsulEndpoint(BaseEndpoint):
             if conn_dict:
                 pop_key_list: List[Tuple[str, int]] = []
                 for key, value in conn_dict:
-                    conn_group: Optional[TransportGroup] = self._transport_group_dict.pop(key, None)
-                    if conn_group:
-                        await conn_group.destroy()
+                    pool: Optional[Pool] = self._transport_pool_dict.pop(key, None)
+                    if pool:
+                        await pool.destroy()
                         pop_key_list.append(key)
                 for key in pop_key_list:
                     conn_dict.pop(key, None)

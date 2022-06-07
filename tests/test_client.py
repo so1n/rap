@@ -35,7 +35,7 @@ class TestTransport:
     #     mocker.patch("rap.common.transport.Connection.read").return_value = mock_future
     #     mock_future.set_result(request_tuple)
     #
-    #     for key, conn_group in client.endpoint._transport_group_dict.items():
+    #     for key, conn_group in client.endpoint._transport_pool_dict.items():
     #         await client.transport.response_handler(conn_group.transport)
     #
     #     mocker_obj.assert_called_once_with(once_target)

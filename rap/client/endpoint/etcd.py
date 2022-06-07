@@ -3,7 +3,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 from rap.client.endpoint.base import BalanceEnum, BaseEndpoint
-from rap.client.transport.transport import TransportGroup
+from rap.client.transport.pool import Pool
 from rap.common.asyncio_helper import del_future, done_future
 from rap.common.coordinator.etcd import ETCD_EVENT_VALUE_DICT_TYPE, EtcdClient
 
@@ -107,9 +107,9 @@ class EtcdEndpoint(BaseEndpoint):
             if not conn_dict:
                 raise KeyError(f"Can not found key:{etcd_value_dict['key']}")
             key: Tuple[str, int] = (conn_dict["host"], conn_dict["post"])
-            conn_group: Optional[TransportGroup] = self._transport_group_dict.pop(key, None)
-            if conn_group:
-                await conn_group.destroy()
+            pool: Optional[Pool] = self._transport_pool_dict.pop(key, None)
+            if pool:
+                await pool.destroy()
             if not self._transport_key_list:
                 logger.warning("client not transport")
 

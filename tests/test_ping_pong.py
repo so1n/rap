@@ -15,12 +15,12 @@ pytestmark = pytest.mark.asyncio
 class TestPingPong:
     async def test_ping_pong(self, rap_server: Server, rap_client: Client) -> None:
         await asyncio.sleep(10)
-        # for key, transport_group in rap_client.endpoint._transport_group_dict.copy().items():
+        # for key, transport_group in rap_client.endpoint._transport_pool_dict.copy().items():
         #     await transport_group.transport.ping(cnt=1)
 
     async def test_ping_pong_timeout(self, mocker: MockerFixture, rap_server: Server, rap_client: Client) -> None:
         # until close
-        for key, transport_group in rap_client.endpoint._transport_group_dict.copy().items():
+        for key, transport_group in rap_client.endpoint._transport_pool_dict.copy().items():
             transport: Optional[Transport] = transport_group.transport
             if not transport:
                 raise ValueError("Not found transport")
