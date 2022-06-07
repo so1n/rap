@@ -31,8 +31,11 @@ class TestConnLimitMiddleware:
         client_1: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
         client_2: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
         await client_1.start()
-        with pytest.raises(ConnectionError):
+        with pytest.raises(CloseConnException) as e:
             await client_2.start()
+
+        exec_msg: str = e.value.args[0]
+        assert exec_msg == "Currently exceeding the maximum number of connections limit"
         await client_1.stop()
         await client_2.stop()
 

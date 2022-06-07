@@ -117,7 +117,7 @@ class Pool(object):
             transport: Transport = self._transport_deque[0]
             if not transport.available:
                 # pop transport and close
-                self._transport_deque.popleft().close()
+                self._transport_deque.popleft().close_soon()
             else:
                 return transport
 

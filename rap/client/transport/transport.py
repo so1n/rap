@@ -33,7 +33,7 @@ from rap.common.utils import InmutableDict, constant
 
 if TYPE_CHECKING:
     from rap.client.core import BaseClient
-__all__ = ["Transport", "TransportGroup"]
+__all__ = ["Transport"]
 logger: logging.Logger = logging.getLogger(__name__)
 
 
@@ -89,6 +89,7 @@ class Transport(object):
 
         self.listen_future: asyncio.Future = done_future()
         self.semaphore: Semaphore = Semaphore(max_inflight or 100)
+        self.close_soon_flag: bool = False
 
         # processor
         self.on_context_enter_processor_list: Sequence[Callable] = [
@@ -160,11 +161,6 @@ class Transport(object):
     def sock_tuple(self) -> Tuple[str, int]:
         return self._conn.sock_tuple
 
-    async def await_close(self) -> None:
-        safe_del_future(self.ping_future)
-        safe_del_future(self.listen_future)
-        await self._conn.await_close()
-
     #################
     # available api #
     #################
@@ -193,18 +189,29 @@ class Transport(object):
         return self._conn.is_closed() or self.listen_future.done()
 
     def close(self) -> None:
+        self.available = False
         safe_del_future(self.ping_future)
         del_future(self.listen_future)
         self._conn.close()
 
     def close_soon(self) -> None:
-        get_event_loop().call_later(60, self.close)
         self.available = False
+        if not self.semaphore.inflight:
+            get_event_loop().call_soon(self.close)
+        else:
+            self.close_soon_flag = True
+
+    async def await_close(self) -> None:
+        self.available = False
+        safe_del_future(self.ping_future)
+        safe_del_future(self.listen_future)
+        await self._conn.await_close()
 
     async def connect(self) -> None:
         await self._conn.connect()
         self.available_level = 5
         self.available = True
+        self.close_soon_flag = False
         self.listen_future = asyncio.ensure_future(self.listen_conn())
         await self.declare()
 
@@ -307,7 +314,7 @@ class Transport(object):
             if response.func_name == constant.EVENT_CLOSE_CONN:
                 # server want to close...do not send data
                 logger.info(f"recv close transport event, event info:{response.body}")
-                self.available = False
+                self.close_soon()
                 exc = CloseConnException(response.body)
                 self._conn.set_reader_exc(exc)
                 response.exc = exc
@@ -378,6 +385,8 @@ class Transport(object):
                     except Exception as e:
                         logger.exception(f"on_context_exit error:{e}")
                 transport._context_dict.pop(self.correlation_id, None)
+                if transport.close_soon_flag and transport.semaphore.inflight == transport.semaphore.raw_value:
+                    get_event_loop().call_soon(transport.close)
 
         return TransportContext()
 
@@ -541,33 +550,3 @@ class Transport(object):
 
             async with channel as channel:
                 yield channel
-
-
-class TransportGroup(object):
-    def __init__(self) -> None:
-        self._transport_deque: Deque[Transport] = deque()
-
-    @property
-    def transport(self) -> Optional[Transport]:
-        self._transport_deque.rotate(1)
-        while True:
-            if not self._transport_deque:
-                return None
-            transport: Transport = self._transport_deque[0]
-            if not transport.available:
-                self._transport_deque.popleft()
-            else:
-                return transport
-
-    def add(self, transport: Transport) -> None:
-        self._transport_deque.append(transport)
-
-    def remove(self, transport: Transport) -> None:
-        self._transport_deque.remove(transport)
-
-    async def destroy(self) -> None:
-        while self._transport_deque:
-            await self._transport_deque.pop().await_close()
-
-    def __len__(self) -> int:
-        return len(self._transport_deque)
