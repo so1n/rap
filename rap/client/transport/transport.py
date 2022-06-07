@@ -82,6 +82,9 @@ class Transport(object):
         self.port: int = port
         self.weight: int = weight
         self._ssl_crt_path: Optional[str] = ssl_crt_path
+        self._pack_param: Optional[dict] = pack_param
+        self._unpack_param: Optional[dict] = unpack_param
+        self._max_inflight: Optional[int] = max_inflight
         self.score: float = 10.0
 
         self.listen_future: asyncio.Future = done_future()
@@ -116,6 +119,19 @@ class Transport(object):
             user_agent=constant.USER_AGENT,
         )
         self._server_info: InmutableDict = InmutableDict()
+
+    def copy(self) -> "Transport":
+        return self.__class__(
+            app=self.app,
+            host=self.host,
+            port=self.port,
+            weight=self.weight,
+            ssl_crt_path=self._ssl_crt_path,
+            pack_param=self._pack_param,
+            unpack_param=self._unpack_param,
+            max_inflight=self._max_inflight,
+            read_timeout=self._read_timeout,
+        )
 
     @property
     def pick_score(self) -> float:

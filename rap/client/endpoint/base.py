@@ -40,14 +40,9 @@ class Picker(object):
 
 
 class PrivatePicker(Picker):
-    def __init__(self, endpoint: "BaseEndpoint", transport_list: List[Transport]):
-        self._endpoint: BaseEndpoint = endpoint
-        super().__init__(transport_list)
-
     async def __aenter__(self) -> Transport:
-        self._transport = await self._endpoint.create_one(
-            self._transport.host, self._transport.port, self._transport.weight, self._transport.semaphore.raw_value
-        )
+        self._transport = self._transport.copy()
+        await self._transport.connect()
         return self._transport
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -195,8 +190,6 @@ class BaseEndpoint(object):
                 transport_group: Optional[TransportGroup] = self._transport_group_dict.get(key, None)
                 if transport_group:
                     transport_group.remove(transport)
-                if transport_group is None or len(transport_group) == 0:
-                    self._transport_key_list.remove(key)
             except ValueError:
                 pass
             except Exception as _e:
@@ -289,7 +282,7 @@ class BaseEndpoint(object):
         if not transport_list:
             raise ConnectionError("Endpoint Can not found available transport")
         if is_private:
-            return PrivatePicker(endpoint=self, transport_list=transport_list)
+            return PrivatePicker(transport_list)
         else:
             return Picker(transport_list)
 
