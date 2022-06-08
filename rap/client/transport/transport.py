@@ -17,6 +17,8 @@ from rap.common import exceptions as rap_exc
 from rap.common.asyncio_helper import (
     Deadline,
     Semaphore,
+    TaskGroup,
+    TaskGroupExc,
     as_first_completed,
     deadline_context,
     del_future,
@@ -216,56 +218,6 @@ class Transport(object):
         self.listen_future = asyncio.ensure_future(self.listen_conn())
         await self.declare()
 
-    ##########################################
-    # rap interactive protocol encapsulation #
-    ##########################################
-    async def process_response(self, response: Response) -> Response:
-        """
-        If this response is accompanied by an exception, handle the exception directly and throw it.
-        """
-        if not response.exc:
-            try:
-                for process_response in reversed(self.process_response_processor_list):
-                    response = await process_response(response)
-            except IgnoreNextProcessor:
-                pass
-            except Exception as e:
-                response.exc = e
-                response.tb = sys.exc_info()[2]
-        if response.exc:
-            for process_exception in reversed(self.process_exception_processor_list):
-                raw_response: Response = response
-                try:
-                    response = await process_exception(response)  # type: ignore
-                except IgnoreNextProcessor:
-                    break
-                except Exception as e:
-                    logger.exception(
-                        f"processor:{process_exception} handle response:{response.correlation_id} error:{e}"
-                    )
-                    response = raw_response
-        return response
-
-    async def listen_conn(self) -> None:
-        """listen server msg from transport"""
-        logger.debug("listen:%s start", self._conn.peer_tuple)
-        try:
-            while not self._conn.is_closed():
-                await self.response_handler()
-        except (asyncio.CancelledError, CloseConnException):
-            pass
-        except Exception as e:
-            self._conn.set_reader_exc(e)
-            logger.exception(f"listen {self._conn.connection_info} error:{e}")
-            if not self._conn.is_closed():
-                await self._conn.await_close()
-
-    def _broadcast_server_event(self, response: Response) -> None:
-        for _, future in self._resp_future_dict.items():
-            future.set_result(response)
-        for _, queue in self._channel_queue_dict.items():
-            queue.put_nowait(response)
-
     ####################
     # response handler #
     ####################
@@ -331,33 +283,79 @@ class Transport(object):
                 request: Request = Request.from_event(event.PingEvent(""), context)
                 request.msg_type = constant.SERVER_EVENT
 
-                async def _send_server_event():
-                    with get_deadline(3):
-                        await self.write_to_conn(request)
-
-                asyncio.create_task(_send_server_event())
+                with get_deadline(3):
+                    await self.write_to_conn(request)
             else:
                 logger.error(f"recv not support event response:{response}")
 
-    async def response_handler(self) -> None:
-        """Distribute the response data to different consumers according to different conditions"""
-        try:
-            # read response msg
-            response_msg: Optional[SERVER_BASE_MSG_TYPE] = await asyncio.wait_for(
-                self._conn.read(), timeout=self._read_timeout
-            )
-            logger.debug("recv raw data: %s", response_msg)
-        except asyncio.TimeoutError as e:
-            logger.error(f"recv response from {self._conn.connection_info} timeout")
-            raise e
+    ##########################################
+    # rap interactive protocol encapsulation #
+    ##########################################
+    async def process_response(self, response: Response) -> Response:
+        """
+        If this response is accompanied by an exception, handle the exception directly and throw it.
+        """
+        if not response.exc:
+            try:
+                for process_response in reversed(self.process_response_processor_list):
+                    response = await process_response(response)
+            except IgnoreNextProcessor:
+                pass
+            except Exception as e:
+                response.exc = e
+                response.tb = sys.exc_info()[2]
+        if response.exc:
+            for process_exception in reversed(self.process_exception_processor_list):
+                raw_response: Response = response
+                try:
+                    response = await process_exception(response)  # type: ignore
+                except IgnoreNextProcessor:
+                    break
+                except Exception as e:
+                    logger.exception(
+                        f"processor:{process_exception} handle response:{response.correlation_id} error:{e}"
+                    )
+                    response = raw_response
+        return response
 
-        if response_msg is None:
-            raise ConnectionError("Connection has been closed")
-        if response_msg[0] == constant.SERVER_EVENT:
-            await self._server_send_msg_handler(response_msg)
-        else:
-            await self._server_recv_msg_handler(response_msg)
-        return
+    async def listen_conn(self) -> None:
+        """listen server msg from transport"""
+        logger.debug("listen:%s start", self._conn.peer_tuple)
+        try:
+            async with TaskGroup() as tg:
+                while not self._conn.is_closed():
+                    try:
+                        # read response msg
+                        response_msg: Optional[SERVER_BASE_MSG_TYPE] = await asyncio.wait_for(
+                            self._conn.read(), timeout=self._read_timeout
+                        )
+                        logger.debug("recv raw data: %s", response_msg)
+                    except asyncio.TimeoutError as e:
+                        logger.error(f"recv response from {self._conn.connection_info} timeout")
+                        raise e
+
+                    if response_msg is None:
+                        raise ConnectionError("Connection has been closed")
+                    if response_msg[0] == constant.SERVER_EVENT:
+                        tg.create_task(self._server_send_msg_handler(response_msg))
+                    else:
+                        tg.create_task(self._server_recv_msg_handler(response_msg))
+        except Exception as e:
+            if isinstance(e, TaskGroupExc):
+                e = e.error[0]
+            if isinstance(e, (asyncio.CancelledError, CloseConnException)):
+                pass
+            else:
+                self._conn.set_reader_exc(e)
+                logger.exception(f"listen {self._conn.connection_info} error:{e}")
+                if not self._conn.is_closed():
+                    await self._conn.await_close()
+
+    def _broadcast_server_event(self, response: Response) -> None:
+        for _, future in self._resp_future_dict.items():
+            future.set_result(response)
+        for _, queue in self._channel_queue_dict.items():
+            queue.put_nowait(response)
 
     def context(self, c_id: Optional[int] = None) -> "Any":
         transport: "Transport" = self
