@@ -49,6 +49,10 @@ class Transport(object):
     _available: bool = False
     _available_level: int = NumberRange.i(0, 0, 5)
 
+    _max_correlation_id: int = 65535
+    _correlation_id: int = 1
+    score: float = 10.0
+
     def __init__(
         self,
         app: "BaseClient",
@@ -71,8 +75,6 @@ class Transport(object):
         )
         self._read_timeout = read_timeout or 1200
 
-        self._max_correlation_id: int = 65535
-        self._correlation_id: int = 1
         self._context_dict: Dict[int, ClientContext] = {}
         self._exc_status_code_dict: Dict[int, Type[rap_exc.BaseRapError]] = get_exc_status_code_dict()
         self._resp_future_dict: Dict[int, asyncio.Future[Response]] = {}
@@ -85,7 +87,6 @@ class Transport(object):
         self._pack_param: Optional[dict] = pack_param
         self._unpack_param: Optional[dict] = unpack_param
         self._max_inflight: Optional[int] = max_inflight
-        self.score: float = 10.0
 
         self.listen_future: asyncio.Future = done_future()
         self.semaphore: Semaphore = Semaphore(max_inflight or 100)
@@ -265,41 +266,16 @@ class Transport(object):
         for _, queue in self._channel_queue_dict.items():
             queue.put_nowait(response)
 
-    # flake8: noqa: C901
-    async def response_handler(self) -> None:
-        """Distribute the response data to different consumers according to different conditions"""
-        # read response msg
-        try:
-            response_msg: Optional[SERVER_BASE_MSG_TYPE] = await asyncio.wait_for(
-                self._conn.read(), timeout=self._read_timeout
-            )
-            logger.debug("recv raw data: %s", response_msg)
-        except asyncio.TimeoutError as e:
-            logger.error(f"recv response from {self._conn.connection_info} timeout")
-            raise e
-
-        if response_msg is None:
-            raise ConnectionError("Connection has been closed")
-        # share state
-        correlation_id: int = response_msg[1]
-        context: Optional[ClientContext] = self._context_dict.get(correlation_id, None)
-        if not context:
-            if response_msg[0] == constant.SERVER_EVENT:
-                context = ClientContext()
-                context.app = self.app
-                context.conn = self._conn
-                context.correlation_id = correlation_id
-                context.server_info = self._server_info
-                context.client_info = self._client_info
-            else:
-                logger.error(f"Can not found context from {correlation_id}, {response_msg}")
-                return
-        # parse response
+    ####################
+    # response handler #
+    ####################
+    async def _get_response(self, response_msg: SERVER_BASE_MSG_TYPE, context: ClientContext) -> Optional[Response]:
         try:
             response: Response = Response.from_msg(msg=response_msg, context=context)
         except Exception as e:
+            print(e, response_msg)
             logger.exception(f"recv wrong response:{response_msg}, ignore error:{e}")
-            return
+            return None
 
         if response.msg_type == constant.SERVER_ERROR_RESPONSE or response.status_code in self._exc_status_code_dict:
             # Generate rap standard error
@@ -307,30 +283,18 @@ class Transport(object):
                 response.status_code, rap_exc.BaseRapError
             )
             response.exc = exc_class.build(response.body)
-        response = await self.process_response(response)
-        # dispatch response
-        if response.msg_type == constant.SERVER_EVENT:
-            # server event msg handle
-            if response.func_name == constant.EVENT_CLOSE_CONN:
-                # server want to close...do not send data
-                logger.info(f"recv close transport event, event info:{response.body}")
-                self.close_soon()
-                exc = CloseConnException(response.body)
-                self._conn.set_reader_exc(exc)
-                response.exc = exc
-                self._broadcast_server_event(response)
-            elif response.func_name == constant.PING_EVENT:
-                request: Request = Request.from_event(event.PingEvent(""), context)
-                request.msg_type = constant.SERVER_EVENT
+        return await self.process_response(response)
 
-                async def _send_server_event():
-                    with get_deadline(3):
-                        await self.write_to_conn(request)
-
-                asyncio.create_task(_send_server_event())
-            else:
-                logger.error(f"recv not support event response:{response}")
-        elif response.msg_type == constant.CLIENT_EVENT:
+    async def _server_recv_msg_handler(self, response_msg: SERVER_BASE_MSG_TYPE) -> None:
+        correlation_id: int = response_msg[1]
+        context: Optional[ClientContext] = self._context_dict.get(correlation_id, None)
+        if not context:
+            logger.error(f"Can not found context from {correlation_id}, {response_msg}")
+            return
+        response = await self._get_response(response_msg=response_msg, context=context)
+        if not response:
+            return
+        if response.msg_type == constant.CLIENT_EVENT:
             if response.func_name in (constant.DECLARE, constant.PING_EVENT):
                 if correlation_id in self._resp_future_dict:
                     self._resp_future_dict[correlation_id].set_result(response)
@@ -348,14 +312,61 @@ class Transport(object):
             logger.error(f"Can not dispatch response: {response}, ignore")
         return
 
-    def context(self) -> "Any":
+    async def _server_send_msg_handler(self, response_msg: SERVER_BASE_MSG_TYPE) -> None:
+        correlation_id: int = response_msg[1]
+        async with self.context(c_id=correlation_id) as context:
+            response = await self._get_response(response_msg=response_msg, context=context)
+            if not response:
+                return
+            # server event msg handle
+            if response.func_name == constant.EVENT_CLOSE_CONN:
+                # server want to close...do not send data
+                logger.info(f"recv close transport event, event info:{response.body}")
+                self.close_soon()
+                exc = CloseConnException(response.body)
+                response.exc = exc
+                self._broadcast_server_event(response)
+                self._conn.set_reader_exc(exc)
+            elif response.func_name == constant.PING_EVENT:
+                request: Request = Request.from_event(event.PingEvent(""), context)
+                request.msg_type = constant.SERVER_EVENT
+
+                async def _send_server_event():
+                    with get_deadline(3):
+                        await self.write_to_conn(request)
+
+                asyncio.create_task(_send_server_event())
+            else:
+                logger.error(f"recv not support event response:{response}")
+
+    async def response_handler(self) -> None:
+        """Distribute the response data to different consumers according to different conditions"""
+        try:
+            # read response msg
+            response_msg: Optional[SERVER_BASE_MSG_TYPE] = await asyncio.wait_for(
+                self._conn.read(), timeout=self._read_timeout
+            )
+            logger.debug("recv raw data: %s", response_msg)
+        except asyncio.TimeoutError as e:
+            logger.error(f"recv response from {self._conn.connection_info} timeout")
+            raise e
+
+        if response_msg is None:
+            raise ConnectionError("Connection has been closed")
+        if response_msg[0] == constant.SERVER_EVENT:
+            await self._server_send_msg_handler(response_msg)
+        else:
+            await self._server_recv_msg_handler(response_msg)
+        return
+
+    def context(self, c_id: Optional[int] = None) -> "Any":
         transport: "Transport" = self
 
         class TransportContext(object):
             correlation_id: int
 
             def __init__(self) -> None:
-                self.correlation_id = transport._gen_correlation_id()
+                self.correlation_id = c_id or transport._gen_correlation_id()
                 self.context: ClientContext = ClientContext()
                 self.context.app = transport.app
                 self.context.conn = transport._conn
