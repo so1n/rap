@@ -30,11 +30,9 @@ class Picker(object):
         self._transport: Transport = max(transport_list, key=lambda x: x.pick_score)
 
     async def __aenter__(self) -> Transport:
-        await self._transport.semaphore.acquire()
         return self._transport
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        self._transport.semaphore.release()
         return None
 
 

@@ -64,7 +64,7 @@ class Pool(object):
                 logger.error(msg)
                 raise RuntimeError(msg)
             elif not (self._min_ping_interval == 1 and self._max_ping_interval == 1):
-                transport.inflight_load.append(transport.semaphore.inflight)
+                transport.inflight_load.append(transport.inflight)
                 # Simple design, don't want to use pandas&numpy in the app framework
                 avg_inflight: float = sum(transport.inflight_load) / len(transport.inflight_load)
                 if avg_inflight > 80 and len(self) < self._max_pool_size:
@@ -138,7 +138,10 @@ class Pool(object):
                 await transport.connect()
         except Exception as e:
             if not transport.is_closed():
-                await transport.await_close()
+                try:
+                    await transport.await_close()
+                except Exception as close_e:
+                    logger.error(f"ignore {transport.connection_info} close error:{close_e}")
             raise e
         ping_future: asyncio.Future = asyncio.create_task(self._ping_handle(transport))
         transport.listen_future.add_done_callback(lambda _: safe_del_future(ping_future))

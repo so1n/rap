@@ -91,7 +91,7 @@ class Transport(object):
         self._max_inflight: Optional[int] = max_inflight
 
         self.listen_future: asyncio.Future = done_future()
-        self.semaphore: Semaphore = Semaphore(max_inflight or 100)
+        self._semaphore: Semaphore = Semaphore(max_inflight or 100)
         self.close_soon_flag: bool = False
 
         # processor
@@ -140,7 +140,11 @@ class Transport(object):
     @property
     def pick_score(self) -> float:
         # Combine the scores obtained through the server side and the usage of the client side to calculate the score
-        return self.score * (1 - (self.semaphore.inflight / self.semaphore.raw_value))
+        return self.score * (1 - (self._semaphore.inflight / self._semaphore.raw_value))
+
+    @property
+    def inflight(self) -> int:
+        return self._semaphore.inflight
 
     ######################
     # proxy _conn feature #
@@ -199,7 +203,7 @@ class Transport(object):
 
     def close_soon(self) -> None:
         self.available = False
-        if not self.semaphore.inflight:
+        if not self._semaphore.inflight:
             get_event_loop().call_soon(self.close)
         else:
             self.close_soon_flag = True
@@ -266,7 +270,7 @@ class Transport(object):
 
     async def _server_send_msg_handler(self, response_msg: SERVER_BASE_MSG_TYPE) -> None:
         correlation_id: int = response_msg[1]
-        async with self.context(c_id=correlation_id) as context:
+        async with self._transport_context(c_id=correlation_id, is_event_request=True) as context:
             response = await self._get_response(response_msg=response_msg, context=context)
             if not response:
                 return
@@ -357,7 +361,7 @@ class Transport(object):
         for _, queue in self._channel_queue_dict.items():
             queue.put_nowait(response)
 
-    def context(self, c_id: Optional[int] = None) -> "Any":
+    def _transport_context(self, c_id: Optional[int] = None, is_event_request: bool = False) -> "Any":
         transport: "Transport" = self
 
         class TransportContext(object):
@@ -394,10 +398,24 @@ class Transport(object):
                     except Exception as e:
                         logger.exception(f"on_context_exit error:{e}")
                 transport._context_dict.pop(self.correlation_id, None)
-                if transport.close_soon_flag and transport.semaphore.inflight == transport.semaphore.raw_value:
+                if transport.close_soon_flag and transport._semaphore.inflight == transport._semaphore.raw_value:
                     get_event_loop().call_soon(transport.close)
 
-        return TransportContext()
+        class InternalTransportContext(TransportContext):
+            async def __aenter__(self) -> "ClientContext":
+                await transport._semaphore.acquire()
+                return await super().__aenter__()
+
+            async def __aexit__(
+                self,
+                exc_type: Optional[Type[BaseException]],
+                exc_val: Optional[BaseException],
+                exc_tb: Optional[TracebackType],
+            ) -> None:
+                await super().__aexit__(exc_type, exc_val, exc_tb)
+                transport._semaphore.release()
+
+        return InternalTransportContext() if is_event_request else TransportContext()
 
     async def declare(self) -> None:
         """
@@ -406,7 +424,7 @@ class Transport(object):
           you need to process the request and response of the declared life cycle through the processor
         """
 
-        async with self.context() as context:
+        async with self._transport_context(is_event_request=True) as context:
             response: Response = await self._base_request(
                 Request.from_event(
                     event.DeclareEvent({"server_name": self.app.server_name, "client_info": context.client_info}),
@@ -439,7 +457,7 @@ class Transport(object):
         async def _ping() -> None:
             nonlocal mos
             nonlocal rtt
-            async with self.context() as context:
+            async with self._transport_context(is_event_request=True) as context:
                 response: Response = await self._base_request(Request.from_event(event.PingEvent({}), context))
             rtt += time.time() - start_time
             mos += response.body.get("mos", 5)
@@ -527,7 +545,7 @@ class Transport(object):
         """
         group = group or constant.DEFAULT_GROUP
         arg_param = arg_param or []
-        async with self.context() as context:
+        async with self._transport_context(is_event_request=False) as context:
             request: Request = Request(
                 msg_type=constant.MSG_REQUEST,
                 target=f"{self.app.server_name}/{group}/{func_name}",
@@ -549,7 +567,7 @@ class Transport(object):
         """
         target: str = f"/{group or constant.DEFAULT_GROUP}/{func_name}"
 
-        async with self.context() as context:
+        async with self._transport_context(is_event_request=False) as context:
             correlation_id: int = context.correlation_id
             channel: Channel = Channel(
                 transport=self, target=target, channel_id=correlation_id, context=context  # type: ignore
