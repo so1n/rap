@@ -146,6 +146,10 @@ class Transport(object):
     def inflight(self) -> int:
         return self._semaphore.inflight
 
+    @property
+    def raw_inflight(self) -> int:
+        return self._semaphore.raw_value
+
     ######################
     # proxy _conn feature #
     ######################

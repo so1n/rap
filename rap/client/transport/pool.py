@@ -62,11 +62,22 @@ class Pool(object):
         """Ensure that the number of transports is adjusted to the desired value during the Pool run"""
         self._transport_manager_event.set()
         while True:
-            await self._transport_manager_event.wait()
+            # Make sure you can run it every once in a while and clear out unavailable transports in time
+            await asyncio.wait([self._transport_manager_event.wait()], timeout=60)
+
             transport_len: int = len(self._transport_deque)
             self._expected_number_of_transports = get_value_by_range(
                 self._expected_number_of_transports, 0, self._max_pool_size
             )
+
+            for _ in range(transport_len):
+                self._transport_deque.rotate(1)
+                if not self._transport_deque[0].available:
+                    try:
+                        await self._transport_deque.popleft().await_close()
+                    except Exception as e:
+                        logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
+
             if transport_len < self._expected_number_of_transports:
                 for _ in range(self._expected_number_of_transports - transport_len):
                     try:
@@ -82,6 +93,7 @@ class Pool(object):
             elif transport_len == 0 and self._expected_number_of_transports == 0:
                 return
             elif transport_len == self._expected_number_of_transports:
+                # If the number of transports is the same as the desired number, wait notify
                 self._transport_manager_event.clear()
 
     async def _ping_handle(self, transport: Transport) -> None:
@@ -92,20 +104,19 @@ class Pool(object):
             available: bool = (time.time() - transport.last_ping_timestamp) < ping_fail_interval
             logger.debug("transport:%s available:%s rtt:%s", transport.connection_info, available, transport.rtt)
             if not available:
-                transport.available = False
                 msg: str = f"ping {transport.sock_tuple} timeout... exit"
                 logger.error(msg)
                 raise RuntimeError(msg)
             elif not (self._min_ping_interval == 1 and self._max_ping_interval == 1):
-                transport.inflight_load.append(transport.inflight)
+                transport.inflight_load.append(int(transport.inflight / transport.raw_inflight * 100))
                 # Simple design, don't want to use pandas&numpy in the app framework
-                avg_inflight: float = sum(transport.inflight_load) / len(transport.inflight_load)
-                if avg_inflight > 80 and len(self) < self._max_pool_size:
+                median_inflight: int = sorted(transport.inflight_load)[len(transport.inflight_load) // 2 + 1]
+                if median_inflight > 80 and len(self) < self._max_pool_size:
                     # The current transport is under too much pressure and
                     # transport needs to be created to divert the traffic
                     self._expected_number_of_transports += 1
                     self._transport_manager_event.set()
-                elif avg_inflight < 20 and len(self) > self._min_pool_size:
+                elif median_inflight < 20 and len(self) > self._min_pool_size:
                     # When transport is just created, inflight is 5.
                     # The current transport is not handling too many requests and needs to lower its priority
                     transport.available_level -= 1
@@ -115,10 +126,7 @@ class Pool(object):
                     transport.available_level += 1
 
             if transport.available_level <= 0 and transport.available:
-                # The current transport availability level is 0,
-                # which means that it is not available and will be marked as unavailable
-                # and will be automatically closed later.
-                transport.available = False
+                # The current transport availability level is 0, which means that it is not available
                 raise RuntimeError("The current transport is idle and needs to be closed")
 
         try:
@@ -137,7 +145,10 @@ class Pool(object):
                 except Exception as e:
                     logger.debug(f"{transport.connection_info} ping event error:{e}")
         finally:
-            transport.close()
+            # Mark the transport as unavailable so that it will be called off the next time the transport is fetched
+            transport.available = False
+            self._expected_number_of_transports -= 1
+            self._transport_manager_event.set()
 
     async def _create_one_transport(self) -> None:
         transport: Transport = Transport(
@@ -161,9 +172,10 @@ class Pool(object):
                 except Exception as close_e:
                     logger.error(f"ignore {transport.connection_info} close error:{close_e}")
             raise e
+        self._transport_deque.append(transport)
         ping_future: asyncio.Future = asyncio.create_task(self._ping_handle(transport))
         transport.listen_future.add_done_callback(lambda _: safe_del_future(ping_future))
-        self._transport_deque.append(transport)
+        transport.listen_future.add_done_callback(lambda _: self._transport_deque.remove(transport))
         logger.debug("create transport:%s", transport.connection_info)
 
     @property
@@ -176,7 +188,6 @@ class Pool(object):
             if not transport.available:
                 # pop transport and close
                 self._transport_deque.popleft().close_soon()
-                self._expected_number_of_transports -= 1
             else:
                 return transport
 
