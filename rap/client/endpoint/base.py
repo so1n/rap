@@ -145,19 +145,7 @@ class BaseEndpoint(object):
         )
         self._transport_pool_dict[key] = pool
         self._transport_key_list.append(key)
-
-        transport_group_len: int = len(self._transport_pool_dict[key])
-        if transport_group_len >= self._max_pool_size:
-            return
-        if not self._transport_pool_dict[key]:
-            create_size = self._min_pool_size
-        elif transport_group_len > self._min_pool_size:
-            create_size = 1
-        else:
-            create_size = self._min_pool_size - transport_group_len
-
-        for _ in range(create_size):
-            await pool.create_new()
+        await pool.create()
 
     @staticmethod
     async def destroy(pool: Pool) -> None:
@@ -173,7 +161,10 @@ class BaseEndpoint(object):
     async def stop(self) -> None:
         """stop endpoint and close all transport and cancel future"""
         while self._transport_key_list:
-            await self.destroy(self._transport_pool_dict[self._transport_key_list.pop()])
+            transport_key: Tuple[str, int] = self._transport_key_list.pop()
+            transport_pool: Optional[Pool] = self._transport_pool_dict.pop(transport_key, None)
+            if transport_pool:
+                await self.destroy(transport_pool)
 
         self._transport_key_list = []
         self._transport_pool_dict = {}

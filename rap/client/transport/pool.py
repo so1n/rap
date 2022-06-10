@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Deque, Optional
 
 from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import Deadline, IgnoreDeadlineTimeoutExc, done_future, safe_del_future
+from rap.common.number_range import get_value_by_range
 
 logger: logging.Logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
@@ -49,7 +50,39 @@ class Pool(object):
         self._min_pool_size: int = min_pool_size or 1
 
         self._transport_deque: Deque[Transport] = deque()
-        self._create_transport_future: asyncio.Future = done_future()
+        self._transport_manager_future: asyncio.Future = done_future()
+        self._transport_manager_event: asyncio.Event = asyncio.Event()
+        self._expected_number_of_transports: int = 0
+
+    @property
+    def is_close(self):
+        return self._transport_manager_future.done()
+
+    async def _transport_manger(self) -> None:
+        """Ensure that the number of transports is adjusted to the desired value during the Pool run"""
+        self._transport_manager_event.set()
+        while True:
+            await self._transport_manager_event.wait()
+            transport_len: int = len(self._transport_deque)
+            self._expected_number_of_transports = get_value_by_range(
+                self._expected_number_of_transports, 0, self._max_pool_size
+            )
+            if transport_len < self._expected_number_of_transports:
+                for _ in range(self._expected_number_of_transports - transport_len):
+                    try:
+                        await self._create_one_transport()
+                    except Exception as e:
+                        logger.warning(f"ignore transport manger create {self._host}:{self._port} error:{e}")
+            elif transport_len > self._expected_number_of_transports:
+                for _ in range(transport_len - self._expected_number_of_transports):
+                    try:
+                        await self._transport_deque.popleft().await_close()
+                    except Exception as e:
+                        logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
+            elif transport_len == 0 and self._expected_number_of_transports == 0:
+                return
+            elif transport_len == self._expected_number_of_transports:
+                self._transport_manager_event.clear()
 
     async def _ping_handle(self, transport: Transport) -> None:
         """client ping-pong handler, check transport is available"""
@@ -70,9 +103,8 @@ class Pool(object):
                 if avg_inflight > 80 and len(self) < self._max_pool_size:
                     # The current transport is under too much pressure and
                     # transport needs to be created to divert the traffic
-                    if self._create_transport_future.done():
-                        # Prevent multiple transport's ping handler from creating new transport at the same time
-                        self._create_transport_future = asyncio.create_task(self.create_new())
+                    self._expected_number_of_transports += 1
+                    self._transport_manager_event.set()
                 elif avg_inflight < 20 and len(self) > self._min_pool_size:
                     # When transport is just created, inflight is 5.
                     # The current transport is not handling too many requests and needs to lower its priority
@@ -105,23 +137,9 @@ class Pool(object):
                 except Exception as e:
                     logger.debug(f"{transport.connection_info} ping event error:{e}")
         finally:
-            safe_del_future(self._create_transport_future)
             transport.close()
 
-    @property
-    def transport(self) -> Optional[Transport]:
-        self._transport_deque.rotate(1)
-        while True:
-            if not self._transport_deque:
-                return None
-            transport: Transport = self._transport_deque[0]
-            if not transport.available:
-                # pop transport and close
-                self._transport_deque.popleft().close_soon()
-            else:
-                return transport
-
-    async def create_new(self) -> None:
+    async def _create_one_transport(self) -> None:
         transport: Transport = Transport(
             self._app,
             self._host,
@@ -146,10 +164,46 @@ class Pool(object):
         ping_future: asyncio.Future = asyncio.create_task(self._ping_handle(transport))
         transport.listen_future.add_done_callback(lambda _: safe_del_future(ping_future))
         self._transport_deque.append(transport)
+        logger.debug("create transport:%s", transport.connection_info)
+
+    @property
+    def transport(self) -> Optional[Transport]:
+        self._transport_deque.rotate(1)
+        while True:
+            if not self._transport_deque:
+                return None
+            transport: Transport = self._transport_deque[0]
+            if not transport.available:
+                # pop transport and close
+                self._transport_deque.popleft().close_soon()
+                self._expected_number_of_transports -= 1
+            else:
+                return transport
+
+    async def create(self) -> None:
+        """
+        Initialize the transport pool,
+        normally the number of generated transport is less than or equal to min pool size
+        """
+        if not self.is_close:
+            return
+        transport_group_len: int = len(self)
+        if transport_group_len >= self._max_pool_size:
+            return
+        elif transport_group_len == 0:
+            self._expected_number_of_transports = self._min_pool_size
+        else:
+            self._expected_number_of_transports = self._min_pool_size - transport_group_len
+
+        # Create one first to ensure that a proper link can be established
+        await self._create_one_transport()
+        # Number of links maintained in the back office
+        self._transport_manager_future = asyncio.create_task(self._transport_manger())
 
     async def destroy(self) -> None:
-        while self._transport_deque:
-            await self._transport_deque.pop().await_close()
+        self._expected_number_of_transports = 0
+        self._transport_manager_event.set()
+        await self._transport_manager_future
 
     def __len__(self) -> int:
         return len(self._transport_deque)
