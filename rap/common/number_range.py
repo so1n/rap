@@ -6,9 +6,9 @@ NumberType = TypeVar("NumberType", int, float)
 def _get_value_by_range(
     value: NumberType, gte: Optional[NumberType] = None, lte: Optional[NumberType] = None
 ) -> NumberType:
-    if gte and value < gte:
+    if gte is not None and value < gte:
         value = gte
-    elif lte and value > lte:
+    elif lte is not None and value > lte:
         value = lte
     else:
         value = value

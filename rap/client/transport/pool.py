@@ -175,7 +175,9 @@ class Pool(object):
         self._transport_deque.append(transport)
         ping_future: asyncio.Future = asyncio.create_task(self._ping_handle(transport))
         transport.listen_future.add_done_callback(lambda _: safe_del_future(ping_future))
-        transport.listen_future.add_done_callback(lambda _: self._transport_deque.remove(transport))
+        transport.listen_future.add_done_callback(
+            lambda _: self._transport_deque.remove(transport) if transport.available else None
+        )
         logger.debug("create transport:%s", transport.connection_info)
 
     @property

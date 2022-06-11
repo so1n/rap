@@ -112,7 +112,7 @@ class Transport(object):
         ]
 
         # ping
-        self.inflight_load: Deque[int] = deque(maxlen=5)  # save history inflight(like Linux load)
+        self.inflight_load: Deque[int] = deque([0, 0, 0, 0, 0], maxlen=5)  # save history inflight(like Linux load)
         self.ping_future: asyncio.Future = done_future()
         self.last_ping_timestamp: float = time.time()
         self.rtt: float = 0.0
