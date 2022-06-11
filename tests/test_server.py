@@ -6,12 +6,11 @@ from pytest_mock import MockerFixture
 
 from rap.client import Client
 from rap.common.asyncio_helper import Deadline
-from rap.common.exceptions import RpcRunTimeError
+from rap.common.exceptions import RpcRunTimeError, ServerError
 from rap.common.utils import EventEnum
 from rap.server import Server
 from rap.server.plugin.middleware.conn.limit import ConnLimitMiddleware
 from rap.server.plugin.processor import CryptoProcessor as ServerCryptoProcessor
-from tests.conftest import AnyStringWith
 
 pytestmark = pytest.mark.asyncio
 
@@ -68,11 +67,9 @@ class TestServerConnHandle:
         future: asyncio.Future = asyncio.Future()
         future.set_exception(Exception())
         mocker.patch("rap.server.receiver.Receiver.dispatch").return_value = future
-        error_log = mocker.patch("rap.client.transport.transport.logger.error")
-        with pytest.raises(asyncio.TimeoutError):
+        with pytest.raises(ServerError):
             with Deadline(1):
                 await rap_client.invoke_by_name("sync_sum", [1, 2])
-        error_log.assert_called_with(AnyStringWith("Can not dispatch response"))
 
     # async def test_receive_error_msg(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
     #     mocker.patch("rap.server.model.Request.from_msg").side_effect = Exception()

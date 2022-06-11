@@ -124,6 +124,104 @@ class Transport(object):
         )
         self._server_info: InmutableDict = InmutableDict()
 
+    def _broadcast_server_event(self, response: Response) -> None:
+        for _, future in self._resp_future_dict.items():
+            future.set_result(response)
+        for _, queue in self._channel_queue_dict.items():
+            queue.put_nowait(response)
+
+    def _transport_context(self, c_id: Optional[int] = None, is_event_request: bool = False) -> "Any":
+        if not c_id:
+            correlation_id: int = self._correlation_id + 2
+            # Avoid too big numbers
+            self._correlation_id = correlation_id & self._max_correlation_id
+        else:
+            correlation_id: int = c_id
+
+        transport: "Transport" = self
+
+        class TransportContext(object):
+            correlation_id: int
+
+            def __init__(self) -> None:
+                self.correlation_id = correlation_id
+                self.context: ClientContext = ClientContext()
+                self.context.app = transport.app
+                self.context.conn = transport._conn
+                self.context.correlation_id = self.correlation_id
+                self.context.server_info = transport._server_info
+                self.context.client_info = transport._client_info
+                transport._context_dict[self.correlation_id] = self.context
+                super().__init__()
+
+            async def __aenter__(self) -> "ClientContext":
+                for on_context_enter in transport.on_context_enter_processor_list:
+                    try:
+                        await on_context_enter(self.context)
+                    except Exception as e:
+                        logger.exception(f"on_context_enter error:{e}")
+                return self.context
+
+            async def __aexit__(
+                self,
+                exc_type: Optional[Type[BaseException]],
+                exc_val: Optional[BaseException],
+                exc_tb: Optional[TracebackType],
+            ) -> None:
+                for on_context_exit in reversed(transport.on_context_exit_processor_list):
+                    try:
+                        await on_context_exit(self.context, exc_type, exc_val, exc_tb)
+                    except Exception as e:
+                        logger.exception(f"on_context_exit error:{e}")
+                transport._context_dict.pop(self.correlation_id, None)
+                if transport.close_soon_flag and transport._semaphore.inflight == transport._semaphore.raw_value:
+                    get_event_loop().call_soon(transport.close)
+
+        class InternalTransportContext(TransportContext):
+            async def __aenter__(self) -> "ClientContext":
+                await transport._semaphore.acquire()
+                return await super().__aenter__()
+
+            async def __aexit__(
+                self,
+                exc_type: Optional[Type[BaseException]],
+                exc_val: Optional[BaseException],
+                exc_tb: Optional[TracebackType],
+            ) -> None:
+                await super().__aexit__(exc_type, exc_val, exc_tb)
+                transport._semaphore.release()
+
+        return InternalTransportContext() if is_event_request else TransportContext()
+
+    async def _listen_conn(self) -> None:
+        """listen server msg from transport"""
+        logger.debug("conn:%s listen:%s start", self._conn.sock_tuple, self._conn.peer_tuple)
+        try:
+            async with TaskGroup() as tg:
+                while not self._conn.is_closed():
+                    try:
+                        response_msg: Optional[SERVER_BASE_MSG_TYPE] = await asyncio.wait_for(
+                            self._conn.read(), timeout=self._read_timeout
+                        )
+                    except asyncio.TimeoutError as e:
+                        logger.error(f"conn:{self._conn.sock_tuple} recv response from {self._conn.peer_tuple} timeout")
+                        raise e
+
+                    if not response_msg:
+                        raise ConnectionError("Connection has been closed")
+                    if response_msg[0] == constant.SERVER_EVENT:
+                        tg.create_task(self._server_send_msg_handler(response_msg))
+                    else:
+                        tg.create_task(self._server_recv_msg_handler(response_msg))
+        except Exception as e:
+            if isinstance(e, TaskGroupExc):
+                e = e.error[0]
+            if not isinstance(e, (asyncio.CancelledError, CloseConnException)):
+                self._conn.set_reader_exc(e)
+                logger.exception(f"conn:{self._conn.sock_tuple} listen {self._conn.peer_tuple} error:{e}")
+                if not self._conn.is_closed():
+                    await self._conn.await_close()
+
     def copy(self) -> "Transport":
         return self.__class__(
             app=self.app,
@@ -223,7 +321,7 @@ class Transport(object):
         self.available_level = 5
         self.available = True
         self.close_soon_flag = False
-        self.listen_future = asyncio.ensure_future(self.listen_conn())
+        self.listen_future = asyncio.ensure_future(self._listen_conn())
         await self.declare()
 
     ####################
@@ -243,7 +341,28 @@ class Transport(object):
                 response.status_code, rap_exc.BaseRapError
             )
             response.exc = exc_class.build(response.body)
-        return await self.process_response(response)
+        if not response.exc:
+            try:
+                for process_response in reversed(self.process_response_processor_list):
+                    response = await process_response(response)
+            except IgnoreNextProcessor:
+                pass
+            except Exception as e:
+                response.exc = e
+                response.tb = sys.exc_info()[2]
+        if response.exc:
+            for process_exception in reversed(self.process_exception_processor_list):
+                raw_response: Response = response
+                try:
+                    response = await process_exception(response)  # type: ignore
+                except IgnoreNextProcessor:
+                    break
+                except Exception as e:
+                    logger.exception(
+                        f"processor:{process_exception} handle response:{response.correlation_id} error:{e}"
+                    )
+                    response = raw_response
+        return response
 
     async def _server_recv_msg_handler(self, response_msg: SERVER_BASE_MSG_TYPE) -> None:
         correlation_id: int = response_msg[1]
@@ -254,20 +373,10 @@ class Transport(object):
         response = await self._get_response(response_msg=response_msg, context=context)
         if not response:
             return
-        if response.msg_type == constant.CLIENT_EVENT:
-            if response.func_name in (constant.DECLARE, constant.PING_EVENT):
-                if correlation_id in self._resp_future_dict:
-                    self._resp_future_dict[correlation_id].set_result(response)
-                else:
-                    logger.error(f"recv event:{response.func_name}, but not handler")
-            else:
-                logger.error(f"recv not support event response:{response}")
-        elif response.msg_type == constant.CHANNEL_RESPONSE and correlation_id in self._channel_queue_dict:
-            # put msg to channel
-            self._channel_queue_dict[correlation_id].put_nowait(response)
-        elif response.msg_type == constant.MSG_RESPONSE and correlation_id in self._resp_future_dict:
-            # set msg to future_dict's `future`
+        if correlation_id in self._resp_future_dict:
             self._resp_future_dict[correlation_id].set_result(response)
+        elif correlation_id in self._channel_queue_dict:
+            self._channel_queue_dict[correlation_id].put_nowait(response)
         else:
             logger.error(f"Can not dispatch response: {response}, ignore")
         return
@@ -299,128 +408,6 @@ class Transport(object):
     ##########################################
     # rap interactive protocol encapsulation #
     ##########################################
-    async def process_response(self, response: Response) -> Response:
-        """
-        If this response is accompanied by an exception, handle the exception directly and throw it.
-        """
-        if not response.exc:
-            try:
-                for process_response in reversed(self.process_response_processor_list):
-                    response = await process_response(response)
-            except IgnoreNextProcessor:
-                pass
-            except Exception as e:
-                response.exc = e
-                response.tb = sys.exc_info()[2]
-        if response.exc:
-            for process_exception in reversed(self.process_exception_processor_list):
-                raw_response: Response = response
-                try:
-                    response = await process_exception(response)  # type: ignore
-                except IgnoreNextProcessor:
-                    break
-                except Exception as e:
-                    logger.exception(
-                        f"processor:{process_exception} handle response:{response.correlation_id} error:{e}"
-                    )
-                    response = raw_response
-        return response
-
-    async def listen_conn(self) -> None:
-        """listen server msg from transport"""
-        logger.debug("listen:%s start", self._conn.peer_tuple)
-        try:
-            async with TaskGroup() as tg:
-                while not self._conn.is_closed():
-                    try:
-                        # read response msg
-                        response_msg: Optional[SERVER_BASE_MSG_TYPE] = await asyncio.wait_for(
-                            self._conn.read(), timeout=self._read_timeout
-                        )
-                        logger.debug("recv raw data: %s", response_msg)
-                    except asyncio.TimeoutError as e:
-                        logger.error(f"recv response from {self._conn.connection_info} timeout")
-                        raise e
-
-                    if response_msg is None:
-                        raise ConnectionError("Connection has been closed")
-                    if response_msg[0] == constant.SERVER_EVENT:
-                        tg.create_task(self._server_send_msg_handler(response_msg))
-                    else:
-                        tg.create_task(self._server_recv_msg_handler(response_msg))
-        except Exception as e:
-            if isinstance(e, TaskGroupExc):
-                e = e.error[0]
-            if isinstance(e, (asyncio.CancelledError, CloseConnException)):
-                pass
-            else:
-                self._conn.set_reader_exc(e)
-                logger.exception(f"listen {self._conn.connection_info} error:{e}")
-                if not self._conn.is_closed():
-                    await self._conn.await_close()
-
-    def _broadcast_server_event(self, response: Response) -> None:
-        for _, future in self._resp_future_dict.items():
-            future.set_result(response)
-        for _, queue in self._channel_queue_dict.items():
-            queue.put_nowait(response)
-
-    def _transport_context(self, c_id: Optional[int] = None, is_event_request: bool = False) -> "Any":
-        transport: "Transport" = self
-
-        class TransportContext(object):
-            correlation_id: int
-
-            def __init__(self) -> None:
-                self.correlation_id = c_id or transport._gen_correlation_id()
-                self.context: ClientContext = ClientContext()
-                self.context.app = transport.app
-                self.context.conn = transport._conn
-                self.context.correlation_id = self.correlation_id
-                self.context.server_info = transport._server_info
-                self.context.client_info = transport._client_info
-                transport._context_dict[self.correlation_id] = self.context
-                super().__init__()
-
-            async def __aenter__(self) -> "ClientContext":
-                for on_context_enter in transport.on_context_enter_processor_list:
-                    try:
-                        await on_context_enter(self.context)
-                    except Exception as e:
-                        logger.exception(f"on_context_enter error:{e}")
-                return self.context
-
-            async def __aexit__(
-                self,
-                exc_type: Optional[Type[BaseException]],
-                exc_val: Optional[BaseException],
-                exc_tb: Optional[TracebackType],
-            ) -> None:
-                for on_context_exit in reversed(transport.on_context_exit_processor_list):
-                    try:
-                        await on_context_exit(self.context, exc_type, exc_val, exc_tb)
-                    except Exception as e:
-                        logger.exception(f"on_context_exit error:{e}")
-                transport._context_dict.pop(self.correlation_id, None)
-                if transport.close_soon_flag and transport._semaphore.inflight == transport._semaphore.raw_value:
-                    get_event_loop().call_soon(transport.close)
-
-        class InternalTransportContext(TransportContext):
-            async def __aenter__(self) -> "ClientContext":
-                await transport._semaphore.acquire()
-                return await super().__aenter__()
-
-            async def __aexit__(
-                self,
-                exc_type: Optional[Type[BaseException]],
-                exc_val: Optional[BaseException],
-                exc_tb: Optional[TracebackType],
-            ) -> None:
-                await super().__aexit__(exc_type, exc_val, exc_tb)
-                transport._semaphore.release()
-
-        return InternalTransportContext() if is_event_request else TransportContext()
-
     async def declare(self) -> None:
         """
         After transport is initialized, connect to the server and initialize the connection resources.
@@ -512,12 +499,6 @@ class Transport(object):
             pop_future: Optional[asyncio.Future] = self._resp_future_dict.pop(request.correlation_id, None)
             if pop_future:
                 safe_del_future(pop_future)
-
-    def _gen_correlation_id(self) -> int:
-        correlation_id: int = self._correlation_id + 2
-        # Avoid too big numbers
-        self._correlation_id = correlation_id & self._max_correlation_id
-        return correlation_id
 
     ##########################
     # base write_to_conn api #
