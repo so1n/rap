@@ -42,7 +42,7 @@ class Client(BaseClient):
             ws_statistics_interval=ws_statistics_interval,
             through_deadline=through_deadline,
         )
-        self.endpoint = ConsulEndpoint(
+        self._endpoint = ConsulEndpoint(
             self,
             ssl_crt_path=ssl_crt_path,
             read_timeout=keep_alive_timeout,

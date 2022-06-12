@@ -1,12 +1,15 @@
 import asyncio
 import inspect
 import sys
+from contextlib import asynccontextmanager
+from contextvars import ContextVar, Token
 from functools import wraps
 from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optional, Sequence, Type, TypeVar
 
 from rap.client.endpoint import BalanceEnum, BaseEndpoint, LocalEndpoint, Picker
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
+from rap.client.transport.transport import Transport
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common.cache import Cache
 from rap.common.channel import UserChannelCovariantType, get_corresponding_channel_class
@@ -20,10 +23,27 @@ CHANNEL_F = Callable[[UserChannelCovariantType], Awaitable[None]]
 Callable_T = TypeVar("Callable_T")
 
 
+class _PickStub(object):
+    def __init__(self, transport: Transport):
+        self._transport: Transport = transport
+
+    def __call__(self, *args, **kwargs) -> "_PickStub":
+        return self
+
+    async def __aenter__(self) -> Transport:
+        return self._transport
+
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        return None
+
+
+_pick_stub_context: ContextVar[Optional[_PickStub]] = ContextVar("_pick_stub_context", default=None)
+
+
 class BaseClient:
     """Human-friendly `rap client` api"""
 
-    endpoint: BaseEndpoint
+    _endpoint: BaseEndpoint
 
     def __init__(
         self,
@@ -54,6 +74,10 @@ class BaseClient:
         )
 
     @property
+    def endpoint(self) -> BaseEndpoint:
+        return self._endpoint
+
+    @property
     def cache(self) -> Cache:
         return self._cache
 
@@ -74,7 +98,7 @@ class BaseClient:
             ret: Any = handler(self)  # type: ignore
             if asyncio.iscoroutine(ret):
                 await ret  # type: ignore
-        await self.endpoint.stop()
+        await self._endpoint.stop()
         for handler in self._event_dict[EventEnum.after_end]:
             ret: Any = handler(self)  # type: ignore
             if asyncio.iscoroutine(ret):
@@ -86,7 +110,7 @@ class BaseClient:
             ret: Any = handler(self)  # type: ignore
             if asyncio.iscoroutine(ret):
                 await ret  # type: ignore
-        await self.endpoint.start()
+        await self._endpoint.start()
         for handler in self._event_dict[EventEnum.after_start]:
             ret: Any = handler(self)  # type: ignore
             if asyncio.iscoroutine(ret):
@@ -140,7 +164,7 @@ class BaseClient:
             _kwargs: Dict = kwargs  # type: ignore
 
             _header = _kwargs.pop("header", header)
-            _picker_class = _kwargs.pop("picker", picker_class)
+            _picker_class = _kwargs.pop("picker_class", picker_class)
             result: Any = await self.invoke_by_name(
                 name,
                 arg_param=param_handle(func_sig, _args, _kwargs),
@@ -172,8 +196,8 @@ class BaseClient:
             _args: Sequence = args  # type: ignore
             _kwargs: Dict = kwargs  # type: ignore
 
-            _picker_class = _kwargs.pop("picker", picker_class)
-            async with self.endpoint.picker(picker_class=_picker_class) as transport:
+            _picker_class = _kwargs.pop("picker_class", picker_class)
+            async with (_pick_stub_context.get() or self._endpoint.picker(picker_class=_picker_class)) as transport:
                 async with transport.channel(name, group) as channel:
                     await channel.write(param_handle(func_sig, _args, _kwargs))
                     async for result in channel.get_read_channel():
@@ -182,7 +206,11 @@ class BaseClient:
         return wrapper
 
     def _wrapper_channel(
-        self, func: CHANNEL_F, group: Optional[str], name: str = "", picker_class: Optional[Type[Picker]] = None
+        self,
+        func: CHANNEL_F,
+        group: Optional[str],
+        name: str = "",
+        picker_class: Optional[Type[Picker]] = None,
     ) -> Callable[..., Awaitable[None]]:
         """Decoration channel function"""
         name = name if name else func.__name__
@@ -190,7 +218,7 @@ class BaseClient:
 
         @wraps(func)
         async def wrapper() -> None:
-            async with self.endpoint.picker(picker_class=picker_class) as transport:
+            async with (_pick_stub_context.get() or self._endpoint.picker(picker_class=picker_class)) as transport:
                 async with transport.channel(name, group) as channel:
                     await func(channel.get_user_channel_from_func(func))
 
@@ -228,7 +256,12 @@ class BaseClient:
 
         return wrapper
 
-    def register(self, name: str = "", group: Optional[str] = None) -> Callable:
+    def register(
+        self,
+        name: str = "",
+        group: Optional[str] = None,
+        picker_class: Optional[Type[Picker]] = None,
+    ) -> Callable:
         """Using this method to decorate a fake function can help you use it better.
         (such as ide completion, ide reconstruction and type hints)
         and will be automatically registered according to the function type
@@ -237,13 +270,14 @@ class BaseClient:
 
         :param name: rap func name
         :param group: func's group, default value is `default`
+        :param picker_class: Specific implementation of picker
         """
 
         def wrapper(func: Callable[P, R_T]) -> Callable:  # type: ignore
             if inspect.iscoroutinefunction(func):
-                return self._wrapper_func(func, group, name=name)  # type: ignore
+                return self._wrapper_func(func, group, name=name, picker_class=picker_class)  # type: ignore
             elif inspect.isasyncgenfunction(func):
-                return self._wrapper_gen_func(func, group, name=name)  # type: ignore
+                return self._wrapper_gen_func(func, group, name=name, picker_class=picker_class)  # type: ignore
             raise TypeError(f"func:{func.__name__} must coroutine function or async gen function")
 
         return wrapper
@@ -254,7 +288,15 @@ class BaseClient:
     @property
     def is_close(self) -> bool:
         """Whether the client is closed"""
-        return self.endpoint.is_close
+        return self._endpoint.is_close
+
+    @asynccontextmanager
+    async def fixed_transport(self, picker_class: Optional[Type[Picker]] = None) -> AsyncGenerator[_PickStub, None]:
+        async with self._endpoint.picker(picker_class=picker_class) as transport:
+            _pick_stub: _PickStub = _PickStub(transport)
+            token: Token = _pick_stub_context.set(_pick_stub)
+            yield _pick_stub
+            _pick_stub_context.reset(token)
 
     async def request(
         self,
@@ -272,7 +314,7 @@ class BaseClient:
         :param header: request header
         :param picker_class: Specific implementation of picker
         """
-        async with self.endpoint.picker(picker_class=picker_class) as transport:
+        async with (_pick_stub_context.get() or self._endpoint.picker(picker_class=picker_class)) as transport:
             return await transport.request(name, arg_param, group=group, header=header)
 
     async def invoke_by_name(
@@ -422,7 +464,7 @@ class Client(BaseClient):
             ws_statistics_interval=ws_statistics_interval,
             through_deadline=through_deadline,
         )
-        self.endpoint = LocalEndpoint(
+        self._endpoint = LocalEndpoint(
             conn_list,
             self,  # type: ignore
             ssl_crt_path=ssl_crt_path,

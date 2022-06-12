@@ -2,7 +2,6 @@ import asyncio
 from typing import Set
 
 from rap.client import Client
-from rap.client.endpoint import PrivatePicker
 from rap.client.model import Request
 from rap.client.processor.base import BaseProcessor
 from rap.common.conn import Connection
@@ -20,20 +19,21 @@ class CheckConnProcessor(BaseProcessor):
 
 
 check_conn_processor: CheckConnProcessor = CheckConnProcessor()
-client: Client = Client("example", [{"ip": "localhost", "port": "9000"}], min_poll_size=1, max_pool_size=1)
+client: Client = Client("example", [{"ip": "localhost", "port": "9000"}], min_poll_size=3, max_pool_size=3)
 client.load_processor([check_conn_processor])
 
 
 # in register, must use async def...
-@client.register(picker_class=PrivatePicker)
+@client.register()
 async def sync_sum(a: int, b: int) -> int:
     return 0
 
 
 async def main() -> None:
     await client.start()
-    for _ in range(3):
-        assert 3 == await sync_sum(1, 2)
+    async with client.fixed_transport():
+        for _ in range(3):
+            assert 3 == await sync_sum(1, 2)
 
 
 if __name__ == "__main__":
@@ -45,4 +45,4 @@ if __name__ == "__main__":
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
-    assert len(check_conn_processor.conn_set) == 3
+    assert len(check_conn_processor.conn_set) == 1
