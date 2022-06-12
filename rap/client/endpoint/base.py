@@ -24,13 +24,29 @@ class BalanceEnum(Enum):
 
 
 class Picker(object):
-    def __init__(self, transport_list: List[Transport]):
-        if not transport_list:
+    def __init__(self, pool_list: List[Pool]):
+        if not pool_list:
             raise ConnectionError("Endpoint Can not found available transport")
-        self._transport: Transport = max(transport_list, key=lambda x: x.pick_score)
+        self._pool_list: List[Pool] = pool_list
+
+        transport_list: List[Transport] = []
+        for pool in pool_list:
+            transport: Optional[Transport] = pool.transport
+            if transport:
+                transport_list.append(transport)
+
+        if transport_list:
+            self._transport: Optional[Transport] = max(transport_list, key=lambda x: x.pick_score)
+        else:
+            self._transport = None
 
     async def __aenter__(self) -> Transport:
-        return self._transport
+        if self._transport:
+            return self._transport
+        else:
+            # If no transport is available, transport is created from the first Pool
+            first_pool = self._pool_list[0]
+            return await first_pool.create_one_transport()
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         return None
@@ -38,12 +54,18 @@ class Picker(object):
 
 class PrivatePicker(Picker):
     async def __aenter__(self) -> Transport:
-        self._transport = self._transport.copy()
-        await self._transport.connect()
+        if not self._transport:
+            # If no transport is available, transport is created from the first Pool
+            first_pool = self._pool_list[0]
+            self._transport = await first_pool.create_one_transport(is_fork=True)
+        else:
+            self._transport = self._transport.copy()
+            await self._transport.connect()
         return self._transport
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        await self._transport.await_close()
+        if self._transport:
+            await self._transport.await_close()
         return None
 
 
@@ -93,12 +115,12 @@ class BaseEndpoint(object):
 
         self._run_event: asyncio.Event = asyncio.Event()
 
-        setattr(self, self._pick_transport.__name__, self._random_pick_transport)
+        setattr(self, self._pick_pool.__name__, self._random_pick_pool)
         if balance_enum:
             if balance_enum == BalanceEnum.random:
-                setattr(self, self._pick_transport.__name__, self._random_pick_transport)
+                setattr(self, self._pick_pool.__name__, self._random_pick_pool)
             elif balance_enum == BalanceEnum.round_robin:
-                setattr(self, self._pick_transport.__name__, self._round_robin_pick_transport)
+                setattr(self, self._pick_pool.__name__, self._round_robin_pick_pool)
 
     @property
     def is_close(self) -> bool:
@@ -178,43 +200,29 @@ class BaseEndpoint(object):
         if not self._transport_key_list:
             raise ConnectionError("Endpoint Can not found available transport")
         cnt = min(len(self._transport_key_list), cnt)
-        transport_list: List[Transport] = self._pick_transport(cnt)
-        if not transport_list:
+        pool_list: List[Pool] = self._pick_pool(cnt)
+        if not pool_list:
             raise ConnectionError("Endpoint Can not found available transport")
         if is_private:
-            return PrivatePicker(transport_list)
+            return PrivatePicker(pool_list)
         else:
-            return Picker(transport_list)
+            return Picker(pool_list)
 
-    def _pick_transport(self, cnt: int) -> List[Transport]:
+    def _pick_pool(self, cnt: int) -> List[Pool]:
         """fake code"""
-        return [
-            transport_group.transport
-            for transport_group in self._transport_pool_dict.values()
-            if transport_group.transport
-        ]
+        return [transport_group for transport_group in self._transport_pool_dict.values()]
 
-    def _random_pick_transport(self, cnt: int) -> List[Transport]:
-        """random get transport"""
+    def _random_pick_pool(self, cnt: int) -> List[Pool]:
+        """random get pool"""
         key_list: List[Tuple[str, int]] = random.choices(self._transport_key_list, k=cnt)
-        transport_list: List[Transport] = []
-        for key in key_list:
-            transport: Optional[Transport] = self._transport_pool_dict[key].transport
-            if transport:
-                transport_list.append(transport)
-        return transport_list
+        return [self._transport_pool_dict[key] for key in key_list]
 
-    def _round_robin_pick_transport(self, cnt: int) -> List[Transport]:
-        """get transport by round robin"""
+    def _round_robin_pick_pool(self, cnt: int) -> List[Pool]:
+        """get pool by round robin"""
         self._round_robin_index += 1
         index: int = self._round_robin_index % (len(self._transport_key_list))
         key_list: List[Tuple[str, int]] = self._transport_key_list[index : index + cnt]
-        transport_list: List[Transport] = []
-        for key in key_list:
-            transport: Optional[Transport] = self._transport_pool_dict[key].transport
-            if transport:
-                transport_list.append(transport)
-        return transport_list
+        return [self._transport_pool_dict[key] for key in key_list]
 
     def __len__(self) -> int:
         return len(self._transport_key_list)
