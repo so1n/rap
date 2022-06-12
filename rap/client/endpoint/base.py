@@ -2,7 +2,7 @@ import asyncio
 import logging
 import random
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type
 
 from rap.client.transport.pool import Pool
 from rap.client.transport.transport import Transport
@@ -192,10 +192,10 @@ class BaseEndpoint(object):
         self._transport_pool_dict = {}
         self._run_event.clear()
 
-    def picker(self, cnt: int = 3, is_private: Optional[bool] = None) -> Picker:
+    def picker(self, cnt: int = 3, picker_class: Optional[Type[Picker]] = None) -> Picker:
         """get transport by endpoint
         :param cnt: How many transport to get
-        :param is_private: If the value is True, it will get transport for its own use only. default False
+        :param picker_class: Specific implementation of picker
         """
         if not self._transport_key_list:
             raise ConnectionError("Endpoint Can not found available transport")
@@ -203,10 +203,8 @@ class BaseEndpoint(object):
         pool_list: List[Pool] = self._pick_pool(cnt)
         if not pool_list:
             raise ConnectionError("Endpoint Can not found available transport")
-        if is_private:
-            return PrivatePicker(pool_list)
-        else:
-            return Picker(pool_list)
+        picker_class = picker_class or Picker
+        return picker_class(pool_list)
 
     def _pick_pool(self, cnt: int) -> List[Pool]:
         """fake code"""

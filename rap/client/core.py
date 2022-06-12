@@ -2,9 +2,9 @@ import asyncio
 import inspect
 import sys
 from functools import wraps
-from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optional, Sequence, TypeVar
+from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optional, Sequence, Type, TypeVar
 
-from rap.client.endpoint import BalanceEnum, BaseEndpoint, LocalEndpoint
+from rap.client.endpoint import BalanceEnum, BaseEndpoint, LocalEndpoint, Picker
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.types import CLIENT_EVENT_FN
@@ -126,7 +126,7 @@ class BaseClient:
         func: Callable[P, R_T],  # type: ignore
         group: Optional[str],
         header: Optional[dict] = None,
-        is_private: Optional[bool] = None,
+        picker_class: Optional[Type[Picker]] = None,
         name: str = "",
     ) -> Callable[P, Awaitable[R_T]]:  # type: ignore
         """Decorate normal function"""
@@ -140,13 +140,13 @@ class BaseClient:
             _kwargs: Dict = kwargs  # type: ignore
 
             _header = _kwargs.pop("header", header)
-            _is_private = _kwargs.pop("is_private", is_private)
+            _picker_class = _kwargs.pop("picker", picker_class)
             result: Any = await self.invoke_by_name(
                 name,
                 arg_param=param_handle(func_sig, _args, _kwargs),
                 group=group,
                 header=_header,
-                is_private=_is_private,
+                picker_class=_picker_class,
             )
             return result
 
@@ -156,7 +156,7 @@ class BaseClient:
         self,
         func: Callable[P, R_T],  # type: ignore
         group: Optional[str],
-        is_private: Optional[bool] = None,
+        picker_class: Optional[Type[Picker]] = None,
         name: str = "",
     ) -> Callable[P, AsyncGenerator[R_T, None]]:  # type: ignore
         """Decoration generator function"""
@@ -172,8 +172,8 @@ class BaseClient:
             _args: Sequence = args  # type: ignore
             _kwargs: Dict = kwargs  # type: ignore
 
-            _is_private = _kwargs.pop("is_private", is_private)
-            async with self.endpoint.picker(is_private=_is_private) as transport:
+            _picker_class = _kwargs.pop("picker", picker_class)
+            async with self.endpoint.picker(picker_class=_picker_class) as transport:
                 async with transport.channel(name, group) as channel:
                     await channel.write(param_handle(func_sig, _args, _kwargs))
                     async for result in channel.get_read_channel():
@@ -182,7 +182,7 @@ class BaseClient:
         return wrapper
 
     def _wrapper_channel(
-        self, func: CHANNEL_F, group: Optional[str], name: str = "", is_private: Optional[bool] = None
+        self, func: CHANNEL_F, group: Optional[str], name: str = "", picker_class: Optional[Type[Picker]] = None
     ) -> Callable[..., Awaitable[None]]:
         """Decoration channel function"""
         name = name if name else func.__name__
@@ -190,7 +190,7 @@ class BaseClient:
 
         @wraps(func)
         async def wrapper() -> None:
-            async with self.endpoint.picker(is_private=is_private) as transport:
+            async with self.endpoint.picker(picker_class=picker_class) as transport:
                 async with transport.channel(name, group) as channel:
                     await func(channel.get_user_channel_from_func(func))
 
@@ -218,10 +218,13 @@ class BaseClient:
         return wrapper
 
     def register_channel(
-        self, name: str = "", group: Optional[str] = None, is_private: bool = False
+        self,
+        name: str = "",
+        group: Optional[str] = None,
+        picker_class: Optional[Type[Picker]] = None,
     ) -> Callable[[CHANNEL_F], Any]:
         def wrapper(func: CHANNEL_F) -> Any:  # type: ignore
-            return self._wrapper_channel(func, group=group, name=name, is_private=is_private)
+            return self._wrapper_channel(func, group=group, name=name, picker_class=picker_class)
 
         return wrapper
 
@@ -259,7 +262,7 @@ class BaseClient:
         arg_param: Optional[Sequence[Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
-        is_private: Optional[bool] = None,
+        picker_class: Optional[Type[Picker]] = None,
     ) -> Response:
         """rpc client base invoke method
         Note: This method does not support parameter type checking, not support channels;
@@ -267,9 +270,9 @@ class BaseClient:
         :param arg_param: rpc func param
         :param group: func's group
         :param header: request header
-        :param is_private: If the value is True, it will get transport for its own use only. default False
+        :param picker_class: Specific implementation of picker
         """
-        async with self.endpoint.picker(is_private=is_private) as transport:
+        async with self.endpoint.picker(picker_class=picker_class) as transport:
             return await transport.request(name, arg_param, group=group, header=header)
 
     async def invoke_by_name(
@@ -278,7 +281,7 @@ class BaseClient:
         arg_param: Optional[Sequence[Any]] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
-        is_private: Optional[bool] = None,
+        picker_class: Optional[Type[Picker]] = None,
     ) -> Any:
         """rpc client base invoke method
         Note: This method does not support parameter type checking, not support channels;
@@ -286,9 +289,9 @@ class BaseClient:
         :param arg_param: rpc func param
         :param group: func's group
         :param header: request header
-        :param is_private: If the value is True, it will get transport for its own use only. default False
+        :param picker_class: Specific implementation of picker
         """
-        response: Response = await self.request(name, arg_param, group=group, header=header, is_private=is_private)
+        response: Response = await self.request(name, arg_param, group=group, header=header, picker_class=picker_class)
         return response.body
 
     def invoke(
@@ -296,41 +299,41 @@ class BaseClient:
         func: Callable[P, R_T],  # type: ignore
         header: Optional[dict] = None,
         group: Optional[str] = None,
-        is_private: bool = False,
+        picker_class: Optional[Type[Picker]] = None,
     ) -> Callable[P, Awaitable[R_T]]:  # type: ignore
         """automatically resolve function names and call invoke_by_name
         :param func: python func
         :param group: func's group, default value is `default`
         :param header: request header
-        :param is_private: If the value is True, it will get transport for its own use only. default False
+        :param picker_class: Specific implementation of picker
         """
-        return self._wrapper_func(func, group=group, header=header, is_private=is_private)
+        return self._wrapper_func(func, group=group, header=header, picker_class=picker_class)
 
     def invoke_iterator(
         self,
         func: Callable[P, R_T],  # type: ignore
         group: Optional[str] = None,
-        is_private: bool = False,
+        picker_class: Optional[Type[Picker]] = None,
     ) -> Callable[P, AsyncGenerator[R_T, None]]:  # type: ignore
         """Python-specific generator invoke
         :param func: python func
         :param group: func's group, default value is `default`
-        :param is_private: If the value is True, it will get transport for its own use only. default False
+        :param picker_class: Specific implementation of picker
         """
-        return self._wrapper_gen_func(func, group=group, is_private=is_private)
+        return self._wrapper_gen_func(func, group=group, picker_class=picker_class)
 
     def invoke_channel(
         self,
         func: Callable[[UserChannelCovariantType], Awaitable[None]],
         group: Optional[str] = None,
-        is_private: bool = False,
+        picker_class: Optional[Type[Picker]] = None,
     ) -> Callable[..., Awaitable[None]]:
         """invoke channel fun
         :param func: python func
         :param group: func's group, default value is `default`
-        :param is_private: If the value is True, it will get transport for its own use only. default False
+        :param picker_class: Specific implementation of picker
         """
-        return self._wrapper_channel(func, group=group, is_private=is_private)
+        return self._wrapper_channel(func, group=group, picker_class=picker_class)
 
     ###############################
     # Magic api (Not recommended) #
