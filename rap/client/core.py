@@ -6,7 +6,7 @@ from contextvars import ContextVar, Token
 from functools import wraps
 from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optional, Sequence, Type, TypeVar
 
-from rap.client.endpoint import BalanceEnum, BaseEndpoint, LocalEndpoint, Picker
+from rap.client.endpoint import BaseEndpoint, LocalEndpoint, Picker
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
 from rap.client.transport.transport import Transport
@@ -43,8 +43,6 @@ _pick_stub_context: ContextVar[Optional[_PickStub]] = ContextVar("_pick_stub_con
 class BaseClient:
     """Human-friendly `rap client` api"""
 
-    _endpoint: BaseEndpoint
-
     def __init__(
         self,
         server_name: str,
@@ -53,6 +51,7 @@ class BaseClient:
         ws_max_interval: Optional[int] = None,
         ws_statistics_interval: Optional[int] = None,
         through_deadline: bool = False,
+        endpoint: Optional[BaseEndpoint] = None,
     ):
         """
         :param server_name: server name
@@ -61,6 +60,7 @@ class BaseClient:
         :param ws_max_interval: WindowStatistics Window capacity
         :param ws_statistics_interval: WindowStatistics Statistical data interval from window
         :param through_deadline: enable through deadline to server
+        :param endpoint: endpoint
         """
         self.server_name: str = server_name
         self._processor_list: List[BaseProcessor] = []
@@ -72,6 +72,10 @@ class BaseClient:
         self._window_statistics: WindowStatistics = WindowStatistics(
             interval=ws_min_interval, max_interval=ws_max_interval, statistics_interval=ws_statistics_interval
         )
+        if endpoint is not None:
+            self._endpoint: BaseEndpoint = endpoint
+        else:
+            self._endpoint = LocalEndpoint({"ip": "localhost", "port": 9000})
 
     @property
     def endpoint(self) -> BaseEndpoint:
@@ -98,7 +102,7 @@ class BaseClient:
             ret: Any = handler(self)  # type: ignore
             if asyncio.iscoroutine(ret):
                 await ret  # type: ignore
-        await self._endpoint.stop()
+        await self.endpoint.stop()
         for handler in self._event_dict[EventEnum.after_end]:
             ret: Any = handler(self)  # type: ignore
             if asyncio.iscoroutine(ret):
@@ -110,11 +114,14 @@ class BaseClient:
             ret: Any = handler(self)  # type: ignore
             if asyncio.iscoroutine(ret):
                 await ret  # type: ignore
-        await self._endpoint.start()
+        await self.endpoint.start(self)
         for handler in self._event_dict[EventEnum.after_start]:
             ret: Any = handler(self)  # type: ignore
             if asyncio.iscoroutine(ret):
                 await ret  # type: ignore
+
+    async def await_start(self) -> None:
+        await self.endpoint.await_start()
 
     def _check_run(self) -> None:
         if not self.is_close:
@@ -197,7 +204,7 @@ class BaseClient:
             _kwargs: Dict = kwargs  # type: ignore
 
             _picker_class = _kwargs.pop("picker_class", picker_class)
-            async with (_pick_stub_context.get() or self._endpoint.picker(picker_class=_picker_class)) as transport:
+            async with (_pick_stub_context.get() or self.endpoint.picker(picker_class=_picker_class)) as transport:
                 async with transport.channel(name, group) as channel:
                     await channel.write(param_handle(func_sig, _args, _kwargs))
                     async for result in channel.get_read_channel():
@@ -218,7 +225,7 @@ class BaseClient:
 
         @wraps(func)
         async def wrapper() -> None:
-            async with (_pick_stub_context.get() or self._endpoint.picker(picker_class=picker_class)) as transport:
+            async with (_pick_stub_context.get() or self.endpoint.picker(picker_class=picker_class)) as transport:
                 async with transport.channel(name, group) as channel:
                     await func(channel.get_user_channel_from_func(func))
 
@@ -288,11 +295,13 @@ class BaseClient:
     @property
     def is_close(self) -> bool:
         """Whether the client is closed"""
+        if not getattr(self, "_endpoint", None):
+            return True
         return self._endpoint.is_close
 
     @asynccontextmanager
     async def fixed_transport(self, picker_class: Optional[Type[Picker]] = None) -> AsyncGenerator[_PickStub, None]:
-        async with self._endpoint.picker(picker_class=picker_class) as transport:
+        async with self.endpoint.picker(picker_class=picker_class) as transport:
             _pick_stub: _PickStub = _PickStub(transport)
             token: Token = _pick_stub_context.set(_pick_stub)
             yield _pick_stub
@@ -314,7 +323,7 @@ class BaseClient:
         :param header: request header
         :param picker_class: Specific implementation of picker
         """
-        async with (_pick_stub_context.get() or self._endpoint.picker(picker_class=picker_class)) as transport:
+        async with (_pick_stub_context.get() or self.endpoint.picker(picker_class=picker_class)) as transport:
             return await transport.request(name, arg_param, group=group, header=header)
 
     async def invoke_by_name(
@@ -427,54 +436,4 @@ class BaseClient:
 
 
 class Client(BaseClient):
-    def __init__(
-        self,
-        server_name: str,
-        conn_list: List[dict],
-        keep_alive_timeout: Optional[int] = None,
-        ssl_crt_path: Optional[str] = None,
-        cache_interval: Optional[float] = None,
-        ws_min_interval: Optional[int] = None,
-        ws_max_interval: Optional[int] = None,
-        ws_statistics_interval: Optional[int] = None,
-        through_deadline: bool = False,
-        select_conn_method: BalanceEnum = BalanceEnum.random,
-        min_ping_interval: Optional[int] = None,
-        max_ping_interval: Optional[int] = None,
-        ping_fail_cnt: Optional[int] = None,
-        max_pool_size: Optional[int] = None,
-        min_poll_size: Optional[int] = None,
-    ):
-        """
-        server_name: server name
-        transport_list: client transport info
-          include ip, port, weight
-          ip: server ip
-          port: server port
-          weight: select this transport weight
-          e.g.  [{"ip": "localhost", "port": "9000", weight: 10}]
-        keep_alive_timeout: read msg from transport timeout
-        """
-
-        super().__init__(
-            server_name,
-            cache_interval=cache_interval,
-            ws_min_interval=ws_min_interval,
-            ws_max_interval=ws_max_interval,
-            ws_statistics_interval=ws_statistics_interval,
-            through_deadline=through_deadline,
-        )
-        self._endpoint = LocalEndpoint(
-            conn_list,
-            self,  # type: ignore
-            ssl_crt_path=ssl_crt_path,
-            pack_param=None,
-            unpack_param=None,
-            read_timeout=keep_alive_timeout,
-            balance_enum=select_conn_method,
-            ping_fail_cnt=ping_fail_cnt,
-            min_ping_interval=min_ping_interval,
-            max_ping_interval=max_ping_interval,
-            max_pool_size=max_pool_size,
-            min_poll_size=min_poll_size,
-        )
+    pass

@@ -2,7 +2,7 @@ import asyncio
 
 from rap.client import Client
 
-client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
+client: Client = Client("example")
 
 
 @client.register()

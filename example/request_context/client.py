@@ -6,7 +6,7 @@ from rap.client import Client
 from rap.client.processor.context import Context, ContextProcessor
 from rap.common.channel import UserChannel
 
-client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
+client: Client = Client("example")
 client.load_processor([ContextProcessor()])
 
 

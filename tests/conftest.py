@@ -115,7 +115,7 @@ def _recovery(client: Client) -> None:
 
 @pytest.fixture
 async def rap_client() -> AsyncGenerator[Client, None]:
-    client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
+    client: Client = Client("test")
     _inject(client)
     await client.start()
     try:
@@ -127,7 +127,7 @@ async def rap_client() -> AsyncGenerator[Client, None]:
 
 @asynccontextmanager
 async def process_client(process_list: List[BaseProcessor]) -> AsyncGenerator[Client, None]:
-    client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
+    client: Client = Client("test")
     _inject(client)
     client.load_processor(process_list)
     await client.start()

@@ -20,7 +20,7 @@ jaeger_exporter = JaegerExporter(
 )
 trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(jaeger_exporter))
 
-client: Client = Client(service_name, [{"ip": "localhost", "port": "9000"}])
+client: Client = Client(service_name)
 client.load_processor([OpenTelemetryProcessor()])
 
 

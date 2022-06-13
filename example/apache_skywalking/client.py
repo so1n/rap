@@ -11,7 +11,7 @@ config.init(service_name="rap client service", log_reporter_active=True)
 
 logging.basicConfig(format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.DEBUG)
 
-client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
+client: Client = Client("example")
 client.load_processor([SkywalkingProcessor()])
 
 

@@ -4,6 +4,7 @@ import json
 from typing import Dict, List, Tuple, Union
 
 from rap.client import Client
+from rap.client.endpoint import LocalEndpoint
 from rap.client.processor import CryptoProcessor
 from rap.common.utils import constant
 
@@ -36,7 +37,7 @@ if __name__ == "__main__":
 
     loop = asyncio.get_event_loop()
 
-    client: Client = Client(server_name, [{"ip": server_host, "port": int(server_port)}])
+    client: Client = Client(server_name, endpoint=LocalEndpoint({"ip": server_host, "port": int(server_port)}))
     if secret_key:
         crypto_key_id, crypto_key = secret_key.split(",")
         client.load_processor([CryptoProcessor(crypto_key_id, crypto_key)])

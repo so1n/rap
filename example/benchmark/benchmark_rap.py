@@ -25,7 +25,7 @@ def run_server() -> None:
 def run_client() -> None:
     loop: asyncio.AbstractEventLoop = uvloop.new_event_loop()
     asyncio.set_event_loop(loop)
-    client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
+    client: Client = Client("example")
 
     @client.register()
     async def test_sum(a: int, b: int) -> int:

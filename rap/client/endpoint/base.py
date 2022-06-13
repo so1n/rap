@@ -72,7 +72,6 @@ class PrivatePicker(Picker):
 class BaseEndpoint(object):
     def __init__(
         self,
-        app: "BaseClient",
         declare_timeout: Optional[int] = None,
         read_timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
@@ -86,7 +85,6 @@ class BaseEndpoint(object):
         min_poll_size: Optional[int] = None,
     ) -> None:
         """
-        :param app: client app
         :param declare_timeout: declare timeout include request & response, default 9
         :param ssl_crt_path: client ssl crt file path
         :param balance_enum: balance pick transport method, default random
@@ -96,7 +94,6 @@ class BaseEndpoint(object):
         :param max_ping_interval: send client ping max interval, default 3
         :param ping_fail_cnt: How many times ping fails to judge as unavailable, default 3
         """
-        self._app: "BaseClient" = app
         self._declare_timeout: int = declare_timeout or 9
         self._read_timeout: Optional[int] = read_timeout
         self._ssl_crt_path: Optional[str] = ssl_crt_path
@@ -131,17 +128,21 @@ class BaseEndpoint(object):
 
     async def create(
         self,
-        ip: str,
-        port: int,
+        app: "BaseClient",
+        ip: Optional[str] = None,
+        port: Optional[int] = None,
         weight: Optional[int] = None,
         max_inflight: Optional[int] = None,
     ) -> None:
         """create and init transport
+        :param app: client app
         :param ip: server ip
         :param port: server port
         :param weight: select transport weight
         :param max_inflight: Maximum number of connections per transport
         """
+        ip = ip or "127.0.0.1"
+        port = port or 9000
         key: Tuple[str, int] = (ip, port)
         if key in self._transport_pool_dict:
             return
@@ -149,7 +150,7 @@ class BaseEndpoint(object):
         weight = get_value_by_range(weight, 0, 10) if weight else 10
         max_inflight = get_value_by_range(max_inflight, 0) if max_inflight else 100
         pool: Pool = Pool(
-            self._app,
+            app,
             host=ip,
             port=port,
             weight=weight,
@@ -176,7 +177,7 @@ class BaseEndpoint(object):
     def _start(self) -> None:
         self._run_event.set()
 
-    async def start(self) -> None:
+    async def start(self, app: "BaseClient") -> None:
         """start endpoint and create&init transport"""
         raise NotImplementedError
 

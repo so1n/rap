@@ -6,7 +6,7 @@ from rap.client import Client
 from rap.common.channel import UserChannel
 from rap.common.exceptions import TooManyRequest
 
-client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
+client: Client = Client("example")
 
 
 # in register, must use async def...

@@ -18,7 +18,7 @@ config: Config = Config(
 )
 tracer: Tracer = config.initialize_tracer()
 
-client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
+client: Client = Client("example")
 client.load_processor([TracingProcessor(tracer)])
 
 

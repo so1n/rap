@@ -1,8 +1,9 @@
 import asyncio
 
-from rap.client.extend_client.etcd import Client
+from rap.client import Client
+from rap.client.endpoint.etcd import EtcdEndpoint
 
-client: Client = Client("example")
+client: Client = Client("example", endpoint=EtcdEndpoint())
 
 
 # in register, must use async def...

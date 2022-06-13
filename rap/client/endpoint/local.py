@@ -1,10 +1,19 @@
 import asyncio
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional, Tuple
+
+from typing_extensions import TypedDict
 
 from rap.client.endpoint.base import BalanceEnum, BaseEndpoint
 
 if TYPE_CHECKING:
     from rap.client.core import BaseClient
+
+
+class ConnParamTypedDict(TypedDict, total=False):
+    ip: str
+    port: int
+    weight: int
+    max_inflight: int
 
 
 class LocalEndpoint(BaseEndpoint):
@@ -15,8 +24,7 @@ class LocalEndpoint(BaseEndpoint):
 
     def __init__(
         self,
-        conn_list: List[dict],
-        app: "BaseClient",
+        *conn_config: ConnParamTypedDict,
         read_timeout: Optional[int] = None,
         declare_timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
@@ -30,8 +38,8 @@ class LocalEndpoint(BaseEndpoint):
         min_poll_size: Optional[int] = None,
     ):
         """
-        :param conn_list: transport info list, 参数和默认值跟`BaseEndpoint.create`的参数保持一致
-            like:[{"ip": localhost, "port": 9000, "weight": 10, "max_inflight": 100, "size": 2}]
+        :param conn_list: transport info list,
+            like:[{"ip": localhost, "port": 9000, "weight": 10, "max_inflight": 100}]
         :param declare_timeout: declare timeout include request & response
         :param ssl_crt_path: client ssl crt file path
         :param balance_enum: balance pick transport method, default random
@@ -41,9 +49,8 @@ class LocalEndpoint(BaseEndpoint):
         :param max_ping_interval: send client ping max interval
         :param ping_fail_cnt: How many times ping fails to judge as unavailable
         """
-        self._conn_config_list: List[dict] = conn_list
+        self._conn_config_list: Tuple[ConnParamTypedDict, ...] = conn_config
         super().__init__(
-            app,
             declare_timeout=declare_timeout,
             read_timeout=read_timeout,
             ssl_crt_path=ssl_crt_path,
@@ -57,7 +64,7 @@ class LocalEndpoint(BaseEndpoint):
             min_poll_size=min_poll_size,
         )
 
-    async def start(self) -> None:
+    async def start(self, app: "BaseClient") -> None:
         """init transport and start"""
         if not self.is_close:
             raise ConnectionError(f"{self.__class__.__name__} is running")
@@ -66,8 +73,9 @@ class LocalEndpoint(BaseEndpoint):
         await asyncio.gather(
             *[
                 self.create(
-                    conn_config_dict["ip"],
-                    conn_config_dict["port"],
+                    app,
+                    conn_config_dict.get("ip", None),
+                    conn_config_dict.get("port", None),
                     weight=conn_config_dict.get("weight", None),
                     max_inflight=conn_config_dict.get("max_inflight", None),
                 )

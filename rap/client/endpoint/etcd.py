@@ -17,7 +17,6 @@ class EtcdEndpoint(BaseEndpoint):
 
     def __init__(
         self,
-        app: "BaseClient",
         ssl_crt_path: Optional[str] = None,
         read_timeout: Optional[int] = None,
         pack_param: Optional[dict] = None,
@@ -49,7 +48,6 @@ class EtcdEndpoint(BaseEndpoint):
         )
         self._watch_future: asyncio.Future = done_future()
         super().__init__(
-            app,
             read_timeout=read_timeout,
             ssl_crt_path=ssl_crt_path,
             balance_enum=balance_enum,
@@ -67,13 +65,14 @@ class EtcdEndpoint(BaseEndpoint):
         await self.etcd_client.stop()
         await super().stop()
 
-    async def start(self) -> None:
+    async def start(self, app: BaseClient) -> None:
         """create transport by etcd info and init watch etcd info future"""
         if not self.is_close:
             raise ConnectionError(f"{self.__class__.__name__} is running")
         logger.info(f"connect to etcd:{self.etcd_url}, wait discovery....")
-        async for item in self.etcd_client.discovery(self._app.server_name):
+        async for item in self.etcd_client.discovery(app.server_name):
             await self.create(
+                app,
                 item["host"],
                 item["port"],
                 weight=item["weight"],
@@ -83,8 +82,7 @@ class EtcdEndpoint(BaseEndpoint):
         wait_start_future: asyncio.Future = asyncio.Future()
         if not self._transport_key_list:
             logger.warning(
-                f"Can not found transport info from etcd,"
-                f" wait {self._app.server_name} server start and register to etcd"
+                f"Can not found transport info from etcd," f" wait {app.server_name} server start and register to etcd"
             )
         else:
             wait_start_future.set_result(True)
@@ -94,6 +92,7 @@ class EtcdEndpoint(BaseEndpoint):
         async def create(etcd_value_dict: ETCD_EVENT_VALUE_DICT_TYPE) -> None:
             _cache_dict[etcd_value_dict["key"]] = etcd_value_dict["value"]
             await self.create(
+                app,
                 etcd_value_dict["value"]["host"],
                 etcd_value_dict["value"]["port"],
                 weight=etcd_value_dict["value"]["weight"],
@@ -114,5 +113,5 @@ class EtcdEndpoint(BaseEndpoint):
                 logger.warning("client not transport")
 
         self._start()
-        self._watch_future = asyncio.ensure_future(self.etcd_client.watch(self._app.server_name, [create], [destroy]))
+        self._watch_future = asyncio.ensure_future(self.etcd_client.watch(app.server_name, [create], [destroy]))
         await wait_start_future

@@ -3,7 +3,7 @@ from typing import AsyncIterator
 from example.starlette.model import async_gen, sync_sum
 from rap.client import Client
 
-client: Client = Client("example", [{"ip": "localhost", "port": "9000"}])
+client: Client = Client("example")
 client.inject(sync_sum)
 client.inject(async_gen)
 

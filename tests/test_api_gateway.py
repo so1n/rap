@@ -16,7 +16,7 @@ from rap.common.utils import constant
 
 @pytest.fixture()
 def create_test_app() -> Generator[Starlette, None, None]:
-    client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
+    client: Client = Client("test")
     app: Starlette = create_app("/api", [client])
     server: Server = create_server("test")
 
@@ -55,7 +55,7 @@ class TestApiGateWay:
             rap_server: Server = create_server("test")
             await rap_server.create_server()
             # start app server and until start
-            client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
+            client: Client = Client("test")
             app_server: AppServer = AppServer(Config(create_app("/api", [client])))
             asyncio.ensure_future(app_server.serve())
             while True:
@@ -92,7 +92,7 @@ class TestApiGateWay:
     def test_not_found(self) -> None:
         group_set: Set[str] = set()
         group_set.add(constant.DEFAULT_GROUP)
-        client: Client = Client("test", [{"ip": "localhost", "port": "9000"}])
+        client: Client = Client("test")
         app: Starlette = create_app("/api", [client], group_filter=group_set)
         server: Server = create_server("test")
 

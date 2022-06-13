@@ -2,7 +2,7 @@ import asyncio
 from typing import Set
 
 from rap.client import Client
-from rap.client.endpoint import PrivatePicker
+from rap.client.endpoint import LocalEndpoint, PrivatePicker
 from rap.client.model import Request
 from rap.client.processor.base import BaseProcessor
 from rap.common.conn import Connection
@@ -20,7 +20,9 @@ class CheckConnProcessor(BaseProcessor):
 
 
 check_conn_processor: CheckConnProcessor = CheckConnProcessor()
-client: Client = Client("example", [{"ip": "localhost", "port": "9000"}], min_poll_size=1, max_pool_size=1)
+client: Client = Client(
+    "example", endpoint=LocalEndpoint({"ip": "localhost", "port": 9000}, min_poll_size=1, max_pool_size=1)
+)
 client.load_processor([check_conn_processor])
 
 

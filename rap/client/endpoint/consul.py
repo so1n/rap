@@ -17,7 +17,6 @@ class ConsulEndpoint(BaseEndpoint):
 
     def __init__(
         self,
-        app: "BaseClient",
         read_timeout: Optional[int] = None,
         ssl_crt_path: Optional[str] = None,
         pack_param: Optional[dict] = None,
@@ -55,7 +54,6 @@ class ConsulEndpoint(BaseEndpoint):
         )
         self._watch_future: asyncio.Future = done_future()
         super().__init__(
-            app,
             read_timeout=read_timeout,
             ssl_crt_path=ssl_crt_path,
             balance_enum=balance_enum,
@@ -74,8 +72,8 @@ class ConsulEndpoint(BaseEndpoint):
         await self.consul_client.stop()
         await super().stop()
 
-    async def _watch(self) -> None:
-        async for conn_dict in self.consul_client.watch(self._app.server_name):
+    async def _watch(self, server_name: str) -> None:
+        async for conn_dict in self.consul_client.watch(server_name):
             if conn_dict:
                 pop_key_list: List[Tuple[str, int]] = []
                 for key, value in conn_dict:
@@ -89,13 +87,14 @@ class ConsulEndpoint(BaseEndpoint):
             for key, value in conn_dict.items():
                 await self.create(value["host"], value["port"], value["weight"])
 
-    async def start(self) -> None:
+    async def start(self, app: "BaseClient") -> None:
         if not self.is_close:
             raise ConnectionError(f"{self.__class__.__name__} is running")
 
         logger.info(f"connect to consul:{self.consul_url}, wait discovery....")
-        async for item in self.consul_client.discovery(self._app.server_name):
+        async for item in self.consul_client.discovery(app.server_name):
             await self.create(
+                app,
                 item["host"],
                 item["port"],
                 weight=item["weight"],
@@ -105,11 +104,12 @@ class ConsulEndpoint(BaseEndpoint):
         if not self._transport_key_list:
             logger.warning(
                 f"Can not found transport info from consul,"
-                f" wait `{self._app.server_name}` server start and register to consul"
+                f" wait `{app.server_name}` server start and register to consul"
             )
-            async for conn_dict in self.consul_client.watch(self._app.server_name):
+            async for conn_dict in self.consul_client.watch(app.server_name):
                 for key, value in conn_dict.items():
                     await self.create(
+                        app,
                         value["host"],
                         value["port"],
                         weight=value["weight"],
@@ -117,4 +117,4 @@ class ConsulEndpoint(BaseEndpoint):
                     )
                     return
         self._start()
-        self._watch_future = asyncio.ensure_future(self._watch())
+        self._watch_future = asyncio.ensure_future(self._watch(app.server_name))

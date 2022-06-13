@@ -1,8 +1,9 @@
 import asyncio
 
-from rap.client.extend_client.consul import Client
+from rap.client import Client
+from rap.client.endpoint.consul import ConsulEndpoint
 
-client: Client = Client("example")
+client: Client = Client("example", endpoint=ConsulEndpoint())
 
 
 # in register, must use async def...
