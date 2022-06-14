@@ -222,19 +222,6 @@ class Transport(object):
                 if not self._conn.is_closed():
                     await self._conn.await_close()
 
-    def copy(self) -> "Transport":
-        return self.__class__(
-            app=self.app,
-            host=self.host,
-            port=self.port,
-            weight=self.weight,
-            ssl_crt_path=self._ssl_crt_path,
-            pack_param=self._pack_param,
-            unpack_param=self._unpack_param,
-            max_inflight=self._max_inflight,
-            read_timeout=self._read_timeout,
-        )
-
     @property
     def pick_score(self) -> float:
         # Combine the scores obtained through the server side and the usage of the client side to calculate the score
@@ -298,12 +285,16 @@ class Transport(object):
         return self._conn.is_closed() or self.listen_future.done()
 
     def close(self) -> None:
+        if self.is_closed():
+            return
         self.available = False
         safe_del_future(self.ping_future)
         del_future(self.listen_future)
         self._conn.close()
 
     def close_soon(self) -> None:
+        if self.is_closed():
+            return
         self.available = False
         if not self._semaphore.inflight:
             get_event_loop().call_soon(self.close)
@@ -311,12 +302,16 @@ class Transport(object):
             self.close_soon_flag = True
 
     async def await_close(self) -> None:
+        if self.is_closed():
+            return
         self.available = False
         safe_del_future(self.ping_future)
         safe_del_future(self.listen_future)
         await self._conn.await_close()
 
     async def connect(self) -> None:
+        if not self.is_closed():
+            return
         await self._conn.connect()
         self.available_level = 5
         self.available = True
@@ -414,7 +409,8 @@ class Transport(object):
         Only include server_name and get transport id two functions, if you need to expand the function,
           you need to process the request and response of the declared life cycle through the processor
         """
-
+        if self._server_info:
+            raise RuntimeError("declare can not be called twice")
         async with self._transport_context(is_event_request=True) as context:
             response: Response = await self._base_request(
                 Request.from_event(

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple, Type
 
 from rap.client.endpoint.base import BalanceEnum, BaseEndpoint
 from rap.client.transport.pool import Pool
@@ -27,6 +27,7 @@ class ConsulEndpoint(BaseEndpoint):
         ping_fail_cnt: Optional[int] = None,
         max_pool_size: Optional[int] = None,
         min_poll_size: Optional[int] = None,
+        pool_class: Optional[Type[Pool]] = None,
         # consul client param
         consul_namespace: str = "rap",
         consul_ttl: int = 10,
@@ -64,6 +65,7 @@ class ConsulEndpoint(BaseEndpoint):
             max_ping_interval=max_ping_interval,
             max_pool_size=max_pool_size,
             min_poll_size=min_poll_size,
+            pool_class=pool_class,
         )
 
     async def stop(self) -> None:

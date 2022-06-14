@@ -28,25 +28,25 @@ class Picker(object):
         if not pool_list:
             raise ConnectionError("Endpoint Can not found available transport")
         self._pool_list: List[Pool] = pool_list
+        self._lock: asyncio.Lock = asyncio.Lock()
 
+    async def __aenter__(self) -> Transport:
         transport_list: List[Transport] = []
-        for pool in pool_list:
+        for pool in self._pool_list:
             transport: Optional[Transport] = pool.transport
             if transport:
                 transport_list.append(transport)
-
         if transport_list:
-            self._transport: Optional[Transport] = max(transport_list, key=lambda x: x.pick_score)
+            transport: Optional[Transport] = max(transport_list, key=lambda x: x.pick_score)
         else:
-            self._transport = None
+            transport = None
 
-    async def __aenter__(self) -> Transport:
-        if self._transport:
-            return self._transport
+        if transport:
+            return transport
         else:
             # If no transport is available, transport is created from the first Pool
-            first_pool = self._pool_list[0]
-            return await first_pool.create_one_transport()
+            async with self._lock:
+                return await self._pool_list[0].new_transport()
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         return None
@@ -54,18 +54,12 @@ class Picker(object):
 
 class PrivatePicker(Picker):
     async def __aenter__(self) -> Transport:
-        if not self._transport:
-            # If no transport is available, transport is created from the first Pool
-            first_pool = self._pool_list[0]
-            self._transport = await first_pool.create_one_transport(is_fork=True)
-        else:
-            self._transport = self._transport.copy()
-            await self._transport.connect()
+        self._pool: Pool = random.choice(self._pool_list)
+        self._transport: Transport = await self._pool.fork_transport()
         return self._transport
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        if self._transport:
-            await self._transport.await_close()
+        self._pool.absorption(self._transport)
         return None
 
 
@@ -83,6 +77,7 @@ class BaseEndpoint(object):
         ping_fail_cnt: Optional[int] = None,
         max_pool_size: Optional[int] = None,
         min_poll_size: Optional[int] = None,
+        pool_class: Optional[Type[Pool]] = None,
     ) -> None:
         """
         :param declare_timeout: declare timeout include request & response, default 9
@@ -93,6 +88,7 @@ class BaseEndpoint(object):
         :param min_ping_interval: send client ping min interval, default 1
         :param max_ping_interval: send client ping max interval, default 3
         :param ping_fail_cnt: How many times ping fails to judge as unavailable, default 3
+        :param pool_class: pool class
         """
         self._declare_timeout: int = declare_timeout or 9
         self._read_timeout: Optional[int] = read_timeout
@@ -111,6 +107,7 @@ class BaseEndpoint(object):
         self._round_robin_index: int = 0
 
         self._run_event: asyncio.Event = asyncio.Event()
+        self._pool_class: Type[Pool] = pool_class or Pool
 
         setattr(self, self._pick_pool.__name__, self._random_pick_pool)
         if balance_enum:
@@ -149,7 +146,7 @@ class BaseEndpoint(object):
 
         weight = get_value_by_range(weight, 0, 10) if weight else 10
         max_inflight = get_value_by_range(max_inflight, 0) if max_inflight else 100
-        pool: Pool = Pool(
+        pool: Pool = self._pool_class(
             app,
             host=ip,
             port=port,
@@ -209,7 +206,7 @@ class BaseEndpoint(object):
 
     def _pick_pool(self, cnt: int) -> List[Pool]:
         """fake code"""
-        return [transport_group for transport_group in self._transport_pool_dict.values()]
+        return [transport_group for transport_group in self._transport_pool_dict.values()][:cnt]
 
     def _random_pick_pool(self, cnt: int) -> List[Pool]:
         """random get pool"""

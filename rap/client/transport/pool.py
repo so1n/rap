@@ -81,7 +81,7 @@ class Pool(object):
             if transport_len < self._expected_number_of_transports:
                 for _ in range(self._expected_number_of_transports - transport_len):
                     try:
-                        await self.create_one_transport()
+                        await self.new_transport()
                     except Exception as e:
                         logger.warning(f"ignore transport manger create {self._host}:{self._port} error:{e}")
             elif transport_len > self._expected_number_of_transports:
@@ -150,10 +150,25 @@ class Pool(object):
             self._expected_number_of_transports -= 1
             self._transport_manager_event.set()
 
-    async def create_one_transport(self, is_fork: bool = False) -> Transport:
-        """Create a new transport,
-        If is_fork is True, it will not be enabled true and will not be managed by the pool.
-        """
+    def absorption(self, transport: Transport) -> None:
+        """Absorb the transport into the pool."""
+        if getattr(transport, "is_absorb", False) is True:
+            return
+        if transport.is_closed():
+            return
+        if self._transport_deque.maxlen == len(self._transport_deque):
+            transport.close_soon()
+        else:
+            setattr(transport, "is_absorb", True)
+            self._transport_deque.append(transport)
+            ping_future: asyncio.Future = asyncio.create_task(self._ping_handle(transport))
+            transport.listen_future.add_done_callback(lambda _: safe_del_future(ping_future))
+            transport.listen_future.add_done_callback(
+                lambda _: self._transport_deque.remove(transport) if transport.available else None
+            )
+
+    async def fork_transport(self) -> Transport:
+        """Create a new transport"""
         transport: Transport = Transport(
             self._app,
             self._host,
@@ -175,14 +190,12 @@ class Pool(object):
                 except Exception as close_e:
                     logger.error(f"ignore {transport.connection_info} close error:{close_e}")
             raise e
-        if not is_fork:
-            self._transport_deque.append(transport)
-            ping_future: asyncio.Future = asyncio.create_task(self._ping_handle(transport))
-            transport.listen_future.add_done_callback(lambda _: safe_del_future(ping_future))
-            transport.listen_future.add_done_callback(
-                lambda _: self._transport_deque.remove(transport) if transport.available else None
-            )
         logger.debug("create transport:%s", transport.connection_info)
+        return transport
+
+    async def new_transport(self) -> Transport:
+        transport: Transport = await self.fork_transport()
+        self.absorption(transport)
         return transport
 
     @property
@@ -214,7 +227,7 @@ class Pool(object):
             self._expected_number_of_transports = self._min_pool_size - transport_group_len
 
         # Create one first to ensure that a proper link can be established
-        await self.create_one_transport()
+        await self.new_transport()
         # Number of links maintained in the back office
         self._transport_manager_future = asyncio.create_task(self._transport_manger())
 

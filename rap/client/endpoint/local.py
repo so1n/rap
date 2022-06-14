@@ -1,9 +1,10 @@
 import asyncio
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple, Type
 
 from typing_extensions import TypedDict
 
 from rap.client.endpoint.base import BalanceEnum, BaseEndpoint
+from rap.client.transport.pool import Pool
 
 if TYPE_CHECKING:
     from rap.client.core import BaseClient
@@ -36,6 +37,7 @@ class LocalEndpoint(BaseEndpoint):
         ping_fail_cnt: Optional[int] = None,
         max_pool_size: Optional[int] = None,
         min_poll_size: Optional[int] = None,
+        pool_class: Optional[Type[Pool]] = None,
     ):
         """
         :param conn_list: transport info list,
@@ -48,6 +50,7 @@ class LocalEndpoint(BaseEndpoint):
         :param min_ping_interval: send client ping min interval
         :param max_ping_interval: send client ping max interval
         :param ping_fail_cnt: How many times ping fails to judge as unavailable
+        :param pool_class: pool class
         """
         self._conn_config_list: Tuple[ConnParamTypedDict, ...] = conn_config
         super().__init__(
@@ -62,6 +65,7 @@ class LocalEndpoint(BaseEndpoint):
             max_ping_interval=max_ping_interval,
             max_pool_size=max_pool_size,
             min_poll_size=min_poll_size,
+            pool_class=pool_class,
         )
 
     async def start(self, app: "BaseClient") -> None:

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Type
 
 from rap.client.endpoint.base import BalanceEnum, BaseEndpoint
 from rap.client.transport.pool import Pool
@@ -27,6 +27,7 @@ class EtcdEndpoint(BaseEndpoint):
         ping_fail_cnt: Optional[int] = None,
         max_pool_size: Optional[int] = None,
         min_poll_size: Optional[int] = None,
+        pool_class: Optional[Type[Pool]] = None,
         # etcd client param
         etcd_host: str = "localhost",
         etcd_port: int = 2379,
@@ -58,6 +59,7 @@ class EtcdEndpoint(BaseEndpoint):
             max_ping_interval=max_ping_interval,
             max_pool_size=max_pool_size,
             min_poll_size=min_poll_size,
+            pool_class=pool_class,
         )
 
     async def stop(self) -> None:
