@@ -32,6 +32,8 @@ class Pool(object):
         ping_fail_cnt: Optional[int] = None,
         max_pool_size: Optional[int] = None,
         min_pool_size: Optional[int] = None,
+        transport_age: Optional[int] = None,
+        transport_age_jitter: Optional[int] = None,
     ) -> None:
         self._app: "BaseClient" = app
         self._host: str = host
@@ -48,6 +50,11 @@ class Pool(object):
         self._ping_fail_cnt: int = ping_fail_cnt or 3
         self._max_pool_size: int = max_pool_size or 3
         self._min_pool_size: int = min_pool_size or 1
+
+        if transport_age and not transport_age_jitter:
+            raise ValueError("transport_age_jitter must be set if transport_age is set")
+        self._transport_age: Optional[int] = transport_age
+        self._transport_age_jitter: Optional[int] = transport_age_jitter
 
         self._transport_deque: Deque[Transport] = deque()
         self._transport_manager_future: asyncio.Future = done_future()
@@ -99,11 +106,25 @@ class Pool(object):
     async def _ping_handle(self, transport: Transport) -> None:
         """client ping-pong handler, check transport is available"""
         ping_fail_interval: int = int(self._max_ping_interval * self._ping_fail_cnt)
+        if self._transport_age and self._transport_age_jitter:
+            transport_end_time: float = time.time() + int(
+                self._transport_age + random.randint(0, self._transport_age_jitter)
+            )
+        else:
+            transport_end_time = 0
 
         def _change_transport_available() -> None:
-            available: bool = (time.time() - transport.last_ping_timestamp) < ping_fail_interval
+            now_time: float = time.time()
+            if transport_end_time and now_time > transport_end_time:
+                if not transport.inflight:
+                    transport.available_level -= 1
+                    self._expected_number_of_transports -= 1
+                    self._transport_manager_event.set()
+                return
+            available: bool = (now_time - transport.last_ping_timestamp) < ping_fail_interval
             logger.debug("transport:%s available:%s rtt:%s", transport.connection_info, available, transport.rtt)
             if not available:
+                transport.available = False
                 msg: str = f"ping {transport.sock_tuple} timeout... exit"
                 logger.error(msg)
                 raise RuntimeError(msg)
