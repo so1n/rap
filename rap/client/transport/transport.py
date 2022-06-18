@@ -175,7 +175,7 @@ class Transport(object):
                         logger.exception(f"on_context_exit error:{e}")
                 transport._context_dict.pop(self.correlation_id, None)
                 if transport.close_soon_flag and transport._semaphore.inflight == transport._semaphore.raw_value:
-                    get_event_loop().call_soon(transport.close)
+                    await transport.await_close()
 
         class InternalTransportContext(TransportContext):
             async def __aenter__(self) -> "ClientContext":
@@ -225,7 +225,7 @@ class Transport(object):
     @property
     def pick_score(self) -> float:
         # Combine the scores obtained through the server side and the usage of the client side to calculate the score
-        return self.score * (1 - (self._semaphore.inflight / self._semaphore.raw_value))
+        return self.score * (1 - (self._semaphore.inflight / self._semaphore.raw_value)) * self.available_level
 
     @property
     def inflight(self) -> int:
@@ -292,7 +292,7 @@ class Transport(object):
         del_future(self.listen_future)
         self._conn.close()
 
-    def close_soon(self) -> None:
+    def grace_close(self) -> None:
         if self.is_closed():
             return
         self.available = False
@@ -386,7 +386,7 @@ class Transport(object):
             if response.func_name == constant.EVENT_CLOSE_CONN:
                 # server want to close...do not send data
                 logger.info(f"recv close transport event, event info:{response.body}")
-                self.close_soon()
+                self.grace_close()
                 exc = CloseConnException(response.body)
                 response.exc = exc
                 self._broadcast_server_event(response)

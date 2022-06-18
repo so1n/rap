@@ -34,6 +34,7 @@ class Pool(object):
         min_pool_size: Optional[int] = None,
         transport_age: Optional[int] = None,
         transport_age_jitter: Optional[int] = None,
+        transport_max_age: Optional[int] = None,
     ) -> None:
         self._app: "BaseClient" = app
         self._host: str = host
@@ -55,6 +56,7 @@ class Pool(object):
             raise ValueError("transport_age_jitter must be set if transport_age is set")
         self._transport_age: Optional[int] = transport_age
         self._transport_age_jitter: Optional[int] = transport_age_jitter
+        self._transport_max_age: int = transport_max_age or ((transport_age or 0) + 3600)
 
         self._transport_deque: Deque[Transport] = deque()
         self._transport_manager_future: asyncio.Future = done_future()
@@ -81,7 +83,14 @@ class Pool(object):
                 self._transport_deque.rotate(1)
                 if not self._transport_deque[0].available:
                     try:
-                        await self._transport_deque.popleft().await_close()
+                        self._transport_deque.popleft().grace_close()
+                    except Exception as e:
+                        logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
+
+            if transport_len > self._expected_number_of_transports:
+                for _ in range(transport_len - self._expected_number_of_transports):
+                    try:
+                        self._transport_deque.popleft().grace_close()
                     except Exception as e:
                         logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
 
@@ -91,13 +100,8 @@ class Pool(object):
                         await self.new_transport()
                     except Exception as e:
                         logger.warning(f"ignore transport manger create {self._host}:{self._port} error:{e}")
-            elif transport_len > self._expected_number_of_transports:
-                for _ in range(transport_len - self._expected_number_of_transports):
-                    try:
-                        await self._transport_deque.popleft().await_close()
-                    except Exception as e:
-                        logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
-            elif transport_len == 0 and self._expected_number_of_transports == 0:
+
+            if transport_len == 0 and self._expected_number_of_transports == 0:
                 return
             elif transport_len == self._expected_number_of_transports:
                 # If the number of transports is the same as the desired number, wait notify
@@ -113,13 +117,19 @@ class Pool(object):
         else:
             transport_end_time = 0
 
-        def _change_transport_available() -> None:
+        async def _change_transport_available() -> None:
             now_time: float = time.time()
             if transport_end_time and now_time > transport_end_time:
-                if not transport.inflight:
-                    transport.available_level -= 1
-                    self._expected_number_of_transports -= 1
+                if transport.available:
+                    # When the transport time exceeds the limit, need to set the transport to become unavailable,
+                    # so that it will not accept new requests, and wait for the pool manager to reorganize the transport
+                    transport.available = False
                     self._transport_manager_event.set()
+                else:
+                    # If the transport exceeds the specified maximum survival time,
+                    # the transport will be closed immediately
+                    if now_time > transport_end_time + self._transport_max_age:
+                        await transport.await_close()
                 return
             available: bool = (now_time - transport.last_ping_timestamp) < ping_fail_interval
             logger.debug("transport:%s available:%s rtt:%s", transport.connection_info, available, transport.rtt)
@@ -155,7 +165,7 @@ class Pool(object):
                 logger.debug(
                     "transport:%s available:%s rtt:%s", transport.peer_tuple, transport.available_level, transport.rtt
                 )
-                _change_transport_available()
+                await _change_transport_available()
                 next_ping_interval: int = random.randint(self._min_ping_interval, self._max_ping_interval)
                 try:
                     with Deadline(next_ping_interval, timeout_exc=IgnoreDeadlineTimeoutExc()) as d:
@@ -178,7 +188,7 @@ class Pool(object):
         if transport.is_closed():
             return
         if self._transport_deque.maxlen == len(self._transport_deque):
-            transport.close_soon()
+            transport.grace_close()
         else:
             setattr(transport, "is_absorb", True)
             self._transport_deque.append(transport)
@@ -228,7 +238,7 @@ class Pool(object):
             transport: Transport = self._transport_deque[0]
             if not transport.available:
                 # pop transport and close
-                self._transport_deque.popleft().close_soon()
+                self._transport_deque.popleft().grace_close()
             else:
                 return transport
 
