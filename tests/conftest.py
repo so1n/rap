@@ -115,7 +115,9 @@ def _recovery(client: Client) -> None:
 
 @pytest.fixture
 async def rap_client() -> AsyncGenerator[Client, None]:
-    client: Client = Client("test")
+    from rap.client.endpoint import LocalEndpoint
+
+    client: Client = Client("test", endpoint=LocalEndpoint({"ip": "localhost", "port": 9000}, enable_ping=False))
     _inject(client)
     await client.start()
     try:

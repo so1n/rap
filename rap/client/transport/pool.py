@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Deque, Optional
 
 from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import Deadline, IgnoreDeadlineTimeoutExc, done_future, safe_del_future
+from rap.common.asyncio_helper.util import get_event_loop
 from rap.common.number_range import get_value_by_range
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ class Pool(object):
         max_inflight: Optional[int] = None,
         read_timeout: Optional[int] = None,
         declare_timeout: Optional[int] = None,
+        enable_ping: Optional[bool] = None,
         min_ping_interval: Optional[int] = None,
         max_ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
@@ -46,6 +48,10 @@ class Pool(object):
         self._max_inflight: Optional[int] = max_inflight
         self._read_timeout: Optional[int] = read_timeout
         self._declare_timeout: int = declare_timeout or 9
+        if enable_ping is None:
+            self._enable_ping: bool = True
+        else:
+            self._enable_ping = enable_ping
         self._min_ping_interval: int = min_ping_interval or 1
         self._max_ping_interval: int = max_ping_interval or 3
         self._ping_fail_cnt: int = ping_fail_cnt or 3
@@ -162,6 +168,8 @@ class Pool(object):
 
         try:
             while True:
+                # If no event loop is running, should just exit
+                get_event_loop()
                 logger.debug(
                     "transport:%s available:%s rtt:%s", transport.peer_tuple, transport.available_level, transport.rtt
                 )
@@ -192,8 +200,9 @@ class Pool(object):
         else:
             setattr(transport, "is_absorb", True)
             self._transport_deque.append(transport)
-            ping_future: asyncio.Future = asyncio.create_task(self._ping_handle(transport))
-            transport.listen_future.add_done_callback(lambda _: safe_del_future(ping_future))
+            if self._enable_ping:
+                ping_future: asyncio.Future = asyncio.create_task(self._ping_handle(transport))
+                transport.listen_future.add_done_callback(lambda _: safe_del_future(ping_future))
             transport.listen_future.add_done_callback(
                 lambda _: self._transport_deque.remove(transport) if transport.available else None
             )

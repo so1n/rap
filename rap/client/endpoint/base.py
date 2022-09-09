@@ -72,6 +72,7 @@ class BaseEndpoint(object):
         balance_enum: Optional[BalanceEnum] = None,
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
+        enable_ping: Optional[bool] = None,
         min_ping_interval: Optional[int] = None,
         max_ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
@@ -96,6 +97,7 @@ class BaseEndpoint(object):
         self._pack_param: Optional[dict] = pack_param
         self._unpack_param: Optional[dict] = unpack_param
 
+        self._enable_ping: Optional[bool] = enable_ping
         self._min_ping_interval: int = min_ping_interval or 1
         self._max_ping_interval: int = max_ping_interval or 3
         self._ping_fail_cnt: int = ping_fail_cnt or 3
@@ -157,6 +159,7 @@ class BaseEndpoint(object):
             max_inflight=max_inflight,
             read_timeout=self._read_timeout,
             declare_timeout=self._declare_timeout,
+            enable_ping=self._enable_ping,
             min_ping_interval=self._min_ping_interval,
             max_ping_interval=self._max_ping_interval,
             ping_fail_cnt=self._ping_fail_cnt,
