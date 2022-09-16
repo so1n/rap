@@ -5,7 +5,6 @@ import sys
 import time
 from collections import deque
 from contextlib import asynccontextmanager
-from types import TracebackType
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Deque, Dict, Optional, Sequence, Tuple, Type
 
 from rap.client.model import ClientContext, Request, Response
@@ -43,6 +42,7 @@ class Transport(object):
     """base client transport, encapsulation of custom transport protocol and proxy _conn feature"""
 
     _decay_time: float = 600.0
+
     weight: int = NumberRange.i(10, 0, 10)
     mos: int = NumberRange.i(5, 0, 5)
 
@@ -53,7 +53,8 @@ class Transport(object):
 
     _max_correlation_id: int = 65535
     _correlation_id: int = 1
-    score: float = 10.0
+
+    _score: float = 10.0
 
     def __init__(
         self,
@@ -77,7 +78,6 @@ class Transport(object):
         )
         self._read_timeout = read_timeout or 1200
 
-        self._context_dict: Dict[int, ClientContext] = {}
         self._exc_status_code_dict: Dict[int, Type[rap_exc.BaseRapError]] = get_exc_status_code_dict()
         self._resp_future_dict: Dict[int, asyncio.Future[Response]] = {}
         self._channel_queue_dict: Dict[int, asyncio.Queue[Response]] = {}
@@ -90,9 +90,12 @@ class Transport(object):
         self._unpack_param: Optional[dict] = unpack_param
         self._max_inflight: Optional[int] = max_inflight
 
-        self.listen_future: asyncio.Future = done_future()
         self._semaphore: Semaphore = Semaphore(max_inflight or 100)
-        self.close_soon_flag: bool = False
+        self._context_dict: Dict[int, ClientContext] = {}
+
+        self.listen_future: asyncio.Future = done_future()
+        # If True, it means that conn needs to be closed after processing the request
+        self._close_soon_flag: bool = False
 
         # processor
         self.on_context_enter_processor_list: Sequence[Callable] = [
@@ -125,73 +128,57 @@ class Transport(object):
         self._server_info: InmutableDict = InmutableDict()
 
     def _broadcast_server_event(self, response: Response) -> None:
+        """Spread the response to all transport"""
         for _, future in self._resp_future_dict.items():
             future.set_result(response)
         for _, queue in self._channel_queue_dict.items():
             queue.put_nowait(response)
 
-    def _transport_context(self, c_id: Optional[int] = None, is_event_request: bool = False) -> "Any":
+    @asynccontextmanager
+    async def _transport_context(self, c_id: Optional[int] = None) -> AsyncGenerator[ClientContext, None]:
+        """
+        Create the request context
+
+        It should be noted that when the context is obtained,
+        it means that conn will be used, even if no request is sent at this time.
+        So you need to call this method as close as possible to the place where the request is sent
+
+        :param c_id: The ID corresponding to the context object, if it is empty, an ID is automatically generated
+        """
         if not c_id:
             correlation_id: int = self._correlation_id + 2
             # Avoid too big numbers
             self._correlation_id = correlation_id & self._max_correlation_id
         else:
             correlation_id: int = c_id
+        context: ClientContext = ClientContext()
+        context.app = self.app
+        context.correlation_id = correlation_id
+        context.conn = self._conn
+        context.server_info = self._server_info
+        context.client_info = self._client_info
 
-        transport: "Transport" = self
+        # create context
+        await self._semaphore.acquire()
+        self._context_dict[correlation_id] = context
+        for on_context_enter in self.on_context_enter_processor_list:
+            await on_context_enter(context)
 
-        class TransportContext(object):
-            correlation_id: int
+        # any code
+        exc_type, exc_val, exc_tb = None, None, None
+        try:
+            yield context
+        except Exception:
+            exc_type, exc_val, exc_tb = sys.exc_info()
 
-            def __init__(self) -> None:
-                self.correlation_id = correlation_id
-                self.context: ClientContext = ClientContext()
-                self.context.app = transport.app
-                self.context.conn = transport._conn
-                self.context.correlation_id = self.correlation_id
-                self.context.server_info = transport._server_info
-                self.context.client_info = transport._client_info
-                transport._context_dict[self.correlation_id] = self.context
-                super().__init__()
+        # release context
+        for on_context_exit in reversed(self.on_context_exit_processor_list):
+            await on_context_exit(context, exc_type, exc_val, exc_tb)
+        self._semaphore.release()
+        self._context_dict.pop(correlation_id, None)
 
-            async def __aenter__(self) -> "ClientContext":
-                for on_context_enter in transport.on_context_enter_processor_list:
-                    try:
-                        await on_context_enter(self.context)
-                    except Exception as e:
-                        logger.exception(f"on_context_enter error:{e}")
-                return self.context
-
-            async def __aexit__(
-                self,
-                exc_type: Optional[Type[BaseException]],
-                exc_val: Optional[BaseException],
-                exc_tb: Optional[TracebackType],
-            ) -> None:
-                for on_context_exit in reversed(transport.on_context_exit_processor_list):
-                    try:
-                        await on_context_exit(self.context, exc_type, exc_val, exc_tb)
-                    except Exception as e:
-                        logger.exception(f"on_context_exit error:{e}")
-                transport._context_dict.pop(self.correlation_id, None)
-                if transport.close_soon_flag and transport._semaphore.inflight == transport._semaphore.raw_value:
-                    await transport.await_close()
-
-        class InternalTransportContext(TransportContext):
-            async def __aenter__(self) -> "ClientContext":
-                await transport._semaphore.acquire()
-                return await super().__aenter__()
-
-            async def __aexit__(
-                self,
-                exc_type: Optional[Type[BaseException]],
-                exc_val: Optional[BaseException],
-                exc_tb: Optional[TracebackType],
-            ) -> None:
-                await super().__aexit__(exc_type, exc_val, exc_tb)
-                transport._semaphore.release()
-
-        return InternalTransportContext() if is_event_request else TransportContext()
+        if self._close_soon_flag and self._semaphore.inflight == self._semaphore.raw_value:
+            await self.await_close()
 
     async def _listen_conn(self) -> None:
         """listen server msg from transport"""
@@ -224,11 +211,14 @@ class Transport(object):
 
     @property
     def pick_score(self) -> float:
-        # Combine the scores obtained through the server side and the usage of the client side to calculate the score
-        return self.score * (1 - (self._semaphore.inflight / self._semaphore.raw_value)) * self.available_level
+        """
+        Combine the scores obtained through the server side and the usage of the client side to calculate the score
+        """
+        return self._score * (1 - (self._semaphore.inflight / self._semaphore.raw_value)) * self.available_level
 
     @property
     def inflight(self) -> int:
+        """Get the number of conn in use"""
         return self._semaphore.inflight
 
     @property
@@ -239,6 +229,7 @@ class Transport(object):
     # proxy _conn feature #
     ######################
     async def sleep_and_listen(self, delay: float) -> None:
+        """like asyncio.sleep, but closing conn will terminate the hibernation"""
         await self._conn.sleep_and_listen(delay)
 
     @property
@@ -277,6 +268,8 @@ class Transport(object):
         self._available_level = value
         if self._available_level <= 0:
             self._available = False
+        elif self.available_level > 0:
+            self._available = True
 
     ############
     # base api #
@@ -297,16 +290,14 @@ class Transport(object):
             return
         self.available = False
         if not self._semaphore.inflight:
+            # If no request is being processed, arrange to close conn as soon as possible,
+            # otherwise it will wait until the request is processed before closing conn
             get_event_loop().call_soon(self.close)
         else:
-            self.close_soon_flag = True
+            self._close_soon_flag = True
 
     async def await_close(self) -> None:
-        if self.is_closed():
-            return
-        self.available = False
-        safe_del_future(self.ping_future)
-        safe_del_future(self.listen_future)
+        self.close()
         await self._conn.await_close()
 
     async def connect(self) -> None:
@@ -314,8 +305,7 @@ class Transport(object):
             return
         await self._conn.connect()
         self.available_level = 5
-        self.available = True
-        self.close_soon_flag = False
+        self._close_soon_flag = False
         self.listen_future = asyncio.ensure_future(self._listen_conn())
         await self.declare()
 
@@ -323,10 +313,10 @@ class Transport(object):
     # response handler #
     ####################
     async def _get_response(self, response_msg: SERVER_BASE_MSG_TYPE, context: ClientContext) -> Optional[Response]:
+        """Generate Response object through response msg"""
         try:
             response: Response = Response.from_msg(msg=response_msg, context=context)
         except Exception as e:
-            print(e, response_msg)
             logger.exception(f"recv wrong response:{response_msg}, ignore error:{e}")
             return None
 
@@ -378,7 +368,7 @@ class Transport(object):
 
     async def _server_send_msg_handler(self, response_msg: SERVER_BASE_MSG_TYPE) -> None:
         correlation_id: int = response_msg[1]
-        async with self._transport_context(c_id=correlation_id, is_event_request=True) as context:
+        async with self._transport_context(c_id=correlation_id) as context:
             response = await self._get_response(response_msg=response_msg, context=context)
             if not response:
                 return
@@ -411,7 +401,7 @@ class Transport(object):
         """
         if self._server_info:
             raise RuntimeError("declare can not be called twice")
-        async with self._transport_context(is_event_request=True) as context:
+        async with self._transport_context() as context:
             response: Response = await self._base_request(
                 Request.from_event(
                     event.DeclareEvent({"server_name": self.app.server_name, "client_info": context.client_info}),
@@ -444,7 +434,7 @@ class Transport(object):
         async def _ping() -> None:
             nonlocal mos
             nonlocal rtt
-            async with self._transport_context(is_event_request=True) as context:
+            async with self._transport_context() as context:
                 response: Response = await self._base_request(Request.from_event(event.PingEvent({}), context))
             rtt += time.time() - start_time
             mos += response.body.get("mos", 5)
@@ -466,7 +456,7 @@ class Transport(object):
         self.rtt = old_rtt * w + rtt * (1 - w)
         self.mos = int(old_mos * w + mos * (1 - w))
         self.last_ping_timestamp = now_time
-        self.score = (self.weight * mos) / self.rtt
+        self._score = (self.weight * mos) / self.rtt
 
     ####################################
     # base one by one request response #
@@ -526,7 +516,7 @@ class Transport(object):
         """
         group = group or constant.DEFAULT_GROUP
         arg_param = arg_param or []
-        async with self._transport_context(is_event_request=False) as context:
+        async with self._transport_context() as context:
             request: Request = Request(
                 msg_type=constant.MSG_REQUEST,
                 target=f"{self.app.server_name}/{group}/{func_name}",
@@ -548,7 +538,7 @@ class Transport(object):
         """
         target: str = f"/{group or constant.DEFAULT_GROUP}/{func_name}"
 
-        async with self._transport_context(is_event_request=False) as context:
+        async with self._transport_context() as context:
             correlation_id: int = context.correlation_id
             channel: Channel = Channel(
                 transport=self, target=target, channel_id=correlation_id, context=context  # type: ignore

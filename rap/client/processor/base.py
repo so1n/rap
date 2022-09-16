@@ -10,6 +10,9 @@ if TYPE_CHECKING:
 
 
 def belong_to_base_method(func: Callable) -> bool:
+    """
+    Determine whether the processor's method is reimplemented by itself or the method of calling the BaseProcessor
+    """
     return getattr(func, "__module__", "") == __name__
 
 
