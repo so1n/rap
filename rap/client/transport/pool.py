@@ -3,11 +3,10 @@ import logging
 import random
 import time
 from collections import deque
-from typing import TYPE_CHECKING, Deque, Optional
+from typing import TYPE_CHECKING, Deque, List, Optional
 
 from rap.client.transport.transport import Transport
-from rap.common.asyncio_helper import Deadline, IgnoreDeadlineTimeoutExc, done_future, safe_del_future
-from rap.common.asyncio_helper.util import get_event_loop
+from rap.common.asyncio_helper import Deadline, done_future
 from rap.common.number_range import get_value_by_range
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -28,7 +27,6 @@ class Pool(object):
         max_inflight: Optional[int] = None,
         read_timeout: Optional[int] = None,
         declare_timeout: Optional[int] = None,
-        enable_ping: Optional[bool] = None,
         min_ping_interval: Optional[int] = None,
         max_ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
@@ -38,6 +36,33 @@ class Pool(object):
         transport_age_jitter: Optional[int] = None,
         transport_max_age: Optional[int] = None,
     ) -> None:
+        """
+        :param app: rap client
+        :param host: server host
+        :param port: server port
+
+        :param ssl_crt_path: set conn ssl_crt_path
+        :param pack_param: set conn pack param
+        :param unpack_param: set conn unpack param
+        :param read_timeout: set conn read timeout param
+        :param max_inflight: set conn max use number
+
+        :param weight: set transport weight
+        :param declare_timeout: set transport declare timeout
+
+        :param min_ping_interval: Minimum interval time (seconds)
+        :param max_ping_interval: Maximum interval time (seconds)
+        :param ping_fail_cnt: The maximum number of consecutive ping failures.
+            If the number of consecutive failures is greater than or equal to the value, conn will be closed
+        :param max_pool_size: Maximum number of conn
+        :param min_pool_size: Minimum number of conn
+        :param transport_age: Set the number of seconds after which the transport will be deactivated
+            (no new requests are allowed)，If it is 0, the function is not enabled
+        :param transport_age_jitter: Prevent transport from being closed in batches by jitter.
+            When the transport age is not empty, the transport age jitter cannot be empty either.
+        :param transport_max_age: Set the number of seconds after the stop is used before closing the transport to
+            prevent affecting the request being processed (default 3600 seconds)
+        """
         self._app: "BaseClient" = app
         self._host: str = host
         self._port: int = port
@@ -48,29 +73,30 @@ class Pool(object):
         self._max_inflight: Optional[int] = max_inflight
         self._read_timeout: Optional[int] = read_timeout
         self._declare_timeout: int = declare_timeout or 9
-        if enable_ping is None:
-            self._enable_ping: bool = True
-        else:
-            self._enable_ping = enable_ping
-        self._min_ping_interval: int = min_ping_interval or 1
-        self._max_ping_interval: int = max_ping_interval or 3
-        self._ping_fail_cnt: int = ping_fail_cnt or 3
+        self._min_ping_interval: Optional[int] = min_ping_interval
+        self._max_ping_interval: Optional[int] = max_ping_interval
+        self._ping_fail_cnt: Optional[int] = ping_fail_cnt
         self._max_pool_size: int = max_pool_size or 3
         self._min_pool_size: int = min_pool_size or 1
 
         if transport_age and not transport_age_jitter:
             raise ValueError("transport_age_jitter must be set if transport_age is set")
-        self._transport_age: Optional[int] = transport_age
-        self._transport_age_jitter: Optional[int] = transport_age_jitter
         self._transport_max_age: int = transport_max_age or ((transport_age or 0) + 3600)
+        if transport_age and transport_age_jitter:
+            self.transport_end_time: float = time.time() + int(transport_age + random.randint(0, transport_age_jitter))
+        else:
+            self.transport_end_time = 0
 
         self._transport_deque: Deque[Transport] = deque()
+        self._transport_list: List[Transport] = []
         self._transport_manager_future: asyncio.Future = done_future()
         self._transport_manager_event: asyncio.Event = asyncio.Event()
         self._expected_number_of_transports: int = 0
+        self._lock: asyncio.Lock = asyncio.Lock()
 
     @property
     def is_close(self):
+        """Whether the pool is closed"""
         return self._transport_manager_future.done()
 
     async def _transport_manger(self) -> None:
@@ -80,18 +106,19 @@ class Pool(object):
             # Make sure you can run it every once in a while and clear out unavailable transports in time
             await asyncio.wait([self._transport_manager_event.wait()], timeout=60)
 
-            transport_len: int = len(self._transport_deque)
-            self._expected_number_of_transports = get_value_by_range(
-                self._expected_number_of_transports, 0, self._max_pool_size
-            )
-
-            for _ in range(transport_len):
+            for _ in range(len(self._transport_deque)):
                 self._transport_deque.rotate(1)
                 if not self._transport_deque[0].available:
                     try:
                         self._transport_deque.popleft().grace_close()
                     except Exception as e:
                         logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
+                    break
+
+            transport_len: int = len(self._transport_deque)
+            self._expected_number_of_transports = get_value_by_range(
+                self._expected_number_of_transports, 0, self._max_pool_size
+            )
 
             if transport_len > self._expected_number_of_transports:
                 for _ in range(transport_len - self._expected_number_of_transports):
@@ -103,7 +130,7 @@ class Pool(object):
             if transport_len < self._expected_number_of_transports:
                 for _ in range(self._expected_number_of_transports - transport_len):
                     try:
-                        await self.new_transport()
+                        await self.add_transport()
                     except Exception as e:
                         logger.warning(f"ignore transport manger create {self._host}:{self._port} error:{e}")
 
@@ -113,102 +140,45 @@ class Pool(object):
                 # If the number of transports is the same as the desired number, wait notify
                 self._transport_manager_event.clear()
 
-    async def _ping_handle(self, transport: Transport) -> None:
-        """client ping-pong handler, check transport is available"""
-        ping_fail_interval: int = int(self._max_ping_interval * self._ping_fail_cnt)
-        if self._transport_age and self._transport_age_jitter:
-            transport_end_time: float = time.time() + int(
-                self._transport_age + random.randint(0, self._transport_age_jitter)
-            )
-        else:
-            transport_end_time = 0
-
-        async def _change_transport_available() -> None:
-            now_time: float = time.time()
-            if transport_end_time and now_time > transport_end_time:
-                if transport.available:
-                    # When the transport time exceeds the limit, need to set the transport to become unavailable,
-                    # so that it will not accept new requests, and wait for the pool manager to reorganize the transport
-                    transport.available = False
-                    self._transport_manager_event.set()
-                else:
-                    # If the transport exceeds the specified maximum survival time,
-                    # the transport will be closed immediately
-                    if now_time > transport_end_time + self._transport_max_age:
-                        await transport.await_close()
-                return
-            available: bool = (now_time - transport.last_ping_timestamp) < ping_fail_interval
-            logger.debug("transport:%s available:%s rtt:%s", transport.connection_info, available, transport.rtt)
-            if not available:
-                transport.available = False
-                msg: str = f"ping {transport.sock_tuple} timeout... exit"
-                logger.error(msg)
-                raise RuntimeError(msg)
-            elif not (self._min_ping_interval == 1 and self._max_ping_interval == 1):
-                transport.inflight_load.append(int(transport.inflight / transport.raw_inflight * 100))
-                # Simple design, don't want to use pandas&numpy in the app framework
-                median_inflight: int = sorted(transport.inflight_load)[len(transport.inflight_load) // 2 + 1]
-                if median_inflight > 80 and len(self) < self._max_pool_size:
-                    # The current transport is under too much pressure and
-                    # transport needs to be created to divert the traffic
-                    self._expected_number_of_transports += 1
-                    self._transport_manager_event.set()
-                elif median_inflight < 20 and len(self) > self._min_pool_size:
-                    # When transport is just created, inflight is 5.
-                    # The current transport is not handling too many requests and needs to lower its priority
-                    transport.available_level -= 1
-                elif transport.available and transport.available_level < 5:
-                    # If the current transport load is moderate and the
-                    # priority is not optimal (priority less than 5), then increase its priority.
-                    transport.available_level += 1
-
-            if transport.available_level <= 0 and transport.available:
-                # The current transport availability level is 0, which means that it is not available
-                raise RuntimeError("The current transport is idle and needs to be closed")
-
-        try:
-            while True:
-                # If no event loop is running, should just exit
-                get_event_loop()
-                logger.debug(
-                    "transport:%s available:%s rtt:%s", transport.peer_tuple, transport.available_level, transport.rtt
-                )
-                await _change_transport_available()
-                next_ping_interval: int = random.randint(self._min_ping_interval, self._max_ping_interval)
-                try:
-                    with Deadline(next_ping_interval, timeout_exc=IgnoreDeadlineTimeoutExc()) as d:
-                        await transport.ping()
-                        await transport.sleep_and_listen(d.surplus)
-                except asyncio.CancelledError:
-                    return
-                except Exception as e:
-                    logger.debug(f"{transport.connection_info} ping event error:{e}")
-        finally:
-            # Mark the transport as unavailable so that it will be called off the next time the transport is fetched
-            transport.available = False
-            self._expected_number_of_transports -= 1
+    def _ping_callback(self, transport: Transport) -> None:
+        now_time: float = time.time()
+        if self.transport_end_time and now_time > self.transport_end_time:
+            if transport.available:
+                # When the transport time exceeds the limit, need to set the transport to become unavailable,
+                # so that it will not accept new requests, and wait for the pool manager to reorganize the transport
+                transport.grace_close()
+                self._transport_manager_event.set()
+            else:
+                # If the transport exceeds the specified maximum survival time,
+                # the transport will be closed immediately
+                if now_time > self.transport_end_time + self._transport_max_age:
+                    transport.close()
+            return
+        median_inflight: int = sorted(transport.inflight_load)[len(transport.inflight_load) // 2 + 1]
+        if median_inflight > 80 and len(self) < self._max_pool_size:
+            # The current transport is under too much pressure and
+            # transport needs to be created to divert the traffic
+            self._expected_number_of_transports += 1
             self._transport_manager_event.set()
 
     def absorption(self, transport: Transport) -> None:
         """Absorb the transport into the pool."""
-        if getattr(transport, "is_absorb", False) is True:
+        if getattr(transport, "_is_absorb", False) is True:
             return
         if transport.is_closed():
             return
         if self._transport_deque.maxlen == len(self._transport_deque):
             transport.grace_close()
         else:
-            setattr(transport, "is_absorb", True)
+            setattr(transport, "_is_absorb", True)
             self._transport_deque.append(transport)
-            if self._enable_ping:
-                ping_future: asyncio.Future = asyncio.create_task(self._ping_handle(transport))
-                transport.listen_future.add_done_callback(lambda _: safe_del_future(ping_future))
-            transport.listen_future.add_done_callback(
+            transport.add_ping_callback(self._ping_callback)
+            transport.add_close_callback(
                 lambda _: self._transport_deque.remove(transport) if transport.available else None
             )
 
     async def fork_transport(self) -> Transport:
-        """Create a new transport"""
+        """Create a new transport. (The transport created at this time will not be placed in the pool)"""
         transport: Transport = Transport(
             self._app,
             self._host,
@@ -218,11 +188,15 @@ class Pool(object):
             pack_param=self._pack_param,
             unpack_param=self._unpack_param,
             max_inflight=self._max_inflight,
+            ping_fail_cnt=self._ping_fail_cnt,
+            max_ping_interval=self._max_ping_interval,
+            min_ping_interval=self._min_ping_interval,
         )
 
         try:
             with Deadline(self._declare_timeout, timeout_exc=asyncio.TimeoutError("transport declare timeout")):
                 await transport.connect()
+                await transport.declare()
         except Exception as e:
             if not transport.is_closed():
                 try:
@@ -233,14 +207,27 @@ class Pool(object):
         logger.debug("create transport:%s", transport.connection_info)
         return transport
 
-    async def new_transport(self) -> Transport:
+    async def add_transport(self) -> Transport:
+        """Create a new transport and place it in the pool"""
+        if self._transport_deque.maxlen == len(self._transport_deque):
+            raise ValueError("Transport pool is full and cannot be added further")
+
         transport: Transport = await self.fork_transport()
         self.absorption(transport)
         return transport
 
+    async def get_transport(self) -> Transport:
+        """Guaranteed to get transport"""
+        async with self._lock:
+            transport: Optional[Transport] = self.transport
+            if not transport:
+                transport = await self.add_transport()
+            return transport
+
     @property
     def transport(self) -> Optional[Transport]:
-        self._transport_deque.rotate(1)
+        """try to get transport from pool"""
+        self._transport_deque.rotate(1)  # Rotate before each call(O(1))
         while True:
             if not self._transport_deque:
                 return None
@@ -267,11 +254,14 @@ class Pool(object):
             self._expected_number_of_transports = self._min_pool_size - transport_group_len
 
         # Create one first to ensure that a proper link can be established
-        await self.new_transport()
+        await self.add_transport()
         # Number of links maintained in the back office
         self._transport_manager_future = asyncio.create_task(self._transport_manger())
 
     async def destroy(self) -> None:
+        """close pool
+        Will first set the expected value to 0, and wait for the transport to be cleaned up
+        """
         self._expected_number_of_transports = 0
         self._transport_manager_event.set()
         await self._transport_manager_future

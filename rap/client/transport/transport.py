@@ -1,11 +1,12 @@
 import asyncio
 import logging
 import math
+import random
 import sys
 import time
 from collections import deque
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Deque, Dict, Optional, Sequence, Tuple, Type
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Deque, Dict, List, Optional, Sequence, Tuple, Type
 
 from rap.client.model import ClientContext, Request, Response
 from rap.client.processor.base import belong_to_base_method
@@ -15,13 +16,12 @@ from rap.common import event
 from rap.common import exceptions as rap_exc
 from rap.common.asyncio_helper import (
     Deadline,
+    IgnoreDeadlineTimeoutExc,
     Semaphore,
     TaskGroup,
     TaskGroupExc,
     as_first_completed,
     deadline_context,
-    del_future,
-    done_future,
     get_deadline,
     get_event_loop,
     safe_del_future,
@@ -67,6 +67,9 @@ class Transport(object):
         unpack_param: Optional[dict] = None,
         max_inflight: Optional[int] = None,
         read_timeout: Optional[int] = None,
+        min_ping_interval: Optional[int] = None,
+        max_ping_interval: Optional[int] = None,
+        ping_fail_cnt: Optional[int] = None,
     ):
         self.app: "BaseClient" = app
         self._conn: Connection = Connection(
@@ -93,7 +96,6 @@ class Transport(object):
         self._semaphore: Semaphore = Semaphore(max_inflight or 100)
         self._context_dict: Dict[int, ClientContext] = {}
 
-        self.listen_future: asyncio.Future = done_future()
         # If True, it means that conn needs to be closed after processing the request
         self._close_soon_flag: bool = False
 
@@ -115,10 +117,13 @@ class Transport(object):
         ]
 
         # ping
+        self._min_ping_interval: int = min_ping_interval or 1
+        self._max_ping_interval: int = max_ping_interval or 3
+        self._ping_fail_cnt: int = ping_fail_cnt or 3
+        self._ping_fn_list: List[Callable[["Transport"], None]] = []
         self.inflight_load: Deque[int] = deque([0, 0, 0, 0, 0], maxlen=5)  # save history inflight(like Linux load)
-        self.ping_future: asyncio.Future = done_future()
-        self.last_ping_timestamp: float = time.time()
-        self.rtt: float = 0.0
+        self._last_ping_timestamp: float = time.time()
+        self._rtt: float = 0.0
 
         self._client_info: InmutableDict = InmutableDict(
             host=self._conn.peer_tuple,
@@ -145,6 +150,8 @@ class Transport(object):
 
         :param c_id: The ID corresponding to the context object, if it is empty, an ID is automatically generated
         """
+        if not self.available:
+            raise RuntimeError("transport has been marked as unavailable and cannot create new requests")
         if not c_id:
             correlation_id: int = self._correlation_id + 2
             # Avoid too big numbers
@@ -168,17 +175,65 @@ class Transport(object):
         exc_type, exc_val, exc_tb = None, None, None
         try:
             yield context
-        except Exception:
+        except Exception as e:
             exc_type, exc_val, exc_tb = sys.exc_info()
+            raise e
+        finally:
+            # release context
+            for on_context_exit in reversed(self.on_context_exit_processor_list):
+                await on_context_exit(context, exc_type, exc_val, exc_tb)
+            self._semaphore.release()
+            self._context_dict.pop(correlation_id, None)
 
-        # release context
-        for on_context_exit in reversed(self.on_context_exit_processor_list):
-            await on_context_exit(context, exc_type, exc_val, exc_tb)
-        self._semaphore.release()
-        self._context_dict.pop(correlation_id, None)
+            if self._close_soon_flag and self._semaphore.inflight == self._semaphore.raw_value:
+                await self.await_close()
 
-        if self._close_soon_flag and self._semaphore.inflight == self._semaphore.raw_value:
-            await self.await_close()
+    async def _ping_handle(self) -> None:
+        ping_fail_interval: int = int(self._max_ping_interval * self._ping_fail_cnt)
+
+        def _change_transport_available() -> None:
+            now_time: float = time.time()
+            available: bool = (now_time - self._last_ping_timestamp) < ping_fail_interval
+            logger.debug("transport:%s available:%s _rtt:%s", self.connection_info, available, self._rtt)
+            if not available:
+                raise RuntimeError(f"ping {self.sock_tuple} timeout... exit")
+            else:
+                self.inflight_load.append(int(self.inflight / self.raw_inflight * 100))
+                # Simple design, don't want to use pandas&numpy in the app framework
+                median_inflight: int = sorted(self.inflight_load)[len(self.inflight_load) // 2 + 1]
+                if median_inflight < 20:
+                    # When transport is just created, inflight is 5.
+                    # The current transport is not handling too many requests and needs to lower its priority
+                    self.available_level -= 1
+                elif self.available and self.available_level < 5:
+                    # If the current transport load is moderate and the
+                    # priority is not optimal (priority less than 5), then increase its priority.
+                    self.available_level += 1
+
+            if self.available_level <= 0 and self.available:
+                # The current transport availability level is 0, which means that it is not available
+                raise RuntimeError("The current transport is idle and needs to be closed")
+
+        try:
+            while True:
+                # If no event loop is running, should just exit
+                get_event_loop()
+                logger.debug("transport:%s available:%s _rtt:%s", self.peer_tuple, self.available_level, self._rtt)
+                _change_transport_available()
+                next_ping_interval: int = random.randint(self._min_ping_interval, self._max_ping_interval)
+                try:
+                    with Deadline(next_ping_interval, timeout_exc=IgnoreDeadlineTimeoutExc()) as d:
+                        for fn in self._ping_fn_list:
+                            fn(self)
+                        await self.ping()
+                        await self.sleep_and_listen(d.surplus)
+                except asyncio.CancelledError:
+                    return
+                except Exception as e:
+                    logger.debug(f"{self.connection_info} ping event error:{e}")
+        finally:
+            # Arrange for a graceful shutdown of the transport
+            self.grace_close()
 
     async def _listen_conn(self) -> None:
         """listen server msg from transport"""
@@ -228,6 +283,12 @@ class Transport(object):
     ######################
     # proxy _conn feature #
     ######################
+    def add_close_callback(self, fn: Callable[[asyncio.Future], None]):
+        self._conn.conn_future.add_done_callback(fn)
+
+    def remove_close_callback(self, fn: Callable[[asyncio.Future], None]):
+        self._conn.conn_future.remove_done_callback(fn)
+
     async def sleep_and_listen(self, delay: float) -> None:
         """like asyncio.sleep, but closing conn will terminate the hibernation"""
         await self._conn.sleep_and_listen(delay)
@@ -274,18 +335,23 @@ class Transport(object):
     ############
     # base api #
     ############
+    def add_ping_callback(self, fn: Callable[["Transport"], None]):
+        self._ping_fn_list.append(fn)
+
+    def remove_ping_callback(self, fn: Callable[["Transport"], None]):
+        self._ping_fn_list.remove(fn)
+
     def is_closed(self) -> bool:
-        return self._conn.is_closed() or self.listen_future.done()
+        return self._conn.is_closed()
 
     def close(self) -> None:
         if self.is_closed():
             return
         self.available = False
-        safe_del_future(self.ping_future)
-        del_future(self.listen_future)
         self._conn.close()
 
     def grace_close(self) -> None:
+        """Graceful shutdown, ensuring that closing the transport does not affect requests being processed"""
         if self.is_closed():
             return
         self.available = False
@@ -306,8 +372,10 @@ class Transport(object):
         await self._conn.connect()
         self.available_level = 5
         self._close_soon_flag = False
-        self.listen_future = asyncio.ensure_future(self._listen_conn())
-        await self.declare()
+        listen_future = asyncio.ensure_future(self._listen_conn())
+        ping_future = asyncio.ensure_future(self._ping_handle())
+        self.add_close_callback(lambda _: safe_del_future(listen_future))
+        self.add_close_callback(lambda _: safe_del_future(ping_future))
 
     ####################
     # response handler #
@@ -387,6 +455,10 @@ class Transport(object):
 
                 with get_deadline(3):
                     await self.write_to_conn(request)
+            elif response.func_name.endswith(event.ShutdownEvent.event_name):
+                # server want to close...do not create request
+                logger.info(f"recv shutdown event, event info:{response.body}")
+                self.grace_close()
             else:
                 logger.error(f"recv not support event response:{response}")
 
@@ -445,18 +517,18 @@ class Transport(object):
 
         # declare
         now_time: float = time.time()
-        old_last_ping_timestamp: float = self.last_ping_timestamp
-        old_rtt: float = self.rtt
+        old_last_ping_timestamp: float = self._last_ping_timestamp
+        old_rtt: float = self._rtt
         old_mos: int = self.mos
 
         # ewma
         td: float = now_time - old_last_ping_timestamp
         w: float = get_value_by_range(math.exp(-td / self._decay_time), 0)
 
-        self.rtt = old_rtt * w + rtt * (1 - w)
+        self._rtt = old_rtt * w + rtt * (1 - w)
         self.mos = int(old_mos * w + mos * (1 - w))
-        self.last_ping_timestamp = now_time
-        self._score = (self.weight * mos) / self.rtt
+        self._last_ping_timestamp = now_time
+        self._score = (self.weight * mos) / self._rtt
 
     ####################################
     # base one by one request response #
@@ -528,7 +600,7 @@ class Transport(object):
             response: Response = await self._base_request(request)
             if response.msg_type != constant.MSG_RESPONSE:
                 raise RPCError(f"response num must:{constant.MSG_RESPONSE} not {response.msg_type}")
-        return response
+            return response
 
     @asynccontextmanager
     async def channel(self, func_name: str, group: Optional[str] = None) -> AsyncGenerator["Channel", None]:
