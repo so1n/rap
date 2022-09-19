@@ -2,8 +2,7 @@ import asyncio
 import logging
 import random
 import time
-from collections import deque
-from typing import TYPE_CHECKING, Deque, List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import Deadline, done_future
@@ -87,8 +86,9 @@ class Pool(object):
         else:
             self.transport_end_time = 0
 
-        self._transport_deque: Deque[Transport] = deque()
+        # self._transport_deque: Deque[Transport] = deque()
         self._transport_list: List[Transport] = []
+        self._transport_index: int = 0
         self._transport_manager_future: asyncio.Future = done_future()
         self._transport_manager_event: asyncio.Event = asyncio.Event()
         self._expected_number_of_transports: int = 0
@@ -105,27 +105,33 @@ class Pool(object):
         while True:
             # Make sure you can run it every once in a while and clear out unavailable transports in time
             await asyncio.wait([self._transport_manager_event.wait()], timeout=60)
+            self._transport_list.sort(key=lambda x: x.pick_score, reverse=True)
 
-            for _ in range(len(self._transport_deque)):
-                self._transport_deque.rotate(1)
-                if not self._transport_deque[0].available:
-                    try:
-                        self._transport_deque.popleft().grace_close()
-                    except Exception as e:
-                        logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
+            # Clear unavailable transport
+            for index in range(len(self._transport_list)):
+                transport = self._transport_list[len(self._transport_list) - index - 1]
+                if transport.available:
                     break
+                else:
+                    self._transport_list.pop()
+                try:
+                    transport.grace_close()
+                except Exception as e:
+                    logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
 
-            transport_len: int = len(self._transport_deque)
+            transport_len: int = len(self._transport_list)
             self._expected_number_of_transports = get_value_by_range(
                 self._expected_number_of_transports, 0, self._max_pool_size
             )
 
             if transport_len > self._expected_number_of_transports:
-                for _ in range(transport_len - self._expected_number_of_transports):
+                # Remove redundant transports (with lower scores)
+                for transport in self._transport_list[self._expected_number_of_transports :]:
                     try:
-                        self._transport_deque.popleft().grace_close()
+                        transport.grace_close()
                     except Exception as e:
                         logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
+                self._transport_list = self._transport_list[: self._expected_number_of_transports]
 
             if transport_len < self._expected_number_of_transports:
                 for _ in range(self._expected_number_of_transports - transport_len):
@@ -167,14 +173,14 @@ class Pool(object):
             return
         if transport.is_closed():
             return
-        if self._transport_deque.maxlen == len(self._transport_deque):
+        if len(self._transport_list) == self._max_pool_size:
             transport.grace_close()
         else:
             setattr(transport, "_is_absorb", True)
-            self._transport_deque.append(transport)
+            self._transport_list.append(transport)
             transport.add_ping_callback(self._ping_callback)
             transport.add_close_callback(
-                lambda _: self._transport_deque.remove(transport) if transport.available else None
+                lambda _: self._transport_list.remove(transport) if transport.available else None
             )
 
     async def fork_transport(self) -> Transport:
@@ -209,7 +215,7 @@ class Pool(object):
 
     async def add_transport(self) -> Transport:
         """Create a new transport and place it in the pool"""
-        if self._transport_deque.maxlen == len(self._transport_deque):
+        if len(self._transport_list) == self._max_pool_size:
             raise ValueError("Transport pool is full and cannot be added further")
 
         transport: Transport = await self.fork_transport()
@@ -227,16 +233,19 @@ class Pool(object):
     @property
     def transport(self) -> Optional[Transport]:
         """try to get transport from pool"""
-        self._transport_deque.rotate(1)  # Rotate before each call(O(1))
         while True:
-            if not self._transport_deque:
+            if not self._transport_list:
                 return None
-            transport: Transport = self._transport_deque[0]
-            if not transport.available:
-                # pop transport and close
-                self._transport_deque.popleft().grace_close()
-            else:
-                return transport
+            try:
+                transport: Transport = self._transport_list[self._transport_index]
+                self._transport_index += 1
+                if transport.available:
+                    return transport
+                else:
+                    self._transport_manager_event.set()
+            except IndexError:
+                self._transport_index = 0
+                continue
 
     async def create(self) -> None:
         """
@@ -267,4 +276,4 @@ class Pool(object):
         await self._transport_manager_future
 
     def __len__(self) -> int:
-        return len(self._transport_deque)
+        return len(self._transport_list)
