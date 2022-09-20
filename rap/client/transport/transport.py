@@ -70,6 +70,9 @@ class Transport(object):
         min_ping_interval: Optional[int] = None,
         max_ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
+        transport_age: Optional[int] = None,
+        transport_age_jitter: Optional[int] = None,
+        transport_max_age: Optional[int] = None,
     ):
         self.app: "BaseClient" = app
         self._conn: Connection = Connection(
@@ -124,6 +127,13 @@ class Transport(object):
         self.inflight_load: Deque[int] = deque([0, 0, 0, 0, 0], maxlen=5)  # save history inflight(like Linux load)
         self._last_ping_timestamp: float = time.time()
         self._rtt: float = 0.0
+        if transport_age and not transport_age_jitter:
+            raise ValueError("transport_age_jitter must be set if transport_age is set")
+        self._transport_max_age: int = transport_max_age or ((transport_age or 0) + 3600)
+        if transport_age and transport_age_jitter:
+            self.transport_end_time: float = time.time() + int(transport_age + random.randint(0, transport_age_jitter))
+        else:
+            self.transport_end_time = 0
 
         self._client_info: InmutableDict = InmutableDict(
             host=self._conn.peer_tuple,
@@ -196,7 +206,8 @@ class Transport(object):
             available: bool = (now_time - self._last_ping_timestamp) < ping_fail_interval
             logger.debug("transport:%s available:%s _rtt:%s", self.connection_info, available, self._rtt)
             if not available:
-                raise RuntimeError(f"ping {self.sock_tuple} timeout... exit")
+                logger.error(f"ping {self.sock_tuple} timeout... exit")
+                self.grace_close()
             else:
                 self.inflight_load.append(int(self.inflight / self.raw_inflight * 100))
                 # Simple design, don't want to use pandas&numpy in the app framework
@@ -212,7 +223,21 @@ class Transport(object):
 
             if self.available_level <= 0 and self.available:
                 # The current transport availability level is 0, which means that it is not available
-                raise RuntimeError("The current transport is idle and needs to be closed")
+                logger.error("The current transport is idle and needs to be closed")
+                self.grace_close()
+
+        def _check_transport_age() -> None:
+            now_time: float = time.time()
+            if self.transport_end_time and now_time > self.transport_end_time:
+                if not self.available and (now_time > self.transport_end_time + self._transport_max_age):
+                    # If the transport exceeds the specified maximum survival time,
+                    # the transport will be closed immediately
+                    self.close()
+                else:
+                    # When the transport time exceeds the limit, need to set the transport to become unavailable,
+                    # so that it will not accept new requests, and wait for the pool manager to reorganize the transport
+                    self.grace_close()
+                return
 
         try:
             while True:
@@ -220,11 +245,14 @@ class Transport(object):
                 get_event_loop()
                 logger.debug("transport:%s available:%s _rtt:%s", self.peer_tuple, self.available_level, self._rtt)
                 _change_transport_available()
+                _check_transport_age()
                 next_ping_interval: int = random.randint(self._min_ping_interval, self._max_ping_interval)
                 try:
                     with Deadline(next_ping_interval, timeout_exc=IgnoreDeadlineTimeoutExc()) as d:
                         for fn in self._ping_fn_list:
                             fn(self)
+                        if not self.available:
+                            return
                         await self.ping()
                         await self.sleep_and_listen(d.surplus)
                 except asyncio.CancelledError:

@@ -1,7 +1,5 @@
 import asyncio
 import logging
-import random
-import time
 from typing import TYPE_CHECKING, List, Optional
 
 from rap.client.transport.transport import Transport
@@ -77,16 +75,10 @@ class Pool(object):
         self._ping_fail_cnt: Optional[int] = ping_fail_cnt
         self._max_pool_size: int = max_pool_size or 3
         self._min_pool_size: int = min_pool_size or 1
+        self._transport_age: Optional[int] = transport_age
+        self._transport_age_jitter: Optional[int] = transport_age_jitter
+        self._transport_max_age: Optional[int] = transport_max_age
 
-        if transport_age and not transport_age_jitter:
-            raise ValueError("transport_age_jitter must be set if transport_age is set")
-        self._transport_max_age: int = transport_max_age or ((transport_age or 0) + 3600)
-        if transport_age and transport_age_jitter:
-            self.transport_end_time: float = time.time() + int(transport_age + random.randint(0, transport_age_jitter))
-        else:
-            self.transport_end_time = 0
-
-        # self._transport_deque: Deque[Transport] = deque()
         self._transport_list: List[Transport] = []
         self._transport_index: int = 0
         self._transport_manager_future: asyncio.Future = done_future()
@@ -104,7 +96,7 @@ class Pool(object):
         self._transport_manager_event.set()
         while True:
             # Make sure you can run it every once in a while and clear out unavailable transports in time
-            await asyncio.wait([self._transport_manager_event.wait()], timeout=60)
+            await asyncio.wait([self._transport_manager_event.wait()], timeout=1)
             self._transport_list.sort(key=lambda x: x.pick_score, reverse=True)
 
             # Clear unavailable transport
@@ -147,24 +139,22 @@ class Pool(object):
                 self._transport_manager_event.clear()
 
     def _ping_callback(self, transport: Transport) -> None:
-        now_time: float = time.time()
-        if self.transport_end_time and now_time > self.transport_end_time:
-            if transport.available:
-                # When the transport time exceeds the limit, need to set the transport to become unavailable,
-                # so that it will not accept new requests, and wait for the pool manager to reorganize the transport
-                transport.grace_close()
-                self._transport_manager_event.set()
-            else:
-                # If the transport exceeds the specified maximum survival time,
-                # the transport will be closed immediately
-                if now_time > self.transport_end_time + self._transport_max_age:
-                    transport.close()
+        """
+        A callback that is executed before the transport sends a ping (because the ping logic will check whether
+            the transport is available in advance, if the transport is not available, there is no need to execute
+            the callback)
+        """
+        if not transport.available:
+            self._transport_manager_event.set()
             return
         median_inflight: int = sorted(transport.inflight_load)[len(transport.inflight_load) // 2 + 1]
         if median_inflight > 80 and len(self) < self._max_pool_size:
             # The current transport is under too much pressure and
             # transport needs to be created to divert the traffic
             self._expected_number_of_transports += 1
+            self._transport_manager_event.set()
+        elif median_inflight < 20 and len(self) > self._min_pool_size:
+            self._expected_number_of_transports -= 1
             self._transport_manager_event.set()
 
     def absorption(self, transport: Transport) -> None:
