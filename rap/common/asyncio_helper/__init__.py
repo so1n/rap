@@ -1,6 +1,7 @@
 from .deadline import Deadline, IgnoreDeadlineTimeoutExc, deadline_context, get_deadline
 from .semaphore import Semaphore
 from .set_event import SetEvent
+from .share import Share
 from .taskgroups import TaskGroup, TaskGroupExc
 from .util import (
     as_first_completed,

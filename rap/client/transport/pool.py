@@ -3,7 +3,7 @@ import logging
 from typing import TYPE_CHECKING, List, Optional
 
 from rap.client.transport.transport import Transport
-from rap.common.asyncio_helper import Deadline, done_future
+from rap.common.asyncio_helper import Deadline, Share, done_future
 from rap.common.number_range import get_value_by_range
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 
 
 class Pool(object):
+    _share: Share = Share()
+
     def __init__(
         self,
         app: "BaseClient",
@@ -84,7 +86,6 @@ class Pool(object):
         self._transport_manager_future: asyncio.Future = done_future()
         self._transport_manager_event: asyncio.Event = asyncio.Event()
         self._expected_number_of_transports: int = 0
-        self._lock: asyncio.Lock = asyncio.Lock()
 
     @property
     def is_close(self):
@@ -203,6 +204,7 @@ class Pool(object):
         logger.debug("create transport:%s", transport.connection_info)
         return transport
 
+    @_share.wrapper_do()
     async def add_transport(self) -> Transport:
         """Create a new transport and place it in the pool"""
         if len(self._transport_list) == self._max_pool_size:
@@ -214,11 +216,10 @@ class Pool(object):
 
     async def get_transport(self) -> Transport:
         """Guaranteed to get transport"""
-        async with self._lock:
-            transport: Optional[Transport] = self.transport
-            if not transport:
-                transport = await self.add_transport()
-            return transport
+        transport: Optional[Transport] = self.transport
+        if not transport:
+            transport = await self.add_transport()
+        return transport
 
     @property
     def transport(self) -> Optional[Transport]:
