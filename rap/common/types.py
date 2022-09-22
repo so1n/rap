@@ -1,10 +1,12 @@
 import asyncio
+import inspect
 import sys
 from collections.abc import AsyncIterator, Iterator
+from typing import _eval_type  # type: ignore
 from typing import _GenericAlias  # type: ignore
-from typing import Any, Awaitable
+from typing import Any, Awaitable  # type: ignore
 from typing import Callable as _Callable  # type: ignore
-from typing import List, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import ForwardRef, List, Optional, Set, Tuple, Type, TypeVar, Union  # type: ignore
 
 import msgpack  # type: ignore
 
@@ -122,3 +124,25 @@ def is_type(source_type: Type, target_type: Union[Type, object]) -> bool:
     if not isinstance(parse_target_type, list):
         parse_target_type = [parse_target_type]
     return bool(set(parse_target_type) & set(parse_source_type))
+
+
+def get_real_annotation(annotation: Union[Type, str], target_obj: Any) -> Type:
+    global_dict = sys.modules[target_obj.__module__].__dict__
+    if isinstance(annotation, str):
+        if inspect.isclass(target_obj) and annotation in target_obj.__dict__:
+            new_annotation: Type = target_obj.__dict__[annotation]
+        else:
+            # get real type
+            value: ForwardRef = ForwardRef(annotation, is_argument=False)
+            new_annotation = value._evaluate(global_dict, None)  # type: ignore
+            if not new_annotation:
+                raise RuntimeError(f"get real annotation from {target_obj} fail")  # pragma: no cover
+    else:
+        new_annotation = annotation
+    if new_annotation.__module__ in sys.modules:
+        global_dict.update(sys.modules[new_annotation.__module__].__dict__)
+    try:
+        return _eval_type(new_annotation, global_dict, None)
+    except NameError:
+        # If it is a package imported through TYPE CHECKING, it may not be able to be parsed
+        return new_annotation

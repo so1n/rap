@@ -24,6 +24,8 @@ class BalanceEnum(Enum):
 
 
 class Picker(object):
+    """Select the best transport from the connection pool"""
+
     def __init__(self, pool_list: List[Pool]):
         if not pool_list:
             raise ConnectionError("Endpoint Can not found available transport")
@@ -51,6 +53,8 @@ class Picker(object):
 
 
 class PrivatePicker(Picker):
+    """provide a private transport"""
+
     async def __aenter__(self) -> Transport:
         self._pool: Pool = random.choice(self._pool_list)
         self._transport: Transport = await self._pool.fork_transport()
@@ -62,6 +66,11 @@ class PrivatePicker(Picker):
 
 
 class BaseEndpoint(object):
+    """
+    Responsible for managing connections for multiple different service instances (these services function the same)
+        Provides a variety of different load balancing implementations at the same time
+    """
+
     def __init__(
         self,
         declare_timeout: Optional[int] = None,
@@ -129,7 +138,7 @@ class BaseEndpoint(object):
         weight: Optional[int] = None,
         max_inflight: Optional[int] = None,
     ) -> None:
-        """create and init transport
+        """create and init pool
         :param app: client app
         :param ip: server ip
         :param port: server port

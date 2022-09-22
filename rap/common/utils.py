@@ -2,8 +2,9 @@ import inspect
 import random
 import string
 import time
+from contextlib import contextmanager
 from enum import Enum, auto
-from typing import Any, Callable, Dict, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Generator, Optional, Sequence, Tuple, Type
 
 from rap import __version__
 from rap.common.types import is_type
@@ -18,6 +19,7 @@ __all__ = [
     "param_handle",
     "response_num_dict",
     "InmutableDict",
+    "ignore_exception",
 ]
 
 
@@ -152,6 +154,14 @@ def get_func_sig(func: Callable) -> inspect.Signature:
         func_sig = inspect.signature(func)
         setattr(func, "_func_sig", func_sig)
     return func_sig
+
+
+@contextmanager
+def ignore_exception(*exception_list: Type[Exception]) -> Generator:
+    try:
+        yield
+    except exception_list:
+        pass
 
 
 class EventEnum(Enum):

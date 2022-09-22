@@ -3,7 +3,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, Optional, Union
 
 from rap.common.asyncio_helper import del_future, get_deadline
-from rap.common.channel import BaseChannel
+from rap.common.channel import BaseChannel, ChannelCloseError
 from rap.common.channel import UserChannel as _UserChannel
 from rap.common.channel import get_corresponding_channel_class
 from rap.common.conn import ServerConnection
@@ -39,7 +39,7 @@ class Channel(BaseChannel["Request"]):
         self.channel_conn_future: asyncio.Future = asyncio.Future()
         self.channel_conn_future.add_done_callback(lambda f: self.queue.put_nowait(f.exception()))
 
-        self._conn.conn_future.add_done_callback(lambda f: self.set_exc(ChannelError("connection already close")))
+        self._conn.conn_future.add_done_callback(lambda f: self.set_finish(ChannelError("connection already close")))
 
         self.func_future: asyncio.Future = asyncio.ensure_future(self._run_func(func))
 
@@ -54,14 +54,14 @@ class Channel(BaseChannel["Request"]):
 
     async def write(self, body: Any, header: Optional[dict] = None, timeout: Optional[int] = None) -> None:
         if self.is_close:
-            raise ChannelError(f"channel<{self.channel_id}> is close")
+            raise ChannelCloseError(f"channel<{self.channel_id}> is close")
         header = header or {}
         header["channel_life_cycle"] = constant.MSG
         await self._write(body, header, timeout)
 
     async def read(self, timeout: Optional[int] = None) -> "Request":
         if self.is_close:
-            raise ChannelError(f"<channel{self.channel_id}> is close")
+            raise ChannelCloseError(f"<channel{self.channel_id}> is close")
 
         with get_deadline(timeout):
             result: Union["Request", Exception] = await self.queue.get()
@@ -77,7 +77,7 @@ class Channel(BaseChannel["Request"]):
         if self.is_close:
             logger.debug("already close channel %s", self.channel_id)
             return
-        self.set_exc(ChannelError(f"channel {self.channel_id} is close"))
+        self.set_finish(ChannelCloseError(f"channel {self.channel_id} is close"))
 
         if not self._conn.is_closed():
             await self._write(None, {"channel_life_cycle": constant.DROP}, None)

@@ -322,10 +322,6 @@ class Transport(object):
         await self._conn.sleep_and_listen(delay)
 
     @property
-    def conn_future(self) -> asyncio.Future:
-        return self._conn.conn_future
-
-    @property
     def connection_info(self) -> str:
         return self._conn.connection_info
 

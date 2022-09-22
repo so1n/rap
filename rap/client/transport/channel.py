@@ -10,8 +10,8 @@ from rap.client.utils import raise_rap_error
 from rap.common.asyncio_helper import as_first_completed, get_deadline
 from rap.common.channel import BaseChannel, ChannelCloseError
 from rap.common.channel import UserChannel as _UserChannel
-from rap.common.exceptions import ChannelError, InvokeError
-from rap.common.utils import constant
+from rap.common.exceptions import ChannelError, ChannelLifecycleError, InvokeError
+from rap.common.utils import constant, ignore_exception
 
 if TYPE_CHECKING:
     from .transport import Transport
@@ -54,27 +54,29 @@ class Channel(BaseChannel[Response]):
         """create and init channel, create session and listen transport exc"""
 
         def add_done_callback(f: asyncio.Future) -> None:
+            """When the transport terminates, propagate the transport exception to the channel"""
             if f.cancelled():
-                self.set_exc(ChannelCloseError("channel's transport is close"))
+                self.set_finish(ChannelCloseError("transport is cancel"))
             try:
                 f.exception()
             except Exception as e:
-                self.set_exc(e)
+                self.set_finish(e)
             else:
-                self.set_exc(ChannelCloseError("channel's transport is close"))
+                self.set_finish(ChannelCloseError("channel's is close"))
 
-        self._transport.conn_future.add_done_callback(add_done_callback)
+        self._transport.add_close_callback(add_done_callback)
 
         # init with server
         life_cycle: str = constant.DECLARE
         await self._base_write(None, life_cycle, target=self._target)
         response: Response = await self._base_read()
         if response.header.get("channel_life_cycle") != life_cycle:
-            raise ChannelError("channel life cycle error")
+            raise ChannelLifecycleError()
 
     async def _base_read(self, timeout: Optional[int] = None) -> Response:
         """base read response msg from channel transport
-        When a drop message is received , will raise `ChannelError`
+
+        When a drop message is received , will raise `ChannelCloseError` and terminate the channel
         :param timeout: read msg from channel transport timeout
         """
 
@@ -99,7 +101,7 @@ class Channel(BaseChannel[Response]):
 
         if response.header.get("channel_life_cycle") == constant.DROP:
             exc: ChannelCloseError = ChannelCloseError(self._drop_msg)
-            self.set_exc(exc)
+            self.set_finish(exc)
             raise exc
         return response
 
@@ -128,7 +130,7 @@ class Channel(BaseChannel[Response]):
     async def read(self, timeout: Optional[int] = None) -> Response:
         response: Response = await self._base_read(timeout=timeout)
         if response.header.get("channel_life_cycle") != constant.MSG:
-            raise ChannelError("channel life cycle error")
+            raise ChannelLifecycleError("channel life cycle error")
         return response
 
     async def read_body(self, timeout: Optional[int] = None) -> Any:
@@ -147,21 +149,15 @@ class Channel(BaseChannel[Response]):
     async def close(self) -> None:
         """Actively send a close message and close the channel"""
         if self.is_close:
-            try:
-                await self.channel_conn_future
-            except ChannelCloseError:
-                pass
             return
 
         await self._base_write(None, constant.DROP)
 
-        try:
-            await asyncio.wait_for(self.wait_close(), 3)
-        except ChannelError as e:
-            if str(e) != self._drop_msg:
-                raise e
-        except asyncio.TimeoutError:
-            logger.warning("wait drop response timeout")
+        with ignore_exception(ChannelCloseError):
+            try:
+                await asyncio.wait_for(self.wait_close(), 3)
+            except asyncio.TimeoutError:
+                logger.warning("wait drop response timeout")
 
     ######################
     # async with support #
@@ -172,7 +168,7 @@ class Channel(BaseChannel[Response]):
 
     async def __aexit__(self, exc_type: Type[Exception], exc: str, tb: traceback.TracebackException) -> None:
         if exc_type:
-            self.set_exc(exc_type(exc))
+            self.set_finish(exc_type(exc))
         else:
-            self.set_success_finish()
+            self.set_finish()
         await self.close()

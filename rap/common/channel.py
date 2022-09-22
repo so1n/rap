@@ -1,9 +1,10 @@
 import asyncio
 import inspect
-import sys
-from typing import Any, Awaitable, Callable, ForwardRef, Generic, List, Optional, Type, TypeVar, Union, overload
+from typing import Any, Awaitable, Callable, Generic, List, Optional, Type, TypeVar, Union, overload
 
 from typing_extensions import Self
+
+from rap.common.types import get_real_annotation
 
 _Read_T = TypeVar("_Read_T")
 
@@ -43,17 +44,18 @@ class BaseChannel(Generic[_Read_T]):
     async def wait_close(self) -> None:
         await self.channel_conn_future
 
-    def set_exc(self, exc: BaseException) -> None:
-        if self.channel_conn_future and not self.channel_conn_future.done():
+    def set_finish(self, exc: Optional[Exception] = None) -> None:
+        """Set the channel to end running, if exc is not empty, exc will be set"""
+        if not (self.channel_conn_future and not self.channel_conn_future.done()):
+            return
+        if exc is None:
+            self.channel_conn_future.set_result(True)
+        else:
             self.channel_conn_future.set_exception(exc)
             try:
                 self.channel_conn_future.exception()
             except Exception:
                 pass
-
-    def set_success_finish(self) -> None:
-        if self.channel_conn_future and not self.channel_conn_future.done():
-            self.channel_conn_future.set_result(True)
 
     ###############
     # Get Channel #
@@ -118,6 +120,8 @@ class _AsyncIterDataBody(_AsyncIterData[_Read_T]):
 
 
 class BaseUserChannel(Generic[_Read_T]):
+    """Provides a generic way that users can use channels (no IO involved)"""
+
     def __init__(self, channel: "BaseChannel[_Read_T]"):
         self._channel: BaseChannel[_Read_T] = channel
 
@@ -147,10 +151,7 @@ class BaseUserChannel(Generic[_Read_T]):
         ...         pass
         """
         await asyncio.sleep(0)
-        if self._channel.is_close:
-            return False
-        else:
-            return flag
+        return False if self._channel.is_close else flag
 
     @property
     def channel_id(self) -> int:
@@ -174,6 +175,8 @@ class BaseUserChannel(Generic[_Read_T]):
 
 
 class _ReadChannelMixin(Generic[_Read_T]):
+    """Provides methods for reading data from a channel"""
+
     _channel: "BaseChannel[_Read_T]"
 
     async def read(self, timeout: Optional[int] = None) -> _Read_T:
@@ -215,6 +218,8 @@ class _ReadChannelMixin(Generic[_Read_T]):
 
 
 class _WriteChannelMixin(Generic[_Read_T]):
+    """Provides methods for write data from a channel"""
+
     _channel: "BaseChannel[_Read_T]"
 
     async def write(self, body: Any, header: Optional[dict] = None, timeout: Optional[int] = None) -> Any:
@@ -223,15 +228,15 @@ class _WriteChannelMixin(Generic[_Read_T]):
 
 
 class ContextChannel(BaseUserChannel[_Read_T]):
-    pass
+    """Used for the channel obtained through the context, the channel will not provide functions related to IO"""
 
 
 class ReadChannel(BaseUserChannel[_Read_T], _ReadChannelMixin):
-    pass
+    """Provides a generic way that users can use channels (with read)"""
 
 
 class WriteChannel(BaseUserChannel[_Read_T], _WriteChannelMixin):
-    pass
+    """Provides a generic way that users can use channels (with write)"""
 
 
 class UserChannel(BaseUserChannel[_Read_T], _WriteChannelMixin, _ReadChannelMixin):
@@ -255,20 +260,17 @@ def get_opposite_channel_class(
 
 
 def get_corresponding_channel_class(func: Callable) -> Type[UserChannelType]:
+    """Identify the corresponding channel through the function signature of func"""
     annotation: Any = getattr(func, "__channel_class__", None)
     if annotation:
         return annotation
-    func_sig: inspect.Signature = inspect.signature(func)
-    func_arg_parameter: List[inspect.Parameter] = [i for i in func_sig.parameters.values() if i.default == i.empty]
+
+    func_arg_parameter: List[inspect.Parameter] = [
+        i for i in inspect.signature(func).parameters.values() if i.default == i.empty
+    ]
     if len(func_arg_parameter) != 1:
         raise TypeError(f"func:{func.__name__} must channel function")
-    annotation = func_arg_parameter[0].annotation
-    # get real type
-    if isinstance(annotation, str):
-        value: ForwardRef = ForwardRef(annotation, is_argument=False)
-        annotation = value._evaluate(sys.modules[func.__module__].__dict__, None)  # type: ignore
-        if not annotation:
-            raise TypeError(f"get real annotation from {func} fail")  # pragma: no cover
+    annotation = get_real_annotation(func_arg_parameter[0].annotation, func)
     origin_type = getattr(annotation, "__origin__", None)
     if origin_type:
         annotation = origin_type
