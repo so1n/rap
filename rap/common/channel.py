@@ -268,7 +268,7 @@ def get_corresponding_channel_class(func: Callable) -> Type[UserChannelType]:
         value: ForwardRef = ForwardRef(annotation, is_argument=False)
         annotation = value._evaluate(sys.modules[func.__module__].__dict__, None)  # type: ignore
         if not annotation:
-            raise RuntimeError(f"get real annotation from {func} fail")  # pragma: no cover
+            raise TypeError(f"get real annotation from {func} fail")  # pragma: no cover
     origin_type = getattr(annotation, "__origin__", None)
     if origin_type:
         annotation = origin_type

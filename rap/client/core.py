@@ -59,8 +59,8 @@ class BaseClient:
         :param ws_min_interval: WindowStatistics time per window
         :param ws_max_interval: WindowStatistics Window capacity
         :param ws_statistics_interval: WindowStatistics Statistical data interval from window
-        :param through_deadline: enable through deadline to server
-        :param endpoint: endpoint
+        :param through_deadline: enable through deadline param to server
+        :param endpoint: rap.client.endpoint
         """
         self.server_name: str = server_name
         self._processor_list: List[BaseProcessor] = []
@@ -98,30 +98,24 @@ class BaseClient:
     ################
     async def stop(self) -> None:
         """close client transport"""
-        for handler in self._event_dict[EventEnum.before_end]:
-            ret: Any = handler(self)  # type: ignore
-            if asyncio.iscoroutine(ret):
-                await ret  # type: ignore
+        await self._run_event_handler(EventEnum.before_end)
         await self.endpoint.stop()
-        for handler in self._event_dict[EventEnum.after_end]:
-            ret: Any = handler(self)  # type: ignore
-            if asyncio.iscoroutine(ret):
-                await ret  # type: ignore
+        await self._run_event_handler(EventEnum.after_end)
 
     async def start(self) -> None:
         """Create client transport"""
-        for handler in self._event_dict[EventEnum.before_start]:
-            ret: Any = handler(self)  # type: ignore
-            if asyncio.iscoroutine(ret):
-                await ret  # type: ignore
+        await self._run_event_handler(EventEnum.before_start)
         await self.endpoint.start(self)
-        for handler in self._event_dict[EventEnum.after_start]:
-            ret: Any = handler(self)  # type: ignore
-            if asyncio.iscoroutine(ret):
-                await ret  # type: ignore
+        await self._run_event_handler(EventEnum.after_start)
 
     async def await_start(self) -> None:
+        """Wait for client startup to complete"""
         await self.endpoint.await_start()
+
+    @property
+    def is_close(self) -> bool:
+        """Whether the client is closed"""
+        return self._endpoint.is_close
 
     def _check_run(self) -> None:
         if not self.is_close:
@@ -130,9 +124,17 @@ class BaseClient:
     ########################
     # client event handler #
     ########################
-    def register_client_event_handle(self, event_name: EventEnum, fn: CLIENT_EVENT_FN) -> None:
+    def register_event_handler(self, event_name: EventEnum, fn: CLIENT_EVENT_FN) -> None:
+        """Registering client event callbacks"""
         self._check_run()
         self._event_dict[event_name].append(fn)
+
+    async def _run_event_handler(self, event_name: EventEnum) -> None:
+        """Execute client event callbacks"""
+        for handler in self._event_dict[event_name]:
+            ret: Any = handler(self)  # type: ignore
+            if asyncio.iscoroutine(ret):
+                await ret  # type: ignore
 
     ############################
     # client processor handler #
@@ -163,6 +165,9 @@ class BaseClient:
         """Decorate normal function"""
         name = name if name else func.__name__
         func_sig: inspect.Signature = get_func_sig(func)
+
+        if not inspect.iscoroutinefunction(func):
+            raise TypeError(f"func:{func.__name__} must coroutine function")
 
         @wraps(func)  # type: ignore
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R_T:  # type: ignore
@@ -235,20 +240,38 @@ class BaseClient:
     # register func api #
     #####################
     def register_func(
-        self, name: str = "", group: Optional[str] = None
+        self,
+        name: str = "",
+        group: Optional[str] = None,
+        picker_class: Optional[Type[Picker]] = None,
     ) -> Callable[[Callable[P, R_T]], Callable[P, Awaitable[R_T]]]:  # type: ignore
+        """Using this method to decorate a fake function can help you use it better.
+
+        :param name: rap func name
+        :param group: func's group, default value is `default`
+        :param picker_class: Specific implementation of picker
+        """
+
         def wrapper(func: Callable[P, R_T]) -> Callable[P, Awaitable[R_T]]:  # type: ignore
-            if not inspect.iscoroutinefunction(func):
-                raise TypeError(f"func:{func.__name__} must coroutine function")
-            return self._wrapper_func(func, group=group, name=name)
+            return self._wrapper_func(func, group=group, name=name, picker_class=picker_class)
 
         return wrapper
 
     def register_gen_func(
-        self, name: str = "", group: Optional[str] = None
+        self,
+        name: str = "",
+        group: Optional[str] = None,
+        picker_class: Optional[Type[Picker]] = None,
     ) -> Callable[[Callable[P, R_T]], Callable[P, AsyncGenerator[R_T, None]]]:  # type: ignore
+        """Using this method to decorate a fake function can help you use it better.
+
+        :param name: rap func name
+        :param group: func's group, default value is `default`
+        :param picker_class: Specific implementation of picker
+        """
+
         def wrapper(func: Callable[P, R_T]) -> Callable[P, AsyncGenerator[R_T, None]]:  # type: ignore
-            return self._wrapper_gen_func(func, group=group, name=name)
+            return self._wrapper_gen_func(func, group=group, name=name, picker_class=picker_class)
 
         return wrapper
 
@@ -258,6 +281,13 @@ class BaseClient:
         group: Optional[str] = None,
         picker_class: Optional[Type[Picker]] = None,
     ) -> Callable[[CHANNEL_F], Any]:
+        """Using this method to decorate a fake function can help you use it better.
+
+        :param name: rap func name
+        :param group: func's group, default value is `default`
+        :param picker_class: Specific implementation of picker
+        """
+
         def wrapper(func: CHANNEL_F) -> Any:  # type: ignore
             return self._wrapper_channel(func, group=group, name=name, picker_class=picker_class)
 
@@ -292,13 +322,6 @@ class BaseClient:
     ###################
     # client base api #
     ###################
-    @property
-    def is_close(self) -> bool:
-        """Whether the client is closed"""
-        if not getattr(self, "_endpoint", None):
-            return True
-        return self._endpoint.is_close
-
     @asynccontextmanager
     async def fixed_transport(self, picker_class: Optional[Type[Picker]] = None) -> AsyncGenerator[_PickStub, None]:
         async with self.endpoint.picker(picker_class=picker_class) as transport:
@@ -317,6 +340,7 @@ class BaseClient:
     ) -> Response:
         """rpc client base invoke method
         Note: This method does not support parameter type checking, not support channels;
+
         :param name: rpc func name
         :param arg_param: rpc func param
         :param group: func's group
@@ -336,6 +360,7 @@ class BaseClient:
     ) -> Any:
         """rpc client base invoke method
         Note: This method does not support parameter type checking, not support channels;
+
         :param name: rpc func name
         :param arg_param: rpc func param
         :param group: func's group
@@ -353,6 +378,7 @@ class BaseClient:
         picker_class: Optional[Type[Picker]] = None,
     ) -> Callable[P, Awaitable[R_T]]:  # type: ignore
         """automatically resolve function names and call invoke_by_name
+
         :param func: python func
         :param group: func's group, default value is `default`
         :param header: request header
@@ -367,6 +393,7 @@ class BaseClient:
         picker_class: Optional[Type[Picker]] = None,
     ) -> Callable[P, AsyncGenerator[R_T, None]]:  # type: ignore
         """Python-specific generator invoke
+
         :param func: python func
         :param group: func's group, default value is `default`
         :param picker_class: Specific implementation of picker
@@ -380,6 +407,7 @@ class BaseClient:
         picker_class: Optional[Type[Picker]] = None,
     ) -> Callable[..., Awaitable[None]]:
         """invoke channel fun
+
         :param func: python func
         :param group: func's group, default value is `default`
         :param picker_class: Specific implementation of picker
@@ -391,6 +419,7 @@ class BaseClient:
     ###############################
     def inject(self, func: Callable_T, name: str = "", group: Optional[str] = None) -> Callable_T:
         """Principle replacement function based on "sys.module
+
         :param func: Python func
         :param name: rap func name
         :param group: func's group, default value is `default`
@@ -436,4 +465,4 @@ class BaseClient:
 
 
 class Client(BaseClient):
-    pass
+    ...
