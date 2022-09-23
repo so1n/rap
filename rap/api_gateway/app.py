@@ -16,8 +16,8 @@ def create_app(
     """
     prefix: api url prefix
     rap_client_list: rap client list
-    private_filter: Can access the function whose attribute is_private is true
-    group_filter: Which groups can be accessed
+    private_filter: If True, access to private methods is not allowed
+    group_filter: Which groups can not be accessed
     """
     app: Starlette = Starlette()
     func_info_dict: Dict[str, Dict[str, Any]] = {}

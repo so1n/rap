@@ -6,6 +6,7 @@ from starlette.requests import HTTPConnection, Request
 from starlette.responses import JSONResponse
 from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 
+from rap.api_gateway import exception
 from rap.client import Client
 from rap.common.asyncio_helper import as_first_completed
 
@@ -14,22 +15,22 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 def before_check(
     server_name: str, group: str, func_name: str, func_type: str, request: HTTPConnection
-) -> Optional[dict]:
+) -> Optional[Exception]:
     key = f"{server_name}:{func_type}:{group}:{func_name}"
     if key not in request.app.state.func_info_dict:
-        return {"code": 3, "msg": "Not Found"}
+        return exception.NotFoundError()
 
     if request.app.state.group_filter and group in request.app.state.group_filter:
-        return {"code": 3, "msg": "Not Found"}
+        return exception.NotFoundError()
     if (
         request.app.state.private_filter
         and request.app.state.func_info_dict[key]["is_private"] == request.app.state.private_filter
     ):
-        return {"code": 3, "msg": "Not Found"}
+        return exception.NotFoundError()
     return None
 
 
-async def websocket_route_func(websocket: WebSocket) -> None:
+async def _websocket_route_func(websocket: WebSocket) -> None:
     await websocket.accept()
     rap_client_dict: Dict[str, Client] = websocket.app.state.rap_client_dict
     resp_dict: Dict[str, Any] = await websocket.receive_json()
@@ -38,19 +39,14 @@ async def websocket_route_func(websocket: WebSocket) -> None:
         group: str = resp_dict["group"]
         func_name: str = resp_dict["func_name"]
     except KeyError as e:
-        await websocket.send_json({"code": 1, "msg": f"param error:{e}"})
-        await websocket.close()
-        return
+        raise exception.ParamError(extra_msg=str(e))
 
     if server_name not in rap_client_dict:
-        await websocket.send_json({"code": 2, "msg": "server name error"})
-        await websocket.close()
-        return
+        raise exception.ServerNameError()
 
-    result: Optional[dict] = before_check(server_name, group, func_name, "channel", websocket)
+    result: Optional[Exception] = before_check(server_name, group, func_name, "channel", websocket)
     if result:
-        await websocket.send_json(result)
-        await websocket.close()
+        raise result
 
     rap_client: Client = rap_client_dict[server_name]
     try:
@@ -82,6 +78,20 @@ async def websocket_route_func(websocket: WebSocket) -> None:
             await websocket.close()
 
 
+async def websocket_route_func(websocket: WebSocket) -> None:
+    error: Optional[exception.BaseError] = None
+    try:
+        await _websocket_route_func(websocket)
+    except exception.BaseError as e:
+        error = e
+    except Exception as e:
+        logger.exception(f"Websocket handler error:{e}")
+        error = exception.BaseError(extra_msg=str(e))
+    if error:
+        await websocket.send_json(error.dict)
+        await websocket.close()
+
+
 async def route_func(request: Request) -> JSONResponse:
     rap_client_dict: Dict[str, Client] = request.app.state.rap_client_dict
     resp_dict: Dict[str, Any] = await request.json()
@@ -90,17 +100,17 @@ async def route_func(request: Request) -> JSONResponse:
         group: str = resp_dict["group"]
         func_name: str = resp_dict["func_name"]
     except KeyError as e:
-        return JSONResponse({"code": 1, "msg": f"param error:{e}"})
+        raise exception.ParamError(extra_msg=str(e))
     if server_name not in rap_client_dict:
-        return JSONResponse({"code": 2, "msg": "server name error"})
+        raise exception.ServerNameError()
 
-    check_result: Optional[dict] = before_check(server_name, group, func_name, "normal", request)
+    check_result: Optional[Exception] = before_check(server_name, group, func_name, "normal", request)
     if check_result:
-        return JSONResponse(check_result)
+        raise check_result
 
     arg_list: List[Any] = resp_dict.get("arg_list", [])
     if not isinstance(arg_list, list):
-        return JSONResponse({"code": 1, "msg": "param error"})
+        raise exception.ParamError()
 
     result: Any = await rap_client_dict[server_name].invoke_by_name(
         func_name,

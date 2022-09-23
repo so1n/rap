@@ -71,12 +71,12 @@ class TestApiGateWay:
         loop.run_until_complete(main())
 
     def test_param_error(self, create_test_app: Starlette) -> None:
-        with TestClient(create_test_app) as client:
+        with TestClient(create_test_app, raise_server_exceptions=False) as client:
             resp = client.post(
                 "http://localhost:8000/api/normal",
                 json={"server_name": "test", "group": "default", "func_type": "normal", "arg_list": [1, 2]},
             )
-            assert {"code": 1, "msg": "param error:'func_name'"} == resp.json()
+            assert {"code": 1, "msg": "Param error('func_name')"} == resp.json()
             resp = client.post(
                 "http://localhost:8000/api/normal",
                 json={
@@ -87,7 +87,7 @@ class TestApiGateWay:
                     "arg_list": 1,
                 },
             )
-            assert {"code": 1, "msg": "param error"} == resp.json()
+            assert {"code": 1, "msg": "Param error"} == resp.json()
 
     def test_not_found(self) -> None:
         group_set: Set[str] = set()
@@ -105,7 +105,7 @@ class TestApiGateWay:
         app.router.on_startup.insert(0, create_rap_server)
         app.router.on_shutdown.append(close_rap_server)
 
-        with TestClient(app) as test_client:
+        with TestClient(app, raise_server_exceptions=False) as test_client:
             resp = test_client.post(
                 "http://localhost:8000/api/normal",
                 json={
