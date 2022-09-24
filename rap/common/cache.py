@@ -1,8 +1,9 @@
+import asyncio
 import logging
 import time
 from dataclasses import MISSING
 from threading import Lock
-from typing import Any, Dict, Generator, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 from .asyncio_helper import get_event_loop
 
@@ -16,16 +17,26 @@ class Cache(object):
         """
         :param interval: Scan all keys interval
         """
-        self._no_expire_value: int = -1
-        self._idling_times: int = 1
-        self._dict: Dict[Any, Tuple[float, Any]] = {}
+        self._no_expire_value: float = -1.0
+        self._idling_count: int = 1
+        self._dict: Dict[Any, List] = {}
+        self._auto_remove_handler: Optional[asyncio.TimerHandle] = None
+
         self._interval: float = interval or 10.0
 
-    def _add(self, key: Any, expire: float, value: Any = None) -> None:
+    def _real_expire(self, expire: float) -> float:
         if expire == self._no_expire_value:
-            self._dict[key] = (self._no_expire_value, value)
+            return self._no_expire_value
         else:
-            self._dict[key] = (time.time() + expire, value)
+            return time.time() + expire
+
+    def _add(self, key: Any, expire: float, value: Any = None) -> None:
+        self._dict[key] = [self._real_expire(expire), value]
+        if self._idling_count > 1:
+            if self._auto_remove_handler:
+                self._auto_remove_handler.cancel()
+                self._auto_remove_handler = None
+            self._auto_remove()
 
     def update_expire(self, key: Any, expire: float) -> bool:
         """update key expire
@@ -34,31 +45,20 @@ class Cache(object):
         """
         if key not in self._dict:
             return False
-        _, value = self._dict[key]
-        self._add(key, expire, value)
+        self._dict[key][0] = self._real_expire(expire)
         return True
 
     def _get(self, key: Any, default: Any = MISSING) -> Tuple[float, Any]:
         try:
+            if key not in self:
+                # Determine if the current key has expired
+                raise KeyError(key)
             expire, value = self._dict[key]
         except KeyError:
             if default is MISSING:
                 raise KeyError(key)
             return -1, default
         return expire, value
-
-    def get_and_update_expire(self, key: Any, expire: float, default: Any = MISSING) -> Any:
-        """get value and update expire
-
-        :param key: cache key
-        :param expire: key new expire
-        :param default: The default value returned when the key corresponding value is not found.
-         If the default value is not filled in, an error will be thrown when the key corresponding value is not found
-        """
-        _, value = self._get(key, default)
-        if value is not MISSING:
-            self._add(key, expire, value)
-        return value
 
     def get(self, key: Any, default: Any = MISSING) -> Any:
         """get value from cache
@@ -105,7 +105,7 @@ class Cache(object):
         if expire == self._no_expire_value:
             return True
         elif expire < time.time():
-            self.pop(key)
+            self.pop(key, None)
             return False
         else:
             return True
@@ -115,24 +115,25 @@ class Cache(object):
         key_list: list = list(self._dict.keys())
         index: int = 0
         if not key_list:
-            self._idling_times += 1
+            self._idling_count += 1
         else:
-            self._idling_times = 1
+            self._idling_count = 1
             for index, key in enumerate(key_list):
                 if index > 100 and index % 100 == 0:
-                    self._idling_times = 0
+                    # There are too many cleanups, and the next cycle needs to be executed immediately
+                    self._idling_count = 0
                     break
                 if key in self:
                     # NOTE: After Python 3.7, the dict is ordered.
                     # Since the inserted data is related to time, the dict here is also ordered by time
                     break
 
-        next_call_interval: float = self._idling_times * self._interval
+        next_call_interval: float = self._idling_count * self._interval
         logger.debug(
             f"{self.__class__.__name__} auto remove key length:{len(key_list)}, clean cnt:{index},"
             f"until the next call:{next_call_interval}"
         )
-        get_event_loop().call_later(next_call_interval, self._auto_remove)
+        self._auto_remove_handler = get_event_loop().call_later(next_call_interval, self._auto_remove)
 
 
 class ThreadCache(Cache):
@@ -152,5 +153,5 @@ class ThreadCache(Cache):
         with self._look:
             _, value = self._get(key, default)
             if value is not MISSING:
-                self._dict[key] = (expire, value)
+                self._dict[key] = [self._real_expire(expire), value]
             return value

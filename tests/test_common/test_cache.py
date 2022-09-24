@@ -45,8 +45,6 @@ class TestCache:
         assert now_timestamp + 9 <= my_cache._dict[key][0] <= now_timestamp + 10
         my_cache.update_expire(key, 20)
         assert now_timestamp + 19 <= my_cache._dict[key][0] <= now_timestamp + 20
-        my_cache.get_and_update_expire(key, 10)
-        assert now_timestamp + 9 <= my_cache._dict[key][0] <= now_timestamp + 10
 
     async def test_expire(self, mocker: MockFixture) -> None:
         mocker.patch("time.time").return_value = 1600000000
