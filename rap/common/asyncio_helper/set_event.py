@@ -6,6 +6,8 @@ _T = TypeVar("_T")
 
 
 class SetEvent(Generic[_T]):
+    """Combining the functions of set and asyncio.Event"""
+
     def __init__(self):
         self._event: asyncio.Event = asyncio.Event()
         self._set: Set[_T] = set()

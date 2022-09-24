@@ -40,6 +40,10 @@ async def as_first_completed(
 ) -> Any:
     """Wait for multiple coroutines to process data, until one of the coroutines returns data,
     and the remaining coroutines are cancelled
+
+    The following two examples are equivalent
+    >>> await as_first_completed([asyncio.Future(), asyncio.shield(asyncio.Future())])
+    >>> await as_first_completed([asyncio.Future()], not_cancel_future_list=[asyncio.Future()])
     """
     not_cancel_future_list = not_cancel_future_list if not_cancel_future_list else []
     future_list.extend(not_cancel_future_list)

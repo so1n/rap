@@ -110,9 +110,8 @@ class Deadline(object):
             else:
                 return None
             if self._deadline_future.done():
-                if exc_type:
-                    if isinstance(self._timeout_exc, IgnoreDeadlineTimeoutExc):
-                        return True
+                if exc_type and isinstance(self._timeout_exc, IgnoreDeadlineTimeoutExc):
+                    return True
                 raise self._timeout_exc
             else:
                 return None
