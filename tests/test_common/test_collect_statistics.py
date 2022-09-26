@@ -13,7 +13,7 @@ class TestCollectStatistics:
     async def test_gauge(self, mocker: MockFixture) -> None:
         mocker.patch("time.time").return_value = 1600000000
         window_statistics: WindowStatistics = WindowStatistics()
-        test_gauge: Gauge = Gauge("test", diff=60)
+        test_gauge: Gauge = Gauge("test")
         window_statistics.registry_metric(test_gauge)
         # test name
         assert test_gauge.metric_cache_name == test_gauge.gen_metric_cache_name(test_gauge.raw_name)
@@ -24,8 +24,6 @@ class TestCollectStatistics:
         test_gauge.increment(1)
         mocker.patch("time.time").return_value = 1600000004
         test_gauge.decrement(5)
-        assert 11 == test_gauge.get_value()
-        mocker.patch("time.time").return_value = 1600000006
         assert 6 == test_gauge.get_value()
         # test statistics value
         assert 0 == test_gauge.get_statistics_value()
@@ -34,17 +32,13 @@ class TestCollectStatistics:
         window_statistics._statistics_data()
         await asyncio.sleep(0.1)
         assert 6 == test_gauge.get_statistics_value()
-        # test window side
-        mocker.patch("time.time").return_value = 1600000062
-        assert -4 == test_gauge.get_value()
-        mocker.patch("time.time").return_value = 1600000070
-        assert 0 == test_gauge.get_value()
+        window_statistics.close()
 
     async def test_counter(self, mocker: MockFixture) -> None:
         mocker.patch("time.time").return_value = 1600000000
         window_statistics: WindowStatistics = WindowStatistics()
         test_counter: Counter = Counter("test")
-        window_statistics.registry_metric(test_counter, expire=60)
+        window_statistics.registry_metric(test_counter)
         # test name
         assert test_counter.metric_cache_name == test_counter.gen_metric_cache_name(test_counter.raw_name)
         assert test_counter.name == test_counter.gen_metric_name(test_counter.raw_name)
@@ -52,31 +46,40 @@ class TestCollectStatistics:
         test_counter.set_value(10)
         mocker.patch("time.time").return_value = 1600000002
         test_counter.set_value(1)
-        mocker.patch("time.time").return_value = 1600000004
-        test_counter.set_value(5)
-        assert 5 == test_counter.get_value()
+        assert 11 == test_counter.get_value()
+        test_counter.set_value(3)
+        # The time does not change, the corresponding value will change
+        assert 13 == test_counter.get_value()
+        test_counter.increment(4)
+        test_counter.decrement(2)
+        assert 15 == test_counter.get_value()
+        # The time does not change, the previous value drop is overwritten
+        test_counter.set_value(3)
+        assert 13 == test_counter.get_value()
+
         # test statistics value
         assert 0 == test_counter.get_statistics_value()
         window_statistics._is_closed = False
         window_statistics._loop = get_event_loop()
         window_statistics._statistics_data()
         await asyncio.sleep(0.1)
-        assert 5 == test_counter.get_statistics_value()
+        assert 13 == test_counter.get_statistics_value()
         # test windows side
         mocker.patch("time.time").return_value = 1600000070
         window_statistics._metric_cache._auto_remove()
         with pytest.raises(AssertionError):
             assert 5 == test_counter.get_value()
         # key not exist, but statistics only change by `window_statistics._statistics_data()`
-        assert 5 == test_counter.get_statistics_value()
+        assert 13 == test_counter.get_statistics_value()
         window_statistics._statistics_data()
         assert 0 == test_counter.get_statistics_value()
+        window_statistics.close()
 
     async def test_callback(self, mocker: MockFixture) -> None:
         mocker.patch("time.time").return_value = 1600000000
         window_statistics: WindowStatistics = WindowStatistics()
-        window_statistics.set_counter_value("test_counter", 60, 10)
-        window_statistics.set_gauge_value("test_gauge", 60, 10, 10)
+        window_statistics.set_counter_value("test_counter", diff=60, value=10)
+        window_statistics.set_gauge_value("test_gauge", value=10)
         assert_dict: dict = {}
 
         def _callback(_dict: dict) -> None:
@@ -96,3 +99,4 @@ class TestCollectStatistics:
         assert assert_dict["new_value"] == 30
         assert assert_dict["counter_test_counter"] == 10
         assert assert_dict["gauge_test_gauge"] == 10
+        window_statistics.close()

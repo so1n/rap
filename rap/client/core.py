@@ -76,6 +76,8 @@ class BaseClient:
             self._endpoint: BaseEndpoint = endpoint
         else:
             self._endpoint = LocalEndpoint({"ip": "localhost", "port": 9000})
+        self.register_event_handler(EventEnum.before_start, lambda _: self._window_statistics.statistics_data())
+        self.register_event_handler(EventEnum.after_end, lambda _: self._window_statistics.close())
 
     @property
     def endpoint(self) -> BaseEndpoint:

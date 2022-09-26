@@ -108,7 +108,7 @@ class Server(object):
         self._call_func_permission_fn: Optional[Callable[[Request], Awaitable[FuncModel]]] = call_func_permission_fn
         self.registry: RegistryManager = RegistryManager()
         self.cache: Cache = Cache(interval=cache_interval)
-        self.window_statistics: WindowStatistics = window_statistics or WindowStatistics(interval=60)
+        self.window_statistics: WindowStatistics = window_statistics or WindowStatistics()
         if self.window_statistics is not None and self.window_statistics.is_closed:
             self.register_server_event(EventEnum.before_start, lambda _app: self.window_statistics.statistics_data())
 

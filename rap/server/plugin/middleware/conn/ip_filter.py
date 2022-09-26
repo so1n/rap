@@ -46,7 +46,7 @@ class IpFilterMiddleware(BaseConnMiddleware):
         }
 
     async def start_event_handle(self, app: "Server") -> None:
-        async def _add_data_to_state(state_dict: dict) -> None:
+        def _add_data_to_state(state_dict: dict) -> None:
             state_dict[f"{self.__class__.__name__}:block_cnt"] = self.block_cnt
 
         if self.app.window_statistics:

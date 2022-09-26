@@ -1,3 +1,4 @@
+import logging
 import random
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -9,6 +10,8 @@ from rap.common.utils import EventEnum, constant
 
 if TYPE_CHECKING:
     from rap.client.core import BaseClient
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class CircuitBreakerExc(Exception):
@@ -53,20 +56,19 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
     def start_event_handle(self, app: "BaseClient") -> None:
         if not getattr(self, "_window_statistics", None):
             self._window_statistics = app.window_statistics
-        if self._window_statistics._max_interval < self._interval:
-            raise ValueError(
-                f"interval value:{self._interval} must <= "
-                f"{self._window_statistics.__class__.__name__}._max_interval:{self._window_statistics._max_interval}"
-            )
+        if self._window_statistics.max_internal < self._interval:
+            logger.warning(f"Ws:{self._window_statistics.__class__.__name__} max_internal < 120, must use new ws")
+            self._window_statistics = WindowStatistics(interval=1, max_interval=self._interval, statistics_interval=1)
 
         def upload_probability(stats_dict: Dict[Any, int]) -> None:
             _dict: Dict[str, Dict[str, int]] = {}
             for key, value in stats_dict.items():
-                if key.startswith("gauge_" + self._prefix):
-                    _, index, type_ = key.split("|")
-                    if index not in _dict:
-                        _dict[index] = {}
-                    _dict[index][type_] = value
+                if not key.startswith("counter_" + self._prefix):
+                    continue
+                _, index, type_ = key.split("|")
+                if index not in _dict:
+                    _dict[index] = {}
+                _dict[index][type_] = value
             for index, metric_dict in _dict.items():
                 total: int = metric_dict.get("total", 0)
                 error_cnt: int = metric_dict.get("error", 0)
@@ -92,17 +94,17 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
             return request
         index: str = self.get_index_from_request(request)
         total_key: str = f"{self._prefix}|{index}|total"
-        self._window_statistics.set_gauge_value(total_key, self._expire, self._interval)
+        self._window_statistics.set_counter_value(total_key, expire=self._expire, diff=self._interval)
         if random.randint(0, 100) < self._probability_dict.get(index, 0.0) * 100:
             error_key: str = f"{self._prefix}|{index}|error"
-            self._window_statistics.set_gauge_value(error_key, self._expire, self._interval)
+            self._window_statistics.set_counter_value(error_key, expire=self._expire, diff=self._interval)
             raise self.exc
 
         return request
 
     async def process_exc(self, response: Response) -> Response:
         error_key: str = f"{self._prefix}|{self.get_index_from_response(response)}|error"
-        self._window_statistics.set_gauge_value(error_key, self._expire, self._interval)
+        self._window_statistics.set_counter_value(error_key, expire=self._expire, diff=self._interval)
         return response
 
 

@@ -31,6 +31,7 @@ SERVER_MSG_TYPE = Tuple[int, int, dict, Any]
 BASE_MSG_TYPE = Tuple[int, int, dict, Any]
 # msg_type, correlation_id, header, body
 SERVER_BASE_MSG_TYPE = Tuple[int, int, dict, Any]
+
 LOOP_TYPE = asyncio.get_event_loop
 READER_TYPE = asyncio.streams.StreamReader
 WRITER_TYPE = asyncio.streams.StreamWriter

@@ -4,6 +4,7 @@ import psutil
 
 from rap.common.asyncio_helper import get_event_loop
 from rap.common.collect_statistics import Counter, Gauge
+from rap.common.number_range import get_value_by_range
 from rap.common.utils import EventEnum, constant
 from rap.server.model import Request, Response
 from rap.server.plugin.processor.base import BaseProcessor
@@ -37,11 +38,11 @@ class MosProcessor(BaseProcessor):
         :param max_request_cnt: The maximum number of requests accepted within the server time window
         :param max_response_cnt: The maximum number of responses accepted within the server time window
         """
-        self.request_online_counter: Counter = Counter(f"{prefix}_request_online")
-        self.channel_online_cnt_counter: Counter = Counter(f"{prefix}_channel_online")
-        self.request_cnt_gauge: Gauge = Gauge(f"{prefix}_request_cnt", diff=diff)
-        self.response_cnt_gauge: Gauge = Gauge(f"{prefix}_response_cnt", diff=diff)
-        self.error_cnt_gauge: Gauge = Gauge(f"{prefix}_error_cnt", diff=diff)
+        self.request_online_gauge: Gauge = Gauge(f"{prefix}_request_online")
+        self.channel_online_gauge: Gauge = Gauge(f"{prefix}_channel_online")
+        self.request_cnt_counter: Counter = Counter(f"{prefix}_request_cnt", diff=diff)
+        self.response_cnt_counter: Counter = Counter(f"{prefix}_response_cnt", diff=diff)
+        self.error_cnt_counter: Counter = Counter(f"{prefix}_error_cnt", diff=diff)
         self.server_event_dict: Dict[EventEnum, List["SERVER_EVENT_FN"]] = {
             EventEnum.before_start: [self.start_event_handle],
             EventEnum.after_end: [self.stop_event_handle],
@@ -62,47 +63,43 @@ class MosProcessor(BaseProcessor):
     def start_event_handle(self, app: "Server") -> None:
         self._run_cpu_percent = True
         self._get_cpu_percent()
-        app.window_statistics.registry_metric(self.request_online_counter)
-        app.window_statistics.registry_metric(self.channel_online_cnt_counter)
-        app.window_statistics.registry_metric(self.request_cnt_gauge)
-        app.window_statistics.registry_metric(self.response_cnt_gauge)
-        app.window_statistics.registry_metric(self.error_cnt_gauge)
+        app.window_statistics.registry_metric(self.request_online_gauge)
+        app.window_statistics.registry_metric(self.channel_online_gauge)
+        app.window_statistics.registry_metric(self.request_cnt_counter)
+        app.window_statistics.registry_metric(self.response_cnt_counter)
+        app.window_statistics.registry_metric(self.error_cnt_counter)
 
     def stop_event_handle(self, app: "Server") -> None:
         self._run_cpu_percent = False
 
     async def process_request(self, request: Request) -> Request:
-        self.request_cnt_gauge.increment()
+        self.request_cnt_counter.increment()
         if request.msg_type == constant.MSG_REQUEST:
-            self.request_online_counter.increment()
+            self.request_online_gauge.increment()
         return request
 
     async def process_response(self, response: Response) -> Response:
-        self.response_cnt_gauge.increment()
+        self.response_cnt_counter.increment()
         if response.msg_type == constant.MSG_RESPONSE:
-            self.request_online_counter.decrement()
+            self.request_online_gauge.decrement()
         elif response.msg_type == constant.CHANNEL_RESPONSE:
             life_cycle: str = response.header.get("channel_life_cycle", "error")
             if life_cycle == constant.DECLARE:
-                self.channel_online_cnt_counter.increment()
+                self.channel_online_gauge.increment()
             elif life_cycle == constant.DROP:
-                self.channel_online_cnt_counter.decrement()
+                self.channel_online_gauge.decrement()
 
         if response.status_code >= 400:
-            self.error_cnt_gauge.increment()
+            self.error_cnt_counter.increment()
         if response.msg_type == constant.CLIENT_EVENT and response.target.endswith(constant.PING_EVENT):
             mos: int = int(
                 5
                 * (1 - self._cpu_percent)
-                * (1 - (self.request_cnt_gauge.get_statistics_value() / self._max_request_cnt))
-                * (1 - (self.response_cnt_gauge.get_statistics_value() / self._max_response_cnt))
-                * (1 - (self.error_cnt_gauge.get_statistics_value() - self._max_error_cnt))
-                * (1 - (self.request_online_counter.get_statistics_value() - self._max_request_online))
-                * (1 - (self.channel_online_cnt_counter.get_statistics_value() - self._max_channel_online))
+                * (1 - (self.request_cnt_counter.get_statistics_value() / self._max_request_cnt))
+                * (1 - (self.response_cnt_counter.get_statistics_value() / self._max_response_cnt))
+                * (1 - (self.error_cnt_counter.get_statistics_value() - self._max_error_cnt))
+                * (1 - (self.request_online_gauge.get_statistics_value() - self._max_request_online))
+                * (1 - (self.channel_online_gauge.get_statistics_value() - self._max_channel_online))
             )
-            if mos < 0:
-                mos = 0
-            if mos > 10:
-                mos = 5
-            response.body["mos"] = mos
+            response.body["mos"] = get_value_by_range(mos, 0, 5)
         return response

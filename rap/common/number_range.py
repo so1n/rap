@@ -10,25 +10,21 @@ def _get_value_by_range(
         value = gte
     elif lte is not None and value > lte:
         value = lte
-    else:
-        value = value
     return value
 
 
 def get_value_by_range(
     value: NumberType, gte: Optional[NumberType] = None, lte: Optional[NumberType] = None
 ) -> NumberType:
-    if gte and lte:
-        if gte > lte:
-            raise ValueError("gte must less than lte")
+    if gte and lte and gte > lte:
+        raise ValueError("gte must less than lte")
     return _get_value_by_range(value, gte, lte)
 
 
 class NumberRange(object):
     def __init__(self, value: NumberType, gte: Optional[NumberType] = None, lte: Optional[NumberType] = None):
         """
-        gte >=
-        lte <=
+        gte >=; lte <=
         """
         self.gte: Optional[NumberType] = gte
         self.lte: Optional[NumberType] = lte
