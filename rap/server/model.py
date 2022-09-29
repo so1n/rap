@@ -144,6 +144,9 @@ class Response(ServerMsgProtocol):
     def to_msg(self) -> SERVER_MSG_TYPE:
         return self.msg_type, self.correlation_id, self.header, self.body
 
+    def to_json(self) -> dict:
+        return {"msg_type": self.msg_type, "cid": self.correlation_id, "header": self.header, "body": self.body}
+
     def __call__(self, content: Any) -> None:
         if isinstance(content, Exception):
             self.set_exception(content)

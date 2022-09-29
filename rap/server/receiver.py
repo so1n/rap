@@ -9,7 +9,7 @@ from types import TracebackType
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Tuple, Type, Union
 
 from rap.common.asyncio_helper import Deadline, SetEvent, get_deadline, get_event_loop
-from rap.common.conn import ServerConnection
+from rap.common.conn import CloseConnException, ServerConnection
 from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent
 from rap.common.exceptions import (
     BaseRapError,
@@ -176,6 +176,8 @@ class Receiver(object):
             await self.sender(response)
             if close_context_flag:
                 await self.close_context(correlation_id)
+        except (IOError, BrokenPipeError, ConnectionError, CloseConnException) as e:
+            await self.close_context(correlation_id, e)
         except Exception as e:
             logging.exception(f"raw_request handle error e, {e}")
             if request.msg_type != constant.SERVER_EVENT:

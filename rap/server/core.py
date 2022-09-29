@@ -333,7 +333,9 @@ class Server(object):
                 logging.error(f"recv data from {conn.peer_tuple} timeout. close conn")
                 await sender.send_event(event.CloseConnEvent("keep alive timeout"))
                 break
-            except (IOError, CloseConnException):
+            except (IOError, ConnectionResetError, CloseConnException) as e:
+                conn.close()
+                logger.error(f"Capture error:{e} Close client conn:{conn.peer_tuple}")
                 break
             except Exception as e:
                 logging.error(f"recv data from {conn.peer_tuple} error:{e}, conn has been closed")
