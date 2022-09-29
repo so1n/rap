@@ -1,7 +1,7 @@
 import asyncio
 import weakref
 from asyncio import events, tasks
-from typing import List
+from typing import Any, List
 
 __all__ = ["TaskGroup", "TaskGroupExc"]
 
@@ -56,6 +56,24 @@ class TaskGroup:
         self._parent_task = tasks.current_task(self._loop)
         if self._parent_task is None:
             raise RuntimeError(f"TaskGroup {self!r} cannot determine the parent task")
+        else:
+            raw_cancel = getattr(self._parent_task, "cancel")
+
+            def cancel(msg: Any = None) -> None:
+                if msg:
+                    raw_cancel(msg=msg)
+                else:
+                    raw_cancel()
+                self._parent_task._num_cancels_requested += 1  # type: ignore
+
+            def uncancel(self: Any) -> None:
+                if self._num_cancels_requested > 0:
+                    self._num_cancels_requested -= 1
+                return self._num_cancels_requested
+
+            setattr(self._parent_task, "_num_cancels_requested", 0)
+            setattr(self._parent_task, "cancel", cancel)
+            setattr(self._parent_task, "uncancel", uncancel)
 
         return self
 
@@ -68,7 +86,7 @@ class TaskGroup:
 
         if et is not None:
             if et is asyncio.CancelledError:
-                if self._parent_cancel_requested and not self._parent_task.uncancel():  # type: ignore
+                if self._parent_cancel_requested and not self._parent_task.uncancel(self._parent_task):  # type: ignore
                     # Do nothing, i.e. swallow the error.
                     pass
                 else:
