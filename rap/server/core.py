@@ -37,7 +37,9 @@ class Server(object):
         run_timeout: int = 9,
         ping_fail_cnt: int = 2,
         ping_sleep_time: int = 60,
-        backlog: int = 1024,
+        backlog: int = 511,
+        reuse_address: Optional[bool] = None,
+        reuse_port: Optional[bool] = None,
         close_timeout: int = 9,
         ssl_crt_path: Optional[str] = None,
         ssl_key_path: Optional[str] = None,
@@ -58,7 +60,9 @@ class Server(object):
         :param run_timeout: Maximum execution time per call
         :param ping_fail_cnt: When ping fails continuously and exceeds this value, conn will be disconnected
         :param ping_sleep_time: ping message interval time
-        :param backlog: server backlog
+        :param backlog: server backlog default 511.
+            The really max accept queue size will be backlog+1(ie, 512 here).
+            We take 511 which is the same as nginx and redis.
         :param close_timeout: The maximum time to wait for conn to process messages when shutting down the service
         :param ssl_crt_path: ssl crt path
         :param ssl_key_path: ssl key path
@@ -78,6 +82,8 @@ class Server(object):
         self._close_timeout: int = close_timeout
         self._keep_alive: int = keep_alive
         self._backlog: int = backlog
+        self._reuse_address: Optional[bool] = reuse_address
+        self._reuse_port: Optional[bool] = reuse_port
         self._ping_fail_cnt: int = ping_fail_cnt
         self._ping_sleep_time: int = ping_sleep_time
         self._server: Optional[asyncio.AbstractServer] = None
@@ -211,7 +217,13 @@ class Server(object):
             raise RuntimeError("Server status is running...")
         await self.run_event_list(EventEnum.before_start, is_raise=True)
         self._server = await asyncio.start_server(
-            self.conn_handle, self.host, self.port, ssl=self._ssl_context, backlog=self._backlog
+            self.conn_handle,
+            self.host,
+            self.port,
+            ssl=self._ssl_context,
+            backlog=self._backlog,
+            reuse_address=self._reuse_address,
+            reuse_port=self._reuse_port,
         )
         logger.info(f"server running on {self.host}:{self.port}. use ssl:{bool(self._ssl_context)}")
         await self.run_event_list(EventEnum.after_start)
@@ -335,7 +347,7 @@ class Server(object):
                 break
             except (IOError, ConnectionResetError, CloseConnException) as e:
                 conn.close()
-                logger.error(f"Capture error:{e} Close client conn:{conn.peer_tuple}")
+                logger.error(f"Capture error:<{e}> Close client conn:{conn.peer_tuple}")
                 break
             except Exception as e:
                 logging.error(f"recv data from {conn.peer_tuple} error:{e}, conn has been closed")

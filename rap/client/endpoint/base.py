@@ -4,7 +4,7 @@ import random
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type
 
-from rap.client.transport.pool import Pool
+from rap.client.transport.pool import Pool, PoolWrapTransport
 from rap.client.transport.transport import Transport
 from rap.common.number_range import get_value_by_range
 
@@ -26,37 +26,23 @@ class BalanceEnum(Enum):
 class Picker(object):
     """Select the best transport from the connection pool"""
 
-    def __init__(self, pool_list: List[Pool]):
-        if not pool_list:
-            raise ConnectionError("Endpoint Can not found available transport")
-        self._pool_list: List[Pool] = pool_list
+    _wrap_transport: PoolWrapTransport
+
+    def __init__(self, pool: Pool):
+        self._pool: Pool = pool
 
     async def __aenter__(self) -> Transport:
-        transport_list: List[Transport] = []
-        for pool in self._pool_list:
-            transport: Optional[Transport] = pool.transport
-            if transport:
-                transport_list.append(transport)
-        if transport_list:
-            transport: Optional[Transport] = max(transport_list, key=lambda x: x.pick_score)
-        else:
-            transport = None
-
-        if transport:
-            return transport
-        else:
-            # If no transport is available, transport is created from the first Pool
-            return await self._pool_list[0].get_transport()
+        self._wrap_transport = await self._pool.use_transport()
+        return self._wrap_transport.transport
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        return None
+        self._pool.unuse_transport(self._wrap_transport)
 
 
 class PrivatePicker(Picker):
     """provide a private transport"""
 
     async def __aenter__(self) -> Transport:
-        self._pool: Pool = random.choice(self._pool_list)
         self._transport: Transport = await self._pool.fork_transport()
         return self._transport
 
@@ -208,8 +194,9 @@ class BaseEndpoint(object):
         pool_list: List[Pool] = self._pick_pool(cnt)
         if not pool_list:
             raise ConnectionError("Endpoint Can not found available transport")
+        pool_list.sort(key=lambda x: x.pick_score, reverse=True)
         picker_class = picker_class or Picker
-        return picker_class(pool_list)
+        return picker_class(pool_list[0])
 
     def _pick_pool(self, cnt: int) -> List[Pool]:
         """fake code"""

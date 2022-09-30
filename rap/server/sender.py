@@ -31,7 +31,7 @@ class Sender(object):
         :param processor_list: rap server processor list
         """
         self._app: "Server" = app
-        self._max_correlation_id: int = 65535
+        self._max_correlation_id: int = 2 ** 16
         self._correlation_id: int = 2
         self._conn: ServerConnection = conn
         self._timeout: Optional[int] = timeout
@@ -102,7 +102,7 @@ class Sender(object):
         context.app = self._app
         context.conn = self._conn
         correlation_id: int = self._correlation_id + 2
-        self._correlation_id = correlation_id & self._max_correlation_id
+        self._correlation_id = correlation_id % self._max_correlation_id
         context.correlation_id = correlation_id
         return context
 

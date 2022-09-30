@@ -1,12 +1,10 @@
 import asyncio
 import logging
 import math
-import random
 import sys
 import time
-from collections import deque
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Deque, Dict, List, Optional, Sequence, Tuple, Type
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Dict, Optional, Sequence, Tuple, Type
 
 from rap.client.model import ClientContext, Request, Response
 from rap.client.processor.base import belong_to_base_method
@@ -16,13 +14,11 @@ from rap.common import event
 from rap.common import exceptions as rap_exc
 from rap.common.asyncio_helper import (
     Deadline,
-    IgnoreDeadlineTimeoutExc,
     Semaphore,
-    TaskGroup,
+    SetEvent,
     TaskGroupExc,
     as_first_completed,
     deadline_context,
-    get_deadline,
     get_event_loop,
     safe_del_future,
 )
@@ -49,9 +45,8 @@ class Transport(object):
     # Mark whether transport is available,
     # if not, no new requests can be initiated (does not affect requests in use)
     _available: bool = False
-    _available_level: int = NumberRange.i(0, 0, 5)
 
-    _max_correlation_id: int = 65535
+    _max_correlation_id: int = 2 ** 32
     _correlation_id: int = 1
 
     _score: float = 10.0
@@ -67,12 +62,6 @@ class Transport(object):
         unpack_param: Optional[dict] = None,
         max_inflight: Optional[int] = None,
         read_timeout: Optional[int] = None,
-        min_ping_interval: Optional[int] = None,
-        max_ping_interval: Optional[int] = None,
-        ping_fail_cnt: Optional[int] = None,
-        transport_age: Optional[int] = None,
-        transport_age_jitter: Optional[int] = None,
-        transport_max_age: Optional[int] = None,
     ):
         self.app: "BaseClient" = app
         self._conn: Connection = Connection(
@@ -94,7 +83,6 @@ class Transport(object):
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._pack_param: Optional[dict] = pack_param
         self._unpack_param: Optional[dict] = unpack_param
-        self._max_inflight: Optional[int] = max_inflight
 
         self._semaphore: Semaphore = Semaphore(max_inflight or 100)
         self._context_dict: Dict[int, ClientContext] = {}
@@ -120,20 +108,8 @@ class Transport(object):
         ]
 
         # ping
-        self._min_ping_interval: int = min_ping_interval or 1
-        self._max_ping_interval: int = max_ping_interval or 3
-        self._ping_fail_cnt: int = ping_fail_cnt or 3
-        self._ping_fn_list: List[Callable[["Transport"], None]] = []
-        self.inflight_load: Deque[int] = deque([0, 0, 0, 0, 0], maxlen=5)  # save history inflight(like Linux load)
         self._last_ping_timestamp: float = time.time()
         self._rtt: float = 0.0
-        if transport_age and not transport_age_jitter:
-            raise ValueError("transport_age_jitter must be set if transport_age is set")
-        self._transport_max_age: int = transport_max_age or ((transport_age or 0) + 3600)
-        if transport_age and transport_age_jitter:
-            self.transport_end_time: float = time.time() + int(transport_age + random.randint(0, transport_age_jitter))
-        else:
-            self.transport_end_time = 0
 
         self._client_info: InmutableDict = InmutableDict(
             host=self._conn.peer_tuple,
@@ -150,24 +126,32 @@ class Transport(object):
             queue.put_nowait(response)
 
     @asynccontextmanager
-    async def _transport_context(self, c_id: Optional[int] = None) -> AsyncGenerator[ClientContext, None]:
+    async def _transport_context(
+        self, c_id: Optional[int] = None, is_internal_request: bool = False
+    ) -> AsyncGenerator[ClientContext, None]:
         """
         Create the request context
 
         It should be noted that when the context is obtained,
         it means that conn will be used, even if no request is sent at this time.
-        So you need to call this method as close as possible to the place where the request is sent
+        So need to call this method as close as possible to the place where the request is sent
 
         :param c_id: The ID corresponding to the context object, if it is empty, an ID is automatically generated
+        :param is_internal_request: Cannot be restricted if requests is internal request
         """
-        if not self.available:
-            raise RuntimeError("transport has been marked as unavailable and cannot create new requests")
         if not c_id:
+            if not self.available:
+                raise RuntimeError("transport has been marked as unavailable and cannot create new requests")
             correlation_id: int = self._correlation_id + 2
             # Avoid too big numbers
-            self._correlation_id = correlation_id & self._max_correlation_id
+            self._correlation_id = correlation_id % self._max_correlation_id
         else:
             correlation_id: int = c_id
+
+        if not is_internal_request:
+            await self._semaphore.acquire()
+
+        # create context
         context: ClientContext = ClientContext()
         context.app = self.app
         context.correlation_id = correlation_id
@@ -175,8 +159,6 @@ class Transport(object):
         context.server_info = self._server_info
         context.client_info = self._client_info
 
-        # create context
-        await self._semaphore.acquire()
         self._context_dict[correlation_id] = context
         for on_context_enter in self.on_context_enter_processor_list:
             await on_context_enter(context)
@@ -192,97 +174,43 @@ class Transport(object):
             # release context
             for on_context_exit in reversed(self.on_context_exit_processor_list):
                 await on_context_exit(context, exc_type, exc_val, exc_tb)
-            self._semaphore.release()
+            if not is_internal_request:
+                self._semaphore.release()
             self._context_dict.pop(correlation_id, None)
 
             if self._close_soon_flag and self._semaphore.inflight == self._semaphore.raw_value:
                 await self.await_close()
 
-    async def _ping_handle(self) -> None:
-        ping_fail_interval: int = int(self._max_ping_interval * self._ping_fail_cnt)
-
-        def _change_transport_available() -> None:
-            now_time: float = time.time()
-            available: bool = (now_time - self._last_ping_timestamp) < ping_fail_interval
-            logger.debug("transport:%s available:%s _rtt:%s", self.connection_info, available, self._rtt)
-            if not available:
-                logger.error(f"ping {self.sock_tuple} timeout... exit")
-                self.grace_close()
-            else:
-                self.inflight_load.append(int(self.inflight / self.raw_inflight * 100))
-                # Simple design, don't want to use pandas&numpy in the app framework
-                median_inflight: int = sorted(self.inflight_load)[len(self.inflight_load) // 2 + 1]
-                if median_inflight < 20:
-                    # When transport is just created, inflight is 5.
-                    # The current transport is not handling too many requests and needs to lower its priority
-                    self.available_level -= 1
-                elif self.available and self.available_level < 5:
-                    # If the current transport load is moderate and the
-                    # priority is not optimal (priority less than 5), then increase its priority.
-                    self.available_level += 1
-
-            if self.available_level <= 0 and self.available:
-                # The current transport availability level is 0, which means that it is not available
-                logger.error("The current transport is idle and needs to be closed")
-                self.grace_close()
-
-        def _check_transport_age() -> None:
-            now_time: float = time.time()
-            if self.transport_end_time and now_time > self.transport_end_time:
-                if not self.available and (now_time > self.transport_end_time + self._transport_max_age):
-                    # If the transport exceeds the specified maximum survival time,
-                    # the transport will be closed immediately
-                    self.close()
-                else:
-                    # When the transport time exceeds the limit, need to set the transport to become unavailable,
-                    # so that it will not accept new requests, and wait for the pool manager to reorganize the transport
-                    self.grace_close()
-                return
-
-        try:
-            while True:
-                # If no event loop is running, should just exit
-                get_event_loop()
-                logger.debug("transport:%s available:%s _rtt:%s", self.peer_tuple, self.available_level, self._rtt)
-                _change_transport_available()
-                _check_transport_age()
-                next_ping_interval: int = random.randint(self._min_ping_interval, self._max_ping_interval)
-                try:
-                    with Deadline(next_ping_interval, timeout_exc=IgnoreDeadlineTimeoutExc()) as d:
-                        for fn in self._ping_fn_list:
-                            fn(self)
-                        if not self.available:
-                            return
-                        await self.ping()
-                        await self.sleep_and_listen(d.surplus)
-                except asyncio.CancelledError:
-                    return
-                except Exception as e:
-                    logger.debug(f"{self.connection_info} ping event error:{e}")
-        finally:
-            # Arrange for a graceful shutdown of the transport
-            self.grace_close()
-
     async def _listen_conn(self) -> None:
         """listen server msg from transport"""
         logger.debug("conn:%s listen:%s start", self._conn.sock_tuple, self._conn.peer_tuple)
-        try:
-            async with TaskGroup() as tg:
-                while not self._conn.is_closed():
-                    try:
-                        response_msg: Optional[SERVER_BASE_MSG_TYPE] = await asyncio.wait_for(
-                            self._conn.read(), timeout=self._read_timeout
-                        )
-                    except asyncio.TimeoutError as e:
-                        logger.error(f"conn:{self._conn.sock_tuple} recv response from {self._conn.peer_tuple} timeout")
-                        raise e
+        msg_handler_set_event: SetEvent[asyncio.Future] = SetEvent()
 
-                    if not response_msg:
-                        raise ConnectionError("Connection has been closed")
-                    if response_msg[0] == constant.SERVER_EVENT:
-                        tg.create_task(self._server_send_msg_handler(response_msg))
-                    else:
-                        tg.create_task(self._server_recv_msg_handler(response_msg))
+        def _msg_handler_callback(f: asyncio.Future) -> None:
+            msg_handler_set_event.remove(f)
+            try:
+                f.result()
+            except Exception as e:
+                logger.exception(f"recv response msg error:{e}")
+
+        try:
+            while not self._conn.is_closed():
+                try:
+                    response_msg: Optional[SERVER_BASE_MSG_TYPE] = await asyncio.wait_for(
+                        self._conn.read(), timeout=self._read_timeout
+                    )
+                except asyncio.TimeoutError as e:
+                    logger.error(f"conn:{self._conn.sock_tuple} recv response from {self._conn.peer_tuple} timeout")
+                    raise e
+
+                if not response_msg:
+                    raise ConnectionError("Connection has been closed")
+                if response_msg[0] == constant.SERVER_EVENT:
+                    future = asyncio.create_task(self._server_send_msg_handler(response_msg))
+                else:
+                    future = asyncio.create_task(self._server_recv_msg_handler(response_msg))
+                msg_handler_set_event.add(future)
+                future.add_done_callback(_msg_handler_callback)
         except Exception as e:
             if isinstance(e, TaskGroupExc):
                 e = e.error[0]
@@ -291,13 +219,17 @@ class Transport(object):
                 logger.exception(f"conn:{self._conn.sock_tuple} listen {self._conn.peer_tuple} error:{e}")
                 if not self._conn.is_closed():
                     await self._conn.await_close()
+        finally:
+            for pending in msg_handler_set_event:
+                if pending.cancelled():
+                    pending.cancel()
 
     @property
     def pick_score(self) -> float:
         """
         Combine the scores obtained through the server side and the usage of the client side to calculate the score
         """
-        return self._score * (1 - (self._semaphore.inflight / self._semaphore.raw_value)) * self.available_level
+        return self._score * (1 - (self._semaphore.inflight / self._semaphore.raw_value))
 
     @property
     def inflight(self) -> int:
@@ -333,6 +265,10 @@ class Transport(object):
     def sock_tuple(self) -> Tuple[str, int]:
         return self._conn.sock_tuple
 
+    @property
+    def conn_id(self) -> str:
+        return self._conn.conn_id
+
     #################
     # available api #
     #################
@@ -345,26 +281,16 @@ class Transport(object):
         self._available = value
 
     @property
-    def available_level(self) -> int:
-        return self._available_level
+    def rtt(self) -> float:
+        return self._rtt
 
-    @available_level.setter
-    def available_level(self, value: int) -> None:
-        self._available_level = value
-        if self._available_level <= 0:
-            self._available = False
-        elif self.available_level > 0:
-            self._available = True
+    @property
+    def last_ping_timestamp(self) -> float:
+        return self._last_ping_timestamp
 
     ############
     # base api #
     ############
-    def add_ping_callback(self, fn: Callable[["Transport"], None]):
-        self._ping_fn_list.append(fn)
-
-    def remove_ping_callback(self, fn: Callable[["Transport"], None]):
-        self._ping_fn_list.remove(fn)
-
     def is_closed(self) -> bool:
         return self._conn.is_closed()
 
@@ -394,12 +320,10 @@ class Transport(object):
         if not self.is_closed():
             return
         await self._conn.connect()
-        self.available_level = 5
+        self.available = True
         self._close_soon_flag = False
         listen_future = asyncio.ensure_future(self._listen_conn())
-        ping_future = asyncio.ensure_future(self._ping_handle())
         self.add_close_callback(lambda _: safe_del_future(listen_future))
-        self.add_close_callback(lambda _: safe_del_future(ping_future))
 
     ####################
     # response handler #
@@ -460,7 +384,7 @@ class Transport(object):
 
     async def _server_send_msg_handler(self, response_msg: SERVER_BASE_MSG_TYPE) -> None:
         correlation_id: int = response_msg[1]
-        async with self._transport_context(c_id=correlation_id) as context:
+        async with self._transport_context(c_id=correlation_id, is_internal_request=True) as context:
             response = await self._get_response(response_msg=response_msg, context=context)
             if not response:
                 return
@@ -477,7 +401,7 @@ class Transport(object):
                 request: Request = Request.from_event(event.PingEvent(""), context)
                 request.msg_type = constant.SERVER_EVENT
 
-                with get_deadline(3):
+                with Deadline(3):
                     await self.write_to_conn(request)
             elif response.func_name.endswith(event.ShutdownEvent.event_name):
                 # server want to close...do not create request
@@ -497,7 +421,7 @@ class Transport(object):
         """
         if self._server_info:
             raise RuntimeError("declare can not be called twice")
-        async with self._transport_context() as context:
+        async with self._transport_context(is_internal_request=True) as context:
             response: Response = await self._base_request(
                 Request.from_event(
                     event.DeclareEvent({"server_name": self.app.server_name, "client_info": context.client_info}),
@@ -530,7 +454,7 @@ class Transport(object):
         async def _ping() -> None:
             nonlocal mos
             nonlocal rtt
-            async with self._transport_context() as context:
+            async with self._transport_context(is_internal_request=True) as context:
                 response: Response = await self._base_request(Request.from_event(event.PingEvent({}), context))
             rtt += time.time() - start_time
             mos += response.body.get("mos", 5)

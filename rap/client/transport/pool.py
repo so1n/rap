@@ -1,9 +1,19 @@
 import asyncio
 import logging
+import random
+import time
 from typing import TYPE_CHECKING, List, Optional
 
 from rap.client.transport.transport import Transport
-from rap.common.asyncio_helper import Deadline, Share, done_future
+from rap.common.asyncio_helper import (
+    Deadline,
+    IgnoreDeadlineTimeoutExc,
+    SetEvent,
+    Share,
+    done_future,
+    get_event_loop,
+    safe_del_future,
+)
 from rap.common.number_range import get_value_by_range
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -11,9 +21,84 @@ if TYPE_CHECKING:
     from rap.client.core import BaseClient
 
 
-class Pool(object):
-    _share: Share = Share()
+class PoolWrapTransport(object):
+    """Wrap Transport for Pool calls"""
 
+    def __init__(
+        self,
+        transport: Transport,
+        transport_age: Optional[int] = None,
+        transport_age_jitter: Optional[int] = None,
+        min_ping_interval: Optional[int] = None,
+        max_ping_interval: Optional[int] = None,
+        ping_fail_cnt: Optional[int] = None,
+    ):
+        self.transport: Transport = transport
+        self._transport_init_time: float = get_event_loop().time()
+
+        # ping
+        self._min_ping_interval: int = min_ping_interval or 1
+        self._max_ping_interval: int = max_ping_interval or 3
+        self._ping_fail_cnt: int = ping_fail_cnt or 3
+        ping_future: asyncio.Future = asyncio.ensure_future(self._ping_handle())
+        self.transport.add_close_callback(lambda _: safe_del_future(ping_future))
+        # age
+        if transport_age and not transport_age_jitter:
+            raise ValueError("transport_age_jitter must be set if transport_age is set")
+        if transport_age and transport_age_jitter:
+            transport_age_time_handle: asyncio.TimerHandle = get_event_loop().call_later(
+                int(transport_age + random.randint(0, transport_age_jitter)), self.transport.grace_close
+            )
+            self.transport.add_close_callback(lambda _: transport_age_time_handle.cancel())
+
+    @property
+    def pick_score(self) -> float:
+        return self.transport.pick_score
+
+    @property
+    def inflight(self) -> int:
+        return self.transport.inflight
+
+    @property
+    def is_active(self) -> bool:
+        return self.transport.available and not self.transport.is_closed()
+
+    def grace_close(self) -> None:
+        self.transport.grace_close()
+
+    async def _ping_handle(self) -> None:
+        ping_fail_interval: int = int(self._max_ping_interval * self._ping_fail_cnt)
+
+        try:
+            while True:
+                # If no event loop is running, should just exit
+                get_event_loop()
+
+                if not self.is_active:
+                    return
+                now_time: float = time.time()
+                available: bool = (now_time - self.transport.last_ping_timestamp) < ping_fail_interval
+                logger.debug("transport:%s available:%s", self.transport.connection_info, available)
+                if not available:
+                    logger.error(f"conn:{self.transport.conn_id} ping {self.transport.sock_tuple} timeout, exit")
+                    return
+                try:
+                    with Deadline(
+                        random.randint(self._min_ping_interval, self._max_ping_interval),
+                        timeout_exc=IgnoreDeadlineTimeoutExc(),
+                    ) as d:
+                        await self.transport.ping()
+                        await self.transport.sleep_and_listen(d.surplus)
+                except asyncio.CancelledError:
+                    return
+                except Exception as e:
+                    logger.debug(f"{self.transport.connection_info} ping event error:{e}")
+        finally:
+            # Arrange for a graceful shutdown of the transport
+            self.transport.grace_close()
+
+
+class Pool(object):
     def __init__(
         self,
         app: "BaseClient",
@@ -33,7 +118,9 @@ class Pool(object):
         min_pool_size: Optional[int] = None,
         transport_age: Optional[int] = None,
         transport_age_jitter: Optional[int] = None,
-        transport_max_age: Optional[int] = None,
+        transport_grace_timeout: Optional[int] = None,
+        pool_high_water: Optional[float] = None,
+        pool_lower_water: Optional[float] = None,
     ) -> None:
         """
         :param app: rap client
@@ -44,7 +131,7 @@ class Pool(object):
         :param pack_param: set conn pack param
         :param unpack_param: set conn unpack param
         :param read_timeout: set conn read timeout param
-        :param max_inflight: set conn max use number
+        :param max_inflight: set conn max use number, default 100
 
         :param weight: set transport weight
         :param declare_timeout: set transport declare timeout
@@ -63,13 +150,14 @@ class Pool(object):
             prevent affecting the request being processed (default 3600 seconds)
         """
         self._app: "BaseClient" = app
+        self._share: Share = Share()
         self._host: str = host
         self._port: int = port
         self._weight: int = weight
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._pack_param: Optional[dict] = pack_param
         self._unpack_param: Optional[dict] = unpack_param
-        self._max_inflight: Optional[int] = max_inflight
+        self._max_inflight: int = max_inflight or 100
         self._read_timeout: Optional[int] = read_timeout
         self._declare_timeout: int = declare_timeout or 9
         self._min_ping_interval: Optional[int] = min_ping_interval
@@ -79,13 +167,18 @@ class Pool(object):
         self._min_pool_size: int = min_pool_size or 1
         self._transport_age: Optional[int] = transport_age
         self._transport_age_jitter: Optional[int] = transport_age_jitter
-        self._transport_max_age: Optional[int] = transport_max_age
+        self._transport_grace_timeout: Optional[int] = transport_grace_timeout
+        self._pool_high_water: float = pool_high_water or 0.8
+        self._pool_lower_water: float = pool_lower_water or 0.2
 
-        self._transport_list: List[Transport] = []
-        self._transport_index: int = 0
+        self._active_transport_list: List[PoolWrapTransport] = []
+
         self._transport_manager_future: asyncio.Future = done_future()
         self._transport_manager_event: asyncio.Event = asyncio.Event()
         self._expected_number_of_transports: int = 0
+        self._transport_index: int = 0
+
+        self._pick_score: float = 0.0
 
     @property
     def is_close(self):
@@ -95,84 +188,81 @@ class Pool(object):
     async def _transport_manger(self) -> None:
         """Ensure that the number of transports is adjusted to the desired value during the Pool run"""
         self._transport_manager_event.set()
+        pending_future_set_event: SetEvent[asyncio.Future] = SetEvent()
         while True:
             # Make sure you can run it every once in a while and clear out unavailable transports in time
             await asyncio.wait([self._transport_manager_event.wait()], timeout=1)
-            self._transport_list.sort(key=lambda x: x.pick_score, reverse=True)
+            transport_len: int = len(self._active_transport_list)
+            if not transport_len:
+                self._pick_score = 0
+            else:
+                self._pick_score = sum([i.pick_score for i in self._active_transport_list]) / transport_len
 
-            # Clear unavailable transport
-            for index in range(len(self._transport_list)):
-                transport = self._transport_list[len(self._transport_list) - index - 1]
-                if transport.available:
-                    break
-                else:
-                    self._transport_list.pop()
-                try:
-                    transport.grace_close()
-                except Exception as e:
-                    logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
+                # Reordered to facilitate subsequent cleanup of transport
+                self._active_transport_list.sort(key=lambda x: x.inflight)
+                # Reset the traversed cursor so that the top-ranked transport will be obtained first
+                self._transport_index = 0
+                # Clear not active transport
+                for index in range(len(self._active_transport_list)):
+                    if not self._active_transport_list:
+                        break
+                    if self._active_transport_list[-1].is_active:
+                        break
 
-            transport_len: int = len(self._transport_list)
+                    try:
+                        self._active_transport_list.pop().transport.grace_close()
+                    except Exception as e:
+                        logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
+
+            transport_len: int = len(self._active_transport_list)
             self._expected_number_of_transports = get_value_by_range(
                 self._expected_number_of_transports, 0, self._max_pool_size
             )
 
             if transport_len > self._expected_number_of_transports:
                 # Remove redundant transports (with lower scores)
-                for transport in self._transport_list[self._expected_number_of_transports :]:
+                for wrap_transport in self._active_transport_list[self._expected_number_of_transports :]:
                     try:
-                        transport.grace_close()
+                        wrap_transport.transport.grace_close()
                     except Exception as e:
                         logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
-                self._transport_list = self._transport_list[: self._expected_number_of_transports]
+                self._active_transport_list = self._active_transport_list[: self._expected_number_of_transports]
 
             if transport_len < self._expected_number_of_transports:
                 for _ in range(self._expected_number_of_transports - transport_len):
-                    try:
-                        await self.add_transport()
-                    except Exception as e:
-                        logger.warning(f"ignore transport manger create {self._host}:{self._port} error:{e}")
+                    add_transport_future: asyncio.Future = asyncio.ensure_future(self.add_transport())
+                    # TODO If exceptions are always created, this logic will be executed all the time and will not sleep
+                    pending_future_set_event.add(add_transport_future)
+                    add_transport_future.add_done_callback(lambda f: pending_future_set_event.remove(f))
 
             if transport_len == 0 and self._expected_number_of_transports == 0:
-                return
+                break
             elif transport_len == self._expected_number_of_transports:
                 # If the number of transports is the same as the desired number, wait notify
                 self._transport_manager_event.clear()
 
-    def _ping_callback(self, transport: Transport) -> None:
-        """
-        A callback that is executed before the transport sends a ping (because the ping logic will check whether
-            the transport is available in advance, if the transport is not available, there is no need to execute
-            the callback)
-        """
-        if not transport.available:
-            self._transport_manager_event.set()
-            return
-        median_inflight: int = sorted(transport.inflight_load)[len(transport.inflight_load) // 2 + 1]
-        if median_inflight > 80 and len(self) < self._max_pool_size:
-            # The current transport is under too much pressure and
-            # transport needs to be created to divert the traffic
-            self._expected_number_of_transports += 1
-            self._transport_manager_event.set()
-        elif median_inflight < 20 and len(self) > self._min_pool_size:
-            self._expected_number_of_transports -= 1
-            self._transport_manager_event.set()
+        if pending_future_set_event:
+            for pending_future in pending_future_set_event:
+                safe_del_future(pending_future)
 
-    def absorption(self, transport: Transport) -> None:
+    @property
+    def pick_score(self) -> float:
+        return self._pick_score
+
+    def absorption(self, transport: Transport) -> Optional[PoolWrapTransport]:
         """Absorb the transport into the pool."""
-        if getattr(transport, "_is_absorb", False) is True:
+        if transport.is_closed() or not transport.available:
             return
-        if transport.is_closed():
-            return
-        if len(self._transport_list) == self._max_pool_size:
-            transport.grace_close()
-        else:
-            setattr(transport, "_is_absorb", True)
-            self._transport_list.append(transport)
-            transport.add_ping_callback(self._ping_callback)
-            transport.add_close_callback(
-                lambda _: self._transport_list.remove(transport) if transport.available else None
-            )
+        wrap_transport: PoolWrapTransport = PoolWrapTransport(
+            transport,
+            transport_age=self._transport_age,
+            transport_age_jitter=self._transport_age_jitter,
+            min_ping_interval=self._min_ping_interval,
+            max_ping_interval=self._max_ping_interval,
+            ping_fail_cnt=self._ping_fail_cnt,
+        )
+        self._active_transport_list.append(wrap_transport)
+        return wrap_transport
 
     async def fork_transport(self) -> Transport:
         """Create a new transport. (The transport created at this time will not be placed in the pool)"""
@@ -185,9 +275,7 @@ class Pool(object):
             pack_param=self._pack_param,
             unpack_param=self._unpack_param,
             max_inflight=self._max_inflight,
-            ping_fail_cnt=self._ping_fail_cnt,
-            max_ping_interval=self._max_ping_interval,
-            min_ping_interval=self._min_ping_interval,
+            read_timeout=self._read_timeout,
         )
 
         try:
@@ -201,42 +289,50 @@ class Pool(object):
                 except Exception as close_e:
                     logger.error(f"ignore {transport.connection_info} close error:{close_e}")
             raise e
-        logger.debug("create transport:%s", transport.connection_info)
         return transport
 
-    @_share.wrapper_do()
-    async def add_transport(self) -> Transport:
+    async def add_transport(self) -> PoolWrapTransport:
         """Create a new transport and place it in the pool"""
-        if len(self._transport_list) == self._max_pool_size:
+        if self.is_close:
+            raise RuntimeError("Pool is close, can not create new transport")
+        if len(self._active_transport_list) >= self._max_pool_size:
             raise ValueError("Transport pool is full and cannot be added further")
 
-        transport: Transport = await self.fork_transport()
-        self.absorption(transport)
-        return transport
+        @self._share.wrapper_do(key=str(id(self)))
+        async def _add_transport() -> PoolWrapTransport:
+            wrap_transport: Optional[PoolWrapTransport] = self.absorption(await self.fork_transport())
+            if wrap_transport is None:
+                raise ConnectionError("Create transport fail")
+            return wrap_transport
 
-    async def get_transport(self) -> Transport:
-        """Guaranteed to get transport"""
-        transport: Optional[Transport] = self.transport
-        if not transport:
-            transport = await self.add_transport()
-        return transport
+        return await _add_transport()
 
-    @property
-    def transport(self) -> Optional[Transport]:
-        """try to get transport from pool"""
+    def unuse_transport(self, wrap_transport: PoolWrapTransport) -> None:
+        if not wrap_transport.is_active:
+            self._transport_manager_event.set()
+        if wrap_transport.inflight <= self._max_inflight * self._pool_lower_water:
+            if self._expected_number_of_transports > 1:
+                self._expected_number_of_transports -= 1
+                self._transport_manager_event.set()
+
+    async def use_transport(self) -> PoolWrapTransport:
+        wrap_transport: Optional[PoolWrapTransport] = None
         while True:
-            if not self._transport_list:
-                return None
-            try:
-                transport: Transport = self._transport_list[self._transport_index]
-                self._transport_index += 1
-                if transport.available:
-                    return transport
-                else:
-                    self._transport_manager_event.set()
-            except IndexError:
-                self._transport_index = 0
-                continue
+            if not self._active_transport_list:
+                break
+            wrap_transport = self._active_transport_list[self._transport_index % len(self._active_transport_list)]
+            self._transport_index += 1
+            if not wrap_transport.is_active:
+                self._transport_manager_event.set()
+            else:
+                break
+        if wrap_transport is None:
+            self._expected_number_of_transports += 1
+            wrap_transport = await self.add_transport()
+        if wrap_transport.inflight >= self._max_inflight * self._pool_high_water:
+            self._expected_number_of_transports += 1
+            self._transport_manager_event.set()
+        return wrap_transport
 
     async def create(self) -> None:
         """
@@ -245,18 +341,17 @@ class Pool(object):
         """
         if not self.is_close:
             return
-        transport_group_len: int = len(self)
+        transport_group_len: int = len(self._active_transport_list)
         if transport_group_len >= self._max_pool_size:
             return
         elif transport_group_len == 0:
             self._expected_number_of_transports = self._min_pool_size
         else:
             self._expected_number_of_transports = self._min_pool_size - transport_group_len
-
-        # Create one first to ensure that a proper link can be established
-        await self.add_transport()
         # Number of links maintained in the back office
         self._transport_manager_future = asyncio.create_task(self._transport_manger())
+        # Create one first to ensure that a proper link can be established
+        await self.add_transport()
 
     async def destroy(self) -> None:
         """close pool
@@ -265,6 +360,3 @@ class Pool(object):
         self._expected_number_of_transports = 0
         self._transport_manager_event.set()
         await self._transport_manager_future
-
-    def __len__(self) -> int:
-        return len(self._transport_list)
