@@ -43,6 +43,9 @@ class SetEvent(Generic[_T]):
     def __iter__(self) -> Iterator[_T]:
         return iter(self._set)
 
+    def __len__(self) -> int:
+        return len(self._set)
+
     ################
     # event method #
     ################

@@ -34,8 +34,6 @@ class PoolWrapTransport(object):
         ping_fail_cnt: Optional[int] = None,
     ):
         self.transport: Transport = transport
-        self._transport_init_time: float = get_event_loop().time()
-
         # ping
         self._min_ping_interval: int = min_ping_interval or 1
         self._max_ping_interval: int = max_ping_interval or 3
@@ -121,6 +119,7 @@ class Pool(object):
         transport_grace_timeout: Optional[int] = None,
         pool_high_water: Optional[float] = None,
         pool_lower_water: Optional[float] = None,
+        destroy_transport_interval: Optional[int] = None,
     ) -> None:
         """
         :param app: rap client
@@ -146,8 +145,12 @@ class Pool(object):
             (no new requests are allowed)，If it is 0, the function is not enabled
         :param transport_age_jitter: Prevent transport from being closed in batches by jitter.
             When the transport age is not empty, the transport age jitter cannot be empty either.
-        :param transport_max_age: Set the number of seconds after the stop is used before closing the transport to
-            prevent affecting the request being processed (default 3600 seconds)
+        :param destroy_transport_interval:
+            When dynamically adjusting the transport, the interval for continuously destroying the transport.
+             default value 60 (second)
+
+             Creating transport is very expensive, so the pool will slowly destroy the transport,
+             preventing frequent destruction and creation of transport in a short period of time.
         """
         self._app: "BaseClient" = app
         self._share: Share = Share()
@@ -168,8 +171,8 @@ class Pool(object):
         self._transport_age: Optional[int] = transport_age
         self._transport_age_jitter: Optional[int] = transport_age_jitter
         self._transport_grace_timeout: Optional[int] = transport_grace_timeout
-        self._pool_high_water: float = pool_high_water or 0.8
-        self._pool_lower_water: float = pool_lower_water or 0.2
+        self._pool_high_water: float = get_value_by_range(pool_high_water or 0.8, 0, 1)
+        self._pool_lower_water: float = get_value_by_range(pool_lower_water or 0.2, 0, 1)
 
         self._active_transport_list: List[PoolWrapTransport] = []
 
@@ -179,6 +182,8 @@ class Pool(object):
         self._transport_index: int = 0
 
         self._pick_score: float = 0.0
+        self._destroy_transport_timestamp: float = time.time()
+        self._destroy_transport_interval: int = destroy_transport_interval or 60
 
     @property
     def is_close(self):
@@ -188,7 +193,7 @@ class Pool(object):
     async def _transport_manger(self) -> None:
         """Ensure that the number of transports is adjusted to the desired value during the Pool run"""
         self._transport_manager_event.set()
-        pending_future_set_event: SetEvent[asyncio.Future] = SetEvent()
+        add_transport_set_event: SetEvent[asyncio.Future] = SetEvent()
         while True:
             # Make sure you can run it every once in a while and clear out unavailable transports in time
             await asyncio.wait([self._transport_manager_event.wait()], timeout=1)
@@ -210,9 +215,12 @@ class Pool(object):
                         break
 
                     try:
-                        self._active_transport_list.pop().transport.grace_close()
+                        self._active_transport_list.pop().grace_close()
                     except Exception as e:
                         logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
+
+                    # Prevent execution for too long and affect the operation of other coroutines
+                    await asyncio.sleep(0)
 
             transport_len: int = len(self._active_transport_list)
             self._expected_number_of_transports = get_value_by_range(
@@ -227,13 +235,15 @@ class Pool(object):
                     except Exception as e:
                         logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
                 self._active_transport_list = self._active_transport_list[: self._expected_number_of_transports]
+                # Prevent execution for too long and affect the operation of other coroutines
+                await asyncio.sleep(0)
 
-            if transport_len < self._expected_number_of_transports:
+            if transport_len < self._expected_number_of_transports and not add_transport_set_event:
                 for _ in range(self._expected_number_of_transports - transport_len):
                     add_transport_future: asyncio.Future = asyncio.ensure_future(self.add_transport())
                     # TODO If exceptions are always created, this logic will be executed all the time and will not sleep
-                    pending_future_set_event.add(add_transport_future)
-                    add_transport_future.add_done_callback(lambda f: pending_future_set_event.remove(f))
+                    add_transport_set_event.add(add_transport_future)
+                    add_transport_future.add_done_callback(lambda f: add_transport_set_event.remove(f))
 
             if transport_len == 0 and self._expected_number_of_transports == 0:
                 break
@@ -241,9 +251,22 @@ class Pool(object):
                 # If the number of transports is the same as the desired number, wait notify
                 self._transport_manager_event.clear()
 
-        if pending_future_set_event:
-            for pending_future in pending_future_set_event:
+        if add_transport_set_event:
+            for pending_future in add_transport_set_event:
                 safe_del_future(pending_future)
+
+    def _incr(self) -> None:
+        self._expected_number_of_transports += 1
+        self._transport_manager_event.set()
+
+    def _decr(self) -> None:
+        if time.time() - self._destroy_transport_timestamp < self._destroy_transport_interval:
+            # Reduce the speed of shrinking
+            return
+        if self._expected_number_of_transports > 1 and len(self._active_transport_list) > 1:
+            self._expected_number_of_transports -= 1
+            self._transport_manager_event.set()
+            self._decr_timestamp = time.time()
 
     @property
     def pick_score(self) -> float:
@@ -293,7 +316,7 @@ class Pool(object):
 
     async def add_transport(self) -> PoolWrapTransport:
         """Create a new transport and place it in the pool"""
-        if self.is_close:
+        if self._expected_number_of_transports == 0:
             raise RuntimeError("Pool is close, can not create new transport")
         if len(self._active_transport_list) >= self._max_pool_size:
             raise ValueError("Transport pool is full and cannot be added further")
@@ -311,9 +334,7 @@ class Pool(object):
         if not wrap_transport.is_active:
             self._transport_manager_event.set()
         if wrap_transport.inflight <= self._max_inflight * self._pool_lower_water:
-            if self._expected_number_of_transports > 1:
-                self._expected_number_of_transports -= 1
-                self._transport_manager_event.set()
+            self._decr()
 
     async def use_transport(self) -> PoolWrapTransport:
         wrap_transport: Optional[PoolWrapTransport] = None
@@ -327,11 +348,10 @@ class Pool(object):
             else:
                 break
         if wrap_transport is None:
-            self._expected_number_of_transports += 1
+            self._incr()
             wrap_transport = await self.add_transport()
         if wrap_transport.inflight >= self._max_inflight * self._pool_high_water:
-            self._expected_number_of_transports += 1
-            self._transport_manager_event.set()
+            self._incr()
         return wrap_transport
 
     async def create(self) -> None:
@@ -344,14 +364,12 @@ class Pool(object):
         transport_group_len: int = len(self._active_transport_list)
         if transport_group_len >= self._max_pool_size:
             return
-        elif transport_group_len == 0:
-            self._expected_number_of_transports = self._min_pool_size
         else:
             self._expected_number_of_transports = self._min_pool_size - transport_group_len
-        # Number of links maintained in the back office
-        self._transport_manager_future = asyncio.create_task(self._transport_manger())
         # Create one first to ensure that a proper link can be established
         await self.add_transport()
+        # Number of links maintained in the back office
+        self._transport_manager_future = asyncio.create_task(self._transport_manger())
 
     async def destroy(self) -> None:
         """close pool

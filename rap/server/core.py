@@ -347,7 +347,8 @@ class Server(object):
                 break
             except (IOError, ConnectionResetError, CloseConnException) as e:
                 conn.close()
-                logger.error(f"Capture error:<{e}> Close client conn:{conn.peer_tuple}")
+                if not isinstance(e, CloseConnException):
+                    logger.error(f"Capture error:<{e}> Close client conn:{conn.peer_tuple}")
                 break
             except Exception as e:
                 logging.error(f"recv data from {conn.peer_tuple} error:{e}, conn has been closed")
