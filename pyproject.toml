@@ -1,12 +1,18 @@
 [tool.poetry]
 name = "rap"
-version = "0.5.3.8"
+version = "0.0.0"
 description = "rap(par[::-1]) is advanced and fast python async rpc"
 authors = ["So1n <so1n897046026@gamil.com>"]
 license = "Apache Software License"
 readme = "./README.md"
 repository = "https://github.com/so1n/rap"
 homepage = "https://github.com/so1n/rap"
+
+[tool.poetry-dynamic-versioning]
+enable = true
+metadata=false
+vcs = "git"
+format = "v{base}+{distance}.{commit}"
 
 [tool.poetry.dependencies]
 python = "^3.7"
@@ -110,5 +116,9 @@ venv = ".venv"
 pythonVersion = "3.7"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning"]
+build-backend = "poetry_dynamic_versioning.backend"
+#
+#[build-system]
+#requires = ["poetry-core>=1.0.0"]
+#build-backend = "poetry.core.masonry.api"
