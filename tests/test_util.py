@@ -3,7 +3,7 @@ import inspect
 
 import pytest
 
-from rap.client.utils import raise_rap_error
+from rap.client.utils import gen_rap_error
 from rap.common.cache import Cache
 from rap.common.event import Event
 from rap.common.exceptions import InvokeError
@@ -37,7 +37,7 @@ class TestUtil:
 
     def test_raise_customer_exc(self) -> None:
         with pytest.raises(InvokeError) as e:
-            raise_rap_error("customer_exc", "customer_info")
+            raise gen_rap_error("customer_exc", "customer_info")
         exec_msg: str = e.value.args[0]
         assert exec_msg == "{'exc_name': 'customer_exc', 'exc_info': 'customer_info'}"
 

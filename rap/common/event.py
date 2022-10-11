@@ -21,7 +21,7 @@ class _RapEvent(Event):
 
 
 class CloseConnEvent(_RapEvent):
-    event_name: str = constant.EVENT_CLOSE_CONN
+    event_name: str = constant.CLOSE_EVENT
 
 
 class PingEvent(_RapEvent):

@@ -18,12 +18,12 @@ def get_exc_status_code_dict() -> Dict[int, Type[rap_exc.BaseRapError]]:
     return exc_dict
 
 
-def raise_rap_error(exc_name: str, exc_info: str = "") -> None:
+def gen_rap_error(exc_name: str, exc_info: str = "") -> Exception:
     """raise python exception"""
     exc: Optional[Type[Exception]] = getattr(rap_exc, exc_name, None)
     if exc is None:
         exc = globals()["__builtins__"].get(exc_name, None)
     if exc is None:
-        raise InvokeError(exc_name, exc_info)
+        return InvokeError(exc_name, exc_info)
     else:
-        raise exc(exc_info)
+        return exc(exc_info)

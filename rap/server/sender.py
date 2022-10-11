@@ -82,7 +82,7 @@ class Sender(object):
 
         with deadline:
             await self._conn.write(resp.to_msg())
-        if resp.target.endswith(constant.EVENT_CLOSE_CONN):
+        if resp.target.endswith(constant.CLOSE_EVENT):
             # conn will be closed after sending the close event
             if not self._conn.is_closed():
                 await self._conn.await_close()

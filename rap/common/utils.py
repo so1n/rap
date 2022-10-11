@@ -48,7 +48,7 @@ class _Constant(object):
     SERVER_EVENT: int = 203
 
     # event func name
-    EVENT_CLOSE_CONN: str = "event_close_conn"
+    CLOSE_EVENT: str = "close"
     PING_EVENT: str = "ping"
 
     # life cycle

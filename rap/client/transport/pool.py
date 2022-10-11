@@ -195,7 +195,7 @@ class Pool(object):
         self._transport_manager_event.set()
         add_transport_set_event: SetEvent[asyncio.Future] = SetEvent()
         while True:
-            # Make sure you can run it every once in a while and clear out unavailable transports in time
+            # Make sure can run it every once in a while and clear out unavailable transports in time
             await asyncio.wait([self._transport_manager_event.wait()], timeout=1)
             transport_len: int = len(self._active_transport_list)
             if not transport_len:
@@ -219,8 +219,8 @@ class Pool(object):
                     except Exception as e:
                         logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
 
-                    # Prevent execution for too long and affect the operation of other coroutines
-                    await asyncio.sleep(0)
+                # Prevent execution for too long and affect the operation of other coroutines
+                await asyncio.sleep(0)
 
             transport_len: int = len(self._active_transport_list)
             self._expected_number_of_transports = get_value_by_range(
@@ -256,17 +256,19 @@ class Pool(object):
                 safe_del_future(pending_future)
 
     def _incr(self) -> None:
+        """Notify the pool to incr transport as soon as possible"""
         self._expected_number_of_transports += 1
         self._transport_manager_event.set()
 
     def _decr(self) -> None:
+        """Notify the pool to decr transport,but the pool will not process it right away"""
         if time.time() - self._destroy_transport_timestamp < self._destroy_transport_interval:
             # Reduce the speed of shrinking
             return
         if self._expected_number_of_transports > 1 and len(self._active_transport_list) > 1:
             self._expected_number_of_transports -= 1
             self._transport_manager_event.set()
-            self._decr_timestamp = time.time()
+            self._destroy_transport_timestamp = time.time()
 
     @property
     def pick_score(self) -> float:
@@ -288,7 +290,7 @@ class Pool(object):
         return wrap_transport
 
     async def fork_transport(self) -> Transport:
-        """Create a new transport. (The transport created at this time will not be placed in the pool)"""
+        """Create new transport. (The transport created at this time will not be placed in the pool)"""
         transport: Transport = Transport(
             self._app,
             self._host,
@@ -315,7 +317,7 @@ class Pool(object):
         return transport
 
     async def add_transport(self) -> PoolWrapTransport:
-        """Create a new transport and place it in the pool"""
+        """Create new transport and place it in the pool"""
         if self._expected_number_of_transports == 0:
             raise RuntimeError("Pool is close, can not create new transport")
         if len(self._active_transport_list) >= self._max_pool_size:
@@ -330,11 +332,16 @@ class Pool(object):
 
         return await _add_transport()
 
+    def _change_by_transport(self, wrap_transport: PoolWrapTransport) -> None:
+        if wrap_transport.inflight <= self._max_inflight * self._pool_lower_water:
+            self._decr()
+        elif wrap_transport.inflight >= self._max_inflight * self._pool_high_water:
+            self._incr()
+
     def unuse_transport(self, wrap_transport: PoolWrapTransport) -> None:
         if not wrap_transport.is_active:
             self._transport_manager_event.set()
-        if wrap_transport.inflight <= self._max_inflight * self._pool_lower_water:
-            self._decr()
+        self._change_by_transport(wrap_transport)
 
     async def use_transport(self) -> PoolWrapTransport:
         wrap_transport: Optional[PoolWrapTransport] = None
@@ -350,8 +357,7 @@ class Pool(object):
         if wrap_transport is None:
             self._incr()
             wrap_transport = await self.add_transport()
-        if wrap_transport.inflight >= self._max_inflight * self._pool_high_water:
-            self._incr()
+        self._change_by_transport(wrap_transport)
         return wrap_transport
 
     async def create(self) -> None:

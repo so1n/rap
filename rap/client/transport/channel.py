@@ -1,16 +1,15 @@
 import asyncio
 import logging
 import traceback
-from typing import TYPE_CHECKING, Any, Optional, Type
+from typing import TYPE_CHECKING, Any, Optional, Type, Union
 
 from typing_extensions import Self
 
 from rap.client.model import ClientContext, Request, Response
-from rap.client.utils import raise_rap_error
 from rap.common.asyncio_helper import as_first_completed, get_deadline
 from rap.common.channel import BaseChannel, ChannelCloseError
 from rap.common.channel import UserChannel as _UserChannel
-from rap.common.exceptions import ChannelError, ChannelLifecycleError, InvokeError
+from rap.common.exceptions import ChannelError, ChannelLifecycleError
 from rap.common.utils import constant, ignore_exception
 
 if TYPE_CHECKING:
@@ -46,7 +45,7 @@ class Channel(BaseChannel[Response]):
         self.context: ClientContext = context
 
         self.channel_id: int = channel_id
-        self.queue: asyncio.Queue[Response] = asyncio.Queue()
+        self.queue: asyncio.Queue[Union[Response, Exception]] = asyncio.Queue()
         self.context.context_channel = self.get_context_channel()
         self.channel_conn_future: asyncio.Future = asyncio.Future()
 
@@ -84,7 +83,7 @@ class Channel(BaseChannel[Response]):
             raise ChannelCloseError("channel is closed")
 
         try:
-            response: Response = await as_first_completed(
+            response: Union[Response, Exception] = await as_first_completed(
                 [get_deadline(timeout).wait_for(self.queue.get())],
                 not_cancel_future_list=[self.channel_conn_future],
             )
@@ -93,11 +92,10 @@ class Channel(BaseChannel[Response]):
         except Exception as e:
             raise e
 
+        if isinstance(response, Exception):
+            raise response
         if response.exc:
-            if isinstance(response.exc, InvokeError):
-                raise_rap_error(response.exc.exc_name, response.exc.exc_info)
-            else:
-                raise response.exc
+            raise response.exc
 
         if response.header.get("channel_life_cycle") == constant.DROP:
             exc: ChannelCloseError = ChannelCloseError(self._drop_msg)

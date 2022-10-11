@@ -349,9 +349,7 @@ class Receiver(object):
                 response.set_server_event(CloseConnEvent("error server name"))
             else:
                 self._client_info = InmutableDict(request.body["client_info"])
-                response.set_event(
-                    DeclareEvent({"result": True, "conn_id": self._conn.conn_id, "server_info": self._server_info})
-                )
+                response.set_event(DeclareEvent({"conn_id": self._conn.conn_id, "server_info": self._server_info}))
                 self._conn.keepalive_timestamp = int(time.time())
 
                 ping_future: asyncio.Future = self.create_future_by_resource(self.ping_event())

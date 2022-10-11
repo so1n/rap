@@ -4,19 +4,18 @@ import math
 import sys
 import time
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Dict, Optional, Sequence, Tuple, Type
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Dict, Optional, Sequence, Tuple, Type, Union
 
 from rap.client.model import ClientContext, Request, Response
 from rap.client.processor.base import belong_to_base_method
 from rap.client.transport.channel import Channel
-from rap.client.utils import get_exc_status_code_dict, raise_rap_error
+from rap.client.utils import gen_rap_error, get_exc_status_code_dict
 from rap.common import event
 from rap.common import exceptions as rap_exc
 from rap.common.asyncio_helper import (
     Deadline,
     Semaphore,
     SetEvent,
-    TaskGroupExc,
     as_first_completed,
     deadline_context,
     get_event_loop,
@@ -35,7 +34,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 class Transport(object):
-    """base client transport, encapsulation of custom transport protocol and proxy _conn feature"""
+    """Implementation of rap client protocol"""
 
     _decay_time: float = 600.0
 
@@ -75,7 +74,7 @@ class Transport(object):
 
         self._exc_status_code_dict: Dict[int, Type[rap_exc.BaseRapError]] = get_exc_status_code_dict()
         self._resp_future_dict: Dict[int, asyncio.Future[Response]] = {}
-        self._channel_queue_dict: Dict[int, asyncio.Queue[Response]] = {}
+        self._channel_queue_dict: Dict[int, asyncio.Queue[Union[Response, Exception]]] = {}
 
         self.host: str = host
         self.port: int = port
@@ -118,16 +117,19 @@ class Transport(object):
         )
         self._server_info: InmutableDict = InmutableDict()
 
-    def _broadcast_server_event(self, response: Response) -> None:
+    def _broadcast_server_event(self, response: Union[Response, Exception]) -> None:
         """Spread the response to all transport"""
         for _, future in self._resp_future_dict.items():
-            future.set_result(response)
+            if isinstance(response, Exception):
+                future.set_exception(response)
+            else:
+                future.set_result(response)
         for _, queue in self._channel_queue_dict.items():
             queue.put_nowait(response)
 
     @asynccontextmanager
     async def _transport_context(
-        self, c_id: Optional[int] = None, is_internal_request: bool = False
+        self, c_id: Optional[int] = None, enable_limit_request: bool = False
     ) -> AsyncGenerator[ClientContext, None]:
         """
         Create the request context
@@ -137,7 +139,7 @@ class Transport(object):
         So need to call this method as close as possible to the place where the request is sent
 
         :param c_id: The ID corresponding to the context object, if it is empty, an ID is automatically generated
-        :param is_internal_request: Cannot be restricted if requests is internal request
+        :param enable_limit_request: Cannot be restricted if requests is internal request
         """
         if not c_id:
             if not self.available:
@@ -148,7 +150,7 @@ class Transport(object):
         else:
             correlation_id: int = c_id
 
-        if not is_internal_request:
+        if not enable_limit_request:
             await self._semaphore.acquire()
 
         # create context
@@ -174,7 +176,7 @@ class Transport(object):
             # release context
             for on_context_exit in reversed(self.on_context_exit_processor_list):
                 await on_context_exit(context, exc_type, exc_val, exc_tb)
-            if not is_internal_request:
+            if not enable_limit_request:
                 self._semaphore.release()
             self._context_dict.pop(correlation_id, None)
 
@@ -212,8 +214,6 @@ class Transport(object):
                 msg_handler_set_event.add(future)
                 future.add_done_callback(_msg_handler_callback)
         except Exception as e:
-            if isinstance(e, TaskGroupExc):
-                e = e.error[0]
             if not isinstance(e, (asyncio.CancelledError, CloseConnException)):
                 self._conn.set_reader_exc(e)
                 logger.exception(f"conn:{self._conn.sock_tuple} listen {self._conn.peer_tuple} error:{e}")
@@ -305,9 +305,10 @@ class Transport(object):
         if self.is_closed():
             return
         self.available = False
+
+        # If no request is being processed, arrange to close conn as soon as possible,
+        # otherwise it will wait until the request is processed before closing conn
         if not self._semaphore.inflight:
-            # If no request is being processed, arrange to close conn as soon as possible,
-            # otherwise it will wait until the request is processed before closing conn
             get_event_loop().call_soon(self.close)
         else:
             self._close_soon_flag = True
@@ -352,6 +353,8 @@ class Transport(object):
                 response.exc = e
                 response.tb = sys.exc_info()[2]
         if response.exc:
+            if isinstance(response.exc, InvokeError):
+                response.exc = gen_rap_error(response.exc.exc_name, response.exc.exc_info)
             for process_exception in reversed(self.process_exception_processor_list):
                 raw_response: Response = response
                 try:
@@ -384,18 +387,17 @@ class Transport(object):
 
     async def _server_send_msg_handler(self, response_msg: SERVER_BASE_MSG_TYPE) -> None:
         correlation_id: int = response_msg[1]
-        async with self._transport_context(c_id=correlation_id, is_internal_request=True) as context:
+        async with self._transport_context(c_id=correlation_id, enable_limit_request=True) as context:
             response = await self._get_response(response_msg=response_msg, context=context)
             if not response:
                 return
             # server event msg handle
-            if response.func_name == constant.EVENT_CLOSE_CONN:
+            if response.func_name == constant.CLOSE_EVENT:
                 # server want to close...do not send data
                 logger.info(f"recv close transport event, event info:{response.body}")
                 self.grace_close()
                 exc = CloseConnException(response.body)
-                response.exc = exc
-                self._broadcast_server_event(response)
+                self._broadcast_server_event(exc)
                 self._conn.set_reader_exc(exc)
             elif response.func_name == constant.PING_EVENT:
                 request: Request = Request.from_event(event.PingEvent(""), context)
@@ -421,7 +423,7 @@ class Transport(object):
         """
         if self._server_info:
             raise RuntimeError("declare can not be called twice")
-        async with self._transport_context(is_internal_request=True) as context:
+        async with self._transport_context(enable_limit_request=True) as context:
             response: Response = await self._base_request(
                 Request.from_event(
                     event.DeclareEvent({"server_name": self.app.server_name, "client_info": context.client_info}),
@@ -432,7 +434,6 @@ class Transport(object):
             if (
                 response.msg_type == constant.CLIENT_EVENT
                 and response.func_name == constant.DECLARE
-                and response.body.get("result", False)
                 and "conn_id" in response.body
             ):
                 self._conn.conn_id = response.body["conn_id"]
@@ -454,7 +455,7 @@ class Transport(object):
         async def _ping() -> None:
             nonlocal mos
             nonlocal rtt
-            async with self._transport_context(is_internal_request=True) as context:
+            async with self._transport_context(enable_limit_request=True) as context:
                 response: Response = await self._base_request(Request.from_event(event.PingEvent({}), context))
             rtt += time.time() - start_time
             mos += response.body.get("mos", 5)
@@ -496,10 +497,7 @@ class Transport(object):
                 not_cancel_future_list=[self._conn.conn_future],
             )
             if response.exc:
-                if isinstance(response.exc, InvokeError):
-                    raise_rap_error(response.exc.exc_name, response.exc.exc_info)
-                else:
-                    raise response.exc
+                raise response.exc
             return response
         finally:
             pop_future: Optional[asyncio.Future] = self._resp_future_dict.pop(request.correlation_id, None)
