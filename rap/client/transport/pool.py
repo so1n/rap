@@ -29,11 +29,13 @@ class PoolWrapTransport(object):
         transport: Transport,
         transport_age: Optional[int] = None,
         transport_age_jitter: Optional[int] = None,
+        transport_grace_timeout: Optional[int] = None,
         min_ping_interval: Optional[int] = None,
         max_ping_interval: Optional[int] = None,
         ping_fail_cnt: Optional[int] = None,
     ):
         self.transport: Transport = transport
+        self._transport_grace_timeout: int = transport_grace_timeout or 9
         # ping
         self._min_ping_interval: int = min_ping_interval or 1
         self._max_ping_interval: int = max_ping_interval or 3
@@ -45,7 +47,7 @@ class PoolWrapTransport(object):
             raise ValueError("transport_age_jitter must be set if transport_age is set")
         if transport_age and transport_age_jitter:
             transport_age_time_handle: asyncio.TimerHandle = get_event_loop().call_later(
-                int(transport_age + random.randint(0, transport_age_jitter)), self.transport.grace_close
+                int(transport_age + random.randint(0, transport_age_jitter)), self.grace_close
             )
             self.transport.add_close_callback(lambda _: transport_age_time_handle.cancel())
 
@@ -62,7 +64,7 @@ class PoolWrapTransport(object):
         return self.transport.available and not self.transport.is_closed()
 
     def grace_close(self) -> None:
-        self.transport.grace_close()
+        self.transport.grace_close(timeout=self._transport_grace_timeout)
 
     async def _ping_handle(self) -> None:
         ping_fail_interval: int = int(self._max_ping_interval * self._ping_fail_cnt)
@@ -93,7 +95,7 @@ class PoolWrapTransport(object):
                     logger.debug(f"{self.transport.connection_info} ping event error:{e}")
         finally:
             # Arrange for a graceful shutdown of the transport
-            self.transport.grace_close()
+            self.grace_close()
 
 
 class Pool(object):
@@ -231,7 +233,7 @@ class Pool(object):
                 # Remove redundant transports (with lower scores)
                 for wrap_transport in self._active_transport_list[self._expected_number_of_transports :]:
                     try:
-                        wrap_transport.transport.grace_close()
+                        wrap_transport.grace_close()
                     except Exception as e:
                         logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
                 self._active_transport_list = self._active_transport_list[: self._expected_number_of_transports]

@@ -33,6 +33,10 @@ __all__ = ["Transport"]
 logger: logging.Logger = logging.getLogger(__name__)
 
 
+class ServerShutdownException(Exception):
+    """Exception raised when receiving a shutdown event pushed by the server"""
+
+
 class Transport(object):
     """Implementation of rap client protocol"""
 
@@ -300,8 +304,18 @@ class Transport(object):
         self.available = False
         self._conn.close()
 
-    def grace_close(self) -> None:
-        """Graceful shutdown, ensuring that closing the transport does not affect requests being processed"""
+    def grace_close(
+        self, timeout: int = 0, timeout_exc: Exception = asyncio.TimeoutError("grace close timeout")
+    ) -> None:
+        """
+        Graceful shutdown, ensuring that closing the transport does not affect requests being processed
+
+        :param timeout:
+            Specifies the number of seconds after which the transport will be forced to close.
+            If it is not 0, it will not be forced to close.
+        :param timeout_exc:
+            Exception broadcast to all listeners receiving callbacks when the transport is forcibly closed
+        """
         if self.is_closed():
             return
         self.available = False
@@ -312,6 +326,14 @@ class Transport(object):
             get_event_loop().call_soon(self.close)
         else:
             self._close_soon_flag = True
+            if timeout:
+
+                def forced_close():
+                    self._broadcast_server_event(timeout_exc)
+                    self.close()
+
+                time_handle: asyncio.TimerHandle = get_event_loop().call_later(timeout, forced_close)
+                self.add_close_callback(lambda _: time_handle.cancel())
 
     async def await_close(self) -> None:
         self.close()
@@ -408,7 +430,10 @@ class Transport(object):
             elif response.func_name.endswith(event.ShutdownEvent.event_name):
                 # server want to close...do not create request
                 logger.info(f"recv shutdown event, event info:{response.body}")
-                self.grace_close()
+                timeout: int = 0
+                if isinstance(response.body, dict):
+                    timeout = response.body.get("close_timeout", 0)
+                self.grace_close(timeout=timeout, timeout_exc=ServerShutdownException())
             else:
                 logger.error(f"recv not support event response:{response}")
 
