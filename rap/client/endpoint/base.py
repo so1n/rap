@@ -36,7 +36,7 @@ class Picker(object):
         return self._wrap_transport.transport
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        self._pool.unuse_transport(self._wrap_transport)
+        self._pool.release_transport(self._wrap_transport)
 
 
 class PrivatePicker(Picker):

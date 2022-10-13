@@ -2,6 +2,7 @@ import asyncio
 import logging
 import random
 import time
+from enum import IntEnum, auto
 from typing import TYPE_CHECKING, List, Optional
 
 from rap.client.transport.transport import Transport
@@ -21,6 +22,14 @@ if TYPE_CHECKING:
     from rap.client.core import BaseClient
 
 
+class _PoolDaemonEnum(IntEnum):
+    """daemon event with priority"""
+
+    close_pool = auto()  # 关闭连接池
+    close_transport = auto()  # Clear connections that are not available in the connection pool
+    normal = auto()  # Make the number of connections held by the connection pool consistent with the expected value
+
+
 class PoolWrapTransport(object):
     """Wrap Transport for Pool calls"""
 
@@ -35,6 +44,7 @@ class PoolWrapTransport(object):
         ping_fail_cnt: Optional[int] = None,
     ):
         self.transport: Transport = transport
+        self.age: float = time.time()
         self._transport_grace_timeout: int = transport_grace_timeout or 9
         # ping
         self._min_ping_interval: int = min_ping_interval or 1
@@ -174,12 +184,15 @@ class Pool(object):
         self._transport_age_jitter: Optional[int] = transport_age_jitter
         self._transport_grace_timeout: Optional[int] = transport_grace_timeout
         self._pool_high_water: float = get_value_by_range(pool_high_water or 0.8, 0, 1)
-        self._pool_lower_water: float = get_value_by_range(pool_lower_water or 0.2, 0, 1)
+        self._pool_lower_water: float = get_value_by_range(pool_lower_water or 0.1, 0, 1)
 
+        self._now_use_cnt: int = 0
+        # The list is implicitly sorted by PoolWrapTransport.age
         self._active_transport_list: List[PoolWrapTransport] = []
 
         self._transport_manager_future: asyncio.Future = done_future()
-        self._transport_manager_event: asyncio.Event = asyncio.Event()
+        # Limit up to 5 daemon enums at the same time
+        self._daemon_enum_queue: asyncio.PriorityQueue[_PoolDaemonEnum] = asyncio.PriorityQueue()
         self._expected_number_of_transports: int = 0
         self._transport_index: int = 0
 
@@ -192,25 +205,33 @@ class Pool(object):
         """Whether the pool is closed"""
         return self._transport_manager_future.done()
 
-    async def _transport_manger(self) -> None:
+    async def _daemon(self) -> None:
         """Ensure that the number of transports is adjusted to the desired value during the Pool run"""
-        self._transport_manager_event.set()
+        self._daemon_enum_queue.put_nowait(_PoolDaemonEnum.normal)
         add_transport_set_event: SetEvent[asyncio.Future] = SetEvent()
         while True:
-            # Make sure can run it every once in a while and clear out unavailable transports in time
-            await asyncio.wait([self._transport_manager_event.wait()], timeout=1)
+            daemon_enum: _PoolDaemonEnum = await self._daemon_enum_queue.get()
+
             transport_len: int = len(self._active_transport_list)
+            self._expected_number_of_transports = get_value_by_range(
+                self._expected_number_of_transports, 0, self._max_pool_size
+            )
+
+            # Calculate the score
             if not transport_len:
                 self._pick_score = 0
             else:
                 self._pick_score = sum([i.pick_score for i in self._active_transport_list]) / transport_len
 
+            # manage transport
+            #  Only one operation can be performed at a time.
+            #  Closing the link is a heavier and higher priority operation
+            if daemon_enum is _PoolDaemonEnum.close_transport and transport_len:
                 # Reordered to facilitate subsequent cleanup of transport
-                self._active_transport_list.sort(key=lambda x: x.inflight)
-                # Reset the traversed cursor so that the top-ranked transport will be obtained first
-                self._transport_index = 0
+                # At the same time, after clearing the unavailable transport, they are still sorted by age
+                self._active_transport_list.sort(key=lambda x: (not x.is_active, x.age))
                 # Clear not active transport
-                for index in range(len(self._active_transport_list)):
+                for _ in range(len(self._active_transport_list)):
                     if not self._active_transport_list:
                         break
                     if self._active_transport_list[-1].is_active:
@@ -220,38 +241,43 @@ class Pool(object):
                         self._active_transport_list.pop().grace_close()
                     except Exception as e:
                         logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
+            elif daemon_enum is _PoolDaemonEnum.normal:
+                if transport_len > self._expected_number_of_transports:
+                    # Remove and close redundant transports (older transport)
+                    for _ in range(transport_len - self._expected_number_of_transports):
+                        try:
+                            self._active_transport_list.pop().grace_close()
+                        except Exception as e:
+                            logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
 
-                # Prevent execution for too long and affect the operation of other coroutines
-                await asyncio.sleep(0)
+                if transport_len < self._expected_number_of_transports and not add_transport_set_event:
+                    for _ in range(self._expected_number_of_transports - transport_len):
+                        add_transport_future: asyncio.Future = asyncio.create_task(self.add_transport())
+                        # TODO If exceptions are always created,
+                        #  this logic will be executed all the time and will not sleep
+                        add_transport_set_event.add(add_transport_future)
+                        add_transport_future.add_done_callback(lambda f: add_transport_set_event.remove(f))
 
-            transport_len: int = len(self._active_transport_list)
-            self._expected_number_of_transports = get_value_by_range(
-                self._expected_number_of_transports, 0, self._max_pool_size
-            )
-
-            if transport_len > self._expected_number_of_transports:
-                # Remove redundant transports (with lower scores)
-                for wrap_transport in self._active_transport_list[self._expected_number_of_transports :]:
-                    try:
-                        wrap_transport.grace_close()
-                    except Exception as e:
-                        logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
-                self._active_transport_list = self._active_transport_list[: self._expected_number_of_transports]
-                # Prevent execution for too long and affect the operation of other coroutines
-                await asyncio.sleep(0)
-
-            if transport_len < self._expected_number_of_transports and not add_transport_set_event:
-                for _ in range(self._expected_number_of_transports - transport_len):
-                    add_transport_future: asyncio.Future = asyncio.ensure_future(self.add_transport())
-                    # TODO If exceptions are always created, this logic will be executed all the time and will not sleep
-                    add_transport_set_event.add(add_transport_future)
-                    add_transport_future.add_done_callback(lambda f: add_transport_set_event.remove(f))
+            # Prevent execution for too long and affect the operation of other coroutines
+            await asyncio.sleep(0)
 
             if transport_len == 0 and self._expected_number_of_transports == 0:
+                # When the expected number is 0, it means the pool is about to close
                 break
-            elif transport_len == self._expected_number_of_transports:
-                # If the number of transports is the same as the desired number, wait notify
-                self._transport_manager_event.clear()
+            if self._daemon_enum_queue.empty():
+                # Only when empty can push daemon enum
+                if (
+                    transport_len == self._expected_number_of_transports
+                    or transport_len + len(add_transport_set_event) == self._expected_number_of_transports
+                ):
+                    # At this time, no signaling is received, and the pool has not changed.
+                    # It is necessary to actively find out whether the expected value needs to be changed.
+                    self._change_transport()
+                    # If the number of transports is the same as the desired number, can take a break
+                    get_event_loop().call_later(1, lambda: self._daemon_enum_queue.put_nowait(_PoolDaemonEnum.normal))
+                else:
+                    # The expected value has not been reached, and it needs to continue to run
+                    self._daemon_enum_queue.put_nowait(_PoolDaemonEnum.normal)
 
         if add_transport_set_event:
             for pending_future in add_transport_set_event:
@@ -259,18 +285,28 @@ class Pool(object):
 
     def _incr(self) -> None:
         """Notify the pool to incr transport as soon as possible"""
+        if self._expected_number_of_transports >= self._max_pool_size:
+            return
         self._expected_number_of_transports += 1
-        self._transport_manager_event.set()
+        self._daemon_enum_queue.put_nowait(_PoolDaemonEnum.normal)
 
     def _decr(self) -> None:
         """Notify the pool to decr transport,but the pool will not process it right away"""
         if time.time() - self._destroy_transport_timestamp < self._destroy_transport_interval:
             # Reduce the speed of shrinking
             return
+        if self._expected_number_of_transports <= self._min_pool_size:
+            return
         if self._expected_number_of_transports > 1 and len(self._active_transport_list) > 1:
             self._expected_number_of_transports -= 1
-            self._transport_manager_event.set()
+            self._daemon_enum_queue.put_nowait(_PoolDaemonEnum.normal)
             self._destroy_transport_timestamp = time.time()
+
+    def _change_transport(self) -> None:
+        if self._now_use_cnt <= len(self._active_transport_list) * self._max_inflight * self._pool_lower_water:
+            self._decr()
+        elif self._now_use_cnt >= len(self._active_transport_list) * self._max_inflight * self._pool_lower_water:
+            self._incr()
 
     @property
     def pick_score(self) -> float:
@@ -334,18 +370,17 @@ class Pool(object):
 
         return await _add_transport()
 
-    def _change_by_transport(self, wrap_transport: PoolWrapTransport) -> None:
-        if wrap_transport.inflight <= self._max_inflight * self._pool_lower_water:
-            self._decr()
-        elif wrap_transport.inflight >= self._max_inflight * self._pool_high_water:
-            self._incr()
-
-    def unuse_transport(self, wrap_transport: PoolWrapTransport) -> None:
+    def release_transport(self, wrap_transport: PoolWrapTransport) -> None:
         if not wrap_transport.is_active:
-            self._transport_manager_event.set()
-        self._change_by_transport(wrap_transport)
+            self._daemon_enum_queue.put_nowait(_PoolDaemonEnum.close_transport)
+        self._now_use_cnt -= 1
+        self._change_transport()
 
     async def use_transport(self) -> PoolWrapTransport:
+        """
+        Note: Putting `_PoolDaemonEnum` multiple times will only make `_daemon` run once,
+            because this function just triggers `await` after putting all `_Pool Daemon Enum`
+        """
         wrap_transport: Optional[PoolWrapTransport] = None
         while True:
             if not self._active_transport_list:
@@ -353,13 +388,15 @@ class Pool(object):
             wrap_transport = self._active_transport_list[self._transport_index % len(self._active_transport_list)]
             self._transport_index += 1
             if not wrap_transport.is_active:
-                self._transport_manager_event.set()
+                self._daemon_enum_queue.put_nowait(_PoolDaemonEnum.close_transport)
             else:
                 break
         if wrap_transport is None:
             self._incr()
             wrap_transport = await self.add_transport()
-        self._change_by_transport(wrap_transport)
+        else:
+            self._change_transport()
+        self._now_use_cnt += 1
         return wrap_transport
 
     async def create(self) -> None:
@@ -377,12 +414,12 @@ class Pool(object):
         # Create one first to ensure that a proper link can be established
         await self.add_transport()
         # Number of links maintained in the back office
-        self._transport_manager_future = asyncio.create_task(self._transport_manger())
+        self._transport_manager_future = asyncio.create_task(self._daemon())
 
     async def destroy(self) -> None:
         """close pool
         Will first set the expected value to 0, and wait for the transport to be cleaned up
         """
         self._expected_number_of_transports = 0
-        self._transport_manager_event.set()
+        self._daemon_enum_queue.put_nowait(_PoolDaemonEnum.normal)
         await self._transport_manager_future
