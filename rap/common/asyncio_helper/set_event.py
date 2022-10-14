@@ -5,13 +5,12 @@ from typing import Generic, Iterator, Set, TypeVar
 _T = TypeVar("_T")
 
 
-class SetEvent(Generic[_T]):
+class BaseSetEvent(Generic[_T]):
     """Combining the functions of set and asyncio.Event"""
 
     def __init__(self):
         self._event: asyncio.Event = asyncio.Event()
         self._set: Set[_T] = set()
-        self.clear()
 
     @contextmanager
     def cm(self, item: _T) -> Iterator[None]:
@@ -22,20 +21,30 @@ class SetEvent(Generic[_T]):
             self.remove(item)
 
     def clear(self) -> None:
-        self._event.set()
         self._set.clear()
+        self._set_remove_hook()
 
     ##############
     # set method #
     ##############
+    def _set_add_hook(self) -> None:
+        raise NotImplementedError()
+
+    def _set_remove_hook(self) -> None:
+        raise NotImplementedError()
+
     def add(self, item: _T) -> None:
         self._set.add(item)
-        self._event.clear()
+        self._set_add_hook()
 
     def remove(self, item: _T) -> None:
         self._set.remove(item)
-        if not self._set:
-            self._event.set()
+        self._set_remove_hook()
+
+    def pop(self) -> _T:
+        result: _T = self._set.pop()
+        self._set_remove_hook()
+        return result
 
     def __contains__(self, item: _T) -> bool:
         return item in self._set
@@ -54,3 +63,37 @@ class SetEvent(Generic[_T]):
 
     async def wait(self):
         await self._event.wait()
+
+
+class SetEvent(BaseSetEvent[_T]):
+    """Combining the functions of set and asyncio.Event"""
+
+    def __init__(self):
+        super().__init__()
+        self._event.set()
+
+    def _set_add_hook(self):
+        self._event.clear()
+
+    def _set_remove_hook(self):
+        if not self._set:
+            self._event.set()
+
+    async def wait_empty(self) -> None:
+        await self.wait()
+
+
+class ReversalSetEvent(BaseSetEvent[_T]):
+    def __init__(self):
+        super().__init__()
+        self._event.clear()
+
+    def _set_add_hook(self):
+        self._event.set()
+
+    def _set_remove_hook(self):
+        if not self._set:
+            self._event.clear()
+
+    async def wait_set(self) -> None:
+        await self.wait()

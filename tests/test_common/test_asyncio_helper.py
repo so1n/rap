@@ -152,3 +152,37 @@ class TestAsyncioHelperDeadline:
         with pytest.raises(asyncio.TimeoutError):
             with deadline:
                 await asyncio.sleep(1)
+
+
+class TestSetEvent:
+    async def test_set_event(self) -> None:
+        set_event: asyncio_helper.SetEvent = asyncio_helper.SetEvent()
+        assert set_event.is_set()
+        set_event.add(1)
+        assert not set_event.is_set()
+        set_event.remove(1)
+        assert set_event.is_set()
+
+        set_event.add(1)
+        future: asyncio.Future = asyncio.ensure_future(set_event.wait_empty())
+        await asyncio.sleep(0)
+        assert not future.done()
+        set_event.remove(1)
+        await asyncio.sleep(0)
+        assert future.done()
+
+    async def test_reversal_set_event(self) -> None:
+        set_event: asyncio_helper.ReversalSetEvent = asyncio_helper.ReversalSetEvent()
+        assert not set_event.is_set()
+        set_event.add(1)
+        assert set_event.is_set()
+        set_event.remove(1)
+        assert not set_event.is_set()
+
+        future: asyncio.Future = asyncio.ensure_future(set_event.wait_set())
+        await asyncio.sleep(0)
+        assert not future.done()
+        set_event.add(1)
+        await asyncio.sleep(0)
+        assert future.done()
+        set_event.add(1)
