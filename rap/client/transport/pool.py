@@ -9,6 +9,7 @@ from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import (
     Deadline,
     IgnoreDeadlineTimeoutExc,
+    ReversalSetEvent,
     SetEvent,
     Share,
     done_future,
@@ -191,8 +192,7 @@ class Pool(object):
         self._active_transport_list: List[PoolWrapTransport] = []
 
         self._transport_manager_future: asyncio.Future = done_future()
-        # Limit up to 5 daemon enums at the same time
-        self._daemon_enum_queue: asyncio.PriorityQueue[_PoolDaemonEnum] = asyncio.PriorityQueue()
+        self._daemon_set_event: ReversalSetEvent[_PoolDaemonEnum] = ReversalSetEvent()
         self._expected_number_of_transports: int = 0
         self._transport_index: int = 0
 
@@ -207,10 +207,11 @@ class Pool(object):
 
     async def _daemon(self) -> None:
         """Ensure that the number of transports is adjusted to the desired value during the Pool run"""
-        self._daemon_enum_queue.put_nowait(_PoolDaemonEnum.normal)
+        self._daemon_set_event.add(_PoolDaemonEnum.normal)
         add_transport_set_event: SetEvent[asyncio.Future] = SetEvent()
         while True:
-            daemon_enum: _PoolDaemonEnum = await self._daemon_enum_queue.get()
+            await self._daemon_set_event.wait_set()
+            daemon_enum: _PoolDaemonEnum = self._daemon_set_event.pop()
 
             transport_len: int = len(self._active_transport_list)
             self._expected_number_of_transports = get_value_by_range(
@@ -264,7 +265,7 @@ class Pool(object):
             if transport_len == 0 and self._expected_number_of_transports == 0:
                 # When the expected number is 0, it means the pool is about to close
                 break
-            if self._daemon_enum_queue.empty():
+            if not self._daemon_set_event:
                 # Only when empty can push daemon enum
                 if (
                     transport_len == self._expected_number_of_transports
@@ -274,10 +275,10 @@ class Pool(object):
                     # It is necessary to actively find out whether the expected value needs to be changed.
                     self._change_transport()
                     # If the number of transports is the same as the desired number, can take a break
-                    get_event_loop().call_later(1, lambda: self._daemon_enum_queue.put_nowait(_PoolDaemonEnum.normal))
+                    get_event_loop().call_later(1, lambda: self._daemon_set_event.add(_PoolDaemonEnum.normal))
                 else:
                     # The expected value has not been reached, and it needs to continue to run
-                    self._daemon_enum_queue.put_nowait(_PoolDaemonEnum.normal)
+                    self._daemon_set_event.add(_PoolDaemonEnum.normal)
 
         if add_transport_set_event:
             for pending_future in add_transport_set_event:
@@ -288,7 +289,7 @@ class Pool(object):
         if self._expected_number_of_transports >= self._max_pool_size:
             return
         self._expected_number_of_transports += 1
-        self._daemon_enum_queue.put_nowait(_PoolDaemonEnum.normal)
+        self._daemon_set_event.add(_PoolDaemonEnum.normal)
 
     def _decr(self) -> None:
         """Notify the pool to decr transport,but the pool will not process it right away"""
@@ -299,7 +300,7 @@ class Pool(object):
             return
         if self._expected_number_of_transports > 1 and len(self._active_transport_list) > 1:
             self._expected_number_of_transports -= 1
-            self._daemon_enum_queue.put_nowait(_PoolDaemonEnum.normal)
+            self._daemon_set_event.add(_PoolDaemonEnum.normal)
             self._destroy_transport_timestamp = time.time()
 
     def _change_transport(self) -> None:
@@ -372,7 +373,7 @@ class Pool(object):
 
     def release_transport(self, wrap_transport: PoolWrapTransport) -> None:
         if not wrap_transport.is_active:
-            self._daemon_enum_queue.put_nowait(_PoolDaemonEnum.close_transport)
+            self._daemon_set_event.add(_PoolDaemonEnum.close_transport)
         self._now_use_cnt -= 1
         self._change_transport()
 
@@ -388,7 +389,7 @@ class Pool(object):
             wrap_transport = self._active_transport_list[self._transport_index % len(self._active_transport_list)]
             self._transport_index += 1
             if not wrap_transport.is_active:
-                self._daemon_enum_queue.put_nowait(_PoolDaemonEnum.close_transport)
+                self._daemon_set_event.add(_PoolDaemonEnum.close_transport)
             else:
                 break
         if wrap_transport is None:
@@ -421,5 +422,5 @@ class Pool(object):
         Will first set the expected value to 0, and wait for the transport to be cleaned up
         """
         self._expected_number_of_transports = 0
-        self._daemon_enum_queue.put_nowait(_PoolDaemonEnum.normal)
+        self._daemon_set_event.add(_PoolDaemonEnum.normal)
         await self._transport_manager_future
