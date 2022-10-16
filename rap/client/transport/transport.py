@@ -4,7 +4,7 @@ import math
 import sys
 import time
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Dict, Optional, Sequence, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Dict, Optional, Sequence, Set, Tuple, Type, Union
 
 from rap.client.model import ClientContext, Request, Response
 from rap.client.processor.base import belong_to_base_method
@@ -15,7 +15,6 @@ from rap.common import exceptions as rap_exc
 from rap.common.asyncio_helper import (
     Deadline,
     Semaphore,
-    SetEvent,
     as_first_completed,
     deadline_context,
     get_event_loop,
@@ -190,10 +189,10 @@ class Transport(object):
     async def _listen_conn(self) -> None:
         """listen server msg from transport"""
         logger.debug("conn:%s listen:%s start", self._conn.sock_tuple, self._conn.peer_tuple)
-        msg_handler_set_event: SetEvent[asyncio.Future] = SetEvent()
+        msg_handler_set: Set[asyncio.Future] = set()
 
         def _msg_handler_callback(f: asyncio.Future) -> None:
-            msg_handler_set_event.remove(f)
+            msg_handler_set.remove(f)
             try:
                 f.result()
             except Exception as e:
@@ -215,7 +214,7 @@ class Transport(object):
                     future = asyncio.create_task(self._server_send_msg_handler(response_msg))
                 else:
                     future = asyncio.create_task(self._server_recv_msg_handler(response_msg))
-                msg_handler_set_event.add(future)
+                msg_handler_set.add(future)
                 future.add_done_callback(_msg_handler_callback)
         except Exception as e:
             if not isinstance(e, (asyncio.CancelledError, CloseConnException)):
@@ -224,7 +223,7 @@ class Transport(object):
                 if not self._conn.is_closed():
                     await self._conn.await_close()
         finally:
-            for pending in msg_handler_set_event:
+            for pending in msg_handler_set:
                 if pending.cancelled():
                     pending.cancel()
 

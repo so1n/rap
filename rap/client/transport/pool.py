@@ -3,14 +3,13 @@ import logging
 import random
 import time
 from enum import IntEnum, auto
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List, Optional, Set
 
 from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import (
     Deadline,
     IgnoreDeadlineTimeoutExc,
     ReversalSetEvent,
-    SetEvent,
     Share,
     done_future,
     get_event_loop,
@@ -208,7 +207,7 @@ class Pool(object):
     async def _daemon(self) -> None:
         """Ensure that the number of transports is adjusted to the desired value during the Pool run"""
         self._daemon_set_event.add(_PoolDaemonEnum.normal)
-        add_transport_set_event: SetEvent[asyncio.Future] = SetEvent()
+        add_transport_set: Set[asyncio.Future] = set()
         while True:
             await self._daemon_set_event.wait_set()
             daemon_enum: _PoolDaemonEnum = self._daemon_set_event.pop()
@@ -251,13 +250,13 @@ class Pool(object):
                         except Exception as e:
                             logger.warning(f"ignore transport manger close {self._host}:{self._port} error:{e}")
 
-                if transport_len < self._expected_number_of_transports and not add_transport_set_event:
+                if transport_len < self._expected_number_of_transports and not add_transport_set:
                     for _ in range(self._expected_number_of_transports - transport_len):
                         add_transport_future: asyncio.Future = asyncio.create_task(self.add_transport())
                         # TODO If exceptions are always created,
                         #  this logic will be executed all the time and will not sleep
-                        add_transport_set_event.add(add_transport_future)
-                        add_transport_future.add_done_callback(lambda f: add_transport_set_event.remove(f))
+                        add_transport_set.add(add_transport_future)
+                        add_transport_future.add_done_callback(lambda f: add_transport_set.remove(f))
 
             # Prevent execution for too long and affect the operation of other coroutines
             await asyncio.sleep(0)
@@ -269,7 +268,7 @@ class Pool(object):
                 # Only when empty can push daemon enum
                 if (
                     transport_len == self._expected_number_of_transports
-                    or transport_len + len(add_transport_set_event) == self._expected_number_of_transports
+                    or transport_len + len(add_transport_set) == self._expected_number_of_transports
                 ):
                     # At this time, no signaling is received, and the pool has not changed.
                     # It is necessary to actively find out whether the expected value needs to be changed.
@@ -280,8 +279,8 @@ class Pool(object):
                     # The expected value has not been reached, and it needs to continue to run
                     self._daemon_set_event.add(_PoolDaemonEnum.normal)
 
-        if add_transport_set_event:
-            for pending_future in add_transport_set_event:
+        if add_transport_set:
+            for pending_future in add_transport_set:
                 safe_del_future(pending_future)
 
     def _incr(self) -> None:
