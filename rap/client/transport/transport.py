@@ -23,6 +23,7 @@ from rap.common.asyncio_helper import (
 from rap.common.conn import CloseConnException, Connection
 from rap.common.exceptions import IgnoreNextProcessor, InvokeError, RPCError
 from rap.common.number_range import NumberRange, get_value_by_range
+from rap.common.state import State
 from rap.common.types import SERVER_BASE_MSG_TYPE
 from rap.common.utils import InmutableDict, constant
 
@@ -119,6 +120,7 @@ class Transport(object):
             user_agent=constant.USER_AGENT,
         )
         self._server_info: InmutableDict = InmutableDict()
+        self.state: State = State()
 
     def _broadcast_server_event(self, response: Union[Response, Exception]) -> None:
         """Spread the response to all transport"""
@@ -160,7 +162,7 @@ class Transport(object):
         context: ClientContext = ClientContext()
         context.app = self.app
         context.correlation_id = correlation_id
-        context.conn = self._conn
+        context.transport = self
         context.server_info = self._server_info
         context.client_info = self._client_info
 

@@ -1,7 +1,6 @@
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Optional
 
-from rap.common.conn import Connection
 from rap.common.event import Event
 from rap.common.msg import BaseMsgProtocol
 from rap.common.state import Context
@@ -10,11 +9,12 @@ from rap.common.utils import constant
 
 if TYPE_CHECKING:
     from rap.client.core import BaseClient
+    from rap.client.transport.transport import Transport
 
 
 class ClientContext(Context):
     app: "BaseClient"
-    conn: Connection
+    transport: "Transport"
 
 
 class Request(BaseMsgProtocol):
@@ -24,13 +24,13 @@ class Request(BaseMsgProtocol):
         msg_type: int,
         target: Optional[str],
         body: Any,
-        context: Context,
+        context: ClientContext,
         header: Optional[dict] = None,
     ):
         self.msg_type: int = msg_type
         self.body: Any = body
         self.header = header or {}
-        self.context: Context = context
+        self.context: ClientContext = context
         if target:
             self.target = target
 
@@ -51,7 +51,7 @@ class Request(BaseMsgProtocol):
         return self.msg_type, self.correlation_id, self.header, self.body
 
     @classmethod
-    def from_event(cls, event: Event, context: Context) -> "Request":
+    def from_event(cls, event: Event, context: ClientContext) -> "Request":
         request: "Request" = cls(
             msg_type=constant.CLIENT_EVENT, target=f"/_event/{event.event_name}", body=event.event_info, context=context
         )

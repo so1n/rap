@@ -5,17 +5,17 @@ from rap.client import Client
 from rap.client.endpoint.local import LocalEndpoint
 from rap.client.model import Request
 from rap.client.processor.base import BaseProcessor
-from rap.common.conn import Connection
+from rap.client.transport.transport import Transport
 
 
 class CheckConnProcessor(BaseProcessor):
     def __init__(self) -> None:
-        self.conn_set: Set[Connection] = set()
+        self.transport_set: Set[Transport] = set()
 
     async def process_request(self, request: Request) -> Request:
-        if request.context.conn and request.target.endswith("sync_sum"):
+        if request.context.transport and request.target.endswith("sync_sum"):
             # block event request
-            self.conn_set.add(request.context.conn)
+            self.transport_set.add(request.context.transport)
         return request
 
 
@@ -48,4 +48,4 @@ if __name__ == "__main__":
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
-    assert len(check_conn_processor.conn_set) == 1
+    assert len(check_conn_processor.transport_set) == 1
