@@ -7,61 +7,86 @@ license = "Apache Software License"
 readme = "./README.md"
 repository = "https://github.com/so1n/rap"
 homepage = "https://github.com/so1n/rap"
+keywords = ["python", "async", "rpc", "hight-performance"]
+
+################
+# dependencies #
+################
+[tool.poetry.dependencies]
+python = "^3.7"
+msgpack = "^1.0.0"
+typing-extensions = "^4.1.1"
+
+aio-statsd = { version = "^0.2.6", optional = true }
+aredis = {version = "^1.1.8", optional = true }
+apache-skywalking = { version = "^0.7.0", optional = true}
+etcd3-py = { version = "^0.1.6", optional = true }
+prometheus-client = { version = "^0.12.0", optional = true}
+pycrypto = { version = "2.6.1", optional = true }
+python-consul = { version = "^1.1.0", optional = true}
+
+starlette = { version = "^0.14.2", optional = true }
+uvicorn = { version = "^0.13.4", optional = true }
+websockets = { version = "^9.0.2", optional = true }
+
+opentracing = { version = "^2.4.0", optional = true }
+jaeger-client = { version = "^4.4.0", optional = true }
+
+opentelemetry-api = { version = "^1.11.1", optional = true}
+opentelemetry-sdk = { version = "^1.11.1", optional = true}
+opentelemetry-exporter-jaeger = { version = "^1.11.1", optional = true}
+
+[tool.poetry.extras]
+crypto = ["pycrypto"]
+opentracing = ["opentracing", "jaeger-client"]
+redis = ["aredis"]
+api_gateway = ["starlette", "websockets", "uvicorn"]
+statsd = ["aio-statsd"]
+etcd = ["etcd3-py"]
+consul = ["python-consul"]
+apache-skywalking = ["apache-skywalking"]
+prometheus = ["prometheus-client"]
+opentelemetry = ["opentelemetry-api", "opentelemetry-sdk", "opentelemetry-exporter-jaeger"]
+
+# poetry not support extra all
+all = [
+    "pycrypto",
+    "opentracing", "jaeger-client",
+    "aredis",
+    "starlette", "websockets", "uvicorn",
+    "aio-statsd",
+    "etcd3-py",
+    "python-consul",
+    "apache-skywalking",
+    "prometheus-client",
+    "opentelemetry-api", "opentelemetry-sdk", "opentelemetry-exporter-jaeger"
+]
+
+[tool.poetry.group.dev.dependencies]
+beartype = "^0.11.0"
+
+autoflake = "^1.4"
+black = "^20.8b1"
+flake8 = "^3.9.2"
+isort = "^5.6.4"
+mypy = "^0.960"
+pre-commit = "^2.14.0"
+pyright = "^1.1.226"
+
+pytest-mock = "^3.5.1"
+pytest = "^6.1.2"
+pytest-asyncio = "^0.14.0"
+coverage = "^5.4"
+
+httpx = "^0.18.1"
+psutil = "^5.8.0"
+uvloop = "^0.16.0"
 
 [tool.poetry-dynamic-versioning]
 enable = true
 metadata=false
 vcs = "git"
 format = "v{base}+{distance}.{commit}"
-
-[tool.poetry.dependencies]
-python = "^3.7"
-msgpack = "^1.0.0"
-typing-extensions = "^4.1.1"
-
-apache-skywalking = { version = "^0.7.0", optional = true}
-pycrypto = { version = "2.6.1", optional = true }
-starlette = { version = "^0.14.2", optional = true }
-aredis = {version = "^1.1.8", optional = true }
-opentracing = { version = "^2.4.0", optional = true }
-jaeger-client = { version = "^4.4.0", optional = true }
-aio-statsd = { version = "^0.2.6", optional = true }
-etcd3-py = { version = "^0.1.6", optional = true }
-python-consul = { version = "^1.1.0", optional = true}
-prometheus-client = { version = "^0.12.0", optional = true}
-opentelemetry-api = { version = "^1.11.1", optional = true}
-opentelemetry-sdk = { version = "^1.11.1", optional = true}
-
-[tool.poetry.dev-dependencies]
-black = "^20.8b1"
-mypy = "^0.960"
-pytest = "^6.1.2"
-isort = "^5.6.4"
-pytest-asyncio = "^0.14.0"
-pytest-mock = "^3.5.1"
-coverage = "^5.4"
-uvicorn = "^0.13.4"
-httpx = "^0.18.1"
-websockets = "^9.0.2"
-pre-commit = "^2.14.0"
-autoflake = "^1.4"
-flake8 = "^3.9.2"
-psutil = "^5.8.0"
-uvloop = "^0.16.0"
-msgpack-rpc-python = "^0.4.1"
-pyright = "^1.1.226"
-opentelemetry-exporter-jaeger = "^1.11.1"
-
-[tool.poetry.extras]
-crypto = ["pycrypto"]
-opentracing = ["opentracing", "jaeger-client"]
-redis = ["aredis"]
-api_gateway = ["starlette"]
-statsd = ["aio-statsd"]
-etcd = ["etcd3-py"]
-consul = ["python-consul"]
-apache-skywalking = ["apache-skywalking"]
-prometheus = ["prometheus-client"]
 
 [tool.black]
 line-length = 120
