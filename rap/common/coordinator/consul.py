@@ -25,6 +25,7 @@ class ConsulClient(BaseCoordinator):
         verify: bool = True,
         cert: Optional[str] = None,
     ):
+        self.consul_url: str = f"{scheme}://{host}:{port}"
         self._ttl: int = ttl
         self.namespace: str = namespace
         self._heartbeat_future_dict: Dict[str, asyncio.Future] = {}

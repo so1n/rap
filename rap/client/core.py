@@ -6,10 +6,11 @@ from contextvars import ContextVar, Token
 from functools import wraps
 from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optional, Sequence, Type, TypeVar
 
-from rap.client.endpoint import BaseEndpoint, LocalEndpoint, Picker
+from rap.client.endpoint import BaseEndpoint, BaseEndpointProvider, LocalEndpointProvider, Picker
 from rap.client.model import Response
 from rap.client.processor.base import BaseProcessor
-from rap.client.transport.transport import Transport
+from rap.client.transport.pool import PoolProvider
+from rap.client.transport.transport import Transport, TransportProvider
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common.cache import Cache
 from rap.common.channel import UserChannelCovariantType, get_corresponding_channel_class
@@ -46,19 +47,17 @@ class BaseClient:
     def __init__(
         self,
         server_name: str,
-        cache_interval: Optional[float] = None,
-        ws_min_interval: Optional[int] = None,
-        ws_max_interval: Optional[int] = None,
-        ws_statistics_interval: Optional[int] = None,
+        cache: Optional[Cache] = None,
+        window_statistics: Optional[WindowStatistics] = None,
         through_deadline: bool = False,
-        endpoint: Optional[BaseEndpoint] = None,
+        pool_provider: Optional[PoolProvider] = None,
+        transport_provider: Optional[TransportProvider] = None,
+        endpoint_provider: Optional[BaseEndpointProvider] = None,
     ):
         """
         :param server_name: server name
-        :param cache_interval: Cache auto scan expire key interval
-        :param ws_min_interval: WindowStatistics time per window
-        :param ws_max_interval: WindowStatistics Window capacity
-        :param ws_statistics_interval: WindowStatistics Statistical data interval from window
+        :param cache: rap.common.cache.Cache
+        :param window_statistics: rap.common.collect_statistics.WindowStatistics
         :param through_deadline: enable through deadline param to server
         :param endpoint: rap.client.endpoint
         """
@@ -68,14 +67,13 @@ class BaseClient:
         self._event_dict: Dict[EventEnum, List[CLIENT_EVENT_FN]] = {
             value: [] for value in EventEnum.__members__.values()
         }
-        self._cache: Cache = Cache(interval=cache_interval)
-        self._window_statistics: WindowStatistics = WindowStatistics(
-            interval=ws_min_interval, max_interval=ws_max_interval, statistics_interval=ws_statistics_interval
-        )
-        if endpoint is not None:
-            self._endpoint: BaseEndpoint = endpoint
-        else:
-            self._endpoint = LocalEndpoint({"ip": "localhost", "port": 9000})
+        self._cache: Cache = cache or Cache()
+        self._window_statistics: WindowStatistics = window_statistics or WindowStatistics()
+
+        ep: BaseEndpointProvider = endpoint_provider or LocalEndpointProvider.build({"ip": "localhost", "port": 9000})
+        ep.inject((pool_provider or PoolProvider.build()).inject(transport_provider or TransportProvider.build()))
+        self._endpoint: BaseEndpoint = ep.create_instance()
+
         self.register_event_handler(EventEnum.before_start, lambda _: self._window_statistics.statistics_data())
         self.register_event_handler(EventEnum.after_end, lambda _: self._window_statistics.close())
 

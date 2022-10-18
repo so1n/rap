@@ -24,12 +24,16 @@ class EtcdClient(BaseCoordinator):
         cert_path: Optional[str] = None,
         key_path: Optional[str] = None,
         ca_path: Optional[str] = None,
+        protocol: str = "http",
     ) -> None:
+        self.etcd_url: str = f"{protocol}://{host}:{port}"
         self.namespace: str = namespace
         if cert_path and key_path and ca_path:
-            self._client: AioClient = AioClient(host, port, cert=(cert_path, key_path), verify=ca_path)
+            self._client: AioClient = AioClient(
+                host, port, cert=(cert_path, key_path), verify=ca_path, protocol=protocol
+            )
         else:
-            self._client = AioClient(host, port)
+            self._client = AioClient(host, port, protocol=protocol)
         self._ttl: int = ttl
 
         self._lease_id: int = 0

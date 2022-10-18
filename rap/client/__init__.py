@@ -6,8 +6,8 @@ from .endpoint.base import Picker, PrivatePicker
 from .endpoint.local import LocalEndpoint
 from .model import Request, Response
 from .transport.channel import Channel, UserChannel
-from .transport.pool import Pool
-from .transport.transport import Transport
+from .transport.pool import Pool, PoolProvider
+from .transport.transport import Transport, TransportProvider
 
 ReadChannel = _ReadChannel[Response]
 WriteChannel = _WriteChannel[Request]
@@ -25,4 +25,6 @@ __all__ = [
     "Pool",
     "Picker",
     "PrivatePicker",
+    "PoolProvider",
+    "TransportProvider",
 ]

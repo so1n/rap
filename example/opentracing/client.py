@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import Optional
 
 from jaeger_client import Config, Tracer  # type: ignore
 from opentracing.scope_managers.asyncio import AsyncioScopeManager  # type: ignore
@@ -16,7 +17,9 @@ config: Config = Config(
     scope_manager=AsyncioScopeManager(),
     service_name="rap client opentracing example",
 )
-tracer: Tracer = config.initialize_tracer()
+tracer: Optional[Tracer] = config.initialize_tracer()
+if not tracer:
+    raise ValueError("tracer must not None")
 
 client: Client = Client("example")
 client.load_processor([TracingProcessor(tracer)])

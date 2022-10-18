@@ -23,13 +23,14 @@ from rap.common.asyncio_helper import (
 from rap.common.conn import CloseConnException, Connection
 from rap.common.exceptions import IgnoreNextProcessor, InvokeError, RPCError
 from rap.common.number_range import NumberRange, get_value_by_range
+from rap.common.provider import Provider
 from rap.common.state import State
 from rap.common.types import SERVER_BASE_MSG_TYPE
 from rap.common.utils import InmutableDict, constant
 
 if TYPE_CHECKING:
     from rap.client.core import BaseClient
-__all__ = ["Transport"]
+__all__ = ["Transport", "TransportProvider"]
 logger: logging.Logger = logging.getLogger(__name__)
 
 
@@ -66,6 +67,13 @@ class Transport(object):
         max_inflight: Optional[int] = None,
         read_timeout: Optional[int] = None,
     ):
+        """
+        :param ssl_crt_path: set conn ssl_crt_path
+        :param pack_param: set conn pack param
+        :param unpack_param: set conn unpack param
+        :param read_timeout: set conn read timeout param, default 1200
+        :param max_inflight: set conn max use number, default 100
+        """
         self.app: "BaseClient" = app
         self._conn: Connection = Connection(
             host,
@@ -592,3 +600,24 @@ class Transport(object):
 
             async with channel as channel:
                 yield channel
+
+
+class TransportProvider(Provider[Transport]):
+    @classmethod
+    def build(
+        cls,
+        transport: Type[Transport] = Transport,
+        ssl_crt_path: Optional[str] = None,
+        pack_param: Optional[dict] = None,
+        unpack_param: Optional[dict] = None,
+        max_inflight: Optional[int] = None,
+        read_timeout: Optional[int] = None,
+    ) -> "TransportProvider":
+        return cls(
+            transport,
+            ssl_crt_path=ssl_crt_path,
+            pack_param=pack_param,
+            unpack_param=unpack_param,
+            max_inflight=max_inflight,
+            read_timeout=read_timeout,
+        )

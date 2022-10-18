@@ -3,9 +3,9 @@ import logging
 import random
 import time
 from enum import IntEnum, auto
-from typing import TYPE_CHECKING, List, Optional, Set
+from typing import TYPE_CHECKING, List, Optional, Set, Type
 
-from rap.client.transport.transport import Transport
+from rap.client.transport.transport import Transport, TransportProvider
 from rap.common.asyncio_helper import (
     Deadline,
     IgnoreDeadlineTimeoutExc,
@@ -16,6 +16,7 @@ from rap.common.asyncio_helper import (
     safe_del_future,
 )
 from rap.common.number_range import get_value_by_range
+from rap.common.provider import Provider
 
 logger: logging.Logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
@@ -115,11 +116,8 @@ class Pool(object):
         host: str,
         port: int,
         weight: int,
-        ssl_crt_path: Optional[str] = None,
-        pack_param: Optional[dict] = None,
-        unpack_param: Optional[dict] = None,
+        transport_provider: TransportProvider,
         max_inflight: Optional[int] = None,
-        read_timeout: Optional[int] = None,
         declare_timeout: Optional[int] = None,
         min_ping_interval: Optional[int] = None,
         max_ping_interval: Optional[int] = None,
@@ -138,13 +136,8 @@ class Pool(object):
         :param host: server host
         :param port: server port
 
-        :param ssl_crt_path: set conn ssl_crt_path
-        :param pack_param: set conn pack param
-        :param unpack_param: set conn unpack param
-        :param read_timeout: set conn read timeout param
-        :param max_inflight: set conn max use number, default 100
-
         :param weight: set transport weight
+        :param max_inflight: set conn max use number, default 100
         :param declare_timeout: set transport declare timeout
 
         :param min_ping_interval: Minimum interval time (seconds)
@@ -169,11 +162,8 @@ class Pool(object):
         self._host: str = host
         self._port: int = port
         self._weight: int = weight
-        self._ssl_crt_path: Optional[str] = ssl_crt_path
-        self._pack_param: Optional[dict] = pack_param
-        self._unpack_param: Optional[dict] = unpack_param
+        self._transport_provider: TransportProvider = transport_provider
         self._max_inflight: int = max_inflight or 100
-        self._read_timeout: Optional[int] = read_timeout
         self._declare_timeout: int = declare_timeout or 9
         self._min_ping_interval: Optional[int] = min_ping_interval
         self._max_ping_interval: Optional[int] = max_ping_interval
@@ -329,18 +319,12 @@ class Pool(object):
 
     async def fork_transport(self) -> Transport:
         """Create new transport. (The transport created at this time will not be placed in the pool)"""
-        transport: Transport = Transport(
+        transport: Transport = self._transport_provider.create_instance(
             self._app,
             self._host,
             self._port,
             self._weight,
-            ssl_crt_path=self._ssl_crt_path,
-            pack_param=self._pack_param,
-            unpack_param=self._unpack_param,
-            max_inflight=self._max_inflight,
-            read_timeout=self._read_timeout,
         )
-
         try:
             with Deadline(self._declare_timeout, timeout_exc=asyncio.TimeoutError("transport declare timeout")):
                 await transport.connect()
@@ -423,3 +407,47 @@ class Pool(object):
         self._expected_number_of_transports = 0
         self._daemon_set_event.add(_PoolDaemonEnum.normal)
         await self._transport_manager_future
+
+
+class PoolProvider(Provider):
+    def inject(
+        self,
+        transport_provider: Optional[TransportProvider] = None,
+    ) -> "PoolProvider":
+        self._kwargs["transport_provider"] = transport_provider or TransportProvider.build()
+        return self
+
+    @classmethod
+    def build(
+        cls,
+        pool: Type[Pool] = Pool,
+        max_inflight: Optional[int] = None,
+        declare_timeout: Optional[int] = None,
+        min_ping_interval: Optional[int] = None,
+        max_ping_interval: Optional[int] = None,
+        ping_fail_cnt: Optional[int] = None,
+        max_pool_size: Optional[int] = None,
+        min_pool_size: Optional[int] = None,
+        transport_age: Optional[int] = None,
+        transport_age_jitter: Optional[int] = None,
+        transport_grace_timeout: Optional[int] = None,
+        pool_high_water: Optional[float] = None,
+        pool_lower_water: Optional[float] = None,
+        destroy_transport_interval: Optional[int] = None,
+    ) -> "PoolProvider":
+        return cls(
+            pool,
+            max_inflight=max_inflight,
+            declare_timeout=declare_timeout,
+            min_ping_interval=min_ping_interval,
+            max_ping_interval=max_ping_interval,
+            ping_fail_cnt=ping_fail_cnt,
+            max_pool_size=max_pool_size,
+            min_pool_size=min_pool_size,
+            transport_age=transport_age,
+            transport_age_jitter=transport_age_jitter,
+            transport_grace_timeout=transport_grace_timeout,
+            pool_high_water=pool_high_water,
+            pool_lower_water=pool_lower_water,
+            destroy_transport_interval=destroy_transport_interval,
+        )

@@ -4,9 +4,10 @@ import random
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type
 
-from rap.client.transport.pool import Pool, PoolWrapTransport
+from rap.client.transport.pool import Pool, PoolProvider, PoolWrapTransport
 from rap.client.transport.transport import Transport
 from rap.common.number_range import get_value_by_range
+from rap.common.provider import Provider
 
 logger: logging.Logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
@@ -59,48 +60,18 @@ class BaseEndpoint(object):
 
     def __init__(
         self,
-        declare_timeout: Optional[int] = None,
-        read_timeout: Optional[int] = None,
-        ssl_crt_path: Optional[str] = None,
+        pool_provider: Optional[PoolProvider] = None,
         balance_enum: Optional[BalanceEnum] = None,
-        pack_param: Optional[dict] = None,
-        unpack_param: Optional[dict] = None,
-        min_ping_interval: Optional[int] = None,
-        max_ping_interval: Optional[int] = None,
-        ping_fail_cnt: Optional[int] = None,
-        max_pool_size: Optional[int] = None,
-        min_poll_size: Optional[int] = None,
-        pool_class: Optional[Type[Pool]] = None,
     ) -> None:
         """
-        :param declare_timeout: declare timeout include request & response, default 9
-        :param ssl_crt_path: client ssl crt file path
         :param balance_enum: balance pick transport method, default random
-        :param pack_param: msgpack pack param
-        :param unpack_param: msgpack unpack param
-        :param min_ping_interval: send client ping min interval, default 1
-        :param max_ping_interval: send client ping max interval, default 3
-        :param ping_fail_cnt: How many times ping fails to judge as unavailable, default 3
-        :param pool_class: pool class
         """
-        self._declare_timeout: int = declare_timeout or 9
-        self._read_timeout: Optional[int] = read_timeout
-        self._ssl_crt_path: Optional[str] = ssl_crt_path
-        self._pack_param: Optional[dict] = pack_param
-        self._unpack_param: Optional[dict] = unpack_param
-
-        self._min_ping_interval: int = min_ping_interval or 1
-        self._max_ping_interval: int = max_ping_interval or 3
-        self._ping_fail_cnt: int = ping_fail_cnt or 3
-        self._max_pool_size: int = max_pool_size or 3
-        self._min_pool_size: int = min_poll_size or 1
-
+        self._pool_provider: PoolProvider = pool_provider or PoolProvider.build()
         self._transport_key_list: List[Tuple[str, int]] = []
         self._transport_pool_dict: Dict[Tuple[str, int], Pool] = {}
         self._round_robin_index: int = 0
 
         self._run_event: asyncio.Event = asyncio.Event()
-        self._pool_class: Type[Pool] = pool_class or Pool
 
         setattr(self, self._pick_pool.__name__, self._random_pick_pool)
         if balance_enum:
@@ -139,22 +110,8 @@ class BaseEndpoint(object):
 
         weight = get_value_by_range(weight, 0, 10) if weight else 10
         max_inflight = get_value_by_range(max_inflight, 0) if max_inflight else 100
-        pool: Pool = self._pool_class(
-            app,
-            host=ip,
-            port=port,
-            weight=weight,
-            ssl_crt_path=self._ssl_crt_path,
-            pack_param=self._pack_param,
-            unpack_param=self._unpack_param,
-            max_inflight=max_inflight,
-            read_timeout=self._read_timeout,
-            declare_timeout=self._declare_timeout,
-            min_ping_interval=self._min_ping_interval,
-            max_ping_interval=self._max_ping_interval,
-            ping_fail_cnt=self._ping_fail_cnt,
-            max_pool_size=self._max_pool_size,
-            min_pool_size=self._min_pool_size,
+        pool: Pool = self._pool_provider.create_instance(
+            app, host=ip, port=port, weight=weight, max_inflight=max_inflight
         )
         self._transport_pool_dict[key] = pool
         self._transport_key_list.append(key)
@@ -216,3 +173,20 @@ class BaseEndpoint(object):
 
     def __len__(self) -> int:
         return len(self._transport_key_list)
+
+
+class BaseEndpointProvider(Provider):
+    def inject(
+        self,
+        pool_provider: Optional[PoolProvider] = None,
+    ) -> "BaseEndpointProvider":
+        self._kwargs["pool_provider"] = pool_provider or PoolProvider.build()
+        return self
+
+    @classmethod
+    def build(
+        cls,
+        *args,
+        **kwargs,
+    ) -> "BaseEndpointProvider":
+        raise NotImplementedError

@@ -1,2 +1,2 @@
-from .base import BalanceEnum, BaseEndpoint, Picker, PrivatePicker
-from .local import LocalEndpoint
+from .base import BalanceEnum, BaseEndpoint, BaseEndpointProvider, Picker, PrivatePicker
+from .local import LocalEndpoint, LocalEndpointProvider

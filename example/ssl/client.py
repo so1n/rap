@@ -1,11 +1,8 @@
 import asyncio
 
-from rap.client import Client
-from rap.client.endpoint import LocalEndpoint
+from rap.client import Client, TransportProvider
 
-client: Client = Client(
-    "example", endpoint=LocalEndpoint({"ip": "localhost", "port": 9000}, ssl_crt_path="./rap_ssl.crt")
-)
+client: Client = Client("example", transport_provider=TransportProvider.build(ssl_crt_path="./rap_ssl.crt"))
 
 
 # in register, must use async def...

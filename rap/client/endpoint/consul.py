@@ -2,8 +2,8 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, List, Optional, Tuple, Type
 
-from rap.client.endpoint.base import BalanceEnum, BaseEndpoint
-from rap.client.transport.pool import Pool
+from rap.client.endpoint.base import BalanceEnum, BaseEndpoint, BaseEndpointProvider
+from rap.client.transport.pool import Pool, PoolProvider
 from rap.common.asyncio_helper import done_future
 from rap.common.coordinator.consul import ConsulClient
 
@@ -17,55 +17,15 @@ class ConsulEndpoint(BaseEndpoint):
 
     def __init__(
         self,
-        read_timeout: Optional[int] = None,
-        ssl_crt_path: Optional[str] = None,
-        pack_param: Optional[dict] = None,
-        unpack_param: Optional[dict] = None,
+        consul_client: ConsulClient,
         balance_enum: BalanceEnum = BalanceEnum.random,
-        min_ping_interval: Optional[int] = None,
-        max_ping_interval: Optional[int] = None,
-        ping_fail_cnt: Optional[int] = None,
-        max_pool_size: Optional[int] = None,
-        min_poll_size: Optional[int] = None,
-        pool_class: Optional[Type[Pool]] = None,
-        # consul client param
-        consul_namespace: str = "rap",
-        consul_ttl: int = 10,
-        consul_host: str = "127.0.0.1",
-        consul_port: int = 8500,
-        consul_token: Optional[str] = None,
-        consul_scheme: str = "http",
-        consul_consistency: str = "default",
-        consul_dc: Optional[str] = None,
-        consul_verify: bool = True,
-        consul_cert: Optional[str] = None,
+        pool_provider: Optional[PoolProvider] = None,
     ):
-        self.consul_url: str = f"{consul_scheme}://{consul_host}:{consul_port}"
-        self.consul_client: ConsulClient = ConsulClient(
-            namespace=consul_namespace,
-            ttl=consul_ttl,
-            host=consul_host,
-            port=consul_port,
-            token=consul_token,
-            scheme=consul_scheme,
-            consistency=consul_consistency,
-            dc=consul_dc,
-            verify=consul_verify,
-            cert=consul_cert,
-        )
+        self.consul_client: ConsulClient = consul_client
         self._watch_future: asyncio.Future = done_future()
         super().__init__(
-            read_timeout=read_timeout,
-            ssl_crt_path=ssl_crt_path,
+            pool_provider=pool_provider,
             balance_enum=balance_enum,
-            pack_param=pack_param,
-            unpack_param=unpack_param,
-            ping_fail_cnt=ping_fail_cnt,
-            min_ping_interval=min_ping_interval,
-            max_ping_interval=max_ping_interval,
-            max_pool_size=max_pool_size,
-            min_poll_size=min_poll_size,
-            pool_class=pool_class,
         )
 
     async def stop(self) -> None:
@@ -93,7 +53,7 @@ class ConsulEndpoint(BaseEndpoint):
         if not self.is_close:
             raise ConnectionError(f"{self.__class__.__name__} is running")
 
-        logger.info(f"connect to consul:{self.consul_url}, wait discovery....")
+        logger.info(f"connect to consul:{self.consul_client.consul_url}, wait discovery....")
         async for item in self.consul_client.discovery(app.server_name):
             await self.create(
                 app,
@@ -120,3 +80,14 @@ class ConsulEndpoint(BaseEndpoint):
                     return
         self._start()
         self._watch_future = asyncio.ensure_future(self._watch(app.server_name))
+
+
+class ConsulEndpointProvider(BaseEndpointProvider):
+    @classmethod
+    def build(
+        cls,
+        consul_client: ConsulClient,
+        endpoint: Type[ConsulEndpoint] = ConsulEndpoint,
+        balance_enum: Optional[BalanceEnum] = None,
+    ) -> "ConsulEndpointProvider":
+        return cls(endpoint, consul_client=consul_client, balance_enum=balance_enum)

@@ -1,12 +1,12 @@
 import asyncio
 
 from rap.client import Client, ReadChannel, Response, UserChannel, WriteChannel
-from rap.client.endpoint import LocalEndpoint
+from rap.client.endpoint import LocalEndpointProvider
 from rap.client.processor import CryptoProcessor
 
 client: Client = Client(
     "example",
-    endpoint=LocalEndpoint(
+    endpoint_provider=LocalEndpointProvider.build(
         {"ip": "localhost", "port": 9000}, {"ip": "localhost", "port": 9001}, {"ip": "localhost", "port": 9002}
     ),
 )

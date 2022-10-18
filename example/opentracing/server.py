@@ -1,4 +1,5 @@
 import asyncio
+from typing import Optional
 
 from aredis import StrictRedis  # type: ignore
 from jaeger_client import Config, Tracer  # type: ignore
@@ -43,7 +44,9 @@ if __name__ == "__main__":
         scope_manager=AsyncioScopeManager(),
         service_name="rap server opentracing example",
     )
-    jaeger_tracer: Tracer = opentracing_config.initialize_tracer()
+    jaeger_tracer: Optional[Tracer] = opentracing_config.initialize_tracer()
+    if not jaeger_tracer:
+        raise ValueError("tracer must not None")
     rpc_server.load_processor([TracingProcessor(jaeger_tracer)])
     rpc_server.register(async_sum)
     rpc_server.register(echo_body)

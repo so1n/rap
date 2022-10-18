@@ -29,7 +29,9 @@ class TracingProcessor(BaseProcessor):
         scope: Scope = self._tracer.start_active_span(
             str(msg.target), child_of=span_ctx, finish_on_close=finish_on_close
         )
-        self._tracer.inject(span_context=scope.span.context, format=Format.HTTP_HEADERS, carrier=msg.header)
+        self._tracer.inject(
+            span_context=scope.span.context, format=Format.HTTP_HEADERS, carrier=msg.header  # type: ignore
+        )
         scope.span.set_tag(tags.SPAN_KIND, tags.SPAN_KIND_RPC_CLIENT)
         scope.span.set_tag(tags.PEER_SERVICE, self.app.server_name)
         scope.span.set_tag(tags.PEER_HOSTNAME, ":".join([str(i) for i in msg.header["host"]]))

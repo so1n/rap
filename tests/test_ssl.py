@@ -3,17 +3,14 @@ from typing import AsyncGenerator
 
 import pytest
 
-from rap.client import Client
-from rap.client.endpoint import LocalEndpoint
+from rap.client import Client, TransportProvider
 from rap.server import Server
 
 pwd_path: str = os.getcwd()
 if not pwd_path.endswith("tests"):
     pwd_path += "/tests"
 pytestmark = pytest.mark.asyncio
-client: Client = Client(
-    "test", endpoint=LocalEndpoint({"ip": "localhost", "port": 9000}, ssl_crt_path=f"{pwd_path}/rap_ssl.crt")
-)
+client: Client = Client("test", transport_provider=TransportProvider.build(ssl_crt_path=f"{pwd_path}/rap_ssl.crt"))
 
 
 # in register, must use async def...
