@@ -4,10 +4,10 @@ import math
 import sys
 import time
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Dict, Optional, Sequence, Set, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Dict, List, Optional, Sequence, Set, Tuple, Type, Union
 
 from rap.client.model import ClientContext, Request, Response
-from rap.client.processor.base import belong_to_base_method
+from rap.client.processor.base import BaseProcessor, belong_to_base_method
 from rap.client.transport.channel import Channel
 from rap.client.utils import gen_rap_error, get_exc_status_code_dict
 from rap.common import event
@@ -29,7 +29,7 @@ from rap.common.types import SERVER_BASE_MSG_TYPE
 from rap.common.utils import InmutableDict, constant
 
 if TYPE_CHECKING:
-    from rap.client.core import BaseClient
+    pass
 __all__ = ["Transport", "TransportProvider"]
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -57,10 +57,12 @@ class Transport(object):
 
     def __init__(
         self,
-        app: "BaseClient",
         host: str,
         port: int,
         weight: int,
+        server_name: str,
+        processor_list: List[BaseProcessor],
+        through_deadline: bool = False,
         ssl_crt_path: Optional[str] = None,
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
@@ -74,7 +76,8 @@ class Transport(object):
         :param read_timeout: set conn read timeout param, default 1200
         :param max_inflight: set conn max use number, default 100
         """
-        self.app: "BaseClient" = app
+        self._server_name: str = server_name
+        self._through_deadline: bool = through_deadline
         self._conn: Connection = Connection(
             host,
             port,
@@ -103,19 +106,19 @@ class Transport(object):
 
         # processor
         self.on_context_enter_processor_list: Sequence[Callable] = [
-            i.on_context_enter for i in self.app.processor_list if not belong_to_base_method(i.on_context_enter)
+            i.on_context_enter for i in processor_list if not belong_to_base_method(i.on_context_enter)
         ]
         self.on_context_exit_processor_list: Sequence[Callable] = [
-            i.on_context_exit for i in self.app.processor_list if not belong_to_base_method(i.on_context_exit)
+            i.on_context_exit for i in processor_list if not belong_to_base_method(i.on_context_exit)
         ]
         self.process_request_processor_list: Sequence[Callable] = [
-            i.process_request for i in self.app.processor_list if not belong_to_base_method(i.process_request)
+            i.process_request for i in processor_list if not belong_to_base_method(i.process_request)
         ]
         self.process_response_processor_list: Sequence[Callable] = [
-            i.process_response for i in self.app.processor_list if not belong_to_base_method(i.process_response)
+            i.process_response for i in processor_list if not belong_to_base_method(i.process_response)
         ]
         self.process_exception_processor_list: Sequence[Callable] = [
-            i.process_exc for i in self.app.processor_list if not belong_to_base_method(i.process_exc)
+            i.process_exc for i in processor_list if not belong_to_base_method(i.process_exc)
         ]
 
         # ping
@@ -168,7 +171,6 @@ class Transport(object):
 
         # create context
         context: ClientContext = ClientContext()
-        context.app = self.app
         context.correlation_id = correlation_id
         context.transport = self
         context.server_info = self._server_info
@@ -460,7 +462,7 @@ class Transport(object):
         async with self._transport_context(enable_limit_request=True) as context:
             response: Response = await self._base_request(
                 Request.from_event(
-                    event.DeclareEvent({"server_name": self.app.server_name, "client_info": context.client_info}),
+                    event.DeclareEvent({"server_name": self._server_name, "client_info": context.client_info}),
                     context,
                 )
             )
@@ -544,7 +546,7 @@ class Transport(object):
     async def write_to_conn(self, request: Request) -> None:
         """gen msg_id and seng msg to transport"""
         deadline: Optional[Deadline] = deadline_context.get()
-        if self.app.through_deadline and deadline:
+        if self._through_deadline and deadline:
             request.header["X-rap-deadline"] = deadline.end_timestamp
         for process_request in self.process_request_processor_list:
             await process_request(request)
@@ -571,7 +573,7 @@ class Transport(object):
         async with self._transport_context() as context:
             request: Request = Request(
                 msg_type=constant.MSG_REQUEST,
-                target=f"{self.app.server_name}/{group}/{func_name}",
+                target=f"{self._server_name}/{group}/{func_name}",
                 body=arg_param,
                 context=context,
             )
@@ -603,18 +605,41 @@ class Transport(object):
 
 
 class TransportProvider(Provider[Transport]):
+    """Auxiliary rap.client to use transport"""
+
+    def inject(
+        self,
+        server_name: str,
+        processor_list: Optional[List[BaseProcessor]] = None,
+    ) -> "TransportProvider":
+        self._kwargs["server_name"] = server_name
+        if "processor_list" not in self._kwargs:
+            self._kwargs["processor_list"] = processor_list if processor_list is not None else []
+        return self
+
     @classmethod
     def build(
         cls,
         transport: Type[Transport] = Transport,
+        through_deadline: bool = False,
         ssl_crt_path: Optional[str] = None,
         pack_param: Optional[dict] = None,
         unpack_param: Optional[dict] = None,
         max_inflight: Optional[int] = None,
         read_timeout: Optional[int] = None,
     ) -> "TransportProvider":
+        """
+        :param transport: rap.client.transport.transport.Transport
+        :param through_deadline: Whether the transparent transmission deadline
+        :param ssl_crt_path: set conn ssl_crt_path
+        :param pack_param: set conn pack param
+        :param unpack_param: set conn unpack param
+        :param read_timeout: set conn read timeout param, default 1200
+        :param max_inflight: set conn max use number, default 100
+        """
         return cls(
             transport,
+            through_deadline=through_deadline,
             ssl_crt_path=ssl_crt_path,
             pack_param=pack_param,
             unpack_param=unpack_param,

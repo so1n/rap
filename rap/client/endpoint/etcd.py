@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Type
+from typing import Any, Dict, Optional, Tuple, Type
 
 from rap.client.endpoint.base import BalanceEnum, BaseEndpoint, BaseEndpointProvider
 from rap.client.transport.pool import Pool, PoolProvider
@@ -8,8 +8,6 @@ from rap.common.asyncio_helper import del_future, done_future
 from rap.common.coordinator.etcd import ETCD_EVENT_VALUE_DICT_TYPE, EtcdClient
 
 logger: logging.Logger = logging.getLogger(__name__)
-if TYPE_CHECKING:
-    from rap.client.core import BaseClient
 
 
 class EtcdEndpoint(BaseEndpoint):
@@ -18,9 +16,11 @@ class EtcdEndpoint(BaseEndpoint):
     def __init__(
         self,
         etcd_client: EtcdClient,
+        server_name: str,
         pool_provider: Optional[PoolProvider] = None,
         balance_enum: BalanceEnum = BalanceEnum.random,
     ):
+        self._server_name: str = server_name
         self.etcd_client: EtcdClient = etcd_client
         self._watch_future: asyncio.Future = done_future()
         super().__init__(
@@ -33,14 +33,13 @@ class EtcdEndpoint(BaseEndpoint):
         await self.etcd_client.stop()
         await super().stop()
 
-    async def start(self, app: BaseClient) -> None:
+    async def start(self) -> None:
         """create transport by etcd info and init watch etcd info future"""
         if not self.is_close:
             raise ConnectionError(f"{self.__class__.__name__} is running")
         logger.info(f"connect to etcd:{self.etcd_client.etcd_url}, wait discovery....")
-        async for item in self.etcd_client.discovery(app.server_name):
+        async for item in self.etcd_client.discovery(self._server_name):
             await self.create(
-                app,
                 item["host"],
                 item["port"],
                 weight=item["weight"],
@@ -50,7 +49,8 @@ class EtcdEndpoint(BaseEndpoint):
         wait_start_future: asyncio.Future = asyncio.Future()
         if not self._transport_key_list:
             logger.warning(
-                f"Can not found transport info from etcd," f" wait {app.server_name} server start and register to etcd"
+                f"Can not found transport info from etcd,"
+                f" wait {self._server_name} server start and register to etcd"
             )
         else:
             wait_start_future.set_result(True)
@@ -60,7 +60,6 @@ class EtcdEndpoint(BaseEndpoint):
         async def create(etcd_value_dict: ETCD_EVENT_VALUE_DICT_TYPE) -> None:
             _cache_dict[etcd_value_dict["key"]] = etcd_value_dict["value"]
             await self.create(
-                app,
                 etcd_value_dict["value"]["host"],
                 etcd_value_dict["value"]["port"],
                 weight=etcd_value_dict["value"]["weight"],
@@ -81,7 +80,7 @@ class EtcdEndpoint(BaseEndpoint):
                 logger.warning("client not transport")
 
         self._start()
-        self._watch_future = asyncio.ensure_future(self.etcd_client.watch(app.server_name, [create], [destroy]))
+        self._watch_future = asyncio.ensure_future(self.etcd_client.watch(self._server_name, [create], [destroy]))
         await wait_start_future
 
 
@@ -90,7 +89,8 @@ class EtcdEndpointProvider(BaseEndpointProvider):
     def build(
         cls,
         etcd_client: EtcdClient,
+        server_name: str,
         endpoint: Type[EtcdEndpoint] = EtcdEndpoint,
         balance_enum: Optional[BalanceEnum] = None,
     ) -> "EtcdEndpointProvider":
-        return cls(endpoint, etcd_client=etcd_client, balance_enum=balance_enum)
+        return cls(endpoint, server_name=server_name, etcd_client=etcd_client, balance_enum=balance_enum)

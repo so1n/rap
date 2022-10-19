@@ -3,7 +3,9 @@ import asyncio
 from rap.client import Client
 from rap.client.endpoint.consul import ConsulClient, ConsulEndpointProvider
 
-client: Client = Client("example", endpoint_provider=ConsulEndpointProvider.build(consul_client=ConsulClient()))
+client: Client = Client(
+    "example", endpoint_provider=ConsulEndpointProvider.build(consul_client=ConsulClient(), server_name="example")
+)
 
 
 # in register, must use async def...

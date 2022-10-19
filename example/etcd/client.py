@@ -3,7 +3,9 @@ import asyncio
 from rap.client import Client
 from rap.client.endpoint.etcd import EtcdClient, EtcdEndpointProvider
 
-client: Client = Client("example", endpoint_provider=EtcdEndpointProvider.build(etcd_client=EtcdClient()))
+client: Client = Client(
+    "example", endpoint_provider=EtcdEndpointProvider.build(etcd_client=EtcdClient(), server_name="example")
+)
 
 
 # in register, must use async def...

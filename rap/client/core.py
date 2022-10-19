@@ -59,7 +59,6 @@ class BaseClient:
         :param cache: rap.common.cache.Cache
         :param window_statistics: rap.common.collect_statistics.WindowStatistics
         :param through_deadline: enable through deadline param to server
-        :param endpoint: rap.client.endpoint
         """
         self.server_name: str = server_name
         self._processor_list: List[BaseProcessor] = []
@@ -71,7 +70,15 @@ class BaseClient:
         self._window_statistics: WindowStatistics = window_statistics or WindowStatistics()
 
         ep: BaseEndpointProvider = endpoint_provider or LocalEndpointProvider.build({"ip": "localhost", "port": 9000})
-        ep.inject((pool_provider or PoolProvider.build()).inject(transport_provider or TransportProvider.build()))
+
+        # Implementing dependency injection manually
+        ep.inject(
+            (pool_provider or PoolProvider.build()).inject(
+                (transport_provider or TransportProvider.build()).inject(
+                    server_name=server_name, processor_list=self._processor_list
+                )
+            )
+        )
         self._endpoint: BaseEndpoint = ep.create_instance()
 
         self.register_event_handler(EventEnum.before_start, lambda _: self._window_statistics.statistics_data())
@@ -105,7 +112,7 @@ class BaseClient:
     async def start(self) -> None:
         """Create client transport"""
         await self._run_event_handler(EventEnum.before_start)
-        await self.endpoint.start(self)
+        await self.endpoint.start()
         await self._run_event_handler(EventEnum.after_start)
 
     async def await_start(self) -> None:

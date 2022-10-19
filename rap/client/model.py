@@ -8,12 +8,10 @@ from rap.common.types import MSG_TYPE, SERVER_BASE_MSG_TYPE
 from rap.common.utils import constant
 
 if TYPE_CHECKING:
-    from rap.client.core import BaseClient
     from rap.client.transport.transport import Transport
 
 
 class ClientContext(Context):
-    app: "BaseClient"
     transport: "Transport"
 
 

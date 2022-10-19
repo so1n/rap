@@ -11,7 +11,7 @@ from rap.common.provider import Provider
 
 logger: logging.Logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
-    from rap.client.core import BaseClient
+    pass
 
 
 class BalanceEnum(Enum):
@@ -89,14 +89,12 @@ class BaseEndpoint(object):
 
     async def create(
         self,
-        app: "BaseClient",
         ip: Optional[str] = None,
         port: Optional[int] = None,
         weight: Optional[int] = None,
         max_inflight: Optional[int] = None,
     ) -> None:
         """create and init pool
-        :param app: client app
         :param ip: server ip
         :param port: server port
         :param weight: select transport weight
@@ -110,9 +108,7 @@ class BaseEndpoint(object):
 
         weight = get_value_by_range(weight, 0, 10) if weight else 10
         max_inflight = get_value_by_range(max_inflight, 0) if max_inflight else 100
-        pool: Pool = self._pool_provider.create_instance(
-            app, host=ip, port=port, weight=weight, max_inflight=max_inflight
-        )
+        pool: Pool = self._pool_provider.create_instance(host=ip, port=port, weight=weight, max_inflight=max_inflight)
         self._transport_pool_dict[key] = pool
         self._transport_key_list.append(key)
         await pool.create()
@@ -124,7 +120,7 @@ class BaseEndpoint(object):
     def _start(self) -> None:
         self._run_event.set()
 
-    async def start(self, app: "BaseClient") -> None:
+    async def start(self) -> None:
         """start endpoint and create&init transport"""
         raise NotImplementedError
 

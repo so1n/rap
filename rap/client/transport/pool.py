@@ -20,7 +20,7 @@ from rap.common.provider import Provider
 
 logger: logging.Logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
-    from rap.client.core import BaseClient
+    pass
 
 
 class _PoolDaemonEnum(IntEnum):
@@ -112,7 +112,6 @@ class PoolWrapTransport(object):
 class Pool(object):
     def __init__(
         self,
-        app: "BaseClient",
         host: str,
         port: int,
         weight: int,
@@ -132,14 +131,11 @@ class Pool(object):
         destroy_transport_interval: Optional[int] = None,
     ) -> None:
         """
-        :param app: rap client
         :param host: server host
         :param port: server port
-
         :param weight: set transport weight
         :param max_inflight: set conn max use number, default 100
         :param declare_timeout: set transport declare timeout
-
         :param min_ping_interval: Minimum interval time (seconds)
         :param max_ping_interval: Maximum interval time (seconds)
         :param ping_fail_cnt: The maximum number of consecutive ping failures.
@@ -149,7 +145,13 @@ class Pool(object):
         :param transport_age: Set the number of seconds after which the transport will be deactivated
             (no new requests are allowed)，If it is 0, the function is not enabled
         :param transport_age_jitter: Prevent transport from being closed in batches by jitter.
-            When the transport age is not empty, the transport age jitter cannot be empty either.
+            When the transport age is not empty, the transport age jitter cannot be empty either
+        :param transport_grace_timeout: How many seconds after the graceful closing of the transport has not been
+            closed, then the transport is forced to close
+        :param pool_lower_water: The low water level of the pool (percentage), when the available usage is found to be
+            lower than the low water level, the redundant transport will be closed
+        :param pool_high_water: The high water level of the pool (percentage), When the available amount is greater
+            than the high water level, the pool will create a new transport
         :param destroy_transport_interval:
             When dynamically adjusting the transport, the interval for continuously destroying the transport.
              default value 60 (second)
@@ -157,7 +159,6 @@ class Pool(object):
              Creating transport is very expensive, so the pool will slowly destroy the transport,
              preventing frequent destruction and creation of transport in a short period of time.
         """
-        self._app: "BaseClient" = app
         self._share: Share = Share()
         self._host: str = host
         self._port: int = port
@@ -320,7 +321,6 @@ class Pool(object):
     async def fork_transport(self) -> Transport:
         """Create new transport. (The transport created at this time will not be placed in the pool)"""
         transport: Transport = self._transport_provider.create_instance(
-            self._app,
             self._host,
             self._port,
             self._weight,
@@ -410,6 +410,8 @@ class Pool(object):
 
 
 class PoolProvider(Provider):
+    """Auxiliary rap.client to use pool"""
+
     def inject(
         self,
         transport_provider: Optional[TransportProvider] = None,
@@ -435,6 +437,34 @@ class PoolProvider(Provider):
         pool_lower_water: Optional[float] = None,
         destroy_transport_interval: Optional[int] = None,
     ) -> "PoolProvider":
+        """
+        :param pool: rap.client.transport.pool.Pool
+
+        :param max_inflight: set conn max use number, default 100
+        :param declare_timeout: set transport declare timeout
+        :param min_ping_interval: Minimum interval time (seconds)
+        :param max_ping_interval: Maximum interval time (seconds)
+        :param ping_fail_cnt: The maximum number of consecutive ping failures.
+            If the number of consecutive failures is greater than or equal to the value, conn will be closed
+        :param max_pool_size: Maximum number of conn
+        :param min_pool_size: Minimum number of conn
+        :param transport_age: Set the number of seconds after which the transport will be deactivated
+            (no new requests are allowed)，If it is 0, the function is not enabled
+        :param transport_age_jitter: Prevent transport from being closed in batches by jitter.
+            When the transport age is not empty, the transport age jitter cannot be empty either
+        :param transport_grace_timeout: How many seconds after the graceful closing of the transport has not been
+            closed, then the transport is forced to close
+        :param pool_lower_water: The low water level of the pool (percentage), when the available usage is found to be
+            lower than the low water level, the redundant transport will be closed
+        :param pool_high_water: The high water level of the pool (percentage), When the available amount is greater
+            than the high water level, the pool will create a new transport
+        :param destroy_transport_interval:
+            When dynamically adjusting the transport, the interval for continuously destroying the transport.
+             default value 60 (second)
+
+             Creating transport is very expensive, so the pool will slowly destroy the transport,
+             preventing frequent destruction and creation of transport in a short period of time.
+        """
         return cls(
             pool,
             max_inflight=max_inflight,

@@ -1,13 +1,10 @@
 import asyncio
-from typing import TYPE_CHECKING, Optional, Tuple, Type
+from typing import Optional, Tuple, Type
 
 from typing_extensions import TypedDict
 
 from rap.client.endpoint.base import BalanceEnum, BaseEndpoint, BaseEndpointProvider
 from rap.client.transport.pool import PoolProvider
-
-if TYPE_CHECKING:
-    from rap.client.core import BaseClient
 
 
 class ConnParamTypedDict(TypedDict, total=False):
@@ -37,7 +34,7 @@ class LocalEndpoint(BaseEndpoint):
         self._conn_config_list: Tuple[ConnParamTypedDict, ...] = conn_config
         super().__init__(balance_enum=balance_enum, pool_provider=pool_provider)
 
-    async def start(self, app: "BaseClient") -> None:
+    async def start(self) -> None:
         """init transport and start"""
         if not self.is_close:
             raise ConnectionError(f"{self.__class__.__name__} is running")
@@ -46,7 +43,6 @@ class LocalEndpoint(BaseEndpoint):
         await asyncio.gather(
             *[
                 self.create(
-                    app,
                     conn_config_dict.get("ip", None),
                     conn_config_dict.get("port", None),
                     weight=conn_config_dict.get("weight", None),
@@ -66,4 +62,10 @@ class LocalEndpointProvider(BaseEndpointProvider):
         endpoint: Type[LocalEndpoint] = LocalEndpoint,
         balance_enum: Optional[BalanceEnum] = None,
     ) -> "LocalEndpointProvider":
+        """
+        :param conn_config: transport info list,
+            like:[{"ip": localhost, "port": 9000, "weight": 10, "max_inflight": 100}]
+        :param endpoint: LocalEndpoint class
+        :param balance_enum: balance pick transport method, default random
+        """
         return cls(endpoint, *conn_config, balance_enum=balance_enum)
