@@ -10,7 +10,7 @@ pwd_path: str = os.getcwd()
 if not pwd_path.endswith("tests"):
     pwd_path += "/tests"
 pytestmark = pytest.mark.asyncio
-client: Client = Client("test", transport_provider=TransportProvider.build(ssl_crt_path=f"{pwd_path}/rap_ssl.crt"))
+client: Client = Client(transport_provider=TransportProvider.build(ssl_crt_path=f"{pwd_path}/rap_ssl.crt"))
 
 
 # in register, must use async def...
@@ -32,7 +32,6 @@ async def ssl_server() -> AsyncGenerator[Server, None]:
         return a + b
 
     rpc_server = Server(
-        "test",
         # enable ssl
         ssl_crt_path=f"{pwd_path}/rap_ssl.crt",
         ssl_key_path=f"{pwd_path}/rap_ssl.key",

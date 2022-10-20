@@ -46,7 +46,6 @@ class BaseClient:
 
     def __init__(
         self,
-        server_name: str,
         cache: Optional[Cache] = None,
         window_statistics: Optional[WindowStatistics] = None,
         through_deadline: bool = False,
@@ -55,12 +54,10 @@ class BaseClient:
         endpoint_provider: Optional[BaseEndpointProvider] = None,
     ):
         """
-        :param server_name: server name
         :param cache: rap.common.cache.Cache
         :param window_statistics: rap.common.collect_statistics.WindowStatistics
         :param through_deadline: enable through deadline param to server
         """
-        self.server_name: str = server_name
         self._processor_list: List[BaseProcessor] = []
         self._through_deadline: bool = through_deadline
         self._event_dict: Dict[EventEnum, List[CLIENT_EVENT_FN]] = {
@@ -74,9 +71,7 @@ class BaseClient:
         # Implementing dependency injection manually
         ep.inject(
             (pool_provider or PoolProvider.build()).inject(
-                (transport_provider or TransportProvider.build()).inject(
-                    server_name=server_name, processor_list=self._processor_list
-                )
+                (transport_provider or TransportProvider.build()).inject(processor_list=self._processor_list)
             )
         )
         self._endpoint: BaseEndpoint = ep.create_instance()

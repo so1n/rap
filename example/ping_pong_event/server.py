@@ -10,7 +10,7 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
-    rpc_server: Server = Server("example")
+    rpc_server: Server = Server()
     loop.run_until_complete(rpc_server.create_server())
 
     loop.run_until_complete(rpc_server.run_forever())

@@ -11,6 +11,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 def add_consul_client(
+    config_name: str,
     server: "Server",
     weight: int = 10,
     namespace: str = "rap",
@@ -40,11 +41,11 @@ def add_consul_client(
     logger.info(f"connect cousul server:<{scheme}://{host}:{port}>")
 
     async def register(app: "Server") -> None:
-        await consul_client.register(app.server_name, app.host, str(app.port), weight)
+        await consul_client.register(config_name, app.host, str(app.port), weight)
         logger.info(f"register to consul success host:{app.host} port:{app.port} weight:{weight}")
 
     async def deregister(app: "Server") -> None:
-        await consul_client.deregister(app.server_name, app.host, str(app.port))
+        await consul_client.deregister(config_name, app.host, str(app.port))
         logger.info("deregister from consul success")
         await consul_client.stop()
 

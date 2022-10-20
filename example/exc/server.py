@@ -15,6 +15,6 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
-    rpc_server = Server("example")
+    rpc_server = Server()
     rpc_server.register(raise_msg_exc)
     loop.run_until_complete(rpc_server.run_forever())

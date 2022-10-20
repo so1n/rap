@@ -2,7 +2,7 @@ import asyncio
 
 from rap.client import Client
 
-client: Client = Client("example")
+client: Client = Client()
 
 
 @client.register()

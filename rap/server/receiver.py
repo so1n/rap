@@ -345,15 +345,12 @@ class Receiver(object):
             else:
                 raise TypeError(f"Error msg type, {request.correlation_id}")
         elif request.func_name == constant.DECLARE:
-            if request.body.get("server_name") != self._app.server_name:
-                response.set_server_event(CloseConnEvent("error server name"))
-            else:
-                self._client_info = InmutableDict(request.body["client_info"])
-                response.set_event(DeclareEvent({"conn_id": self._conn.conn_id, "server_info": self._server_info}))
-                self._conn.keepalive_timestamp = int(time.time())
+            self._client_info = InmutableDict(request.body["client_info"])
+            response.set_event(DeclareEvent({"conn_id": self._conn.conn_id, "server_info": self._server_info}))
+            self._conn.keepalive_timestamp = int(time.time())
 
-                ping_future: asyncio.Future = self.create_future_by_resource(self.ping_event())
-                self._conn.conn_future.add_done_callback(lambda _: ping_future.cancel())
+            ping_future: asyncio.Future = self.create_future_by_resource(self.ping_event())
+            self._conn.conn_future.add_done_callback(lambda _: ping_future.cancel())
         elif request.func_name == constant.DROP:
             response.set_event(DropEvent("success"))
         return response, True

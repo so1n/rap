@@ -20,7 +20,7 @@ class CheckConnProcessor(BaseProcessor):
 
 
 check_conn_processor: CheckConnProcessor = CheckConnProcessor()
-client: Client = Client("example", pool_provider=PoolProvider.build(max_pool_size=1, min_pool_size=1))
+client: Client = Client(pool_provider=PoolProvider.build(max_pool_size=1, min_pool_size=1))
 client.load_processor([check_conn_processor])
 
 

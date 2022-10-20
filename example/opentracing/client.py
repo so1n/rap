@@ -21,7 +21,7 @@ tracer: Optional[Tracer] = config.initialize_tracer()
 if not tracer:
     raise ValueError("tracer must not None")
 
-client: Client = Client("example")
+client: Client = Client()
 client.load_processor([TracingProcessor(tracer)])
 
 

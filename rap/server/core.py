@@ -29,7 +29,6 @@ logger: logging.Logger = logging.getLogger(__name__)
 class Server(object):
     def __init__(
         self,
-        server_name: str,
         host: str = "localhost",
         port: int = 9000,
         send_timeout: int = 9,
@@ -52,7 +51,6 @@ class Server(object):
         cache_interval: Optional[float] = None,
     ):
         """
-        :param server_name: server name
         :param host: listen host
         :param port: listen port
         :param send_timeout: send msg timeout
@@ -74,7 +72,6 @@ class Server(object):
         :param window_statistics: Server window state
         :param cache_interval: Server cache interval seconds to clean up expired data
         """
-        self.server_name: str = server_name
         self.host: str = host
         self.port: int = port
         self._send_timeout: int = send_timeout

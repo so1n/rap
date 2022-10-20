@@ -4,7 +4,7 @@ from rap.client import Client
 from rap.client.endpoint.consul import ConsulClient, ConsulEndpointProvider
 
 client: Client = Client(
-    "example", endpoint_provider=ConsulEndpointProvider.build(consul_client=ConsulClient(), server_name="example")
+    endpoint_provider=ConsulEndpointProvider.build(consul_client=ConsulClient(), config_name="example")
 )
 
 

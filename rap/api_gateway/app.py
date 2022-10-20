@@ -9,19 +9,18 @@ from rap.client import Client
 
 def create_app(
     prefix: str,
-    rap_client_list: List[Client],
+    rap_client_dict: Dict[str, Client],
     private_filter: Optional[bool] = None,
     group_filter: Optional[Set[str]] = None,
 ) -> Starlette:
     """
     prefix: api url prefix
-    rap_client_list: rap client list
+    rap_client_dict: rap client dict
     private_filter: If True, access to private methods is not allowed
     group_filter: Which groups can not be accessed
     """
     app: Starlette = Starlette()
     func_info_dict: Dict[str, Dict[str, Any]] = {}
-    rap_client_dict: Dict[str, Client] = {rap_client.server_name: rap_client for rap_client in rap_client_list}
     app.add_exception_handler(Exception, api_exception)
     app.state.rap_client_dict = rap_client_dict
     app.state.private_filter = private_filter

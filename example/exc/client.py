@@ -4,7 +4,7 @@ import time
 from rap.client import Client
 from rap.common.exceptions import FuncNotFoundError
 
-client: Client = Client("example")
+client: Client = Client()
 
 
 # in register, must use async def...

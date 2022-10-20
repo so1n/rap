@@ -16,11 +16,11 @@ class EtcdEndpoint(BaseEndpoint):
     def __init__(
         self,
         etcd_client: EtcdClient,
-        server_name: str,
+        config_name: str,
         pool_provider: Optional[PoolProvider] = None,
         balance_enum: BalanceEnum = BalanceEnum.random,
     ):
-        self._server_name: str = server_name
+        self._config_name: str = config_name
         self.etcd_client: EtcdClient = etcd_client
         self._watch_future: asyncio.Future = done_future()
         super().__init__(
@@ -38,7 +38,7 @@ class EtcdEndpoint(BaseEndpoint):
         if not self.is_close:
             raise ConnectionError(f"{self.__class__.__name__} is running")
         logger.info(f"connect to etcd:{self.etcd_client.etcd_url}, wait discovery....")
-        async for item in self.etcd_client.discovery(self._server_name):
+        async for item in self.etcd_client.discovery(self._config_name):
             await self.create(
                 item["host"],
                 item["port"],
@@ -50,7 +50,7 @@ class EtcdEndpoint(BaseEndpoint):
         if not self._transport_key_list:
             logger.warning(
                 f"Can not found transport info from etcd,"
-                f" wait {self._server_name} server start and register to etcd"
+                f" wait {self._config_name} server start and register to etcd"
             )
         else:
             wait_start_future.set_result(True)
@@ -80,7 +80,7 @@ class EtcdEndpoint(BaseEndpoint):
                 logger.warning("client not transport")
 
         self._start()
-        self._watch_future = asyncio.ensure_future(self.etcd_client.watch(self._server_name, [create], [destroy]))
+        self._watch_future = asyncio.ensure_future(self.etcd_client.watch(self._config_name, [create], [destroy]))
         await wait_start_future
 
 
@@ -89,8 +89,8 @@ class EtcdEndpointProvider(BaseEndpointProvider):
     def build(
         cls,
         etcd_client: EtcdClient,
-        server_name: str,
+        config_name: str,
         endpoint: Type[EtcdEndpoint] = EtcdEndpoint,
         balance_enum: Optional[BalanceEnum] = None,
     ) -> "EtcdEndpointProvider":
-        return cls(endpoint, server_name=server_name, etcd_client=etcd_client, balance_enum=balance_enum)
+        return cls(endpoint, config_name=config_name, etcd_client=etcd_client, balance_enum=balance_enum)

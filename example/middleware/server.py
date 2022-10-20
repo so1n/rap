@@ -27,7 +27,7 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
-    rpc_server = Server("example")
+    rpc_server = Server()
     rpc_server.load_middleware([ConnLimitMiddleware()])
     rpc_server.register(sync_sum)
     rpc_server.register(async_sum)

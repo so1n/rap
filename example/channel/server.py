@@ -60,7 +60,7 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
-    rpc_server_1: Server = Server("example")
+    rpc_server_1: Server = Server()
     rpc_server_1.load_processor([CryptoProcessor({"test": "keyskeyskeyskeys"})])
     rpc_server_1.register(async_channel)
     rpc_server_1.register(echo_body)
@@ -68,7 +68,7 @@ if __name__ == "__main__":
     rpc_server_1.register(read_channel)
     rpc_server_1.register(write_channel)
 
-    rpc_server_2: Server = Server("example", port=9001)
+    rpc_server_2: Server = Server(port=9001)
     rpc_server_2.load_processor([CryptoProcessor({"test": "keyskeyskeyskeys"})])
     rpc_server_2.register(async_channel)
     rpc_server_2.register(echo_body)
@@ -76,7 +76,7 @@ if __name__ == "__main__":
     rpc_server_2.register(read_channel)
     rpc_server_2.register(write_channel)
 
-    rpc_server_3: Server = Server("example", port=9002)
+    rpc_server_3: Server = Server(port=9002)
     rpc_server_3.load_processor([CryptoProcessor({"test": "keyskeyskeyskeys"})])
     rpc_server_3.register(async_channel)
     rpc_server_3.register(echo_body)

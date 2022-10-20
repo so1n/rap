@@ -2,7 +2,7 @@ import asyncio
 
 from rap.client import Client, TransportProvider
 
-client: Client = Client("example", transport_provider=TransportProvider.build(ssl_crt_path="./rap_ssl.crt"))
+client: Client = Client(transport_provider=TransportProvider.build(ssl_crt_path="./rap_ssl.crt"))
 
 
 # in register, must use async def...

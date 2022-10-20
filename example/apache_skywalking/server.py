@@ -32,7 +32,7 @@ if __name__ == "__main__":
     )
     agent.start()
     loop = asyncio.new_event_loop()
-    rpc_server: Server = Server("example")
+    rpc_server: Server = Server()
     rpc_server.load_processor([SkywalkingProcessor()])
     rpc_server.register(async_sum)
     rpc_server.register(echo_body)

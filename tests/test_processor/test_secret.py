@@ -26,7 +26,7 @@ class TestCrypto:
 
     async def test_crypto_body_handle(self) -> None:
         crypto: CryptoProcessor = CryptoProcessor("test", "keyskeyskeyskeys")
-        crypto.app = Client("test")
+        crypto.app = Client()
         demo_body_dict: dict = {"nonce": "aaa", "timestamp": int(time.time()) - 70}
         with pytest.raises(CryptoError) as e:
             crypto._body_handle(demo_body_dict)

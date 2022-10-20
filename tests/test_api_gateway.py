@@ -16,9 +16,9 @@ from rap.common.utils import constant
 
 @pytest.fixture()
 def create_test_app() -> Generator[Starlette, None, None]:
-    client: Client = Client("test")
-    app: Starlette = create_app("/api", [client])
-    server: Server = create_server("test")
+    client: Client = Client()
+    app: Starlette = create_app("/api", {"test": client})
+    server: Server = create_server()
 
     async def create_rap_server() -> None:
         await server.create_server()
@@ -52,11 +52,11 @@ class TestApiGateWay:
 
         async def main() -> None:
             # start rap server
-            rap_server: Server = create_server("test")
+            rap_server: Server = create_server()
             await rap_server.create_server()
             # start app server and until start
-            client: Client = Client("test")
-            app_server: AppServer = AppServer(Config(create_app("/api", [client])))
+            client: Client = Client()
+            app_server: AppServer = AppServer(Config(create_app("/api", {"test": client})))
             asyncio.ensure_future(app_server.serve())
             while True:
                 if hasattr(app_server, "servers") and len(app_server.servers) > 0:
@@ -92,9 +92,9 @@ class TestApiGateWay:
     def test_not_found(self) -> None:
         group_set: Set[str] = set()
         group_set.add(constant.DEFAULT_GROUP)
-        client: Client = Client("test")
-        app: Starlette = create_app("/api", [client], group_filter=group_set)
-        server: Server = create_server("test")
+        client: Client = Client()
+        app: Starlette = create_app("/api", {"test": client}, group_filter=group_set)
+        server: Server = create_server()
 
         async def create_rap_server() -> None:
             await server.create_server()

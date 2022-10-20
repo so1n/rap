@@ -5,7 +5,6 @@ from rap.client.endpoint import LocalEndpointProvider
 from rap.client.processor import CryptoProcessor
 
 client: Client = Client(
-    "example",
     endpoint_provider=LocalEndpointProvider.build(
         {"ip": "localhost", "port": 9000}, {"ip": "localhost", "port": 9001}, {"ip": "localhost", "port": 9002}
     ),

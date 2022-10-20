@@ -61,7 +61,7 @@ async def _init_server(processor_list: Optional[List] = None) -> Server:
                 return
             await asyncio.sleep(0.1)
 
-    rpc_server = Server("test", ping_sleep_time=1, processor_list=processor_list or [])
+    rpc_server = Server(ping_sleep_time=1, processor_list=processor_list or [])
     rpc_server.register(sync_sum)
     rpc_server.register(async_sum)
     rpc_server.register(sync_gen)
@@ -117,7 +117,7 @@ def _recovery(client: Client) -> None:
 async def rap_client() -> AsyncGenerator[Client, None]:
     pass
 
-    client: Client = Client("test")
+    client: Client = Client()
     _inject(client)
     await client.start()
     try:
@@ -129,7 +129,7 @@ async def rap_client() -> AsyncGenerator[Client, None]:
 
 @asynccontextmanager
 async def process_client(process_list: List[BaseProcessor]) -> AsyncGenerator[Client, None]:
-    client: Client = Client("test")
+    client: Client = Client()
     _inject(client)
     client.load_processor(process_list)
     await client.start()

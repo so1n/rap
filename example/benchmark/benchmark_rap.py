@@ -17,7 +17,7 @@ def run_server() -> None:
 
     loop: asyncio.AbstractEventLoop = uvloop.new_event_loop()
     asyncio.set_event_loop(loop)
-    rpc_server: Server = Server("example")
+    rpc_server: Server = Server()
     rpc_server.register(test_sum)
     loop.run_until_complete(rpc_server.run_forever())
 
@@ -25,7 +25,7 @@ def run_server() -> None:
 def run_client() -> None:
     loop: asyncio.AbstractEventLoop = uvloop.new_event_loop()
     asyncio.set_event_loop(loop)
-    client: Client = Client("example")
+    client: Client = Client()
 
     @client.register()
     async def test_sum(a: int, b: int) -> int:

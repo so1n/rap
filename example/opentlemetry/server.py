@@ -36,9 +36,8 @@ if __name__ == "__main__":
 
     loop = asyncio.new_event_loop()
     redis: StrictRedis = StrictRedis.from_url("redis://localhost")
-    service_name: str = "example"
-    rpc_server: Server = Server(service_name)
-    trace.set_tracer_provider(TracerProvider(resource=Resource.create({SERVICE_NAME: "server." + service_name})))
+    rpc_server: Server = Server()
+    trace.set_tracer_provider(TracerProvider(resource=Resource.create({SERVICE_NAME: "server.example"})))
     jaeger_exporter = JaegerExporter(
         agent_host_name="localhost",
         agent_port=6831,

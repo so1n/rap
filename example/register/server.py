@@ -30,7 +30,7 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
-    rpc_server: Server = Server("example")
+    rpc_server: Server = Server()
     rpc_server.register(sync_sum)
     rpc_server.register(default_param)
     rpc_server.register(async_sum)

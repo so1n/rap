@@ -11,16 +11,15 @@ from rap.client import Client
 from rap.client.processor.opentelemetry import OpenTelemetryProcessor
 from rap.common.channel import UserChannel
 
-service_name: str = "example"
 logging.basicConfig(format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.DEBUG)
-trace.set_tracer_provider(TracerProvider(resource=Resource.create({SERVICE_NAME: "client." + service_name})))
+trace.set_tracer_provider(TracerProvider(resource=Resource.create({SERVICE_NAME: "client.example"})))
 jaeger_exporter = JaegerExporter(
     agent_host_name="localhost",
     agent_port=6831,
 )
 trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(jaeger_exporter))
 
-client: Client = Client(service_name)
+client: Client = Client()
 client.load_processor([OpenTelemetryProcessor()])
 
 

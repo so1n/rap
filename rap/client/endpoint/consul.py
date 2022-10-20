@@ -16,11 +16,11 @@ class ConsulEndpoint(BaseEndpoint):
     def __init__(
         self,
         consul_client: ConsulClient,
-        server_name: str,
+        config_name: str,
         balance_enum: BalanceEnum = BalanceEnum.random,
         pool_provider: Optional[PoolProvider] = None,
     ):
-        self._server_name: str = server_name
+        self._config_name: str = config_name
         self.consul_client: ConsulClient = consul_client
         self._watch_future: asyncio.Future = done_future()
         super().__init__(
@@ -34,8 +34,8 @@ class ConsulEndpoint(BaseEndpoint):
         await self.consul_client.stop()
         await super().stop()
 
-    async def _watch(self, server_name: str) -> None:
-        async for conn_dict in self.consul_client.watch(server_name):
+    async def _watch(self, config_name: str) -> None:
+        async for conn_dict in self.consul_client.watch(config_name):
             if conn_dict:
                 pop_key_list: List[Tuple[str, int]] = []
                 for key, value in conn_dict:
@@ -54,7 +54,7 @@ class ConsulEndpoint(BaseEndpoint):
             raise ConnectionError(f"{self.__class__.__name__} is running")
 
         logger.info(f"connect to consul:{self.consul_client.consul_url}, wait discovery....")
-        async for item in self.consul_client.discovery(self._server_name):
+        async for item in self.consul_client.discovery(self._config_name):
             await self.create(
                 item["host"],
                 item["port"],
@@ -65,9 +65,9 @@ class ConsulEndpoint(BaseEndpoint):
         if not self._transport_key_list:
             logger.warning(
                 f"Can not found transport info from consul,"
-                f" wait `{self._server_name}` server start and register to consul"
+                f" wait `{self._config_name}` server start and register to consul"
             )
-            async for conn_dict in self.consul_client.watch(self._server_name):
+            async for conn_dict in self.consul_client.watch(self._config_name):
                 for key, value in conn_dict.items():
                     await self.create(
                         value["host"],
@@ -77,7 +77,7 @@ class ConsulEndpoint(BaseEndpoint):
                     )
                     return
         self._start()
-        self._watch_future = asyncio.ensure_future(self._watch(self._server_name))
+        self._watch_future = asyncio.ensure_future(self._watch(self._config_name))
 
 
 class ConsulEndpointProvider(BaseEndpointProvider):
@@ -85,8 +85,8 @@ class ConsulEndpointProvider(BaseEndpointProvider):
     def build(
         cls,
         consul_client: ConsulClient,
-        server_name: str,
+        config_name: str,
         endpoint: Type[ConsulEndpoint] = ConsulEndpoint,
         balance_enum: Optional[BalanceEnum] = None,
     ) -> "ConsulEndpointProvider":
-        return cls(endpoint, server_name=server_name, consul_client=consul_client, balance_enum=balance_enum)
+        return cls(endpoint, config_name=config_name, consul_client=consul_client, balance_enum=balance_enum)

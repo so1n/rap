@@ -29,7 +29,6 @@ class TracingProcessor(BaseProcessor):
             span_context=scope.span.context, format=Format.HTTP_HEADERS, carrier=msg.header  # type: ignore
         )
         scope.span.set_tag(tags.SPAN_KIND, tags.SPAN_KIND_RPC_SERVER)
-        scope.span.set_tag(tags.PEER_SERVICE, msg.context.app.server_name)
         scope.span.set_tag(tags.PEER_HOSTNAME, ":".join([str(i) for i in msg.header["host"]]))
         scope.span.set_tag("correlation_id", msg.correlation_id)
         scope.span.set_tag("msg_type", msg.msg_type)

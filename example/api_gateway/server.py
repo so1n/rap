@@ -24,8 +24,8 @@ async def async_channel(channel: UserChannel) -> None:
         await channel.write(body)
 
 
-def create_server(server_name: str) -> Server:
-    rpc_server: Server = Server(server_name)
+def create_server() -> Server:
+    rpc_server: Server = Server()
     rpc_server.register(sync_sum)
     rpc_server.register(async_sum)
     rpc_server.register(async_gen)
@@ -41,5 +41,5 @@ if __name__ == "__main__":
     )
 
     loop = asyncio.new_event_loop()
-    server: Server = create_server("example")
+    server: Server = create_server()
     loop.run_until_complete(server.run_forever())

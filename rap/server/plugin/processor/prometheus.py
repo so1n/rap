@@ -29,7 +29,8 @@ response_count: "Counter" = Counter("response_total", "Count of response", label
 
 
 class PrometheusProcessor(BaseProcessor):
-    def __init__(self, prometheus_host: str, prometheus_port: int):
+    def __init__(self, service_name: str, prometheus_host: str, prometheus_port: int):
+        self._service_name: str = service_name
         self._prometheus_host: str = prometheus_host
         self._prometheus_port: int = prometheus_port
         self.host_name: str = socket.gethostname()
@@ -41,7 +42,7 @@ class PrometheusProcessor(BaseProcessor):
         start_http_server(self._prometheus_host, self._prometheus_port)
 
     async def process_request(self, request: Request) -> Request:
-        label_list: list = [self.app.server_name, self.host_name, request.target]
+        label_list: list = [self._service_name, self.host_name, request.target]
         request_count.labels(*label_list, request.msg_type).inc()
         if request.msg_type == constant.MSG_REQUEST:
             request.context.start_time = time.time()
@@ -50,7 +51,7 @@ class PrometheusProcessor(BaseProcessor):
         return request
 
     async def process_response(self, response: Response) -> Response:
-        label_list: list = [self.app.server_name, self.host_name, response.target]
+        label_list: list = [self._service_name, self.host_name, response.target]
         response_count.labels(*label_list, response.msg_type, response.status_code).inc()
         if response.msg_type == constant.MSG_RESPONSE:
             msg_response_count.labels(*label_list, response.status_code).inc()
@@ -66,7 +67,7 @@ class PrometheusProcessor(BaseProcessor):
         return response
 
     async def process_exc(self, response: Response) -> Response:
-        label_list: list = [self.app.server_name, self.host_name, response.target]
+        label_list: list = [self._service_name, self.host_name, response.target]
         response_count.labels(*label_list, response.msg_type, response.status_code).inc()
         if response.msg_type == constant.MSG_RESPONSE:
             msg_response_count.labels(*label_list, response.status_code).inc()

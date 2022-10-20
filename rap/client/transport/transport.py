@@ -60,7 +60,6 @@ class Transport(object):
         host: str,
         port: int,
         weight: int,
-        server_name: str,
         processor_list: List[BaseProcessor],
         through_deadline: bool = False,
         ssl_crt_path: Optional[str] = None,
@@ -76,7 +75,6 @@ class Transport(object):
         :param read_timeout: set conn read timeout param, default 1200
         :param max_inflight: set conn max use number, default 100
         """
-        self._server_name: str = server_name
         self._through_deadline: bool = through_deadline
         self._conn: Connection = Connection(
             host,
@@ -454,7 +452,7 @@ class Transport(object):
     async def declare(self) -> None:
         """
         After transport is initialized, connect to the server and initialize the connection resources.
-        Only include server_name and get transport id two functions, if you need to expand the function,
+        Only include transport id functions, if you need to expand the function,
           you need to process the request and response of the declared life cycle through the processor
         """
         if self._server_info:
@@ -462,7 +460,7 @@ class Transport(object):
         async with self._transport_context(enable_limit_request=True) as context:
             response: Response = await self._base_request(
                 Request.from_event(
-                    event.DeclareEvent({"server_name": self._server_name, "client_info": context.client_info}),
+                    event.DeclareEvent({"client_info": context.client_info}),
                     context,
                 )
             )
@@ -573,7 +571,7 @@ class Transport(object):
         async with self._transport_context() as context:
             request: Request = Request(
                 msg_type=constant.MSG_REQUEST,
-                target=f"{self._server_name}/{group}/{func_name}",
+                target=f"/{group}/{func_name}",
                 body=arg_param,
                 context=context,
             )
@@ -609,10 +607,8 @@ class TransportProvider(Provider[Transport]):
 
     def inject(
         self,
-        server_name: str,
         processor_list: Optional[List[BaseProcessor]] = None,
     ) -> "TransportProvider":
-        self._kwargs["server_name"] = server_name
         if "processor_list" not in self._kwargs:
             self._kwargs["processor_list"] = processor_list if processor_list is not None else []
         return self

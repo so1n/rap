@@ -10,9 +10,9 @@ async def async_sum(a: int, b: int) -> int:
 
 
 async def main() -> None:
-    rpc_server: Server = Server("example")
+    rpc_server: Server = Server()
     rpc_server.register(async_sum)
-    await add_etcd_client(rpc_server).run_forever()
+    await add_etcd_client("example", rpc_server).run_forever()
 
 
 if __name__ == "__main__":
