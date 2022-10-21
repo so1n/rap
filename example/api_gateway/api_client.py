@@ -7,7 +7,7 @@ from websockets import connect  # type: ignore
 
 
 async def example_websockets_client(server_name: str = "example") -> None:
-    async with connect("ws://localhost:8000/api/channel") as websocket:
+    async with connect(f"ws://localhost:8000/api/channel/{server_name}") as websocket:
 
         async def send_json(data: dict) -> None:
             await websocket.send(json.dumps(data))
@@ -19,7 +19,7 @@ async def example_websockets_client(server_name: str = "example") -> None:
             else:
                 raise RuntimeError(resp["msg"])
 
-        await send_json({"server_name": server_name, "group": "default", "func_name": "async_channel"})
+        await send_json({"group": "default", "func_name": "async_channel"})
         result: Any = await receive_json()
         if result != "accept":
             return
@@ -35,9 +35,8 @@ async def example_websockets_client(server_name: str = "example") -> None:
 async def example_http_client() -> None:
     async with AsyncClient() as client:
         resp: Response = await client.post(
-            "http://localhost:8000/api/normal",
+            "http://localhost:8000/api/normal/example",
             json={
-                "server_name": "example",
                 "group": "default",
                 "func_name": "sync_sum",
                 "func_type": "normal",

@@ -17,7 +17,7 @@ from rap.common.utils import constant
 @pytest.fixture()
 def create_test_app() -> Generator[Starlette, None, None]:
     client: Client = Client()
-    app: Starlette = create_app("/api", {"test": client})
+    app: Starlette = create_app("/api", {"title": "test", "client": client})
     server: Server = create_server()
 
     async def create_rap_server() -> None:
@@ -35,9 +35,8 @@ class TestApiGateWay:
     def test_api_normal(self, create_test_app: Starlette) -> None:
         with TestClient(create_test_app) as client:
             resp = client.post(
-                "http://localhost:8000/api/normal",
+                "http://localhost:8000/api/normal/test",
                 json={
-                    "server_name": "test",
                     "group": "default",
                     "func_name": "sync_sum",
                     "func_type": "normal",
@@ -56,7 +55,7 @@ class TestApiGateWay:
             await rap_server.create_server()
             # start app server and until start
             client: Client = Client()
-            app_server: AppServer = AppServer(Config(create_app("/api", {"test": client})))
+            app_server: AppServer = AppServer(Config(create_app("/api", {"title": "test", "client": client})))
             asyncio.ensure_future(app_server.serve())
             while True:
                 if hasattr(app_server, "servers") and len(app_server.servers) > 0:
@@ -73,14 +72,13 @@ class TestApiGateWay:
     def test_param_error(self, create_test_app: Starlette) -> None:
         with TestClient(create_test_app, raise_server_exceptions=False) as client:
             resp = client.post(
-                "http://localhost:8000/api/normal",
-                json={"server_name": "test", "group": "default", "func_type": "normal", "arg_list": [1, 2]},
+                "http://localhost:8000/api/normal/test",
+                json={"group": "default", "func_type": "normal", "arg_list": [1, 2]},
             )
             assert {"code": 1, "msg": "Param error('func_name')"} == resp.json()
             resp = client.post(
-                "http://localhost:8000/api/normal",
+                "http://localhost:8000/api/normal/test",
                 json={
-                    "server_name": "test",
                     "group": "default",
                     "func_name": "sync_sum",
                     "func_type": "normal",
@@ -93,7 +91,7 @@ class TestApiGateWay:
         group_set: Set[str] = set()
         group_set.add(constant.DEFAULT_GROUP)
         client: Client = Client()
-        app: Starlette = create_app("/api", {"test": client}, group_filter=group_set)
+        app: Starlette = create_app("/api", {"title": "test", "client": client, "group_filter": group_set})
         server: Server = create_server()
 
         async def create_rap_server() -> None:
@@ -107,9 +105,8 @@ class TestApiGateWay:
 
         with TestClient(app, raise_server_exceptions=False) as test_client:
             resp = test_client.post(
-                "http://localhost:8000/api/normal",
+                "http://localhost:8000/api/normal/test",
                 json={
-                    "server_name": "test",
                     "group": "default",
                     "func_name": "sync_sum",
                     "func_type": "normal",
