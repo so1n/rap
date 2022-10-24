@@ -4,10 +4,10 @@ import math
 import sys
 import time
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Dict, List, Optional, Sequence, Set, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Dict, Optional, Sequence, Set, Tuple, Type, Union
 
 from rap.client.model import ClientContext, Request, Response
-from rap.client.processor.base import BaseProcessor, belong_to_base_method
+from rap.client.processor.base import BaseProcessor
 from rap.client.transport.channel import Channel
 from rap.client.utils import gen_rap_error, get_exc_status_code_dict
 from rap.common import event
@@ -21,7 +21,7 @@ from rap.common.asyncio_helper import (
     safe_del_future,
 )
 from rap.common.conn import CloseConnException, Connection
-from rap.common.exceptions import IgnoreNextProcessor, InvokeError, RPCError
+from rap.common.exceptions import InvokeError, RPCError
 from rap.common.number_range import NumberRange, get_value_by_range
 from rap.common.provider import Provider
 from rap.common.state import State
@@ -60,7 +60,7 @@ class Transport(object):
         host: str,
         port: int,
         weight: int,
-        processor_list: List[BaseProcessor],
+        processor: Optional[BaseProcessor] = None,
         through_deadline: bool = False,
         ssl_crt_path: Optional[str] = None,
         pack_param: Optional[dict] = None,
@@ -103,21 +103,7 @@ class Transport(object):
         self._close_soon_flag: bool = False
 
         # processor
-        self.on_context_enter_processor_list: Sequence[Callable] = [
-            i.on_context_enter for i in processor_list if not belong_to_base_method(i.on_context_enter)
-        ]
-        self.on_context_exit_processor_list: Sequence[Callable] = [
-            i.on_context_exit for i in processor_list if not belong_to_base_method(i.on_context_exit)
-        ]
-        self.process_request_processor_list: Sequence[Callable] = [
-            i.process_request for i in processor_list if not belong_to_base_method(i.process_request)
-        ]
-        self.process_response_processor_list: Sequence[Callable] = [
-            i.process_response for i in processor_list if not belong_to_base_method(i.process_response)
-        ]
-        self.process_exception_processor_list: Sequence[Callable] = [
-            i.process_exc for i in processor_list if not belong_to_base_method(i.process_exc)
-        ]
+        self._processor: Optional[BaseProcessor] = processor
 
         # ping
         self._last_ping_timestamp: float = time.time()
@@ -175,8 +161,8 @@ class Transport(object):
         context.client_info = self._client_info
 
         self._context_dict[correlation_id] = context
-        for on_context_enter in self.on_context_enter_processor_list:
-            await on_context_enter(context)
+        if self._processor:
+            await self._processor.on_context_enter(context)
 
         # any code
         exc_type, exc_val, exc_tb = None, None, None
@@ -187,8 +173,8 @@ class Transport(object):
             raise e
         finally:
             # release context
-            for on_context_exit in reversed(self.on_context_exit_processor_list):
-                await on_context_exit(context, exc_type, exc_val, exc_tb)
+            if self._processor:
+                await self._processor.tail_processor.on_context_exit(context, exc_type, exc_val, exc_tb)
             if not enable_limit_request:
                 self._semaphore.release()
             self._context_dict.pop(correlation_id, None)
@@ -373,30 +359,21 @@ class Transport(object):
             exc_class: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(
                 response.status_code, rap_exc.BaseRapError
             )
-            response.exc = exc_class.build(response.body)
-        if not response.exc:
+            exc: Exception = exc_class.build(response.body)
+            if isinstance(exc, InvokeError):
+                # Handle exceptions in the same language of the client and server
+                response.exc = gen_rap_error(exc.exc_name, exc.exc_info)
+            else:
+                response.exc = exc
+
+        if self._processor:
             try:
-                for process_response in reversed(self.process_response_processor_list):
-                    response = await process_response(response)
-            except IgnoreNextProcessor:
-                pass
+                response = await self._processor.tail_processor.process_response(response)
             except Exception as e:
+                # The exception is propagated in another coroutine and needs to be transferred to the coroutine
+                # that initiated the request
                 response.exc = e
-                response.tb = sys.exc_info()[2]
-        if response.exc:
-            if isinstance(response.exc, InvokeError):
-                response.exc = gen_rap_error(response.exc.exc_name, response.exc.exc_info)
-            for process_exception in reversed(self.process_exception_processor_list):
-                raw_response: Response = response
-                try:
-                    response = await process_exception(response)  # type: ignore
-                except IgnoreNextProcessor:
-                    break
-                except Exception as e:
-                    logger.exception(
-                        f"processor:{process_exception} handle response:{response.correlation_id} error:{e}"
-                    )
-                    response = raw_response
+                _, _, response.tb = sys.exc_info()
         return response
 
     async def _server_recv_msg_handler(self, response_msg: SERVER_BASE_MSG_TYPE) -> None:
@@ -546,8 +523,8 @@ class Transport(object):
         deadline: Optional[Deadline] = deadline_context.get()
         if self._through_deadline and deadline:
             request.header["X-rap-deadline"] = deadline.end_timestamp
-        for process_request in self.process_request_processor_list:
-            await process_request(request)
+        if self._processor:
+            request = await self._processor.process_request(request)
         await self._conn.write(request.to_msg())
 
     ######################
@@ -607,10 +584,10 @@ class TransportProvider(Provider[Transport]):
 
     def inject(
         self,
-        processor_list: Optional[List[BaseProcessor]] = None,
+        processor: Optional[BaseProcessor] = None,
     ) -> "TransportProvider":
-        if "processor_list" not in self._kwargs:
-            self._kwargs["processor_list"] = processor_list if processor_list is not None else []
+        if "processor" not in self._kwargs:
+            self._kwargs["processor"] = processor
         return self
 
     @classmethod

@@ -40,7 +40,7 @@ if __name__ == "__main__":
     )
     if secret_key:
         crypto_key_id, crypto_key = secret_key.split(",")
-        client.load_processor([CryptoProcessor(crypto_key_id, crypto_key)])
+        client.load_processor(CryptoProcessor(crypto_key_id, crypto_key))
     loop.run_until_complete(client.start())
 
     if mode == "d":

@@ -5,7 +5,7 @@ from typing import Any, AsyncGenerator, AsyncIterator, List, Optional, Tuple
 import pytest
 
 from rap.client import Client
-from rap.client.processor.base import BaseProcessor
+from rap.client.processor.base import BaseClientProcessor
 from rap.common.channel import UserChannel
 from rap.server import Server
 from rap.server.plugin.processor.base import BaseProcessor as ServerBaseProcessor
@@ -128,10 +128,10 @@ async def rap_client() -> AsyncGenerator[Client, None]:
 
 
 @asynccontextmanager
-async def process_client(process_list: List[BaseProcessor]) -> AsyncGenerator[Client, None]:
+async def process_client(*process_list: BaseClientProcessor) -> AsyncGenerator[Client, None]:
     client: Client = Client()
     _inject(client)
-    client.load_processor(process_list)
+    client.load_processor(*process_list)
     await client.start()
     try:
         yield client
@@ -142,8 +142,8 @@ async def process_client(process_list: List[BaseProcessor]) -> AsyncGenerator[Cl
 
 @asynccontextmanager
 async def load_process(
-    server_process: List[ServerBaseProcessor], client_process: List[BaseProcessor]
+    server_process: List[ServerBaseProcessor], client_process: List[BaseClientProcessor]
 ) -> AsyncGenerator[Tuple[Client, Server], None]:
     async with process_server(server_process) as server:
-        async with process_client(client_process) as client:
+        async with process_client(*client_process) as client:
             yield client, server

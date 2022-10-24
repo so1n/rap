@@ -1,4 +1,5 @@
-from typing import Optional
+from types import TracebackType
+from typing import Optional, Tuple, Type
 
 from jaeger_client.span_context import SpanContext
 from jaeger_client.tracer import Tracer
@@ -7,13 +8,13 @@ from opentracing.ext import tags
 from opentracing.propagation import Format
 from opentracing.scope import Scope
 
-from rap.client.model import BaseMsgProtocol, Request, Response
+from rap.client.model import BaseMsgProtocol, ClientContext, Request, Response
 from rap.common.utils import constant
 
-from .base import BaseProcessor
+from .base import BaseClientProcessor
 
 
-class TracingProcessor(BaseProcessor):
+class TracingProcessor(BaseClientProcessor):
     def __init__(self, tracer: Tracer, scope_cache_timeout: Optional[float] = None):
         self._tracer: Tracer = tracer
         self._scope_cache_timeout: float = scope_cache_timeout or 60.0
@@ -55,14 +56,16 @@ class TracingProcessor(BaseProcessor):
             status_code: int = response.status_code
             scope.span.set_tag("status_code", status_code)
             scope.span.set_tag(tags.ERROR, status_code >= 400)
-            scope.close()
         return response
 
-    async def process_exc(self, response: Response) -> Response:
-        scope: Optional[Scope] = response.context.get_value("scope", None)
-        if scope and response.msg_type is constant.MSG_RESPONSE:
-            status_code: int = response.status_code
-            scope.span.set_tag("status_code", status_code)
-            scope.span._on_error(scope.span, type(response.exc), response.exc, response.tb)  # type: ignore
-            scope.close()
-        return response
+    async def on_context_exit(
+        self,
+        context: ClientContext,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> Tuple[ClientContext, Optional[Type[BaseException]], Optional[BaseException], Optional[TracebackType]]:
+        scope: Optional[Scope] = context.get_value("scope", None)
+        if scope:
+            scope.span.__exit__(exc_type, exc_val, exc_tb)
+        return await super().on_context_exit(context, exc_type, exc_val, exc_tb)

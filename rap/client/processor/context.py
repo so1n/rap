@@ -1,5 +1,5 @@
 from types import TracebackType
-from typing import Optional, Type
+from typing import Optional, Tuple, Type
 
 from rap.client.model import ClientContext, Request
 from rap.common.channel import UserChannel
@@ -7,7 +7,7 @@ from rap.common.context import Context as _Context
 from rap.common.context import rap_context
 from rap.common.utils import constant
 
-from .base import BaseProcessor
+from .base import BaseClientProcessor
 
 
 class Context(_Context):
@@ -15,12 +15,13 @@ class Context(_Context):
     channel: UserChannel
 
 
-class ContextProcessor(BaseProcessor):
+class ContextProcessor(BaseClientProcessor):
     def __init__(self) -> None:
         self._context: Context = Context()
 
-    async def on_context_enter(self, context: ClientContext) -> None:
+    async def on_context_enter(self, context: ClientContext) -> ClientContext:
         context.context_token = rap_context.set({})
+        return await super().on_context_enter(context)
 
     async def on_context_exit(
         self,
@@ -28,8 +29,9 @@ class ContextProcessor(BaseProcessor):
         exc_type: Optional[Type[BaseException]],
         exc_val: Optional[BaseException],
         exc_tb: Optional[TracebackType],
-    ) -> None:
+    ) -> Tuple[ClientContext, Optional[Type[BaseException]], Optional[BaseException], Optional[TracebackType]]:
         rap_context.reset(context.context_token)
+        return await super().on_context_exit(context, exc_type, exc_val, exc_tb)
 
     async def process_request(self, request: Request) -> Request:
         if request.msg_type is constant.MSG_REQUEST:
@@ -37,4 +39,4 @@ class ContextProcessor(BaseProcessor):
         elif request.msg_type is constant.CHANNEL_REQUEST and self._context.channel is None:
             # channel can not reset token
             self._context.channel = request.context.context_channel
-        return request
+        return await super().process_request(request)

@@ -9,7 +9,7 @@ client: Client = Client(
         {"ip": "localhost", "port": 9000}, {"ip": "localhost", "port": 9001}, {"ip": "localhost", "port": 9002}
     ),
 )
-client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
+client.load_processor(CryptoProcessor("test", "keyskeyskeyskeys"))
 
 
 async def async_channel(channel: UserChannel) -> None:

@@ -4,7 +4,7 @@ import time
 from typing import Optional
 
 from rap.client.model import Request, Response
-from rap.client.processor.base import BaseProcessor
+from rap.client.processor.base import BaseClientProcessor
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError
 from rap.common.snowflake import async_get_snowflake_id
@@ -13,7 +13,7 @@ from rap.common.utils import constant, gen_random_time_id
 logger: logging.Logger = logging.getLogger(__name__)
 
 
-class BaseCryptoProcessor(BaseProcessor):
+class BaseCryptoProcessor(BaseClientProcessor):
     _nonce_timeout: int = 60
 
     def _body_handle(self, body: dict) -> None:
@@ -67,7 +67,7 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
                 request.body = crypto.encrypt_object(request.body)
             except Exception as e:
                 raise CryptoError("Can't encrypt body.") from e
-        return request
+        return await super().process_request(request)
 
     async def process_response(self, response: Response) -> Response:
         crypto: Crypto = response.context.conn.state.crypto
@@ -79,9 +79,9 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
                 response.body = crypto.decrypt_object(response.body)
                 self._body_handle(response.body)
                 response.body = response.body["body"]
-            return response
         except Exception as e:
             raise CryptoError("Can't decrypt body.") from e
+        return await super().process_response(response)
 
 
 class CryptoProcessor(BaseCryptoProcessor):
@@ -112,7 +112,7 @@ class CryptoProcessor(BaseCryptoProcessor):
                 "nonce": await async_get_snowflake_id(),
             }
             request.body = self._crypto.encrypt_object(request.body)
-        return request
+        return await super().process_request(request)
 
     async def process_response(self, response: Response) -> Response:
         if response.msg_type in (constant.MSG_RESPONSE, constant.CHANNEL_RESPONSE) and response.status_code < 400:
@@ -123,4 +123,4 @@ class CryptoProcessor(BaseCryptoProcessor):
             except Exception as e:
                 logger.exception(f"decrypt error:{e}")
                 raise CryptoError("Can't decrypt body.") from e
-        return response
+        return await super().process_response(response)

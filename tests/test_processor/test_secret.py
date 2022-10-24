@@ -1,6 +1,5 @@
 import asyncio
 import time
-from typing import Any
 
 import pytest
 from pytest_mock import MockerFixture
@@ -43,10 +42,12 @@ class TestCrypto:
 
 
 class TestServerCryptoProcess:
-    async def test_process_response_error(self, rap_server: Server, mocker: Any) -> None:
-        mocker.patch("rap.client.processor.CryptoProcessor._body_handle").side_effect = Exception()
+    async def test_process_response_error(self, rap_server: Server, mocker: MockerFixture) -> None:
+
+        mocker.patch.object(CryptoProcessor, "_body_handle").side_effect = Exception()
+        crypto_processor: CryptoProcessor = CryptoProcessor("test", "keyskeyskeyskeys")
         rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"})])
-        async with process_client([CryptoProcessor("test", "keyskeyskeyskeys")]):
+        async with process_client(crypto_processor):
             from tests.conftest import async_sum
 
             with pytest.raises(CryptoError):
@@ -65,7 +66,7 @@ class TestServerCryptoProcess:
 
     async def test_process_request_timestamp_param_error(self, rap_server: Server) -> None:
         rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"}, timeout=-1)])
-        async with process_client([CryptoProcessor("test", "keyskeyskeyskeys")]):
+        async with process_client(CryptoProcessor("test", "keyskeyskeyskeys")):
             with pytest.raises(CryptoError) as e:
                 from tests.conftest import async_sum
 
@@ -80,7 +81,7 @@ class TestServerCryptoProcess:
         future.set_result("")
         rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"})])
 
-        async with process_client([CryptoProcessor("test", "keyskeyskeyskeys")]):
+        async with process_client(CryptoProcessor("test", "keyskeyskeyskeys")):
             from tests.conftest import async_sum
 
             with pytest.raises(CryptoError) as e:
@@ -95,7 +96,7 @@ class TestServerCryptoProcess:
         future.set_result("mocker")
 
         rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"})])
-        async with process_client([CryptoProcessor("test", "keyskeyskeyskeys")]):
+        async with process_client(CryptoProcessor("test", "keyskeyskeyskeys")):
             from tests.conftest import async_sum
 
             assert await async_sum(1, 2) == 3
@@ -107,7 +108,7 @@ class TestServerCryptoProcess:
 
     async def test_secret(self, rap_server: Server) -> None:
         rap_server.load_processor([ServerCryptoProcessor({"test": "keyskeyskeyskeys"})])
-        async with process_client([CryptoProcessor("test", "keyskeyskeyskeys")]):
+        async with process_client(CryptoProcessor("test", "keyskeyskeyskeys")):
             from tests.conftest import async_sum
 
             assert 3 == await async_sum(1, 2)
@@ -116,7 +117,7 @@ class TestServerCryptoProcess:
         middleware: ServerCryptoProcessor = ServerCryptoProcessor({"test": "keyskeyskeyskeys"})
         rap_server.load_processor([middleware])
         middleware.start_event_handle(rap_server)
-        async with process_client([CryptoProcessor("test", "keyskeyskeyskeys")]) as rap_client:
+        async with process_client(CryptoProcessor("test", "keyskeyskeyskeys")) as rap_client:
 
             await rap_client.invoke_by_name("modify_crypto_timeout", [10], group=middleware.__class__.__name__)
             assert middleware._timeout == 10

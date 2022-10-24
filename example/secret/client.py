@@ -4,7 +4,7 @@ from rap.client import Client
 from rap.client.processor import CryptoProcessor
 
 client: Client = Client()
-client.load_processor([CryptoProcessor("test", "keyskeyskeyskeys")])
+client.load_processor(CryptoProcessor("test", "keyskeyskeyskeys"))
 
 
 # in register, must use async def...

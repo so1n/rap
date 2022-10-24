@@ -8,7 +8,7 @@ from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Optiona
 
 from rap.client.endpoint import BaseEndpoint, BaseEndpointProvider, LocalEndpointProvider, Picker
 from rap.client.model import Response
-from rap.client.processor.base import BaseProcessor
+from rap.client.processor.base import BaseClientProcessor, chain_processor
 from rap.client.transport.pool import PoolProvider
 from rap.client.transport.transport import Transport, TransportProvider
 from rap.client.types import CLIENT_EVENT_FN
@@ -58,7 +58,7 @@ class BaseClient:
         :param window_statistics: rap.common.collect_statistics.WindowStatistics
         :param through_deadline: enable through deadline param to server
         """
-        self._processor_list: List[BaseProcessor] = []
+        self._processor: Optional[BaseClientProcessor] = None
         self._through_deadline: bool = through_deadline
         self._event_dict: Dict[EventEnum, List[CLIENT_EVENT_FN]] = {
             value: [] for value in EventEnum.__members__.values()
@@ -67,13 +67,10 @@ class BaseClient:
         self._window_statistics: WindowStatistics = window_statistics or WindowStatistics()
 
         ep: BaseEndpointProvider = endpoint_provider or LocalEndpointProvider.build({"ip": "localhost", "port": 9000})
+        self._tp = transport_provider or TransportProvider.build()
 
         # Implementing dependency injection manually
-        ep.inject(
-            (pool_provider or PoolProvider.build()).inject(
-                (transport_provider or TransportProvider.build()).inject(processor_list=self._processor_list)
-            )
-        )
+        ep.inject((pool_provider or PoolProvider.build()).inject(self._tp))
         self._endpoint: BaseEndpoint = ep.create_instance()
 
         self.register_event_handler(EventEnum.before_start, lambda _: self._window_statistics.statistics_data())
@@ -141,17 +138,23 @@ class BaseClient:
     ############################
     # client processor handler #
     ############################
-    def load_processor(self, processor_list: List[BaseProcessor]) -> None:
+    def load_processor(self, *processor_list: BaseClientProcessor) -> None:
         self._check_run()
+        if not processor_list:
+            return
         for processor in processor_list:
             processor.app = self  # type: ignore
             for event_type, handle in processor.event_dict.items():
                 self._event_dict[event_type].extend(handle)
-        self._processor_list.extend(processor_list)
+        if self._processor:
+            self._processor = chain_processor(self._processor, *processor_list)
+        else:
+            self._processor = chain_processor(*processor_list)
+        self._tp.inject(self._processor)
 
     @property
-    def processor_list(self) -> List[BaseProcessor]:
-        return self._processor_list
+    def processor(self) -> Optional[BaseClientProcessor]:
+        return self._processor
 
     ####################
     # wrapper func api #

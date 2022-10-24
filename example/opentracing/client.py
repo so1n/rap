@@ -22,7 +22,7 @@ if not tracer:
     raise ValueError("tracer must not None")
 
 client: Client = Client()
-client.load_processor([TracingProcessor(tracer)])
+client.load_processor(TracingProcessor(tracer))
 
 
 # in register, must use async def...

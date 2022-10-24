@@ -20,7 +20,7 @@ jaeger_exporter = JaegerExporter(
 trace.get_tracer_provider().add_span_processor(BatchSpanProcessor(jaeger_exporter))
 
 client: Client = Client()
-client.load_processor([OpenTelemetryProcessor()])
+client.load_processor(OpenTelemetryProcessor())
 
 
 # in register, must use async def...

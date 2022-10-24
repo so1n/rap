@@ -3,11 +3,11 @@ from typing import Set
 
 from rap.client import Client, PoolProvider
 from rap.client.model import Request
-from rap.client.processor.base import BaseProcessor
+from rap.client.processor.base import BaseClientProcessor
 from rap.client.transport.transport import Transport
 
 
-class CheckConnProcessor(BaseProcessor):
+class CheckConnProcessor(BaseClientProcessor):
     def __init__(self) -> None:
         self.transport_set: Set[Transport] = set()
 
@@ -20,7 +20,7 @@ class CheckConnProcessor(BaseProcessor):
 
 check_conn_processor: CheckConnProcessor = CheckConnProcessor()
 client: Client = Client(pool_provider=PoolProvider.build(max_pool_size=3, min_pool_size=3))
-client.load_processor([check_conn_processor])
+client.load_processor(check_conn_processor)
 
 
 # in register, must use async def...

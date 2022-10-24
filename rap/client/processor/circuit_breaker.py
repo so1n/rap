@@ -3,7 +3,7 @@ import random
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from rap.client.model import Request, Response
-from rap.client.processor.base import BaseProcessor
+from rap.client.processor.base import BaseClientProcessor
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common.collect_statistics import WindowStatistics
 from rap.common.utils import EventEnum, constant
@@ -18,7 +18,7 @@ class CircuitBreakerExc(Exception):
     pass
 
 
-class BaseCircuitBreakerProcessor(BaseProcessor):
+class BaseCircuitBreakerProcessor(BaseClientProcessor):
     """The simplest circuit breaker based on the idea of google sre document"""
 
     exc: Exception = NotImplementedError()
@@ -93,19 +93,25 @@ class BaseCircuitBreakerProcessor(BaseProcessor):
             # do not process event
             return request
         index: str = self.get_index_from_request(request)
+        error_key: str = f"{self._prefix}|{index}|error"
         total_key: str = f"{self._prefix}|{index}|total"
         self._window_statistics.set_counter_value(total_key, expire=self._expire, diff=self._interval)
         if random.randint(0, 100) < self._probability_dict.get(index, 0.0) * 100:
-            error_key: str = f"{self._prefix}|{index}|error"
             self._window_statistics.set_counter_value(error_key, expire=self._expire, diff=self._interval)
             raise self.exc
+        try:
+            return await super().process_request(request)
+        except Exception as e:
+            self._window_statistics.set_counter_value(error_key, expire=self._expire, diff=self._interval)
+            raise e
 
-        return request
-
-    async def process_exc(self, response: Response) -> Response:
-        error_key: str = f"{self._prefix}|{self.get_index_from_response(response)}|error"
-        self._window_statistics.set_counter_value(error_key, expire=self._expire, diff=self._interval)
-        return response
+    async def process_response(self, response: Response) -> Response:
+        try:
+            return await super().process_response(response)
+        except Exception as e:
+            error_key: str = f"{self._prefix}|{self.get_index_from_response(response)}|error"
+            self._window_statistics.set_counter_value(error_key, expire=self._expire, diff=self._interval)
+            raise e
 
 
 class HostCircuitBreakerProcessor(BaseCircuitBreakerProcessor):

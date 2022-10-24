@@ -1,17 +1,16 @@
-from traceback import format_tb
-from typing import Optional
+from types import TracebackType
+from typing import Optional, Tuple, Type
 
-from skywalking import Component, Layer, Log, LogItem
+from skywalking import Component, Layer
 from skywalking.trace.carrier import Carrier
 from skywalking.trace.context import get_context
 from skywalking.trace.span import Span
 from skywalking.trace.tags import Tag
-from skywalking.utils import filter
 
-from rap.client.model import BaseMsgProtocol, Request, Response
+from rap.client.model import BaseMsgProtocol, ClientContext, Request, Response
 from rap.common.utils import constant
 
-from .base import BaseProcessor
+from .base import BaseClientProcessor
 
 # class Component(Enum):
 #     RAP = 7777
@@ -33,7 +32,7 @@ class TagRapType(Tag):
     key = "rap.type"
 
 
-class SkywalkingProcessor(BaseProcessor):
+class SkywalkingProcessor(BaseClientProcessor):
     def __init__(self, carrier_key_prefix: str = "X-Rap"):
         self._carrier_key_prefix = carrier_key_prefix
 
@@ -63,13 +62,15 @@ class SkywalkingProcessor(BaseProcessor):
         return span
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type is constant.MSG_REQUEST:
-            request.context.span = self._create_span(request)
-        elif request.msg_type is constant.CHANNEL_REQUEST and not request.context.get_value("span", None):
-            # A channel is a continuous activity that may involve the interaction of multiple coroutines
-            request.context.span = self._create_span(request)
-            request.context.context_channel.add_done_callback(lambda f: request.context.span.stop())
-        return request
+        try:
+            if request.msg_type is constant.MSG_REQUEST:
+                request.context.span = self._create_span(request)
+            elif request.msg_type is constant.CHANNEL_REQUEST and not request.context.get_value("span", None):
+                # A channel is a continuous activity that may involve the interaction of multiple coroutines
+                request.context.span = self._create_span(request)
+        except Exception:
+            pass
+        return await super().process_request(request)
 
     async def process_response(self, response: Response) -> Response:
         if response.msg_type is constant.MSG_RESPONSE:
@@ -78,17 +79,16 @@ class SkywalkingProcessor(BaseProcessor):
             span.tag(TagStatusCode(status_code))
             span.error_occurred = status_code >= 400
             span.stop()
-        return response
+        return await super().process_response(response)
 
-    async def process_exc(self, response: Response) -> Response:
-        span: Optional[Span] = response.context.get_value("span", None)
+    async def on_context_exit(
+        self,
+        context: ClientContext,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> Tuple[ClientContext, Optional[Type[BaseException]], Optional[BaseException], Optional[TracebackType]]:
+        span: Optional[Span] = context.get_value("span", None)
         if span:
-            status_code: int = response.status_code
-            span.tag(TagStatusCode(status_code))
-            span.error_occurred = True
-            span.logs = [
-                Log(items=[LogItem(key="Traceback", val=filter.sw_filter(target="".join(format_tb(response.tb))))])
-            ]
-            if response.msg_type is not constant.CHANNEL_RESPONSE:
-                span.stop()
-        return response
+            span.__exit__(exc_type, exc_val, exc_tb)
+        return await super().on_context_exit(context, exc_type, exc_val, exc_tb)

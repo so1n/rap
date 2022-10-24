@@ -7,7 +7,7 @@ from rap.client.processor.context import Context, ContextProcessor
 from rap.common.channel import UserChannel
 
 client: Client = Client()
-client.load_processor([ContextProcessor()])
+client.load_processor(ContextProcessor())
 
 
 class RequestIDLogFilter(logging.Filter):
