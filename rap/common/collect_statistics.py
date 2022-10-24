@@ -227,7 +227,9 @@ class WindowStatistics(object):
         else:
             bucket[key] += value
 
-    def set_counter_value(self, key: str, expire: float = -1.0, diff: int = 1, value: float = 1) -> Counter:
+    def set_counter_value(
+        self, key: str, expire: float = -1.0, diff: int = 1, value: float = 1, is_cover: bool = True
+    ) -> Counter:
         """
         Set the value of Counter metric
 
@@ -236,6 +238,8 @@ class WindowStatistics(object):
         :param diff: collection cycle
             The formula for calculating the statistical time is： max_interval / interval * diff
         :param value: Counter value
+        :param is_cover: If the value is True, the original value will be overwritten,
+            otherwise the value will be accumulated
         """
         cache_key: str = Counter.gen_metric_cache_name(key)
         if cache_key not in self._metric_cache:
@@ -243,7 +247,7 @@ class WindowStatistics(object):
             self.registry_metric(metric, expire)
         else:
             metric = self._metric_cache.get(cache_key)
-        self._set_counter_value(key, value)
+        self._set_counter_value(key, value, is_cover=is_cover)
         return metric
 
     def get_counter_value(self, key: str, diff: int = 0) -> float:

@@ -97,12 +97,16 @@ class BaseCircuitBreakerProcessor(BaseClientProcessor):
         total_key: str = f"{self._prefix}|{index}|total"
         self._window_statistics.set_counter_value(total_key, expire=self._expire, diff=self._interval)
         if random.randint(0, 100) < self._probability_dict.get(index, 0.0) * 100:
-            self._window_statistics.set_counter_value(error_key, expire=self._expire, diff=self._interval)
+            self._window_statistics.set_counter_value(
+                error_key, expire=self._expire, diff=self._interval, is_cover=False
+            )
             raise self.exc
         try:
             return await super().process_request(request)
         except Exception as e:
-            self._window_statistics.set_counter_value(error_key, expire=self._expire, diff=self._interval)
+            self._window_statistics.set_counter_value(
+                error_key, expire=self._expire, diff=self._interval, is_cover=False
+            )
             raise e
 
     async def process_response(self, response: Response) -> Response:
@@ -110,7 +114,9 @@ class BaseCircuitBreakerProcessor(BaseClientProcessor):
             return await super().process_response(response)
         except Exception as e:
             error_key: str = f"{self._prefix}|{self.get_index_from_response(response)}|error"
-            self._window_statistics.set_counter_value(error_key, expire=self._expire, diff=self._interval)
+            self._window_statistics.set_counter_value(
+                error_key, expire=self._expire, diff=self._interval, is_cover=False
+            )
             raise e
 
 
