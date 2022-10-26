@@ -30,6 +30,7 @@ class BaseCircuitBreakerProcessor(BaseClientProcessor):
         expire: int = 180,
         interval: int = 120,
         prefix: str = "circuit_breaker",
+        ignore_processor_exception: bool = True,
         window_statistics: Optional[WindowStatistics] = None,
     ):
         """
@@ -38,11 +39,13 @@ class BaseCircuitBreakerProcessor(BaseClientProcessor):
         :param expire: metric expire time
         :param interval: metric data change interval
         :param prefix: metric key prefix
+        :param ignore_processor_exception: Ignore exceptions raised by `process response` of other processors
         """
         self._k: float = k
         self._prefix: str = prefix
         self._expire: int = expire
         self._interval: int = interval
+        self._ignore_processor_exception: bool = ignore_processor_exception
         if window_statistics:
             self._window_statistics = window_statistics
 
@@ -113,7 +116,9 @@ class BaseCircuitBreakerProcessor(BaseClientProcessor):
         try:
             return await super().process_response(response_cb)
         except Exception as e:
-            response: Response = (await response_cb(False))[0]
+            response, raw_e = await response_cb(False)
+            if raw_e is e and self._ignore_processor_exception:
+                raise e
             error_key: str = f"{self._prefix}|{self.get_index_from_response(response)}|error"
             self._window_statistics.set_counter_value(
                 error_key, expire=self._expire, diff=self._interval, is_cover=False
