@@ -35,10 +35,14 @@ class State(object):
 
 
 class Context(State):
-    target: str
+    # assign at initialization time
     correlation_id: int
     client_info: Dict[str, Any]
     server_info: Dict[str, Any]
+    # Assignment in the Request object initialization time
+    target: str
+    func_name: str
+    group: str
 
     def __getattr__(self, key: Any) -> Any:
         try:

@@ -30,6 +30,11 @@ class Request(BaseMsgProtocol):
         self.context: ClientContext = context
         if target:
             self.target = target
+        _, group, func_name = self.target.split("/")
+        self.group: str = group
+        self.func_name: str = func_name
+        self.context.func_name = func_name
+        self.context.group = group
 
     @property  # type: ignore
     def correlation_id(self) -> int:  # type: ignore
