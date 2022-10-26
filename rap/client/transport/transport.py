@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Dict, Optional, Sequence, Set, Tuple, Type, Union
 
 from rap.client.model import ClientContext, Request, Response
-from rap.client.processor.base import BaseProcessor
+from rap.client.processor.base import BaseProcessor, ContextExitType
 from rap.client.transport.channel import Channel
 from rap.client.utils import gen_rap_error, get_exc_status_code_dict
 from rap.common import event
@@ -174,7 +174,11 @@ class Transport(object):
         finally:
             # release context
             if self._processor:
-                await self._processor.tail_processor.on_context_exit(context, exc_type, exc_val, exc_tb)
+
+                async def _context_exit_cb() -> ContextExitType:
+                    return context, exc_type, exc_val, exc_tb
+
+                await self._processor.on_context_exit(_context_exit_cb)
             if not enable_limit_request:
                 self._semaphore.release()
             self._context_dict.pop(correlation_id, None)
@@ -354,27 +358,29 @@ class Transport(object):
             logger.exception(f"recv wrong response:{response_msg}, ignore error:{e}")
             return None
 
+        exc: Optional[Exception] = None
         if response.msg_type == constant.SERVER_ERROR_RESPONSE or response.status_code in self._exc_status_code_dict:
             # Generate rap standard error
             exc_class: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(
                 response.status_code, rap_exc.BaseRapError
             )
-            exc: Exception = exc_class.build(response.body)
+            exc = exc_class.build(response.body)
             if isinstance(exc, InvokeError):
                 # Handle exceptions in the same language of the client and server
-                response.exc = gen_rap_error(exc.exc_name, exc.exc_info)
-            else:
-                response.exc = exc
+                exc = gen_rap_error(exc.exc_name, exc.exc_info)
+
+        async def response_cb(is_raise: bool = True) -> Tuple[Response, Optional[Exception]]:
+            if exc:
+                if is_raise:
+                    raise exc
+                else:
+                    return response, exc
+            return response, None
 
         if self._processor:
-            try:
-                response = await self._processor.tail_processor.process_response(response)
-            except Exception as e:
-                # The exception is propagated in another coroutine and needs to be transferred to the coroutine
-                # that initiated the request
-                response.exc = e
-                _, _, response.tb = sys.exc_info()
-        return response
+            return await self._processor.process_response(response_cb)
+        else:
+            return (await response_cb())[0]
 
     async def _server_recv_msg_handler(self, response_msg: SERVER_BASE_MSG_TYPE) -> None:
         correlation_id: int = response_msg[1]
@@ -382,11 +388,19 @@ class Transport(object):
         if not context:
             logger.error(f"Can not found context from {correlation_id}, {response_msg}")
             return
-        response = await self._get_response(response_msg=response_msg, context=context)
-        if not response:
-            return
+        try:
+            response = await self._get_response(response_msg=response_msg, context=context)
+            if not response:
+                return
+        except Exception as e:
+            # The exception is propagated in another coroutine and needs to be transferred to the coroutine
+            # that initiated the request
+            response = e
         if correlation_id in self._resp_future_dict:
-            self._resp_future_dict[correlation_id].set_result(response)
+            if isinstance(response, Exception):
+                self._resp_future_dict[correlation_id].set_exception(response)
+            else:
+                self._resp_future_dict[correlation_id].set_result(response)
         elif correlation_id in self._channel_queue_dict:
             self._channel_queue_dict[correlation_id].put_nowait(response)
         else:
@@ -503,13 +517,10 @@ class Transport(object):
             response_future: asyncio.Future[Response] = asyncio.Future()
             self._resp_future_dict[request.correlation_id] = response_future
             await self.write_to_conn(request)
-            response: Response = await as_first_completed(
+            return await as_first_completed(
                 [response_future],
                 not_cancel_future_list=[self._conn.conn_future],
             )
-            if response.exc:
-                raise response.exc
-            return response
         finally:
             pop_future: Optional[asyncio.Future] = self._resp_future_dict.pop(request.correlation_id, None)
             if pop_future:

@@ -94,8 +94,6 @@ class Channel(BaseChannel[Response]):
 
         if isinstance(response, Exception):
             raise response
-        if response.exc:
-            raise response.exc
 
         if response.header.get("channel_life_cycle") == constant.DROP:
             exc: ChannelCloseError = ChannelCloseError(self._drop_msg)

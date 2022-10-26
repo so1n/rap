@@ -3,7 +3,7 @@ from typing import List
 import pytest
 
 from rap.client.model import Request, Response
-from rap.client.processor.base import BaseClientProcessor
+from rap.client.processor.base import BaseClientProcessor, ResponseCallable
 from rap.common.utils import constant
 from rap.server import Server
 from tests.conftest import async_sum, process_client  # type: ignore
@@ -25,10 +25,11 @@ class TestProcessor:
                     process_request_list.append(self._number)
                 return await super().process_request(request)
 
-            async def process_response(self, response: Response) -> Response:
+            async def process_response(self, response_cb: ResponseCallable) -> Response:
+                response: Response = await super().process_response(response_cb)
                 if response.msg_type == constant.MSG_RESPONSE:
                     process_response_list.append(self._number)
-                return await super().process_response(response)
+                return response
 
         async with process_client(Processor(1), Processor(2), Processor(3)) as rap_client:
             for _ in range(3):

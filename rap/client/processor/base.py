@@ -1,5 +1,5 @@
 from types import TracebackType
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Optional, Tuple, Type, TypeVar
 
 from rap.client.model import ClientContext, Request, Response
 from rap.client.types import CLIENT_EVENT_FN
@@ -9,6 +9,9 @@ if TYPE_CHECKING:
     from rap.client.core import BaseClient
 
 
+ResponseCallable = Callable[[bool], Coroutine[Any, Any, Tuple[Response, Optional[Exception]]]]
+ContextExitType = Tuple[ClientContext, Optional[Type[BaseException]], Optional[BaseException], Optional[TracebackType]]
+ContextExitCallable = Callable[[], Coroutine[Any, Any, ContextExitType]]
 _ProcessorT = TypeVar("_ProcessorT", bound="BaseProcessor")
 
 
@@ -22,24 +25,12 @@ def belong_to_base_method(func: Callable) -> bool:
 def chain_processor(*processor_list: "_ProcessorT") -> "_ProcessorT":
     """Chain each Processor instance and return the first one"""
     for index, processor in enumerate(processor_list):
-        processor.head_processor = processor_list[0]
-        processor.tail_processor = processor_list[-1]
         if processor == processor_list[-1]:
-            if len(processor_list) != 1:
-                processor.prev_processor = processor_list[index - 1]
             continue
         else:
             next_processor: BaseProcessor = processor_list[index + 1]
-            processor.next_processor = next_processor
             setattr(processor, processor.next_context_enter.__name__, next_processor.on_context_enter)
             setattr(processor, processor.next_process_request.__name__, next_processor.process_request)
-
-    reversed_processor_list: List = list(reversed(processor_list))
-    for index, processor in enumerate(reversed_processor_list):
-        if processor == reversed_processor_list[-1]:
-            continue
-        else:
-            next_processor: BaseProcessor = reversed_processor_list[index + 1]
             setattr(processor, processor.next_process_response.__name__, next_processor.process_response)
             setattr(processor, processor.next_context_exit.__name__, next_processor.on_context_exit)
     return processor_list[0]
@@ -51,34 +42,11 @@ class BaseProcessor(object):
      This class can only be used by the `Transport` class
     """
 
-    head_processor: "BaseProcessor"
-    prev_processor: "BaseProcessor"
-    next_processor: "BaseProcessor"
-    tail_processor: "BaseProcessor"
-
     async def next_context_enter(self, context: ClientContext) -> ClientContext:
         return context
 
     async def on_context_enter(self, context: ClientContext) -> ClientContext:
         return await self.next_context_enter(context)
-
-    async def next_context_exit(
-        self,
-        context: ClientContext,
-        exc_type: Optional[Type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
-    ) -> Tuple[ClientContext, Optional[Type[BaseException]], Optional[BaseException], Optional[TracebackType]]:
-        return context, exc_type, exc_val, exc_tb
-
-    async def on_context_exit(
-        self,
-        context: ClientContext,
-        exc_type: Optional[Type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
-    ) -> Tuple[ClientContext, Optional[Type[BaseException]], Optional[BaseException], Optional[TracebackType]]:
-        return await self.next_context_exit(context, exc_type, exc_val, exc_tb)
 
     async def next_process_request(self, request: Request) -> Request:
         return request
@@ -86,13 +54,17 @@ class BaseProcessor(object):
     async def process_request(self, request: Request) -> Request:
         return await self.next_process_request(request)
 
-    async def next_process_response(self, response: Response) -> Response:
-        if response.exc:
-            raise response.exc
-        return response
+    async def next_process_response(self, response_cb: ResponseCallable) -> Response:
+        return (await response_cb(True))[0]
 
-    async def process_response(self, response: Response) -> Response:
-        return await self.next_process_response(response)
+    async def process_response(self, response_cb: ResponseCallable) -> Response:
+        return await self.next_process_response(response_cb)
+
+    async def next_context_exit(self, context_exit_cb: ContextExitCallable) -> ContextExitType:
+        return await context_exit_cb()
+
+    async def on_context_exit(self, context_exit_cb: ContextExitCallable) -> ContextExitType:
+        return await self.next_context_exit(context_exit_cb)
 
 
 class BaseClientProcessor(BaseProcessor):

@@ -3,7 +3,7 @@ import random
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from rap.client.model import Request, Response
-from rap.client.processor.base import BaseClientProcessor
+from rap.client.processor.base import BaseClientProcessor, ResponseCallable
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common.collect_statistics import WindowStatistics
 from rap.common.utils import EventEnum, constant
@@ -109,10 +109,11 @@ class BaseCircuitBreakerProcessor(BaseClientProcessor):
             )
             raise e
 
-    async def process_response(self, response: Response) -> Response:
+    async def process_response(self, response_cb: ResponseCallable) -> Response:
         try:
-            return await super().process_response(response)
+            return await super().process_response(response_cb)
         except Exception as e:
+            response: Response = (await response_cb(False))[0]
             error_key: str = f"{self._prefix}|{self.get_index_from_response(response)}|error"
             self._window_statistics.set_counter_value(
                 error_key, expire=self._expire, diff=self._interval, is_cover=False

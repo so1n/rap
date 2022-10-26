@@ -9,9 +9,8 @@ from opentracing.propagation import Format
 from opentracing.scope import Scope
 
 from rap.client.model import BaseMsgProtocol, ClientContext, Request, Response
+from rap.client.processor.base import BaseClientProcessor, ContextExitCallable, ResponseCallable
 from rap.common.utils import constant
-
-from .base import BaseClientProcessor
 
 
 class TracingProcessor(BaseClientProcessor):
@@ -50,7 +49,8 @@ class TracingProcessor(BaseClientProcessor):
             request.context.context_channel.add_done_callback(lambda f: request.context.span.finish())
         return request
 
-    async def process_response(self, response: Response) -> Response:
+    async def process_response(self, response_cb: ResponseCallable) -> Response:
+        response: Response = await super().process_response(response_cb)
         if response.msg_type is constant.MSG_RESPONSE:
             scope: Scope = response.context.scope
             status_code: int = response.status_code
@@ -59,13 +59,10 @@ class TracingProcessor(BaseClientProcessor):
         return response
 
     async def on_context_exit(
-        self,
-        context: ClientContext,
-        exc_type: Optional[Type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
+        self, context_exit_cb: ContextExitCallable
     ) -> Tuple[ClientContext, Optional[Type[BaseException]], Optional[BaseException], Optional[TracebackType]]:
+        context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb)
         scope: Optional[Scope] = context.get_value("scope", None)
         if scope:
             scope.span.__exit__(exc_type, exc_val, exc_tb)
-        return await super().on_context_exit(context, exc_type, exc_val, exc_tb)
+        return context, exc_type, exc_val, exc_tb

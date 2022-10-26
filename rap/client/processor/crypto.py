@@ -4,7 +4,7 @@ import time
 from typing import Optional
 
 from rap.client.model import Request, Response
-from rap.client.processor.base import BaseClientProcessor
+from rap.client.processor.base import BaseClientProcessor, ResponseCallable
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError
 from rap.common.snowflake import async_get_snowflake_id
@@ -69,7 +69,8 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
                 raise CryptoError("Can't encrypt body.") from e
         return await super().process_request(request)
 
-    async def process_response(self, response: Response) -> Response:
+    async def process_response(self, response_cb: ResponseCallable) -> Response:
+        response: Response = await super().process_response(response_cb)
         crypto: Crypto = response.context.conn.state.crypto
         try:
             if response.msg_type == constant.SERVER_EVENT and response.target.endswith(constant.DECLARE):
@@ -81,7 +82,7 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
                 response.body = response.body["body"]
         except Exception as e:
             raise CryptoError("Can't decrypt body.") from e
-        return await super().process_response(response)
+        return response
 
 
 class CryptoProcessor(BaseCryptoProcessor):
@@ -114,7 +115,8 @@ class CryptoProcessor(BaseCryptoProcessor):
             request.body = self._crypto.encrypt_object(request.body)
         return await super().process_request(request)
 
-    async def process_response(self, response: Response) -> Response:
+    async def process_response(self, response_cb: ResponseCallable) -> Response:
+        response: Response = await super().process_response(response_cb)
         if response.msg_type in (constant.MSG_RESPONSE, constant.CHANNEL_RESPONSE) and response.status_code < 400:
             try:
                 response.body = self._crypto.decrypt_object(response.body)
@@ -123,4 +125,4 @@ class CryptoProcessor(BaseCryptoProcessor):
             except Exception as e:
                 logger.exception(f"decrypt error:{e}")
                 raise CryptoError("Can't decrypt body.") from e
-        return await super().process_response(response)
+        return response

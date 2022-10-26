@@ -1,4 +1,3 @@
-from types import TracebackType
 from typing import TYPE_CHECKING, Any, Optional
 
 from rap.common.event import Event
@@ -84,9 +83,6 @@ class Response(BaseMsgProtocol):
         _, group, func_name = self.target.split("/")
         self.group: str = group
         self.func_name: str = func_name
-
-        self.exc: Optional[Exception] = None
-        self.tb: Optional[TracebackType] = None
 
     @property  # type: ignore
     def correlation_id(self) -> int:  # type: ignore

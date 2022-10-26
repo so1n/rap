@@ -8,9 +8,8 @@ from opentelemetry.trace.span import Span
 from opentelemetry.trace.status import Status, StatusCode
 
 from rap.client.model import BaseMsgProtocol, ClientContext, Request, Response
+from rap.client.processor.base import BaseClientProcessor, ContextExitCallable, ResponseCallable
 from rap.common.utils import constant
-
-from .base import BaseClientProcessor
 
 
 class OpenTelemetryProcessor(BaseClientProcessor):
@@ -22,19 +21,6 @@ class OpenTelemetryProcessor(BaseClientProcessor):
             instrumenting_module_name="rap",
             tracer_provider=tracer_provider,
         )
-
-    async def on_context_exit(
-        self,
-        _context: ClientContext,
-        exc_type: Optional[Type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
-    ) -> Tuple[ClientContext, Optional[Type[BaseException]], Optional[BaseException], Optional[TracebackType]]:
-        span: Optional[Span] = _context.get_value("span", None)
-        if span:
-            span.__exit__(exc_type, exc_val, exc_tb)
-            next(_context.iter_span)
-        return await self.on_context_exit(_context, exc_type, exc_val, exc_tb)
 
     def _create_scope(self, msg: BaseMsgProtocol, context: ClientContext) -> Span:
         service_name, group, func_name = msg.target.split("/")
@@ -64,7 +50,8 @@ class OpenTelemetryProcessor(BaseClientProcessor):
             request.context.span = self._create_scope(request, request.context)
         return await super().process_request(request)
 
-    async def process_response(self, response: Response) -> Response:
+    async def process_response(self, response_cb: ResponseCallable) -> Response:
+        response: Response = await super().process_response(response_cb)
         if (response.msg_type is constant.MSG_RESPONSE) or (
             response.msg_type is constant.CHANNEL_RESPONSE
             and response.header.get("channel_life_cycle", "error") == constant.DECLARE
@@ -72,4 +59,14 @@ class OpenTelemetryProcessor(BaseClientProcessor):
             span: trace.Span = response.context.span
             span.set_status(Status(status_code=StatusCode.OK))
             span.set_attribute("rap.status_code", response.status_code)
-        return await super().process_response(response)
+        return response
+
+    async def on_context_exit(
+        self, context_exit_cb: ContextExitCallable
+    ) -> Tuple[ClientContext, Optional[Type[BaseException]], Optional[BaseException], Optional[TracebackType]]:
+        _context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb)
+        span: Optional[Span] = _context.get_value("span", None)
+        if span:
+            span.__exit__(exc_type, exc_val, exc_tb)
+            next(_context.iter_span)
+        return _context, exc_type, exc_val, exc_tb
