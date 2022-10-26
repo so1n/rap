@@ -2,9 +2,7 @@ import asyncio
 from typing import Any
 
 import pytest
-from pytest_mock import MockerFixture
 
-from rap.client import Client
 from rap.client.transport.transport import Transport
 from rap.common.asyncio_helper import Deadline
 from rap.server import Server
@@ -12,26 +10,31 @@ from rap.server import Server
 pytestmark = pytest.mark.asyncio
 
 
-class TestPingPong:
-    async def test_ping_pong(self, rap_server: Server, rap_client: Client) -> None:
-        await asyncio.sleep(10)
-        # for key, transport_group in rap_client.endpoint._transport_pool_dict.copy().items():
-        #     await transport_group.transport.ping(cnt=1)
+class TestClientPingPong:
+    async def test_ping_pong(self, rap_server: Server) -> None:
+        transport: Transport = Transport(host="127.0.0.1", port=9000, weight=10)
+        await transport.connect()
+        await transport.declare()
+        assert transport.pick_score == 10.0
 
-    async def test_ping_pong_timeout(self, mocker: MockerFixture, rap_server: Server, rap_client: Client) -> None:
+        await transport.ping()
+        assert transport.pick_score > 0
+
+    async def test_ping_pong_timeout(self, rap_server: Server) -> None:
         # until close
-        for key, transport_group in rap_client.endpoint._transport_pool_dict.copy().items():
-            transport: Transport = (await transport_group.use_transport()).transport
-            write_func = transport.write_to_conn
 
-            async def mock_write(*args: Any, **kwargs: Any) -> Any:
-                if not args[0].target.endswith("ping"):
-                    return await write_func(*args, **kwargs)
+        transport: Transport = Transport(host="127.0.0.1", port=9000, weight=10)
+        await transport.connect()
+        await transport.declare()
+        write_func = transport.write_to_conn
 
-            setattr(transport, "write_to_conn", mock_write)
+        async def mock_write(*args: Any, **kwargs: Any) -> Any:
+            if not args[0].target.endswith("ping"):
+                return await write_func(*args, **kwargs)
 
-            with pytest.raises(asyncio.TimeoutError):
-                with Deadline(delay=0.5):
-                    transport: Transport = (await transport_group.use_transport()).transport
-                    await transport.ping(cnt=1)
-            setattr(transport, "write_to_conn", write_func)
+        setattr(transport, "write_to_conn", mock_write)
+
+        with pytest.raises(asyncio.TimeoutError):
+            with Deadline(delay=0.5):
+                await transport.ping(cnt=1)
+        setattr(transport, "write_to_conn", write_func)
