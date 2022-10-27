@@ -1,7 +1,7 @@
 import argparse
 import asyncio
 import json
-from typing import Dict, List, Tuple, Union
+from typing import Dict, Tuple
 
 from rap.client import Client
 from rap.client.endpoint import LocalEndpointProvider
@@ -17,7 +17,7 @@ if __name__ == "__main__":
     parser.add_argument("-k", "--key", help="secret key")
 
     parser.add_argument("-n", "--name", help="func name")
-    parser.add_argument("-a", "--arg", help="func param", default=tuple())
+    parser.add_argument("-a", "--arg", help="func param", default=None)
     parser.add_argument("-g", "--group", help="func group", default=constant.DEFAULT_GROUP)
     args, unknown = parser.parse_known_args()
     server_host: str = args.server_host
@@ -25,13 +25,13 @@ if __name__ == "__main__":
     secret_key: str = args.secret_key
     mode: str = args.mode
     func_name: str = args.name
-    arg: Union[str, list] = args.arg
+    arg: str = args.arg
     group: str = args.group
 
     if isinstance(arg, str):
-        arg_list: List[str] = arg.split(",")
+        arg_dict: dict = json.loads(arg)
     else:
-        arg_list = arg
+        arg_dict = {}
 
     loop = asyncio.get_event_loop()
 
@@ -54,6 +54,6 @@ if __name__ == "__main__":
         #     display_table_list.append([target, func_group, func_type, path_str, module_str])
         # print_table(display_table_list)
     elif mode == "r" and func_name:
-        print(loop.run_until_complete(client.invoke_by_name(func_name, arg_param=arg_list, group=group)))
+        print(loop.run_until_complete(client.invoke_by_name(func_name, param=arg_dict, group=group)))
 
     loop.run_until_complete(client.stop())

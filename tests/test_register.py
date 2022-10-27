@@ -83,7 +83,7 @@ class TestRegister:
         assert 3 == await reload_sum_num(1, 2)
         await rap_client.invoke_by_name(
             "reload",
-            ["tests.test_register", "new_reload_sum", "reload_sum_num"],
+            {"path": "tests.test_register", "func_str": "new_reload_sum", "name": "reload_sum_num"},
             group="registry",
         )
         assert 4 == await reload_sum_num(1, 2)
@@ -91,7 +91,7 @@ class TestRegister:
         with pytest.raises(RegisteredError) as e:
             await rap_client.invoke_by_name(
                 "reload",
-                ["tests.test_register", "new_reload_sum", "load", "registry"],
+                {"path": "tests.test_register", "func_str": "new_reload_sum", "name": "load", "group": "registry"},
                 group="registry",
             )
         exec_msg: str = e.value.args[0]
@@ -99,20 +99,26 @@ class TestRegister:
 
         with pytest.raises(RegisteredError) as e:
             await rap_client.invoke_by_name(
-                "reload", ["tests.test_register", "new_reload_sum", "load"], group="registry"
+                "reload",
+                {"path": "tests.test_register", "func_str": "new_reload_sum", "name": "load"},
+                group="registry",
             )
         exec_msg = e.value.args[0]
         assert "`normal:default:load` not exists" in exec_msg
 
     async def test_load_error_fun(self, rap_server: Server, rap_client: Client) -> None:
         with pytest.raises(RegisteredError) as e:
-            await rap_client.invoke_by_name("load", ["tests.test_register", "fail_reload_demo"], group="registry")
+            await rap_client.invoke_by_name(
+                "load", {"path": "tests.test_register", "func_str": "fail_reload_demo"}, group="registry"
+            )
         exec_msg: str = e.value.args[0]
         assert exec_msg.endswith("is not a callable object")
 
     async def test_load_fun(self, rap_server: Server, rap_client: Client) -> None:
-        await rap_client.invoke_by_name("load", ["tests.test_register", "new_reload_sum"], group="registry")
-        assert 4 == await rap_client.invoke_by_name("new_reload_sum", [1, 2])
+        await rap_client.invoke_by_name(
+            "load", {"path": "tests.test_register", "func_str": "new_reload_sum"}, group="registry"
+        )
+        assert 4 == await rap_client.invoke_by_name("new_reload_sum", {"a": 1, "b": 2})
 
         with pytest.raises(RegisteredError) as e:
             rap_server.registry._load("tests.test_register", "new_reload_sum")

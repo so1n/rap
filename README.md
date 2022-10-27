@@ -100,9 +100,9 @@ async def main():
   client.add_conn("localhost", 9000)
   await client.start()
   # Call the invoke method; read the function name and then invoke `invoke_by_name`.
-  print(f"invoke result: {await client.invoke(sync_sum, 1, 2)}")
+  print(f"invoke result: {await client.invoke(sync_sum, {'a': 1, 'b': 2})}")
   # Basic calls to rap.client
-  print(f"raw invoke result: {await client.invoke_by_name('sync_sum', 1, 2)}")
+  print(f"raw invoke result: {await client.invoke_by_name('sync_sum', {'a': 1, 'b': 2})}")
 
   # Functions registered through `@client.register` can be used directly
   # await async_sum(1,3) == await client.invoke_by_name('async_sum', 1, 2)

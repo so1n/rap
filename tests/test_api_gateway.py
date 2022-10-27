@@ -40,7 +40,7 @@ class TestApiGateWay:
                     "group": "default",
                     "func_name": "sync_sum",
                     "func_type": "normal",
-                    "arg_list": [1, 2],
+                    "arg_dict": {"a": 1, "b": 2},
                 },
             )
             assert 3 == resp.json()["data"]
@@ -73,7 +73,7 @@ class TestApiGateWay:
         with TestClient(create_test_app, raise_server_exceptions=False) as client:
             resp = client.post(
                 "http://localhost:8000/api/normal/test",
-                json={"group": "default", "func_type": "normal", "arg_list": [1, 2]},
+                json={"group": "default", "func_type": "normal", "arg_dict": {"a": 1, "b": 2}},
             )
             assert {"code": 1, "msg": "Param error('func_name')"} == resp.json()
             resp = client.post(
@@ -82,10 +82,10 @@ class TestApiGateWay:
                     "group": "default",
                     "func_name": "sync_sum",
                     "func_type": "normal",
-                    "arg_list": 1,
+                    "arg_dict": {"a": 1},
                 },
             )
-            assert {"code": 1, "msg": "Param error"} == resp.json()
+            assert {"code": 1002, "msg": "Parse error"} == resp.json()
 
     def test_not_found(self) -> None:
         group_set: Set[str] = set()

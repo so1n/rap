@@ -4,7 +4,7 @@ import math
 import sys
 import time
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Dict, Optional, Sequence, Set, Tuple, Type, Union
+from typing import TYPE_CHECKING, AsyncGenerator, Callable, Dict, Optional, Set, Tuple, Type, Union
 
 from rap.client.model import ClientContext, Request, Response
 from rap.client.processor.base import BaseProcessor, ContextExitType
@@ -544,23 +544,23 @@ class Transport(object):
     async def request(
         self,
         func_name: str,
-        arg_param: Optional[Sequence[Any]] = None,
+        param: Optional[dict] = None,
         group: Optional[str] = None,
         header: Optional[dict] = None,
     ) -> Response:
         """msg request handle
         :param func_name: rpc func name
-        :param arg_param: rpc func param
+        :param param: rpc func param
         :param group: func's group
         :param header: request header
         """
         group = group or constant.DEFAULT_GROUP
-        arg_param = arg_param or []
+        param = param or {}
         async with self._transport_context() as context:
             request: Request = Request(
                 msg_type=constant.MSG_REQUEST,
                 target=f"/{group}/{func_name}",
-                body=arg_param,
+                body=param,
                 context=context,
             )
             if header:

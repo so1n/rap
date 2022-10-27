@@ -51,7 +51,7 @@ class TestClientProcessor:
 
         async with process_client(MyProcessor(1), MyProcessor(2), MyProcessor(3)) as rap_client:
             for _ in range(3):
-                assert 3 == await rap_client.invoke_by_name("sync_sum", (1, 2))
+                assert 3 == await rap_client.invoke_by_name("sync_sum", {"a": 1, "b": 2})
         assert process_request_list == process_response_list[::-1]
         assert context_enter_list == context_exit_list[::-1]
 
@@ -100,7 +100,7 @@ class TestClientProcessor:
 
         async with process_client(MyProcessor(1), MyProcessor(2), MyProcessor(3)) as rap_client:
             with pytest.raises(RuntimeError):
-                assert 3 == await rap_client.invoke_by_name("sync_sum", (1, 2))
+                assert 3 == await rap_client.invoke_by_name("sync_sum", {"a": 1, "b": 2})
 
         assert process_request_list == [1, 2]
         assert process_response_list == []
@@ -155,7 +155,7 @@ class TestClientProcessor:
 
         async with process_client(MyProcessor(1), MyProcessor(2), MyProcessor(3)) as rap_client:
             with pytest.raises(RuntimeError):
-                assert 3 == await rap_client.invoke_by_name("sync_sum", (1, 2))
+                assert 3 == await rap_client.invoke_by_name("sync_sum", {"a": 1, "b": 2})
 
         assert process_request_list == [1, 2, 3]
         assert process_response_list == [3, 2]
@@ -217,7 +217,7 @@ class TestClientProcessor:
 
         async with process_client(MyProcessor(1), MyProcessor(2), MyProcessor(3)) as rap_client:
             with pytest.raises(FuncNotFoundError):
-                await rap_client.invoke_by_name("error_func_name", (1, 2))
+                await rap_client.invoke_by_name("error_func_name", {"a": 1, "b": 2})
 
         assert process_request_list == [1, 2, 3]
         assert process_response_list == []

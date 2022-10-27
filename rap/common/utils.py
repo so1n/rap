@@ -102,11 +102,11 @@ def check_func_type(func_sig: inspect.Signature, param_list: Sequence[Any], defa
 
 def param_handle(
     func_sig: inspect.Signature, param_list: Sequence[Any], default_param_dict: Dict[str, Any]
-) -> Tuple[Any, ...]:
+) -> Tuple[Tuple[Any, ...], dict]:
     """Check whether the parameter is legal and whether the parameter type is correct"""
-    new_param_list: Tuple[Any, ...] = func_sig.bind(*param_list, **default_param_dict).args
+    bind: inspect.BoundArguments = func_sig.bind(*param_list, **default_param_dict)
     # check_func_type(func_sig, param_list, default_param_dict)
-    return new_param_list
+    return bind.args, bind.kwargs
 
 
 def get_func_sig(func: Callable) -> inspect.Signature:

@@ -17,7 +17,7 @@ from rap.common.channel import UserChannelCovariantType, get_corresponding_chann
 from rap.common.collect_statistics import WindowStatistics
 from rap.common.types import T_ParamSpec as P
 from rap.common.types import T_ReturnType as R_T
-from rap.common.utils import EventEnum, get_func_sig, param_handle
+from rap.common.utils import EventEnum, get_func_sig
 
 __all__ = ["BaseClient", "Client"]
 CHANNEL_F = Callable[[UserChannelCovariantType], Awaitable[None]]
@@ -171,8 +171,8 @@ class BaseClient:
         name = name if name else func.__name__
         func_sig: inspect.Signature = get_func_sig(func)
 
-        if not inspect.iscoroutinefunction(func):
-            raise TypeError(f"func:{func.__name__} must coroutine function")
+        # if not inspect.iscoroutinefunction(func):
+        #     raise TypeError(f"func:{func.__name__} must coroutine function")
 
         @wraps(func)  # type: ignore
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R_T:  # type: ignore
@@ -184,7 +184,7 @@ class BaseClient:
             _picker_class = _kwargs.pop("picker_class", picker_class)
             result: Any = await self.invoke_by_name(
                 name,
-                arg_param=param_handle(func_sig, _args, _kwargs),
+                param=func_sig.bind(*_args, **_kwargs).arguments,
                 group=group,
                 header=_header,
                 picker_class=_picker_class,
@@ -216,7 +216,7 @@ class BaseClient:
             _picker_class = _kwargs.pop("picker_class", picker_class)
             async with (_pick_stub_context.get() or self.endpoint.picker(picker_class=_picker_class)) as transport:
                 async with transport.channel(name, group) as channel:
-                    await channel.write(param_handle(func_sig, _args, _kwargs))
+                    await channel.write(func_sig.bind(*_args, **_kwargs).arguments)
                     async for result in channel.get_read_channel():
                         yield result
 
@@ -338,7 +338,7 @@ class BaseClient:
     async def request(
         self,
         name: str,
-        arg_param: Optional[Sequence[Any]] = None,
+        param: Optional[dict] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
         picker_class: Optional[Type[Picker]] = None,
@@ -347,18 +347,18 @@ class BaseClient:
         Note: This method does not support parameter type checking, not support channels;
 
         :param name: rpc func name
-        :param arg_param: rpc func param
+        :param param: rpc func param
         :param group: func's group
         :param header: request header
         :param picker_class: Specific implementation of picker
         """
         async with (_pick_stub_context.get() or self.endpoint.picker(picker_class=picker_class)) as transport:
-            return await transport.request(name, arg_param, group=group, header=header)
+            return await transport.request(name, param, group=group, header=header)
 
     async def invoke_by_name(
         self,
         name: str,
-        arg_param: Optional[Sequence[Any]] = None,
+        param: Optional[dict] = None,
         header: Optional[dict] = None,
         group: Optional[str] = None,
         picker_class: Optional[Type[Picker]] = None,
@@ -367,12 +367,12 @@ class BaseClient:
         Note: This method does not support parameter type checking, not support channels;
 
         :param name: rpc func name
-        :param arg_param: rpc func param
+        :param param: rpc func param
         :param group: func's group
         :param header: request header
         :param picker_class: Specific implementation of picker
         """
-        response: Response = await self.request(name, arg_param, group=group, header=header, picker_class=picker_class)
+        response: Response = await self.request(name, param, group=group, header=header, picker_class=picker_class)
         return response.body
 
     def invoke(

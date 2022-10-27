@@ -117,7 +117,7 @@ class BaseCircuitBreakerProcessor(BaseClientProcessor):
             return await super().process_response(response_cb)
         except Exception as e:
             response, raw_e = await response_cb(False)
-            if raw_e is e and self._ignore_processor_exception:
+            if raw_e is not e and self._ignore_processor_exception:
                 raise e
             error_key: str = f"{self._prefix}|{self.get_index_from_response(response)}|error"
             self._window_statistics.set_counter_value(

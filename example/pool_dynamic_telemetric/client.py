@@ -30,7 +30,7 @@ async def async_gen_(a: int) -> AsyncIterator[int]:
 async def _run_once() -> None:
     try:
         await client.invoke(async_sum)(1, 2)
-        await client.invoke_by_name("sync_sum", [1, 2])
+        await client.invoke_by_name("sync_sum", {"a": 1, "b": 2})
         await async_sum_(1, 3)
         # async for i in client.invoke_iterator(async_gen)(3):
         #     pass

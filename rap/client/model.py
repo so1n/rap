@@ -42,7 +42,7 @@ class Request(BaseMsgProtocol):
 
     @property  # type: ignore
     def target(self) -> str:  # type: ignore
-        return self.header["target"]
+        return self.context.target
 
     @target.setter
     def target(self, value: str) -> None:

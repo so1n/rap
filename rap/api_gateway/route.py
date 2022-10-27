@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, Optional, Set
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -105,14 +105,14 @@ async def route_func(request: Request) -> JSONResponse:
     if check_result:
         raise check_result
 
-    arg_list: List[Any] = resp_dict.get("arg_list", [])
-    if not isinstance(arg_list, list):
+    arg_dict: Dict = resp_dict.get("arg_dict", {})
+    if not isinstance(arg_dict, dict):
         raise exception.ParamError()
 
     rap_client: Client = rap_client_dict["client"]  # type: ignore
     result: Any = await rap_client.invoke_by_name(
         func_name,
-        arg_param=arg_list,
+        param=arg_dict,
         header={key: value for key, value in request.headers.items()},
         group=group,
     )

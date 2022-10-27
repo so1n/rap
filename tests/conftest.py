@@ -51,7 +51,7 @@ async def sleep(second: int) -> None:
 ##########
 # server #
 ##########
-async def _init_server(processor_list: Optional[List] = None) -> Server:
+async def _init_server(processor_list: Optional[List] = None, **kwargs) -> Server:
     def error_func() -> float:
         return 1 / 0
 
@@ -61,7 +61,7 @@ async def _init_server(processor_list: Optional[List] = None) -> Server:
                 return
             await asyncio.sleep(0.1)
 
-    rpc_server = Server(ping_sleep_time=1, processor_list=processor_list or [])
+    rpc_server = Server(ping_sleep_time=1, processor_list=processor_list or [], **kwargs)
     rpc_server.register(sync_sum)
     rpc_server.register(async_sum)
     rpc_server.register(sync_gen)
@@ -82,8 +82,8 @@ async def rap_server() -> AsyncGenerator[Server, None]:
 
 
 @asynccontextmanager
-async def process_server(process_list: List[ServerBaseProcessor]) -> AsyncGenerator[Server, None]:
-    server: Server = await _init_server(processor_list=process_list)
+async def process_server(process_list: List[ServerBaseProcessor], **kwargs) -> AsyncGenerator[Server, None]:
+    server: Server = await _init_server(processor_list=process_list, **kwargs)
     try:
         yield server
     finally:
@@ -128,8 +128,8 @@ async def rap_client() -> AsyncGenerator[Client, None]:
 
 
 @asynccontextmanager
-async def process_client(*process_list: BaseClientProcessor) -> AsyncGenerator[Client, None]:
-    client: Client = Client()
+async def process_client(*process_list: BaseClientProcessor, **kwargs) -> AsyncGenerator[Client, None]:
+    client: Client = Client(**kwargs)
     _inject(client)
     client.load_processor(*process_list)
     await client.start()
@@ -141,7 +141,7 @@ async def process_client(*process_list: BaseClientProcessor) -> AsyncGenerator[C
 
 
 @asynccontextmanager
-async def load_process(
+async def load_processor(
     server_process: List[ServerBaseProcessor], client_process: List[BaseClientProcessor]
 ) -> AsyncGenerator[Tuple[Client, Server], None]:
     async with process_server(server_process) as server:

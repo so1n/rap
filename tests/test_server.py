@@ -9,8 +9,12 @@ from rap.common.asyncio_helper import Deadline
 from rap.common.exceptions import RpcRunTimeError, ServerError
 from rap.common.utils import EventEnum
 from rap.server import Server
+from rap.server.model import Request
 from rap.server.plugin.middleware.conn.limit import ConnLimitMiddleware
 from rap.server.plugin.processor import CryptoProcessor as ServerCryptoProcessor
+from rap.server.receiver import Receiver
+from rap.server.registry import FuncModel
+from tests.conftest import process_client
 
 pytestmark = pytest.mark.asyncio
 
@@ -69,7 +73,7 @@ class TestServerConnHandle:
         mocker.patch("rap.server.receiver.Receiver.dispatch").return_value = future
         with pytest.raises(ServerError):
             with Deadline(1):
-                await rap_client.invoke_by_name("sync_sum", [1, 2])
+                await rap_client.invoke_by_name("sync_sum", {"a": 1, "b": 2})
 
     # async def test_receive_error_msg(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
     #     mocker.patch("rap.server.model.Request.from_msg").side_effect = Exception()
@@ -103,13 +107,16 @@ class TestRequestHandle:
     #     exec_msg = e.value.args[0]
     #     assert exec_msg == "Illegal request"
 
-    async def test_request_dispatch_func_error(
-        self, rap_server: Server, rap_client: Client, mocker: MockerFixture
-    ) -> None:
-        mocker.patch("rap.server.receiver.param_handle").side_effect = Exception()
+    async def test_request_dispatch_func_error(self, rap_server: Server) -> None:
+        class MyReceiver(Receiver):
+            async def _default_call_fun_permission_fn(self, request: Request) -> FuncModel:
+                raise Exception()
+
+        rap_server._receiver = MyReceiver
 
         with pytest.raises(RpcRunTimeError) as e:
-            await rap_client.invoke_by_name("sync_sum", [1, 2])
+            async with process_client() as rap_client:
+                await rap_client.invoke_by_name("sync_sum", {"a": 1, "b": 2})
 
         exec_msg = e.value.args[0]
         assert exec_msg == "Rpc run time error"

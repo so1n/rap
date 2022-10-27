@@ -3,7 +3,7 @@ import logging
 import signal
 import ssl
 import threading
-from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Set
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Type
 
 from rap.common import event
 from rap.common.asyncio_helper import Deadline, SetEvent
@@ -46,9 +46,11 @@ class Server(object):
         unpack_param: Optional[dict] = None,
         middleware_list: Optional[List[BaseMiddleware]] = None,
         processor_list: Optional[List[BaseProcessor]] = None,
-        call_func_permission_fn: Optional[Callable[[Request], Awaitable[FuncModel]]] = None,
+        call_func_permission_fn: Optional[Callable[[Request], Coroutine[Any, Any, FuncModel]]] = None,
         window_statistics: Optional[WindowStatistics] = None,
         cache_interval: Optional[float] = None,
+        receiver: Type[Receiver] = Receiver,
+        sender: Type[Sender] = Sender,
     ):
         """
         :param host: listen host
@@ -83,6 +85,8 @@ class Server(object):
         self._reuse_port: Optional[bool] = reuse_port
         self._ping_fail_cnt: int = ping_fail_cnt
         self._ping_sleep_time: int = ping_sleep_time
+        self._receiver: Type[Receiver] = receiver
+        self._sender: Type[Sender] = sender
         self._server: Optional[asyncio.AbstractServer] = None
         self._connected_set: SetEvent[ServerConnection] = SetEvent()
         self._run_event: asyncio.Event = asyncio.Event()
@@ -108,7 +112,9 @@ class Server(object):
         if processor_list:
             self.load_processor(processor_list)
 
-        self._call_func_permission_fn: Optional[Callable[[Request], Awaitable[FuncModel]]] = call_func_permission_fn
+        self._call_func_permission_fn: Optional[
+            Callable[[Request], Coroutine[Any, Any, FuncModel]]
+        ] = call_func_permission_fn
         self.registry: RegistryManager = RegistryManager()
         self.cache: Cache = Cache(interval=cache_interval)
         self.window_statistics: WindowStatistics = window_statistics or WindowStatistics()
@@ -317,8 +323,10 @@ class Server(object):
 
     async def _conn_handle(self, conn: ServerConnection) -> None:
         """Receive or send messages by conn"""
-        sender: Sender = Sender(self, conn, self._send_timeout, processor_list=self._processor_list)  # type: ignore
-        receiver: Receiver = Receiver(
+        sender: Sender = self._sender(
+            self, conn, self._send_timeout, processor_list=self._processor_list  # type: ignore
+        )
+        receiver: Receiver = self._receiver(
             self,  # type: ignore
             conn,
             self._run_timeout,

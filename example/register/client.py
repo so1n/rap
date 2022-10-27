@@ -33,7 +33,7 @@ async def main() -> None:
     # client auto use func name
     print(f"invoke result: {await client.invoke(sync_sum)(1, 2)}")
     # invoke function according to protocol
-    print(f"raw invoke result: {await client.invoke_by_name('sync_sum', [1, 2])}")
+    print(f"raw invoke result: {await client.invoke_by_name('sync_sum', {'a': 1, 'b': 2})}")
     # use decorator, client will auto register `sync_sum` func,
     # when you invoke the decorated function,
     # the action(await sync_sum(1, 3)) is like await client.invoke_by_name('sync_sum', 1, 3)

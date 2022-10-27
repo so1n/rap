@@ -46,7 +46,7 @@ class TestTransport:
         mock_future.set_exception(asyncio.TimeoutError())
 
         with pytest.raises(asyncio.TimeoutError):
-            await rap_client.invoke_by_name("sync_sum", [1, 2])
+            await rap_client.invoke_by_name("sync_sum", {"a": 1, "b": 2})
 
     async def test_write_timeout(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
         mock_future: asyncio.Future = asyncio.Future()
@@ -54,7 +54,7 @@ class TestTransport:
         mock_future.set_exception(asyncio.TimeoutError())
 
         with pytest.raises(asyncio.TimeoutError):
-            await rap_client.invoke_by_name("sync_sum", [1, 2])
+            await rap_client.invoke_by_name("sync_sum", {"a": 1, "b": 2})
 
     async def test_write_raise_exc(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
         mock_future: asyncio.Future = asyncio.Future()
@@ -62,7 +62,7 @@ class TestTransport:
         mock_future.set_exception(Exception("demo"))
 
         with pytest.raises(Exception) as e:
-            await rap_client.invoke_by_name("sync_sum", [1, 2])
+            await rap_client.invoke_by_name("sync_sum", {"a": 1, "b": 2})
 
         exec_msg: str = e.value.args[0]
         assert exec_msg == "demo"
@@ -73,7 +73,7 @@ class TestTransport:
         mock_future.set_result(None)
 
         with pytest.raises(ConnectionError) as e:
-            await rap_client.invoke_by_name("sync_sum", [1, 2])
+            await rap_client.invoke_by_name("sync_sum", {"a": 1, "b": 2})
 
         exec_msg: str = e.value.args[0]
         assert exec_msg == "Connection has been closed"

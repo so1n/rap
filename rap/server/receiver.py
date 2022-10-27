@@ -21,7 +21,7 @@ from rap.common.exceptions import (
     ServerError,
 )
 from rap.common.types import BASE_MSG_TYPE
-from rap.common.utils import InmutableDict, constant, param_handle, parse_error, response_num_dict
+from rap.common.utils import InmutableDict, constant, parse_error, response_num_dict
 from rap.server.channel import Channel, get_corresponding_channel_class
 from rap.server.model import Request, Response, ServerContext
 from rap.server.plugin.processor.base import BaseProcessor, belong_to_base_method
@@ -45,7 +45,7 @@ class Receiver(object):
         sender: Sender,
         ping_fail_cnt: int,
         ping_sleep_time: int,
-        call_func_permission_fn: Optional[Callable[[Request], Awaitable[FuncModel]]] = None,
+        call_func_permission_fn: Optional[Callable[[Request], Coroutine[Any, Any, FuncModel]]] = None,
         processor_list: Optional[List[BaseProcessor]] = None,
     ):
         """Receive and process messages from the client, and execute different logics according to the message type
@@ -65,7 +65,7 @@ class Receiver(object):
         self.context_dict: Dict[int, ServerContext] = {}
         self._ping_sleep_time: int = ping_sleep_time
         self._ping_fail_cnt: int = ping_fail_cnt
-        self._get_func_from_request: Callable[[Request], Awaitable[FuncModel]] = (
+        self._get_func_from_request: Callable[[Request], Coroutine[Any, Any, FuncModel]] = (
             call_func_permission_fn if call_func_permission_fn else self._default_call_fun_permission_fn
         )
 
@@ -304,14 +304,14 @@ class Receiver(object):
         func_model: FuncModel = await self._get_func_from_request(request)
         # Check param type
         try:
-            param_tuple: tuple = param_handle(func_model.func_sig, request.body, {})
+            param_dict: dict = func_model.func_sig.bind(*tuple(), **request.body).arguments
         except TypeError as e:
             raise ParseError(extra_msg=str(e))
 
         if asyncio.iscoroutinefunction(func_model.func):
-            coroutine: Union[Awaitable, Coroutine] = func_model.func(*param_tuple)
+            coroutine: Union[Awaitable, Coroutine] = func_model.func(**param_dict)
         else:
-            coroutine = get_event_loop().run_in_executor(None, partial(func_model.func, *param_tuple))
+            coroutine = get_event_loop().run_in_executor(None, partial(func_model.func, **param_dict))
 
         # called func
         try:
