@@ -79,6 +79,7 @@ class Transport(object):
         :param unpack_param: set conn unpack param
         :param read_timeout: set conn read timeout param, default 1200
         :param max_inflight: set conn max use number, default 100
+        :param through_deadline: Whether to transparently transmit deadline parameters to the server
         """
         self._through_deadline: bool = through_deadline
         self._conn: Connection = Connection(
@@ -520,16 +521,17 @@ class Transport(object):
     ####################################
     # base one by one request response #
     ####################################
-    async def _base_request(self, request: Request) -> Response:
+    async def _base_request(self, request: Request, through_deadline: Optional[bool] = None) -> Response:
         """Send data to the server and get the response from the server.
         :param request: client request obj
+        :param through_deadline: Whether to transparently transmit deadline parameters to the server
 
         :return: return server response
         """
         try:
             response_future: asyncio.Future[Response] = asyncio.Future()
             self._resp_future_dict[request.correlation_id] = response_future
-            await self.write_to_conn(request)
+            await self.write_to_conn(request, through_deadline=through_deadline)
             return await as_first_completed(
                 [response_future],
                 not_cancel_future_list=[self._conn.conn_future],
@@ -542,10 +544,10 @@ class Transport(object):
     ##########################
     # base write_to_conn api #
     ##########################
-    async def write_to_conn(self, request: Request) -> None:
+    async def write_to_conn(self, request: Request, through_deadline: Optional[bool] = None) -> None:
         """gen msg_id and seng msg to transport"""
         deadline: Optional[Deadline] = deadline_context.get()
-        if self._through_deadline and deadline:
+        if (self._through_deadline or through_deadline) and deadline:
             request.header["X-rap-deadline"] = deadline.end_timestamp
         if self._processor:
             request = await self._processor.process_request(request)
@@ -560,12 +562,14 @@ class Transport(object):
         param: Optional[dict] = None,
         group: Optional[str] = None,
         header: Optional[dict] = None,
+        through_deadline: Optional[bool] = None,
     ) -> Response:
         """msg request handle
         :param func_name: rpc func name
         :param param: rpc func param
         :param group: func's group
         :param header: request header
+        :param through_deadline: Whether to transparently transmit deadline parameters to the server
         """
         group = group or constant.DEFAULT_GROUP
         param = param or {}
@@ -578,7 +582,7 @@ class Transport(object):
             )
             if header:
                 request.header.update(header)
-            response: Response = await self._base_request(request)
+            response: Response = await self._base_request(request, through_deadline=through_deadline)
             if response.msg_type != constant.MSG_RESPONSE:
                 raise RPCError(f"response num must:{constant.MSG_RESPONSE} not {response.msg_type}")
             return response
@@ -633,7 +637,7 @@ class TransportProvider(Provider[Transport]):
     ) -> "TransportProvider":
         """
         :param transport: rap.client.transport.transport.Transport
-        :param through_deadline: Whether the transparent transmission deadline
+        :param through_deadline: Whether to transparently transmit deadline parameters to the server
         :param ssl_crt_path: set conn ssl_crt_path
         :param pack_param: set conn pack param
         :param unpack_param: set conn unpack param

@@ -182,12 +182,14 @@ class BaseClient:
 
             _header = _kwargs.pop("header", header)
             _picker_class = _kwargs.pop("picker_class", picker_class)
+            through_deadline = _kwargs.pop("through_deadline", None)
             result: Any = await self.invoke_by_name(
                 name,
                 param=func_sig.bind(*_args, **_kwargs).arguments,
                 group=group,
                 header=_header,
                 picker_class=_picker_class,
+                through_deadline=through_deadline,
             )
             return result
 
@@ -347,6 +349,7 @@ class BaseClient:
         header: Optional[dict] = None,
         group: Optional[str] = None,
         picker_class: Optional[Type[Picker]] = None,
+        through_deadline: Optional[bool] = None,
     ) -> Response:
         """rpc client base invoke method
         Note: This method does not support parameter type checking, not support channels;
@@ -356,9 +359,10 @@ class BaseClient:
         :param group: func's group
         :param header: request header
         :param picker_class: Specific implementation of picker
+        :param through_deadline: Whether the transparent transmission deadline
         """
         async with (_pick_stub_context.get() or self.endpoint.picker(picker_class=picker_class)) as transport:
-            return await transport.request(name, param, group=group, header=header)
+            return await transport.request(name, param, group=group, header=header, through_deadline=through_deadline)
 
     async def invoke_by_name(
         self,
@@ -367,6 +371,7 @@ class BaseClient:
         header: Optional[dict] = None,
         group: Optional[str] = None,
         picker_class: Optional[Type[Picker]] = None,
+        through_deadline: Optional[bool] = None,
     ) -> Any:
         """rpc client base invoke method
         Note: This method does not support parameter type checking, not support channels;
@@ -376,8 +381,11 @@ class BaseClient:
         :param group: func's group
         :param header: request header
         :param picker_class: Specific implementation of picker
+        :param through_deadline: Whether the transparent transmission deadline
         """
-        response: Response = await self.request(name, param, group=group, header=header, picker_class=picker_class)
+        response: Response = await self.request(
+            name, param, group=group, header=header, picker_class=picker_class, through_deadline=through_deadline
+        )
         return response.body
 
     def invoke(
