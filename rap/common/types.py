@@ -141,7 +141,9 @@ def get_real_annotation(annotation: Union[Type, str], target_obj: Any) -> Type:
     else:
         new_annotation = annotation
     if new_annotation.__module__ in sys.modules:
-        global_dict.update(sys.modules[new_annotation.__module__].__dict__)
+        for key, value in sys.modules[new_annotation.__module__].__dict__.items():
+            if key not in global_dict:
+                global_dict[key] = value
     try:
         return _eval_type(new_annotation, global_dict, None)
     except NameError:

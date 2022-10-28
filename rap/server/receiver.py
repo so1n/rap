@@ -78,6 +78,7 @@ class Receiver(object):
         # now one conn one Request object
         self._keepalive_timestamp: int = int(time.time())
         self._channel_dict: Dict[int, Channel] = {}
+        self._metadata: dict = {}
 
         # processor
         processor_list = processor_list or []
@@ -122,6 +123,7 @@ class Receiver(object):
             context.correlation_id = correlation_id
             context.server_info = self._server_info
             context.client_info = self._client_info
+            context.transport_metadata = self._metadata
             self.context_dict[correlation_id] = context
             logger.debug("create %s context", correlation_id)
 
@@ -274,6 +276,7 @@ class Receiver(object):
             channel = Channel(channel_id, write, self._conn, func)
             self._channel_dict[channel_id] = channel
             request.context.context_channel = channel.get_context_channel()
+            request.context.channel_metadata = request.body
 
             async def wait_channel_close() -> None:
                 # Recycling Channel Resources
@@ -346,6 +349,8 @@ class Receiver(object):
                 raise TypeError(f"Error msg type, {request.correlation_id}")
         elif request.func_name == constant.DECLARE:
             self._client_info = InmutableDict(request.body["client_info"])
+            self._metadata = request.body["metadata"]
+            response.context.transport_metadata = self._metadata
             response.set_event(DeclareEvent({"conn_id": self._conn.conn_id, "server_info": self._server_info}))
             self._conn.keepalive_timestamp = int(time.time())
 

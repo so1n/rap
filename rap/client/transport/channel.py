@@ -33,11 +33,15 @@ class Channel(BaseChannel[Response]):
         target: str,
         channel_id: int,
         context: ClientContext,
+        metadata: Optional[dict] = None,
     ):
         """
         :param transport: rap client transport
         :param target: rap target
         :param channel_id: transport correlation_id
+        :param metadata:
+            Create the channel phase to synchronize the metadata of the server channel,
+            which can be obtained during the channel
         """
         self._transport: "Transport" = transport
         self._target: str = target
@@ -46,7 +50,9 @@ class Channel(BaseChannel[Response]):
 
         self.channel_id: int = channel_id
         self.queue: asyncio.Queue[Union[Response, Exception]] = asyncio.Queue()
+        self.metadata: dict = metadata or {}
         self.context.context_channel = self.get_context_channel()
+        self.context.channel_metadata = self.metadata
         self.channel_conn_future: asyncio.Future = asyncio.Future()
 
     async def create(self) -> None:
@@ -67,7 +73,7 @@ class Channel(BaseChannel[Response]):
 
         # init with server
         life_cycle: str = constant.DECLARE
-        await self._base_write(None, life_cycle, target=self._target)
+        await self._base_write(self.metadata, life_cycle, target=self._target)
         response: Response = await self._base_read()
         if response.header.get("channel_life_cycle") != life_cycle:
             raise ChannelLifecycleError()

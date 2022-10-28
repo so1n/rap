@@ -39,7 +39,6 @@ class ServerShutdownException(Exception):
 
 
 class Transport(object):
-    """Implementation of rap client protocol"""
 
     _decay_time: float = 600.0
 
@@ -61,6 +60,7 @@ class Transport(object):
         port: int,
         weight: int,
         processor: Optional[BaseProcessor] = None,
+        metadata: Optional[dict] = None,
         through_deadline: bool = False,
         ssl_crt_path: Optional[str] = None,
         pack_param: Optional[dict] = None,
@@ -69,7 +69,12 @@ class Transport(object):
         read_timeout: Optional[int] = None,
     ):
         """
+        Implementation of rap client protocol
+
         :param ssl_crt_path: set conn ssl_crt_path
+        :param metadata:
+            The header when creating the Transport will synchronize the data to the server in the `declare` phase.
+            It can be obtained through context in the transport stage.
         :param pack_param: set conn pack param
         :param unpack_param: set conn unpack param
         :param read_timeout: set conn read timeout param, default 1200
@@ -92,6 +97,7 @@ class Transport(object):
         self.host: str = host
         self.port: int = port
         self.weight: int = weight
+        self._metadata: dict = metadata or {}
         self._ssl_crt_path: Optional[str] = ssl_crt_path
         self._pack_param: Optional[dict] = pack_param
         self._unpack_param: Optional[dict] = unpack_param
@@ -109,11 +115,7 @@ class Transport(object):
         self._last_ping_timestamp: float = time.time()
         self._rtt: float = 0.0
 
-        self._client_info: InmutableDict = InmutableDict(
-            host=self._conn.peer_tuple,
-            version=constant.VERSION,
-            user_agent=constant.USER_AGENT,
-        )
+        self._client_info: InmutableDict = InmutableDict()
         self._server_info: InmutableDict = InmutableDict()
         self.state: State = State()
 
@@ -129,7 +131,7 @@ class Transport(object):
 
     @asynccontextmanager
     async def _transport_context(
-        self, c_id: Optional[int] = None, enable_limit_request: bool = False
+        self, c_id: Optional[int] = None, is_not_limit_request: bool = False
     ) -> AsyncGenerator[ClientContext, None]:
         """
         Create the request context
@@ -139,7 +141,7 @@ class Transport(object):
         So need to call this method as close as possible to the place where the request is sent
 
         :param c_id: The ID corresponding to the context object, if it is empty, an ID is automatically generated
-        :param enable_limit_request: Cannot be restricted if requests is internal request
+        :param is_not_limit_request: Cannot be restricted if requests is internal request
         """
         if not c_id:
             if not self.available:
@@ -150,7 +152,7 @@ class Transport(object):
         else:
             correlation_id: int = c_id
 
-        if not enable_limit_request:
+        if not is_not_limit_request:
             await self._semaphore.acquire()
 
         # create context
@@ -159,6 +161,7 @@ class Transport(object):
         context.transport = self
         context.server_info = self._server_info
         context.client_info = self._client_info
+        context.transport_metadata = self._metadata
 
         self._context_dict[correlation_id] = context
         if self._processor:
@@ -179,7 +182,7 @@ class Transport(object):
                     return context, exc_type, exc_val, exc_tb
 
                 await self._processor.on_context_exit(_context_exit_cb)
-            if not enable_limit_request:
+            if not is_not_limit_request:
                 self._semaphore.release()
             self._context_dict.pop(correlation_id, None)
 
@@ -276,6 +279,11 @@ class Transport(object):
     # available api #
     #################
     @property
+    def metadata(self) -> dict:
+        """get transport header"""
+        return self._metadata
+
+    @property
     def available(self) -> bool:
         return self._available
 
@@ -344,6 +352,11 @@ class Transport(object):
         await self._conn.connect()
         self.available = True
         self._close_soon_flag = False
+        self._client_info: InmutableDict = InmutableDict(
+            host=self._conn.peer_tuple,
+            version=constant.VERSION,
+            user_agent=constant.USER_AGENT,
+        )
         listen_future = asyncio.ensure_future(self._listen_conn())
         self.add_close_callback(lambda _: safe_del_future(listen_future))
 
@@ -409,7 +422,7 @@ class Transport(object):
 
     async def _server_send_msg_handler(self, response_msg: SERVER_BASE_MSG_TYPE) -> None:
         correlation_id: int = response_msg[1]
-        async with self._transport_context(c_id=correlation_id, enable_limit_request=True) as context:
+        async with self._transport_context(c_id=correlation_id, is_not_limit_request=True) as context:
             response = await self._get_response(response_msg=response_msg, context=context)
             if not response:
                 return
@@ -448,10 +461,10 @@ class Transport(object):
         """
         if self._server_info:
             raise RuntimeError("declare can not be called twice")
-        async with self._transport_context(enable_limit_request=True) as context:
+        async with self._transport_context(is_not_limit_request=True) as context:
             response: Response = await self._base_request(
                 Request.from_event(
-                    event.DeclareEvent({"client_info": context.client_info}),
+                    event.DeclareEvent({"client_info": context.client_info, "metadata": self._metadata}),
                     context,
                 )
             )
@@ -480,7 +493,7 @@ class Transport(object):
         async def _ping() -> None:
             nonlocal mos
             nonlocal rtt
-            async with self._transport_context(enable_limit_request=True) as context:
+            async with self._transport_context(is_not_limit_request=True) as context:
                 response: Response = await self._base_request(Request.from_event(event.PingEvent({}), context))
             rtt += time.time() - start_time
             mos += response.body.get("mos", 5)
@@ -571,17 +584,22 @@ class Transport(object):
             return response
 
     @asynccontextmanager
-    async def channel(self, func_name: str, group: Optional[str] = None) -> AsyncGenerator["Channel", None]:
+    async def channel(
+        self, func_name: str, group: Optional[str] = None, metadata: Optional[dict] = None
+    ) -> AsyncGenerator["Channel", None]:
         """create and init channel
         :param func_name: rpc func name
         :param group: func's group
+        :param metadata:
+            Create the channel phase to synchronize the metadata of the server channel,
+            which can be obtained during the channel
         """
         target: str = f"/{group or constant.DEFAULT_GROUP}/{func_name}"
 
         async with self._transport_context() as context:
             correlation_id: int = context.correlation_id
             channel: Channel = Channel(
-                transport=self, target=target, channel_id=correlation_id, context=context  # type: ignore
+                transport=self, target=target, channel_id=correlation_id, context=context, metadata=metadata
             )
             self._channel_queue_dict[correlation_id] = channel.queue
             channel.channel_conn_future.add_done_callback(lambda f: self._channel_queue_dict.pop(correlation_id, None))
@@ -611,6 +629,7 @@ class TransportProvider(Provider[Transport]):
         unpack_param: Optional[dict] = None,
         max_inflight: Optional[int] = None,
         read_timeout: Optional[int] = None,
+        metadata: Optional[dict] = None,
     ) -> "TransportProvider":
         """
         :param transport: rap.client.transport.transport.Transport
@@ -620,6 +639,9 @@ class TransportProvider(Provider[Transport]):
         :param unpack_param: set conn unpack param
         :param read_timeout: set conn read timeout param, default 1200
         :param max_inflight: set conn max use number, default 100
+        :param metadata:
+            The header when creating the Transport will synchronize the data to the server in the `declare` phase.
+            It can be obtained through context in the transport stage.
         """
         return cls(
             transport,
@@ -629,4 +651,5 @@ class TransportProvider(Provider[Transport]):
             unpack_param=unpack_param,
             max_inflight=max_inflight,
             read_timeout=read_timeout,
+            metadata=metadata,
         )

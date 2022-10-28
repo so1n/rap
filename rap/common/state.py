@@ -44,10 +44,15 @@ class Context(State):
     func_name: str
     group: str
 
+    transport_metadata: dict
+    channel_metadata: dict
+
     def __getattr__(self, key: Any) -> Any:
         try:
             return self._state[key]
         except KeyError:
+            if not hasattr(self, "correlation_id"):
+                raise AttributeError(f"'{self}' object has no attribute '{key}'")
             raise AttributeError(f"'{self.__class__.__name__}<{self.correlation_id}>' object has no attribute '{key}'")
 
     def get_value(self, key: Any, default_value: Any = MISSING) -> Any:

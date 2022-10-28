@@ -227,6 +227,7 @@ class BaseClient:
         func: CHANNEL_F,
         group: Optional[str],
         name: str = "",
+        metadata: Optional[dict] = None,
         picker_class: Optional[Type[Picker]] = None,
     ) -> Callable[..., Awaitable[None]]:
         """Decoration channel function"""
@@ -236,7 +237,7 @@ class BaseClient:
         @wraps(func)
         async def wrapper() -> None:
             async with (_pick_stub_context.get() or self.endpoint.picker(picker_class=picker_class)) as transport:
-                async with transport.channel(name, group) as channel:
+                async with transport.channel(name, group, metadata=metadata) as channel:
                     await func(channel.get_user_channel_from_func(func))
 
         return wrapper
@@ -285,16 +286,20 @@ class BaseClient:
         name: str = "",
         group: Optional[str] = None,
         picker_class: Optional[Type[Picker]] = None,
+        metadata: Optional[dict] = None,
     ) -> Callable[[CHANNEL_F], Any]:
         """Using this method to decorate a fake function can help you use it better.
 
         :param name: rap func name
         :param group: func's group, default value is `default`
         :param picker_class: Specific implementation of picker
+        :param metadata:
+            Create the channel phase to synchronize the metadata of the server channel,
+            which can be obtained during the channel
         """
 
         def wrapper(func: CHANNEL_F) -> Any:  # type: ignore
-            return self._wrapper_channel(func, group=group, name=name, picker_class=picker_class)
+            return self._wrapper_channel(func, group=group, name=name, picker_class=picker_class, metadata=metadata)
 
         return wrapper
 
@@ -410,14 +415,18 @@ class BaseClient:
         func: Callable[[UserChannelCovariantType], Awaitable[None]],
         group: Optional[str] = None,
         picker_class: Optional[Type[Picker]] = None,
+        metadata: Optional[dict] = None,
     ) -> Callable[..., Awaitable[None]]:
         """invoke channel fun
 
         :param func: python func
         :param group: func's group, default value is `default`
         :param picker_class: Specific implementation of picker
+        :param metadata:
+            Create the channel phase to synchronize the metadata of the server channel,
+            which can be obtained during the channel
         """
-        return self._wrapper_channel(func, group=group, picker_class=picker_class)
+        return self._wrapper_channel(func, group=group, picker_class=picker_class, metadata=metadata)
 
     ###############################
     # Magic api (Not recommended) #
