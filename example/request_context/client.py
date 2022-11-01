@@ -48,6 +48,11 @@ async def main() -> None:
     await client.stop()
 
 
+def run_client() -> None:
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
+
+
 if __name__ == "__main__":
     import logging
 
@@ -59,6 +64,4 @@ if __name__ == "__main__":
         level=logging.DEBUG,
         handlers=[default_handler],
     )
-
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    run_client()

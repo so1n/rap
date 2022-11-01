@@ -24,12 +24,7 @@ async def async_sum(a: int, b: int) -> int:
     return a + b
 
 
-if __name__ == "__main__":
-    import logging
-
-    logging.basicConfig(
-        format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.DEBUG
-    )
+def run_server() -> None:
     agent.start()
     loop = asyncio.new_event_loop()
     rpc_server: Server = Server()
@@ -38,3 +33,12 @@ if __name__ == "__main__":
     rpc_server.register(echo_body)
     loop.run_until_complete(rpc_server.run_forever())
     agent.stop()
+
+
+if __name__ == "__main__":
+    import logging
+
+    logging.basicConfig(
+        format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.DEBUG
+    )
+    run_server()

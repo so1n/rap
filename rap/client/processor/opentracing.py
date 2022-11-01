@@ -8,7 +8,7 @@ from opentracing.ext import tags
 from opentracing.propagation import Format
 from opentracing.scope import Scope
 
-from rap.client.model import BaseMsgProtocol, ClientContext, Request, Response
+from rap.client.model import ClientContext, Request, Response
 from rap.client.processor.base import BaseClientProcessor, ContextExitCallable, ResponseCallable
 from rap.common.utils import constant
 
@@ -18,7 +18,7 @@ class TracingProcessor(BaseClientProcessor):
         self._tracer: Tracer = tracer
         self._scope_cache_timeout: float = scope_cache_timeout or 60.0
 
-    def _create_scope(self, msg: BaseMsgProtocol, finish_on_close: bool = True) -> Scope:
+    def _create_scope(self, msg: Request, finish_on_close: bool = True) -> Scope:
         span_ctx: Optional[SpanContext] = None
         try:
             span_ctx = self._tracer.extract(Format.HTTP_HEADERS, msg.header)
@@ -33,7 +33,7 @@ class TracingProcessor(BaseClientProcessor):
             span_context=scope.span.context, format=Format.HTTP_HEADERS, carrier=msg.header  # type: ignore
         )
         scope.span.set_tag(tags.SPAN_KIND, tags.SPAN_KIND_RPC_CLIENT)
-        scope.span.set_tag(tags.PEER_HOSTNAME, ":".join([str(i) for i in msg.header["host"]]))
+        scope.span.set_tag(tags.PEER_HOSTNAME, ":".join([str(i) for i in msg.context.server_info["host"]]))
         scope.span.set_tag("correlation_id", msg.correlation_id)
         scope.span.set_tag("msg_type", msg.msg_type)
         if not finish_on_close:

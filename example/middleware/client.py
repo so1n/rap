@@ -30,6 +30,13 @@ async def main() -> None:
     print(f"async result: {await async_sum(1, 3)}")
     async for i in async_gen(10):
         print(f"async gen result:{i}")
+    await client.stop()
+
+
+def run_client() -> None:
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
 
 
 if __name__ == "__main__":
@@ -38,6 +45,4 @@ if __name__ == "__main__":
     logging.basicConfig(
         format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.DEBUG
     )
-
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    run_client()

@@ -9,7 +9,7 @@ from skywalking.trace.tags import Tag
 from skywalking.utils import filter
 
 from rap.common.utils import constant
-from rap.server.model import BaseMsgProtocol, Request, Response
+from rap.server.model import Request, Response
 
 from .base import BaseProcessor
 
@@ -37,7 +37,7 @@ class SkywalkingProcessor(BaseProcessor):
     def __init__(self, carrier_key_prefix: str = "X-Rap"):
         self._carrier_key_prefix = carrier_key_prefix
 
-    def _create_span(self, msg: BaseMsgProtocol) -> Span:
+    def _create_span(self, msg: Request) -> Span:
         carrier: Carrier = Carrier()
         for item in carrier:
             key: str = self._carrier_key_prefix + "-" + item.key
@@ -47,7 +47,7 @@ class SkywalkingProcessor(BaseProcessor):
         span.start()
         span.layer = Layer.RPCFramework
         span.component = Component.Unknown
-        span.peer = ":".join([str(i) for i in msg.header["host"]])
+        span.peer = ":".join([str(i) for i in msg.context.server_info["host"]])
         span.tag(TagRapType("server"))
         span.tag(TagCorrelationId(msg.correlation_id))
         span.tag(TagMsgType(msg.msg_type))

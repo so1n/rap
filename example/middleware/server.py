@@ -19,12 +19,7 @@ async def async_gen(a: int) -> AsyncIterator[int]:
         yield i
 
 
-if __name__ == "__main__":
-    import logging
-
-    logging.basicConfig(
-        format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.DEBUG
-    )
+def run_server() -> None:
 
     loop = asyncio.new_event_loop()
     rpc_server = Server()
@@ -33,3 +28,12 @@ if __name__ == "__main__":
     rpc_server.register(async_sum)
     rpc_server.register(async_gen)
     loop.run_until_complete(rpc_server.run_forever())
+
+
+if __name__ == "__main__":
+    import logging
+
+    logging.basicConfig(
+        format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.DEBUG
+    )
+    run_server()

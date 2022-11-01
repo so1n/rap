@@ -40,9 +40,10 @@ async def example_http_client() -> None:
                 "group": "default",
                 "func_name": "sync_sum",
                 "func_type": "normal",
-                "arg_list": [1, 2],
+                "arg_dict": {"a": 1, "b": 2},
             },
         )
+        print(resp.json())
         assert 3 == resp.json()["data"]
 
 
@@ -51,10 +52,14 @@ async def main() -> None:
     await example_websockets_client()
 
 
+def run_api_client() -> None:
+    asyncio.run(main())
+
+
 if __name__ == "__main__":
     import logging
 
     logging.basicConfig(
         format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.DEBUG
     )
-    asyncio.run(main())
+    run_api_client()

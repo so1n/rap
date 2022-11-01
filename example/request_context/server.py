@@ -2,8 +2,6 @@ import asyncio
 import logging
 from typing import Any
 
-from aredis import StrictRedis  # type: ignore
-
 from rap.common.channel import UserChannel
 from rap.server import Server
 from rap.server.plugin.processor.context import Context, ContextProcessor
@@ -41,6 +39,15 @@ async def echo_body(channel: UserChannel) -> None:
         await channel.write(f"pong! {cnt}")
 
 
+def run_server() -> None:
+    loop = asyncio.new_event_loop()
+    rpc_server: Server = Server()
+    rpc_server.register(async_sum)
+    rpc_server.register(echo_body)
+    rpc_server.load_processor([ContextProcessor()])
+    loop.run_until_complete(rpc_server.run_forever())
+
+
 if __name__ == "__main__":
     import logging
 
@@ -52,11 +59,4 @@ if __name__ == "__main__":
         level=logging.DEBUG,
         handlers=[default_handler],
     )
-
-    loop = asyncio.new_event_loop()
-    redis: StrictRedis = StrictRedis.from_url("redis://localhost")
-    rpc_server: Server = Server()
-    rpc_server.register(async_sum)
-    rpc_server.register(echo_body)
-    rpc_server.load_processor([ContextProcessor()])
-    loop.run_until_complete(rpc_server.run_forever())
+    run_server()

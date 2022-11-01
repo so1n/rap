@@ -1,12 +1,22 @@
 import asyncio
 
-from rap.client import Client
-
-client: Client = Client()
+from rap.client.transport.transport import Transport
 
 
 async def main() -> None:
-    await client.start()
+    transport: Transport = Transport(host="127.0.0.1", port=9000, weight=10)
+    await transport.connect()
+    await transport.declare()
+    assert transport.pick_score == 10.0
+
+    await transport.ping()
+    assert transport.pick_score > 0
+    await transport.await_close()
+
+
+def run_client() -> None:
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
 
 
 if __name__ == "__main__":
@@ -15,7 +25,4 @@ if __name__ == "__main__":
     logging.basicConfig(
         format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.DEBUG
     )
-
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
-    loop.run_forever()
+    run_client()

@@ -33,13 +33,16 @@ def create_server() -> Server:
     return rpc_server
 
 
+def run_server() -> None:
+    loop = asyncio.new_event_loop()
+    server: Server = create_server()
+    loop.run_until_complete(server.run_forever())
+
+
 if __name__ == "__main__":
     import logging
 
     logging.basicConfig(
         format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.DEBUG
     )
-
-    loop = asyncio.new_event_loop()
-    server: Server = create_server()
-    loop.run_until_complete(server.run_forever())
+    run_server()

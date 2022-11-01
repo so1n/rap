@@ -7,7 +7,7 @@ from skywalking.trace.context import get_context
 from skywalking.trace.span import Span
 from skywalking.trace.tags import Tag
 
-from rap.client.model import BaseMsgProtocol, ClientContext, Request, Response
+from rap.client.model import ClientContext, Request, Response
 from rap.common.utils import constant
 
 from .base import BaseClientProcessor, ContextExitCallable, ResponseCallable
@@ -36,13 +36,13 @@ class SkywalkingProcessor(BaseClientProcessor):
     def __init__(self, carrier_key_prefix: str = "X-Rap"):
         self._carrier_key_prefix = carrier_key_prefix
 
-    def _create_span(self, msg: BaseMsgProtocol) -> Span:
+    def _create_span(self, msg: Request) -> Span:
         carrier: Carrier = Carrier()
         for item in carrier:
             key: str = self._carrier_key_prefix + "-" + item.key
             if key in msg.header:
                 item.val = msg.header[key]
-        peer: str = ":".join([str(i) for i in msg.header["host"]])
+        peer: str = ":".join([str(i) for i in msg.context.server_info["host"]])
         if carrier.is_valid:
             span: Span = get_context().new_entry_span(op=msg.target, carrier=carrier)
             span.start()
@@ -74,12 +74,11 @@ class SkywalkingProcessor(BaseClientProcessor):
 
     async def process_response(self, response_cb: ResponseCallable) -> Response:
         response: Response = await super().process_response(response_cb)
-        if response.msg_type is constant.MSG_RESPONSE:
-            span: Span = response.context.span
+        span: Optional[Span] = response.context.get_value("span", None)
+        if response.msg_type is constant.MSG_RESPONSE and span:
             status_code: int = response.status_code
             span.tag(TagStatusCode(status_code))
             span.error_occurred = status_code >= 400
-            span.stop()
         return response
 
     async def on_context_exit(

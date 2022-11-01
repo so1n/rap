@@ -47,12 +47,15 @@ async def main() -> None:
     await client.stop()
 
 
-if __name__ == "__main__":
-
+def run_client():
     agent.start()
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
     import time
 
     time.sleep(10)
-    # agent.stop()
+    agent.stop()
+
+
+if __name__ == "__main__":
+    run_client()

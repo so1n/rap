@@ -50,14 +50,7 @@ async def echo_response(channel: UserChannel) -> None:
         await channel.write(response.body)
 
 
-if __name__ == "__main__":
-    import logging
-
-    logging.basicConfig(
-        format="[%(asctime)s %(levelname)s %(filename)s line:%(lineno)d] %(message)s",
-        datefmt="%y-%m-%d %H:%M:%S",
-        level=logging.DEBUG,
-    )
+def run_server() -> None:
 
     loop = asyncio.new_event_loop()
     rpc_server_1: Server = Server()
@@ -88,3 +81,14 @@ if __name__ == "__main__":
         await asyncio.gather(*[rpc_server_1.run_forever(), rpc_server_2.run_forever(), rpc_server_3.run_forever()])
 
     loop.run_until_complete(run_forever())
+
+
+if __name__ == "__main__":
+    import logging
+
+    logging.basicConfig(
+        format="[%(asctime)s %(levelname)s %(filename)s line:%(lineno)d] %(message)s",
+        datefmt="%y-%m-%d %H:%M:%S",
+        level=logging.DEBUG,
+    )
+    run_server()

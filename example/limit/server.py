@@ -52,12 +52,7 @@ def match_ip_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
         return None, False
 
 
-if __name__ == "__main__":
-    import logging
-
-    logging.basicConfig(
-        format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.INFO
-    )
+def run_server() -> None:
 
     loop = asyncio.new_event_loop()
     redis: StrictRedis = StrictRedis.from_url("redis://localhost")
@@ -74,3 +69,12 @@ if __name__ == "__main__":
     )
     rpc_server.load_processor([limit_processor])
     loop.run_until_complete(rpc_server.run_forever())
+
+
+if __name__ == "__main__":
+    import logging
+
+    logging.basicConfig(
+        format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.INFO
+    )
+    run_server()

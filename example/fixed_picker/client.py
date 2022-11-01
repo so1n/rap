@@ -34,6 +34,13 @@ async def main() -> None:
     async with client.fixed_transport():
         for _ in range(3):
             assert 3 == await sync_sum(1, 2)
+    await client.stop()
+
+
+def run_client() -> None:
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
+    assert len(check_conn_processor.transport_set) == 1
 
 
 if __name__ == "__main__":
@@ -42,7 +49,4 @@ if __name__ == "__main__":
     logging.basicConfig(
         format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.DEBUG
     )
-
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
-    assert len(check_conn_processor.transport_set) == 1
+    run_client()

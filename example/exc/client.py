@@ -34,12 +34,15 @@ async def main() -> None:
     await client.stop()
 
 
+def run_client():
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
+
+
 if __name__ == "__main__":
     import logging
 
     logging.basicConfig(
         format="[%(asctime)s %(levelname)s] %(message)s", datefmt="%y-%m-%d %H:%M:%S", level=logging.INFO
     )
-
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    run_client()
