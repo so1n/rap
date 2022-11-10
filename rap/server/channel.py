@@ -35,10 +35,11 @@ class Channel(BaseChannel["Request"]):
         self.queue: asyncio.Queue = asyncio.Queue()
         self.channel_id: int = channel_id
 
-        # if conn close, channel future will done and channel not read & write_to_conn
-        self.channel_conn_future: asyncio.Future = asyncio.Future()
-        self.channel_conn_future.add_done_callback(lambda f: self.queue.put_nowait(f.exception()))
+        # Can only be closed via `set finish`
+        self.channel_future: asyncio.Future = asyncio.Future()
+        self.channel_future.add_done_callback(lambda f: self.queue.put_nowait(f.exception()))
 
+        # if conn close, channel future will done and channel not read & write_to_conn
         self._conn.conn_future.add_done_callback(lambda f: self.set_finish(ChannelError("connection already close")))
 
         self.func_future: asyncio.Future = asyncio.ensure_future(self._run_func(func))

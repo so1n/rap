@@ -142,7 +142,7 @@ class Receiver(object):
         context: Optional[ServerContext] = self.context_dict.pop(correlation_id, None)
         if context:
             logger.debug("close %s context", correlation_id)
-            if exc:
+            if not exc:
                 exc_type: Optional[Type[BaseException]] = None
                 exc_val: Optional[BaseException] = None
                 exc_tb: Optional[TracebackType] = None
@@ -285,7 +285,7 @@ class Receiver(object):
                 except Exception:
                     pass
                 try:
-                    await channel.channel_conn_future
+                    await channel.channel_future
                 except Exception:
                     pass
                 self._channel_dict.pop(channel_id, None)

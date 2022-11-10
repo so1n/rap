@@ -48,9 +48,10 @@ class Server(object):
         processor_list: Optional[List[BaseProcessor]] = None,
         call_func_permission_fn: Optional[Callable[[Request], Coroutine[Any, Any, FuncModel]]] = None,
         window_statistics: Optional[WindowStatistics] = None,
-        cache_interval: Optional[float] = None,
         receiver: Type[Receiver] = Receiver,
         sender: Type[Sender] = Sender,
+        cache: Optional[Cache] = None,
+        registry: Optional[RegistryManager] = None,
     ):
         """
         :param host: listen host
@@ -72,7 +73,8 @@ class Server(object):
         :param processor_list: Server processor list
         :param call_func_permission_fn: Check the permission to call the function
         :param window_statistics: Server window state
-        :param cache_interval: Server cache interval seconds to clean up expired data
+        :param cache: Server cache
+        :param registry: Server registry
         """
         self.host: str = host
         self.port: int = port
@@ -115,8 +117,8 @@ class Server(object):
         self._call_func_permission_fn: Optional[
             Callable[[Request], Coroutine[Any, Any, FuncModel]]
         ] = call_func_permission_fn
-        self.registry: RegistryManager = RegistryManager()
-        self.cache: Cache = Cache(interval=cache_interval)
+        self.registry: RegistryManager = registry or RegistryManager()
+        self.cache: Cache = cache or Cache()
         self.window_statistics: WindowStatistics = window_statistics or WindowStatistics()
         if self.window_statistics is not None and self.window_statistics.is_closed:
             self.register_server_event(EventEnum.before_start, lambda _app: self.window_statistics.statistics_data())

@@ -606,7 +606,7 @@ class Transport(object):
                 transport=self, target=target, channel_id=correlation_id, context=context, metadata=metadata
             )
             self._channel_queue_dict[correlation_id] = channel.queue
-            channel.channel_conn_future.add_done_callback(lambda f: self._channel_queue_dict.pop(correlation_id, None))
+            channel.channel_future.add_done_callback(lambda f: self._channel_queue_dict.pop(correlation_id, None))
 
             async with channel as channel:
                 yield channel

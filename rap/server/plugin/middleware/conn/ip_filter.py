@@ -67,7 +67,7 @@ class IpFilterMiddleware(BaseConnMiddleware):
     def ip_network_handle(ip: str) -> List[str]:
         """
         >>> IpFilterMiddleware.ip_network_handle('192.168.0.0/31')
-        ['192.168.0.1', '192.168.0.2']
+        >>> ['192.168.0.1', '192.168.0.2']
         """
         ip_list: List[str] = [ip]
         if "/" in ip:

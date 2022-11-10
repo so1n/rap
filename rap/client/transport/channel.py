@@ -53,7 +53,7 @@ class Channel(BaseChannel[Response]):
         self.metadata: dict = metadata or {}
         self.context.context_channel = self.get_context_channel()
         self.context.channel_metadata = self.metadata
-        self.channel_conn_future: asyncio.Future = asyncio.Future()
+        self.channel_future: asyncio.Future = asyncio.Future()
 
     async def create(self) -> None:
         """create and init channel, create session and listen transport exc"""
@@ -91,7 +91,7 @@ class Channel(BaseChannel[Response]):
         try:
             response: Union[Response, Exception] = await as_first_completed(
                 [get_deadline(timeout).wait_for(self.queue.get())],
-                not_cancel_future_list=[self.channel_conn_future],
+                not_cancel_future_list=[self.channel_future],
             )
         except asyncio.TimeoutError:
             raise ChannelError(f"channel<{self.channel_id}> read response timeout")

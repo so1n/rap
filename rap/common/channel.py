@@ -17,7 +17,7 @@ class BaseChannel(Generic[_Read_T]):
     """Common method of rap client and server channel"""
 
     channel_id: int
-    channel_conn_future: asyncio.Future
+    channel_future: asyncio.Future
     queue: asyncio.Queue
 
     async def read(self, timeout: Optional[int] = None) -> _Read_T:
@@ -39,21 +39,21 @@ class BaseChannel(Generic[_Read_T]):
     @property
     def is_close(self) -> bool:
         """whether the channel is closed"""
-        return self.channel_conn_future.done()
+        return self.channel_future.done()
 
     async def wait_close(self) -> None:
-        await self.channel_conn_future
+        await self.channel_future
 
     def set_finish(self, exc: Optional[Exception] = None) -> None:
         """Set the channel to end running, if exc is not empty, exc will be set"""
-        if not (self.channel_conn_future and not self.channel_conn_future.done()):
+        if not (self.channel_future and not self.channel_future.done()):
             return
         if exc is None:
-            self.channel_conn_future.set_result(True)
+            self.channel_future.set_result(True)
         else:
-            self.channel_conn_future.set_exception(exc)
+            self.channel_future.set_exception(exc)
             try:
-                self.channel_conn_future.exception()
+                self.channel_future.exception()
             except Exception:
                 pass
 
@@ -168,10 +168,10 @@ class BaseUserChannel(Generic[_Read_T]):
         await self._channel.wait_close()
 
     def add_done_callback(self, fn: Callable[[asyncio.Future], None]) -> None:
-        self._channel.channel_conn_future.add_done_callback(fn)
+        self._channel.channel_future.add_done_callback(fn)
 
     def remove_done_callback(self, fn: Callable[[asyncio.Future], None]) -> None:
-        self._channel.channel_conn_future.remove_done_callback(fn)
+        self._channel.channel_future.remove_done_callback(fn)
 
 
 class _ReadChannelMixin(Generic[_Read_T]):
