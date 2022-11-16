@@ -6,7 +6,7 @@ from prometheus_client import Counter, Gauge, Histogram, start_http_server  # ty
 
 from rap.common.utils import EventEnum, constant
 from rap.server.model import Request, Response
-from rap.server.plugin.processor.base import BaseProcessor
+from rap.server.plugin.processor.base import BaseProcessor, ContextExitCallable, ContextExitType, ResponseCallable
 
 if TYPE_CHECKING:
     from rap.server.core import Server
@@ -26,6 +26,7 @@ channel_in_progress: "Gauge" = Gauge("channel_in_progress", "Gauge of current ch
 # total
 request_count: "Counter" = Counter("request_total", "Count of requests", label_list + ["msg_type"])
 response_count: "Counter" = Counter("response_total", "Count of response", label_list + ["msg_type", "status_code"])
+exc_count: "Counter" = Counter("exc_total", "Count of exc", label_list + ["msg_type"])
 
 
 class PrometheusProcessor(BaseProcessor):
@@ -50,27 +51,35 @@ class PrometheusProcessor(BaseProcessor):
             msg_request_in_progress.labels(*label_list).inc()
         return request
 
-    async def process_response(self, response: Response) -> Response:
-        label_list: list = [self._service_name, self.host_name, response.target]
-        response_count.labels(*label_list, response.msg_type, response.status_code).inc()
-        if response.msg_type == constant.MSG_RESPONSE:
-            msg_response_count.labels(*label_list, response.status_code).inc()
-            msg_request_in_progress.labels(*label_list).dec()
-            msg_request_time.labels(*label_list).observe(time.time() - response.context.start_time)
-        elif response.msg_type == constant.CHANNEL_RESPONSE:
-            life_cycle: str = response.header.get("channel_life_cycle", "error")
-            if life_cycle == constant.DECLARE:
-                channel_count.labels(*label_list).inc()
-                channel_in_progress.labels(*label_list).inc()
-            elif life_cycle == constant.DROP:
-                channel_in_progress.labels(*label_list).dec()
-        return response
+    async def process_response(self, response_cb: ResponseCallable) -> Response:
+        resp = None
+        try:
+            response: Response = await super().process_response(response_cb)
+            resp = response
+            return response
+        except Exception as e:
+            resp, _ = await response_cb(False)
+            raise e
+        finally:
+            response = resp  # type: ignore
+            label_list: list = [self._service_name, self.host_name, response.target]
+            response_count.labels(*label_list, response.msg_type, response.status_code).inc()
+            if response.msg_type == constant.MSG_RESPONSE:
+                msg_response_count.labels(*label_list, response.status_code).inc()
+                msg_request_in_progress.labels(*label_list).dec()
+                msg_request_time.labels(*label_list).observe(time.time() - response.context.start_time)
+            elif response.msg_type == constant.CHANNEL_RESPONSE:
+                life_cycle: str = response.header.get("channel_life_cycle", "error")
+                if life_cycle == constant.DECLARE:
+                    channel_count.labels(*label_list).inc()
+                    channel_in_progress.labels(*label_list).inc()
+                elif life_cycle == constant.DROP:
+                    channel_in_progress.labels(*label_list).dec()
 
-    async def process_exc(self, response: Response) -> Response:
-        label_list: list = [self._service_name, self.host_name, response.target]
-        response_count.labels(*label_list, response.msg_type, response.status_code).inc()
-        if response.msg_type == constant.MSG_RESPONSE:
-            msg_response_count.labels(*label_list, response.status_code).inc()
-            msg_request_in_progress.labels(*label_list).dec()
-            msg_request_time.labels(*label_list).observe(time.time() - response.context.start_time)
-        return response
+    async def on_context_exit(self, context_exit_cb: ContextExitCallable) -> ContextExitType:
+        context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb)
+        if exc_type:
+            # TODO
+            # exc_count.labels(self._service_name, self.host_name, context.target, context.msg_type).inc()
+            pass
+        return context, exc_type, exc_val, exc_tb

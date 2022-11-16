@@ -1,12 +1,11 @@
 import logging
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import TYPE_CHECKING, Optional, Tuple
 
 from rap.common.asyncio_helper import Deadline
 from rap.common.conn import ServerConnection
-from rap.common.exceptions import IgnoreNextProcessor
 from rap.common.utils import constant
 from rap.server.model import Event, Response, ServerContext
-from rap.server.plugin.processor.base import BaseProcessor, belong_to_base_method
+from rap.server.plugin.processor.base import BaseProcessor
 
 if TYPE_CHECKING:
     from rap.server.core import Server
@@ -22,13 +21,13 @@ class Sender(object):
         app: "Server",
         conn: ServerConnection,
         timeout: Optional[int] = None,
-        processor_list: Optional[List[BaseProcessor]] = None,
+        processor: Optional[BaseProcessor] = None,
     ):
         """
         :param app: rap server
         :param conn: rap server conn
         :param timeout: send data timeout
-        :param processor_list: rap server processor list
+        :param processor: rap server processor
         """
         self._app: "Server" = app
         self._max_correlation_id: int = 2 ** 16
@@ -36,53 +35,28 @@ class Sender(object):
         self._conn: ServerConnection = conn
         self._timeout: Optional[int] = timeout
 
-        self._processor_list: Optional[List[BaseProcessor]] = processor_list
-        processor_list = processor_list or []
-        self.process_response_processor_list: List[Callable] = [
-            i.process_response for i in processor_list if not belong_to_base_method(i.process_response)
-        ]
-        self.process_exception_processor_list: List[Callable] = [
-            i.process_exc for i in processor_list if not belong_to_base_method(i.process_exc)
-        ]
-
-    async def _processor_response_handle(self, resp: Response) -> Response:
-        if not self._processor_list:
-            return resp
-        if not resp.exc:
-            # Once there is an exception, the processing logic of the response is exited directly
-            try:
-                for process_response in reversed(self.process_response_processor_list):
-                    resp = await process_response(resp)
-            except IgnoreNextProcessor:
-                pass
-            except Exception as e:
-                resp.set_exception(e)
-        if resp.exc:
-            # Ensure that each Processor can handle exceptions
-            for process_exc in reversed(self.process_exception_processor_list):
-                raw_resp: Response = resp
-                try:
-                    resp = await process_exc(resp)
-                except IgnoreNextProcessor:
-                    break
-                except Exception as e:
-                    logger.exception(f"processor:{process_exc} handle response:{resp.correlation_id} error:{e}")
-                    resp = raw_resp
-        return resp
+        self._processor: Optional[BaseProcessor] = processor
 
     async def __call__(self, resp: Optional[Response], deadline: Optional[Deadline] = None) -> bool:
         """Send response data to the client"""
         if resp is None:
             return False
 
-        resp = await self._processor_response_handle(resp)
-        logger.debug("resp: %s", resp)
+        response: Response = resp
+
+        async def response_cb(is_raise: bool = True) -> Tuple[Response, Optional[Exception]]:
+            return response, None
+
+        if self._processor:
+            response = await self._processor.process_response(response_cb)
+
+        logger.debug("resp: %s", response)
         if not deadline:
             deadline = Deadline(self._timeout)
 
         with deadline:
-            await self._conn.write(resp.to_msg())
-        if resp.target.endswith(constant.CLOSE_EVENT):
+            await self._conn.write(response.to_msg())
+        if response.target.endswith(constant.CLOSE_EVENT):
             # conn will be closed after sending the close event
             if not self._conn.is_closed():
                 await self._conn.await_close()

@@ -16,7 +16,7 @@ from rap.common.types import BASE_MSG_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utils import EventEnum
 from rap.server.model import Request
 from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware
-from rap.server.plugin.processor.base import BaseProcessor
+from rap.server.plugin.processor.base import BaseProcessor, chain_processor
 from rap.server.receiver import Receiver
 from rap.server.registry import FuncModel, RegistryManager
 from rap.server.sender import Sender
@@ -103,7 +103,7 @@ class Server(object):
             self._ssl_context.load_cert_chain(ssl_crt_path, ssl_key_path)
 
         self._middleware_list: List[BaseMiddleware] = []
-        self._processor_list: List[BaseProcessor] = []
+        self._processor: Optional[BaseProcessor] = None
         self._server_event_dict: Dict[EventEnum, List[SERVER_EVENT_FN]] = {
             value: [] for value in EventEnum.__members__.values()
         }
@@ -161,6 +161,9 @@ class Server(object):
         """load server processor
         :param processor_list server load processor
         """
+        if not processor_list:
+            return
+
         for processor in processor_list:
             if processor not in self._depend_set:
                 self._depend_set.add(processor)
@@ -168,12 +171,16 @@ class Server(object):
                 raise ImportError(f"{processor} processor already load")
             if isinstance(processor, BaseProcessor):
                 processor.app = self  # type: ignore
-                self._processor_list.append(processor)
             else:
                 raise RuntimeError(f"{processor} must instance of {BaseProcessor}")
 
             for event_type, server_event_handle_list in processor.server_event_dict.items():
                 self.register_server_event(event_type, *server_event_handle_list)
+
+        if self._processor:
+            self._processor = chain_processor(self._processor, *processor_list)
+        else:
+            self._processor = chain_processor(*processor_list)
 
     def register(
         self,
@@ -325,9 +332,7 @@ class Server(object):
 
     async def _conn_handle(self, conn: ServerConnection) -> None:
         """Receive or send messages by conn"""
-        sender: Sender = self._sender(
-            self, conn, self._send_timeout, processor_list=self._processor_list  # type: ignore
-        )
+        sender: Sender = self._sender(self, conn, self._send_timeout, processor=self._processor)  # type: ignore
         receiver: Receiver = self._receiver(
             self,  # type: ignore
             conn,
@@ -335,7 +340,7 @@ class Server(object):
             sender,
             self._ping_fail_cnt,
             self._ping_sleep_time,
-            processor_list=self._processor_list,
+            processor=self._processor,
             call_func_permission_fn=self._call_func_permission_fn,
         )
         recv_msg_handle_future_set_event: SetEvent[asyncio.Future] = SetEvent()

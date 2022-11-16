@@ -5,7 +5,7 @@ from aio_statsd import StatsdClient
 
 from rap.common.utils import EventEnum, constant
 from rap.server.model import Request, Response
-from rap.server.plugin.processor.base import BaseProcessor
+from rap.server.plugin.processor.base import BaseProcessor, ResponseCallable
 
 if TYPE_CHECKING:
     from rap.server.core import Server
@@ -54,7 +54,8 @@ class StatsdProcessor(BaseProcessor):
         self._statsd_client.sets(f"{self._namespace}.online.{host}", 1)
         return request
 
-    async def process_response(self, response: Response) -> Response:
+    async def process_response(self, response_cb: ResponseCallable) -> Response:
+        response: Response = await super().process_response(response_cb)
         if response.msg_type == constant.MSG_RESPONSE:
             self._statsd_client.decrement(self._process_msg_key, 1)
             if response.status_code >= 400:

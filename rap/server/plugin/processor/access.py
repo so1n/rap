@@ -3,7 +3,7 @@ import time
 
 from rap.common.utils import constant
 from rap.server.model import Request, Response
-from rap.server.plugin.processor.base import BaseProcessor
+from rap.server.plugin.processor.base import BaseProcessor, ResponseCallable
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -22,7 +22,8 @@ class AccessProcessor(BaseProcessor):
             logger.info(f"host:{host} declare channel. group:{request.group} func:{request.func_name}")
         return request
 
-    async def process_response(self, response: Response) -> Response:
+    async def process_response(self, response_cb: ResponseCallable) -> Response:
+        response: Response = await super().process_response(response_cb)
         host: str = response.header["host"]
         status_code: int = response.header["status_code"]
         if response.msg_type == constant.MSG_RESPONSE:

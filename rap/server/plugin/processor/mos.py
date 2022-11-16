@@ -7,7 +7,7 @@ from rap.common.collect_statistics import Counter, Gauge
 from rap.common.number_range import get_value_by_range
 from rap.common.utils import EventEnum, constant
 from rap.server.model import Request, Response
-from rap.server.plugin.processor.base import BaseProcessor
+from rap.server.plugin.processor.base import BaseProcessor, ResponseCallable
 
 if TYPE_CHECKING:
     from rap.server.core import Server
@@ -78,7 +78,8 @@ class MosProcessor(BaseProcessor):
             self.request_online_gauge.increment()
         return request
 
-    async def process_response(self, response: Response) -> Response:
+    async def process_response(self, response_cb: ResponseCallable) -> Response:
+        response: Response = await super().process_response(response_cb)
         self.response_cnt_counter.increment()
         if response.msg_type == constant.MSG_RESPONSE:
             self.request_online_gauge.decrement()

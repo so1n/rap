@@ -6,7 +6,7 @@ import time
 import traceback
 from functools import partial
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Coroutine, Dict, Optional, Tuple, Type, Union
 
 from rap.common.asyncio_helper import Deadline, SetEvent, get_deadline, get_event_loop
 from rap.common.conn import CloseConnException, ServerConnection
@@ -24,7 +24,7 @@ from rap.common.types import BASE_MSG_TYPE
 from rap.common.utils import InmutableDict, constant, parse_error, response_num_dict
 from rap.server.channel import Channel, get_corresponding_channel_class
 from rap.server.model import Request, Response, ServerContext
-from rap.server.plugin.processor.base import BaseProcessor, belong_to_base_method
+from rap.server.plugin.processor.base import BaseProcessor, ContextExitType
 from rap.server.registry import FuncModel
 from rap.server.sender import Sender
 
@@ -46,7 +46,7 @@ class Receiver(object):
         ping_fail_cnt: int,
         ping_sleep_time: int,
         call_func_permission_fn: Optional[Callable[[Request], Coroutine[Any, Any, FuncModel]]] = None,
-        processor_list: Optional[List[BaseProcessor]] = None,
+        processor: Optional[BaseProcessor] = None,
     ):
         """Receive and process messages from the client, and execute different logics according to the message type
         :param app: server
@@ -56,7 +56,7 @@ class Receiver(object):
         :param ping_fail_cnt: When ping fails continuously and exceeds this value, conn will be disconnected
         :param ping_sleep_time: ping message interval time
         :param call_func_permission_fn: Check the permission to call the private function
-        :param processor_list: processor list
+        :param processor: processor
         """
         self._app: "Server" = app
         self._conn: ServerConnection = conn
@@ -81,16 +81,8 @@ class Receiver(object):
         self._metadata: dict = {}
 
         # processor
-        processor_list = processor_list or []
-        self.on_context_enter_processor_list: List[Callable] = [
-            i.on_context_enter for i in processor_list if not belong_to_base_method(i.on_context_enter)
-        ]
-        self.on_context_exit_processor_list: List[Callable] = [
-            i.on_context_exit for i in processor_list if not belong_to_base_method(i.on_context_exit)
-        ]
-        self.process_request_processor_list: List[Callable] = [
-            i.process_request for i in processor_list if not belong_to_base_method(i.process_request)
-        ]
+        self._processor: Optional[BaseProcessor] = processor
+
         # Store resources that cannot be controlled by the current concurrent process
         self._used_resources: SetEvent = SetEvent()
         self._server_info: InmutableDict = InmutableDict(
@@ -126,12 +118,8 @@ class Receiver(object):
             context.transport_metadata = self._metadata
             self.context_dict[correlation_id] = context
             logger.debug("create %s context", correlation_id)
-
-            for on_context_enter in self.on_context_enter_processor_list:
-                try:
-                    await on_context_enter(context)
-                except Exception as e:
-                    logger.exception(f"on_context_enter error:{e}")
+            if self._processor:
+                await self._processor.on_context_enter(context)
         return context
 
     async def close_context(
@@ -150,11 +138,12 @@ class Receiver(object):
                 exc_type, exc_val, exc_tb = sys.exc_info()
                 if exc_val != exc:
                     logger.error(f"context error: {exc} != {exc_val}")
-            for on_context_exit in reversed(self.on_context_exit_processor_list):
-                try:
-                    await on_context_exit(context, exc_type, exc_val, exc_tb)
-                except Exception as e:
-                    logger.exception(f"on_context_exit error:{e}")
+            if self._processor:
+
+                async def _context_exit_cb() -> ContextExitType:
+                    return context, exc_type, exc_val, exc_tb
+
+                await self._processor.on_context_exit(_context_exit_cb)
         else:
             logger.error(f"Can not found {correlation_id} context")
 
@@ -194,11 +183,10 @@ class Receiver(object):
         # gen response object
         response: "Response" = Response(msg_type=response_msg_type, context=request.context)
 
-        if self.process_request_processor_list:
+        if self._processor:
             # If the processor does not pass the check, then an error is thrown and the error is returned directly
             try:
-                for process_request in self.process_request_processor_list:
-                    request = await process_request(request)
+                request = await self._processor.process_request(request)
             except Exception as e:
                 if not isinstance(e, BaseRapError):
                     logger.exception(e)

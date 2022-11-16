@@ -1,17 +1,16 @@
-from traceback import format_tb
-from typing import Optional
+from types import TracebackType
+from typing import Optional, Tuple, Type
 
-from skywalking import Component, Layer, Log, LogItem
+from skywalking import Component, Layer
 from skywalking.trace.carrier import Carrier
 from skywalking.trace.context import get_context
 from skywalking.trace.span import Span
 from skywalking.trace.tags import Tag
-from skywalking.utils import filter
 
 from rap.common.utils import constant
-from rap.server.model import Request, Response
+from rap.server.model import Request, Response, ServerContext
 
-from .base import BaseProcessor
+from .base import BaseProcessor, ContextExitCallable, ResponseCallable
 
 # class Component(Enum):
 #     RAP = 7777
@@ -61,7 +60,8 @@ class SkywalkingProcessor(BaseProcessor):
             request.context.span = self._create_span(request)
         return request
 
-    async def process_response(self, response: Response) -> Response:
+    async def process_response(self, response_cb: ResponseCallable) -> Response:
+        response: Response = await super().process_response(response_cb)
         if response.msg_type is constant.MSG_RESPONSE:
             span: Span = response.context.span
             status_code: int = response.status_code
@@ -76,15 +76,11 @@ class SkywalkingProcessor(BaseProcessor):
             response.context.context_channel.add_done_callback(lambda f: response.context.span.stop())
         return response
 
-    async def process_exc(self, response: Response) -> Response:
-        span: Optional[Span] = response.context.get_value("span", None)
+    async def on_context_exit(
+        self, context_exit_cb: ContextExitCallable
+    ) -> Tuple[ServerContext, Optional[Type[BaseException]], Optional[BaseException], Optional[TracebackType]]:
+        context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb)
+        span: Optional[Span] = context.get_value("span", None)
         if span:
-            status_code: int = response.status_code
-            span.tag(TagStatusCode(status_code))
-            span.error_occurred = True
-            span.logs = [
-                Log(items=[LogItem(key="Traceback", val=filter.sw_filter(target="".join(format_tb(response.tb))))])
-            ]
-            if response.msg_type is not constant.CHANNEL_RESPONSE:
-                span.stop()
-        return response
+            span.__exit__(exc_type, exc_val, exc_tb)
+        return context, exc_type, exc_val, exc_tb

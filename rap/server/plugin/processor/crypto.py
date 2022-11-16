@@ -5,7 +5,7 @@ from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError, ParseError
 from rap.common.utils import EventEnum, constant, gen_random_time_id
 from rap.server.model import Request, Response
-from rap.server.plugin.processor.base import BaseProcessor
+from rap.server.plugin.processor.base import BaseProcessor, ResponseCallable
 
 if TYPE_CHECKING:
     from rap.server.core import Server
@@ -140,7 +140,8 @@ class CryptoProcessor(BaseCryptoProcessor):
                 request.context.conn.state.crypto = crypto
         return await self.decrypt_request(request)
 
-    async def process_response(self, response: Response) -> Response:
+    async def process_response(self, response_cb: ResponseCallable) -> Response:
+        response: Response = await super().process_response(response_cb)
         return await self.encrypt_response(response)
 
 
@@ -174,7 +175,8 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
         else:
             return await super().decrypt_request(request)
 
-    async def process_response(self, response: Response) -> Response:
+    async def process_response(self, response_cb: ResponseCallable) -> Response:
+        response: Response = await super().process_response(response_cb)
         if response.msg_type == constant.SERVER_EVENT and response.target.endswith(constant.DECLARE):
             try:
                 check_id: int = response.context.check_id

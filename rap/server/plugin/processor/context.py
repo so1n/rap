@@ -3,7 +3,7 @@ from rap.common.context import Context as _Context
 from rap.common.context import rap_context
 from rap.common.utils import constant
 from rap.server.model import Request, Response
-from rap.server.plugin.processor.base import BaseProcessor
+from rap.server.plugin.processor.base import BaseProcessor, ResponseCallable
 
 
 class Context(_Context):
@@ -24,7 +24,8 @@ class ContextProcessor(BaseProcessor):
             request.context.context_token = rap_context.set({})
         return request
 
-    async def process_response(self, response: Response) -> Response:
+    async def process_response(self, response_cb: ResponseCallable) -> Response:
+        response: Response = await super().process_response(response_cb)
         if response.msg_type is constant.MSG_RESPONSE:
             rap_context.reset(response.context.context_token)
         elif (

@@ -1,4 +1,5 @@
-from typing import Optional
+from types import TracebackType
+from typing import Optional, Tuple, Type
 
 from jaeger_client.span_context import SpanContext
 from jaeger_client.tracer import Tracer
@@ -8,8 +9,8 @@ from opentracing.propagation import Format
 from opentracing.scope import Scope
 
 from rap.common.utils import constant
-from rap.server.model import Request, Response, ServerMsgProtocol
-from rap.server.plugin.processor.base import BaseProcessor
+from rap.server.model import Request, Response, ServerContext, ServerMsgProtocol
+from rap.server.plugin.processor.base import BaseProcessor, ContextExitCallable, ResponseCallable
 
 
 class TracingProcessor(BaseProcessor):
@@ -17,7 +18,12 @@ class TracingProcessor(BaseProcessor):
         self._tracer: Tracer = tracer
         self._scope_cache_timeout: float = scope_cache_timeout or 60.0
 
-    def _create_scope(self, msg: ServerMsgProtocol, finish_on_close: bool = True) -> Scope:
+    def _create_scope(self, msg: ServerMsgProtocol, finish_on_close: bool = True) -> Optional[Scope]:
+        if msg.msg_type in (constant.CLIENT_EVENT, constant.SERVER_EVENT):
+            return None
+        ctx_scope: Optional[Scope] = msg.context.get_value("scope", None)
+        if ctx_scope:
+            return ctx_scope
         span_ctx: Optional[SpanContext] = None
         try:
             span_ctx = self._tracer.extract(Format.HTTP_HEADERS, msg.header)
@@ -32,19 +38,20 @@ class TracingProcessor(BaseProcessor):
         scope.span.set_tag(tags.PEER_HOSTNAME, ":".join([str(i) for i in msg.context.server_info["host"]]))
         scope.span.set_tag("correlation_id", msg.correlation_id)
         scope.span.set_tag("msg_type", msg.msg_type)
-        if not finish_on_close:
-            scope.close()
+        msg.context.scope = scope
         return scope
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type is constant.MSG_REQUEST and not request.context.get_value("scope", None):
-            request.context.scope = self._create_scope(request)
-        elif request.msg_type is constant.CHANNEL_REQUEST and not request.context.get_value("span", None):
-            # A channel is a continuous activity that may involve the interaction of multiple coroutines
-            request.context.span = self._create_scope(request, finish_on_close=False).span
+        self._create_scope(request)
         return request
 
-    async def process_response(self, response: Response) -> Response:
+    async def process_response(self, response_cb: ResponseCallable) -> Response:
+        response: Response = await super().process_response(response_cb)
+        # TODO support server push msg
+        # self._create_scope(response)
+        ctx_scope: Optional[Scope] = response.context.get_value("scope", None)
+        if not ctx_scope:
+            return response
         if response.msg_type is constant.MSG_RESPONSE:
             scope: Scope = response.context.scope
             status_code: int = response.status_code
@@ -59,11 +66,11 @@ class TracingProcessor(BaseProcessor):
             response.context.context_channel.add_done_callback(lambda f: response.context.span.finish())
         return response
 
-    async def process_exc(self, response: Response) -> Response:
-        scope: Optional[Scope] = response.context.get_value("scope", None)
-        if scope and response.msg_type is constant.MSG_RESPONSE:
-            status_code: int = response.status_code
-            scope.span.set_tag("status_code", status_code)
-            scope.span._on_error(scope.span, type(response.exc), response.exc, response.tb)  # type: ignore
-            scope.close()
-        return response
+    async def on_context_exit(
+        self, context_exit_cb: ContextExitCallable
+    ) -> Tuple[ServerContext, Optional[Type[BaseException]], Optional[BaseException], Optional[TracebackType]]:
+        context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb)
+        scope: Optional[Scope] = context.get_value("scope", None)
+        if scope:
+            scope.__exit__(exc_type, exc_val, exc_tb)
+        return context, exc_type, exc_val, exc_tb
