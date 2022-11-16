@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Coroutine, Dict, Opt
 
 from rap.common.asyncio_helper import Deadline, SetEvent, get_deadline, get_event_loop
 from rap.common.conn import CloseConnException, ServerConnection
-from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent
+from rap.common.event import CloseConnEvent, DeclareEvent, DropEvent, PingEvent, ServerErrorEvent
 from rap.common.exceptions import (
     BaseRapError,
     ChannelError,
@@ -151,6 +151,7 @@ class Receiver(object):
         if request_msg is None:
             await self.sender.send_event(CloseConnEvent("request is empty"))
             return
+        print(request_msg)
 
         correlation_id: int = request_msg[1]
         context: ServerContext = await self.create_context(correlation_id)
@@ -174,7 +175,7 @@ class Receiver(object):
             if request.msg_type != constant.SERVER_EVENT:
                 # If an event is received from the client in response,
                 # it should not respond even if there is an error
-                await self.sender.response_exc(ServerError(str(e)), context)
+                await self.sender.send_event(ServerErrorEvent(str(e)))
             await self.close_context(correlation_id, e)
 
     async def dispatch(self, request: Request) -> Tuple[Optional[Response], bool]:

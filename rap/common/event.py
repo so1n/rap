@@ -36,6 +36,10 @@ class DropEvent(_RapEvent):
     event_name: str = constant.DROP
 
 
+class ServerErrorEvent(Event):
+    event_name: str = "Server Error"
+
+
 class ShutdownEvent(Event):
     event_name: str = "shutdown"
 

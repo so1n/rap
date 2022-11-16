@@ -58,7 +58,7 @@ async def run_mutli() -> None:
 async def main() -> None:
     await client.start()
     await run_once()
-    await run_mutli()
+    # await run_mutli()
     await client.stop()
 
 

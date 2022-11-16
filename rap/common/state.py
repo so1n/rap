@@ -43,6 +43,7 @@ class Context(State):
     target: str
     func_name: str
     group: str
+    msg_type: int
 
     transport_metadata: dict
     channel_metadata: dict

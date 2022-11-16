@@ -62,12 +62,6 @@ class Sender(object):
                 await self._conn.await_close()
         return True
 
-    async def response_event(self, event: Event, context: ServerContext, deadline: Optional[Deadline] = None) -> bool:
-        return await self.__call__(Response.from_event(event, context), deadline=deadline)
-
-    async def response_exc(self, exc: Exception, context: ServerContext, deadline: Optional[Deadline] = None) -> bool:
-        return await self.__call__(Response.from_exc(exc, context), deadline=deadline)
-
     #############################
     # Server-side push messages #
     #############################
@@ -83,9 +77,4 @@ class Sender(object):
     async def send_event(self, event: Event, deadline: Optional[Deadline] = None) -> bool:
         """send event obj to client"""
         response = Response.from_event(event, self._create_context())
-        return await self.__call__(response, deadline=deadline)
-
-    async def send_exc(self, exc: Exception, deadline: Optional[Deadline] = None) -> bool:
-        """send exc obj to client"""
-        response = Response.from_exc(exc, self._create_context())
         return await self.__call__(response, deadline=deadline)
