@@ -104,7 +104,7 @@ class TestServerResponse:
         mock_future: asyncio.Future = asyncio.Future()
         mocker.patch("rap.common.conn.BaseConnection.write").return_value = mock_future
         mock_future.set_exception(asyncio.TimeoutError())
-        response: Sender = Sender(rap_server, BaseConnection(1), 1, processor_list=[])  # type: ignore
+        response: Sender = Sender(rap_server, BaseConnection(1), 1)  # type: ignore
         response_model: Response = Response(target=test_target, context=response._create_context())
         response_model.set_body({"a": 1, "b": 2})
 

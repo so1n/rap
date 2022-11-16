@@ -5,7 +5,7 @@ from rap.common.channel import UserChannel
 from rap.common.event import DeclareEvent
 from rap.common.utils import constant
 from rap.server.model import Request, Response
-from rap.server.plugin.processor.base import BaseProcessor
+from rap.server.plugin.processor.base import BaseProcessor, ResponseCallable
 from tests.conftest import load_processor, process_server
 
 pytestmark = pytest.mark.asyncio
@@ -24,7 +24,8 @@ class TestHeader:
                     recv_header = request.body["metadata"]
                 return request
 
-            async def process_response(self, response: Response) -> Response:
+            async def process_response(self, response_cb: ResponseCallable) -> Response:
+                response: Response = await super().process_response(response_cb)
                 if response.target.endswith(DeclareEvent.event_name):
                     nonlocal response_recv_header
                     response_recv_header = response.context.transport_metadata
@@ -53,7 +54,8 @@ class TestHeader:
                     request_recv_header = request.body
                 return request
 
-            async def process_response(self, response: Response) -> Response:
+            async def process_response(self, response_cb: ResponseCallable) -> Response:
+                response: Response = await super().process_response(response_cb)
                 if (
                     response.msg_type is constant.CHANNEL_RESPONSE
                     and response.header["channel_life_cycle"] == constant.DECLARE

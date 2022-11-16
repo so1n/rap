@@ -8,7 +8,7 @@ from rap.common.exceptions import ServerError, TooManyRequest
 from rap.common.utils import constant
 from rap.server import Request, Response
 from rap.server.plugin.processor import limit
-from rap.server.plugin.processor.base import BaseProcessor
+from rap.server.plugin.processor.base import BaseProcessor, ResponseCallable
 from tests.conftest import load_processor
 
 pytestmark = pytest.mark.asyncio
@@ -22,8 +22,8 @@ class TestLimit:
                     raise TooManyRequest("test")
                 return request
 
-            async def process_response(self, response: Response) -> Response:
-                return response
+            async def process_response(self, response_cb: ResponseCallable) -> Response:
+                return await super().process_response(response_cb)
 
         async with load_processor([TestProcessor()], []):
             with pytest.raises(TooManyRequest) as e:
@@ -41,8 +41,8 @@ class TestLimit:
                     raise ValueError("test")
                 return request
 
-            async def process_response(self, response: Response) -> Response:
-                return response
+            async def process_response(self, response_cb: ResponseCallable) -> Response:
+                return await super().process_response(response_cb)
 
         async with load_processor([TestProcessor()], []):
             with pytest.raises(ServerError) as e:

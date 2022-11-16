@@ -286,9 +286,9 @@ class Server(object):
             # conn may be closed
             if not _conn.is_closed():
                 try:
-                    await Sender(
-                        self, _conn, self._send_timeout, processor_list=self._processor_list  # type: ignore
-                    ).send_event(event.ShutdownEvent({"close_timeout": self._close_timeout - 1}))
+                    await Sender(self, _conn, self._send_timeout, processor=self._processor).send_event(  # type: ignore
+                        event.ShutdownEvent({"close_timeout": self._close_timeout - 1})
+                    )
                 except ConnectionError:
                     # conn may be closed
                     pass
