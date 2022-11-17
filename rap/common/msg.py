@@ -4,7 +4,7 @@ from typing_extensions import Self
 
 from rap.common.event import Event
 from rap.common.state import Context
-from rap.common.types import MSG_TYPE, SERVER_BASE_MSG_TYPE
+from rap.common.types import MSG_TYPE
 from rap.common.utils import constant
 
 ContextTyper = TypeVar("ContextTyper", bound=Context)
@@ -118,11 +118,11 @@ class BaseResponse(BaseMsgProtocol[ContextTyper]):
     def to_json(self) -> dict:
         return {"msg_type": self.msg_type, "cid": self.correlation_id, "header": self.header, "body": self.body}
 
-    def to_msg(self) -> SERVER_BASE_MSG_TYPE:
+    def to_msg(self) -> MSG_TYPE:
         return self.msg_type, self.correlation_id, self.header, self.body
 
     @classmethod
-    def from_msg(cls, *, msg: SERVER_BASE_MSG_TYPE, context: ContextTyper) -> "Self":
+    def from_msg(cls, *, msg: MSG_TYPE, context: ContextTyper) -> "Self":
         response: "BaseResponse" = cls(msg_type=msg[0], header=msg[2], body=msg[3], context=context)
         target = response.header.get("target", "")
         if target:

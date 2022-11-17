@@ -25,7 +25,7 @@ from rap.common.exceptions import InvokeError, RPCError
 from rap.common.number_range import NumberRange, get_value_by_range
 from rap.common.provider import Provider
 from rap.common.state import State
-from rap.common.types import SERVER_BASE_MSG_TYPE
+from rap.common.types import MSG_TYPE
 from rap.common.utils import InmutableDict, constant
 
 if TYPE_CHECKING:
@@ -205,7 +205,7 @@ class Transport(object):
         try:
             while not self._conn.is_closed():
                 try:
-                    response_msg: Optional[SERVER_BASE_MSG_TYPE] = await asyncio.wait_for(
+                    response_msg: Optional[MSG_TYPE] = await asyncio.wait_for(
                         self._conn.read(), timeout=self._read_timeout
                     )
                 except asyncio.TimeoutError as e:
@@ -364,7 +364,7 @@ class Transport(object):
     ####################
     # response handler #
     ####################
-    async def _get_response(self, response_msg: SERVER_BASE_MSG_TYPE, context: ClientContext) -> Optional[Response]:
+    async def _get_response(self, response_msg: MSG_TYPE, context: ClientContext) -> Optional[Response]:
         """Generate Response object through response msg"""
         try:
             response: Response = Response.from_msg(msg=response_msg, context=context)
@@ -396,7 +396,7 @@ class Transport(object):
         else:
             return (await response_cb())[0]
 
-    async def _server_recv_msg_handler(self, response_msg: SERVER_BASE_MSG_TYPE) -> None:
+    async def _server_recv_msg_handler(self, response_msg: MSG_TYPE) -> None:
         correlation_id: int = response_msg[1]
         context: Optional[ClientContext] = self._context_dict.get(correlation_id, None)
         if not context:
@@ -421,7 +421,7 @@ class Transport(object):
             logger.error(f"Can not dispatch response: {response}, ignore")
         return
 
-    async def _server_send_msg_handler(self, response_msg: SERVER_BASE_MSG_TYPE) -> None:
+    async def _server_send_msg_handler(self, response_msg: MSG_TYPE) -> None:
         correlation_id: int = response_msg[1]
         async with self._transport_context(c_id=correlation_id, is_not_limit_request=True) as context:
             response = await self._get_response(response_msg=response_msg, context=context)

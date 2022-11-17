@@ -12,7 +12,7 @@ from rap.common.collect_statistics import WindowStatistics
 from rap.common.conn import CloseConnException, ServerConnection
 from rap.common.signal_broadcast import add_signal_handler, remove_signal_handler
 from rap.common.snowflake import async_get_snowflake_id
-from rap.common.types import BASE_MSG_TYPE, READER_TYPE, WRITER_TYPE
+from rap.common.types import MSG_TYPE, READER_TYPE, WRITER_TYPE
 from rap.common.utils import EventEnum
 from rap.server.model import Request
 from rap.server.plugin.middleware.base import BaseConnMiddleware, BaseMiddleware
@@ -348,7 +348,7 @@ class Server(object):
         while not conn.is_closed():
             try:
                 with Deadline(self._keep_alive):
-                    request_msg: Optional[BASE_MSG_TYPE] = await conn.read()
+                    request_msg: Optional[MSG_TYPE] = await conn.read()
                 # create future handle msg
                 future: asyncio.Future = asyncio.ensure_future(receiver(request_msg))
                 future.add_done_callback(lambda f: recv_msg_handle_future_set_event.remove(f))

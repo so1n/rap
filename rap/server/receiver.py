@@ -20,7 +20,7 @@ from rap.common.exceptions import (
     RpcRunTimeError,
     ServerError,
 )
-from rap.common.types import BASE_MSG_TYPE
+from rap.common.types import MSG_TYPE
 from rap.common.utils import InmutableDict, constant, parse_error, response_num_dict
 from rap.server.channel import Channel, get_corresponding_channel_class
 from rap.server.model import Request, Response, ServerContext
@@ -147,7 +147,7 @@ class Receiver(object):
         else:
             logger.error(f"Can not found {correlation_id} context")
 
-    async def __call__(self, request_msg: Optional[BASE_MSG_TYPE]) -> None:
+    async def __call__(self, request_msg: Optional[MSG_TYPE]) -> None:
         if request_msg is None:
             await self.sender.send_event(CloseConnEvent("request is empty"))
             return
