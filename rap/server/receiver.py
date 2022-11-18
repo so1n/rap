@@ -5,8 +5,7 @@ import sys
 import time
 import traceback
 from functools import partial
-from types import TracebackType
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Coroutine, Dict, Optional, Tuple, Type, Union
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Coroutine, Dict, Optional, Tuple, Union
 
 from rap.common.asyncio_helper import Deadline, SetEvent, get_deadline, get_event_loop
 from rap.common.conn import CloseConnException, ServerConnection
@@ -76,7 +75,6 @@ class Receiver(object):
         }
         # now one conn one Request object
         self._keepalive_timestamp: int = int(time.time())
-        self._channel_dict: Dict[int, Channel] = {}
         self._metadata: dict = {}
 
         # processor
@@ -104,7 +102,7 @@ class Receiver(object):
             raise FuncNotFoundError(f"No permission to call:`{request.func_name}`")
         return func_model
 
-    async def create_context(self, correlation_id: int) -> ServerContext:
+    async def get_context(self, correlation_id: int) -> ServerContext:
         context: Optional[ServerContext] = self.context_dict.get(correlation_id, None)
         if not context:
             # create context
@@ -116,35 +114,22 @@ class Receiver(object):
             context.client_info = self._client_info
             context.transport_metadata = self._metadata
             self.context_dict[correlation_id] = context
-            logger.debug("create %s context", correlation_id)
             if self._processor:
                 await self._processor.on_context_enter(context)
         return context
 
-    async def close_context(
-        self,
-        correlation_id: int,
-        exc: Optional[Exception] = None,
-    ):
-        context: Optional[ServerContext] = self.context_dict.pop(correlation_id, None)
-        if context:
-            logger.debug("close %s context", correlation_id)
-            if not exc:
-                exc_type: Optional[Type[BaseException]] = None
-                exc_val: Optional[BaseException] = None
-                exc_tb: Optional[TracebackType] = None
-            else:
-                exc_type, exc_val, exc_tb = sys.exc_info()
-                if exc_val != exc:
-                    logger.error(f"context error: {exc} != {exc_val}")
-            if self._processor:
+    async def close_context(self, context: ServerContext):
+        if context.get_value("_is_pop", False):
+            raise RpcRunTimeError(f"{context} has been closed")
+        self.context_dict.pop(context.correlation_id, None)
+        context._is_pop = True
+        if self._processor:
+            exc_type, exc_val, exc_tb = sys.exc_info()
 
-                async def _context_exit_cb() -> ContextExitType:
-                    return context, exc_type, exc_val, exc_tb
+            async def _context_exit_cb() -> ContextExitType:
+                return context, exc_type, exc_val, exc_tb
 
-                await self._processor.on_context_exit(_context_exit_cb)
-        else:
-            logger.error(f"Can not found {correlation_id} context")
+            await self._processor.on_context_exit(_context_exit_cb)
 
     async def __call__(self, request_msg: Optional[MSG_TYPE]) -> None:
         if request_msg is None:
@@ -157,30 +142,31 @@ class Receiver(object):
             constant.MT_SERVER_EVENT,
         ):
             await self.sender.send_event(CloseConnEvent("Illegal request"))
+            return
         correlation_id: int = request_msg[1]
-        context: ServerContext = await self.create_context(correlation_id)
+        context: ServerContext = await self.get_context(correlation_id)
         try:
             request: Request = Request.from_msg(request_msg, context=context)
         except Exception as e:
             logger.error(f"{self._conn.peer_tuple} recv bad msg:{request_msg}, error:{e}")
             await self.sender.send_event(CloseConnEvent("protocol error"))
-            await self.close_context(correlation_id, e)
+            await self.close_context(context)
             return
 
         try:
             response, close_context_flag = await self.dispatch(request)
             await self.sender(response)
             if close_context_flag:
-                await self.close_context(correlation_id)
-        except (IOError, BrokenPipeError, ConnectionError, CloseConnException) as e:
-            await self.close_context(correlation_id, e)
+                await self.close_context(context)
+        except (IOError, BrokenPipeError, ConnectionError, CloseConnException):
+            await self.close_context(context)
         except Exception as e:
             logging.exception(f"raw_request handle error e, {e}")
             if request.msg_type != constant.MT_SERVER_EVENT:
                 # If an event is received from the client in response,
                 # it should not respond even if there is an error
                 await self.sender.send_event(ServerErrorEvent(str(e)))
-            await self.close_context(correlation_id, e)
+            await self.close_context(context)
 
     async def dispatch(self, request: Request) -> Tuple[Optional[Response], bool]:
         """recv request, processor request and dispatch request by request msg type"""
@@ -236,7 +222,7 @@ class Receiver(object):
         # declare var
         channel_id: int = request.correlation_id
         life_cycle: str = request.header.get("channel_life_cycle", "error")
-        channel: Optional[Channel] = self._channel_dict.get(channel_id, None)
+        channel: Optional[Channel] = request.context.get_value("_channel", None)
         if life_cycle == constant.MSG:
             # Messages with a life cycle of `msg` in the channel type account for the highest proportion
             if channel is None:
@@ -260,11 +246,11 @@ class Receiver(object):
                 )
 
             channel = Channel(channel_id, write, self._conn, func)
-            self._channel_dict[channel_id] = channel
+            request.context._channel = channel
             request.context.context_channel = channel.get_context_channel()
             request.context.channel_metadata = request.body
 
-            async def wait_channel_close() -> None:
+            async def recycle_channel_resource() -> None:
                 # Recycling Channel Resources
                 try:
                     await channel.func_future
@@ -274,10 +260,9 @@ class Receiver(object):
                     await channel.channel_future
                 except Exception:
                     pass
-                self._channel_dict.pop(channel_id, None)
-                await self.close_context(channel_id)
+                await self.close_context(request.context)
 
-            self.create_future_by_resource(wait_channel_close())
+            self.create_future_by_resource(recycle_channel_resource())
             response.header["channel_life_cycle"] = constant.DECLARE
             return response, False
         elif life_cycle == constant.DROP:

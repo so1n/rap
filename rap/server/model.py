@@ -42,7 +42,9 @@ class Response(BaseResponse[ServerContext]):
     def set_server_event(self, event: Event) -> None:
         self.set_event(event)
         self.msg_type = constant.MT_SERVER_EVENT
-        self.target = f"/_event/{event.event_name}"
+        self.group = "_event"
+        self.func_name = event.event_name
+        self.target = f"/{self.group}/{self.func_name}"
 
     def set_body(self, body: Any) -> None:
         self.body = body

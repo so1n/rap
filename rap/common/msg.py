@@ -1,4 +1,4 @@
-from typing import Any, Generic, Optional, TypeVar
+from typing import Any, Generic, Optional, Type, TypeVar
 
 from typing_extensions import Self
 
@@ -136,3 +136,12 @@ class BaseResponse(BaseMsgProtocol[ContextTyper]):
             response.target = target
             response.func_name = func_name
         return response
+
+    def match_event(self, event: Type[Event]) -> bool:
+        return self.func_name == event.event_name
+
+    def is_msg(self) -> bool:
+        return self.msg_type == constant.MT_MSG
+
+    def is_channel(self) -> bool:
+        return self.msg_type == constant.MT_CHANNEL

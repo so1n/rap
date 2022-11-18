@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Optional, Tuple
 
 from rap.common.asyncio_helper import Deadline
 from rap.common.conn import ServerConnection
-from rap.common.utils import constant
+from rap.common.event import CloseConnEvent
 from rap.server.model import Event, Response, ServerContext
 from rap.server.plugin.processor.base import BaseProcessor
 
@@ -38,7 +38,10 @@ class Sender(object):
         self._processor: Optional[BaseProcessor] = processor
 
     async def __call__(self, resp: Optional[Response], deadline: Optional[Deadline] = None) -> bool:
-        """Send response data to the client"""
+        """Send response data to the client
+
+        If a Close Conn Event is received, the conn is closed
+        """
         if resp is None:
             return False
 
@@ -56,7 +59,7 @@ class Sender(object):
 
         with deadline:
             await self._conn.write(response.to_msg())
-        if response.target.endswith(constant.CLOSE_EVENT):
+        if response.match_event(CloseConnEvent):
             # conn will be closed after sending the close event
             if not self._conn.is_closed():
                 await self._conn.await_close()
@@ -75,6 +78,9 @@ class Sender(object):
         return context
 
     async def send_event(self, event: Event, deadline: Optional[Deadline] = None) -> bool:
-        """send event obj to client"""
+        """send event obj to client
+
+        If a Close Conn Event is received, the conn is closed
+        """
         response = Response.from_event(event, self._create_context())
         return await self.__call__(response, deadline=deadline)

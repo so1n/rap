@@ -9,6 +9,7 @@ from rap.client import Client
 from rap.server import Server
 
 NUM_CALLS: int = 10000
+uvloop.install()
 
 
 def run_server() -> None:
@@ -16,8 +17,7 @@ def run_server() -> None:
         await asyncio.sleep(0.01)
         return a + b
 
-    loop: asyncio.AbstractEventLoop = uvloop.new_event_loop()
-    asyncio.set_event_loop(loop)
+    loop: asyncio.AbstractEventLoop = asyncio.get_event_loop()
     rpc_server: Server = Server()
     rpc_server.register(test_sum)
     loop.run_until_complete(rpc_server.run_forever())
