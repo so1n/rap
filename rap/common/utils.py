@@ -16,8 +16,7 @@ __all__ = [
     "gen_random_time_id",
     "parse_error",
     "param_handle",
-    "response_num_dict",
-    "InmutableDict",
+    "ImmutableDict",
     "ignore_exception",
 ]
 
@@ -39,26 +38,26 @@ class _Constant(object):
     SOCKET_RECV_SIZE: int = 1024 ** 1
 
     # msg type
-    SERVER_ERROR_RESPONSE: int = 100
-    MSG_REQUEST: int = 101
-    MSG_RESPONSE: int = 201
-    CHANNEL_REQUEST: int = 102
-    CHANNEL_RESPONSE: int = 202
-    CLIENT_EVENT: int = 103
-    SERVER_EVENT: int = 203
+    # SERVER_ERROR_RESPONSE: int = 100
+    MT_MSG: int = 101
+    # MT_MSG: int = 201
+    MT_CHANNEL: int = 102
+    # MT_CHANNEL: int = 202
+    MT_CLIENT_EVENT: int = 103
+    MT_SERVER_EVENT: int = 203
 
     # event func name
-    CLOSE_EVENT: str = "close"
+    CLOSE_EVENT: str = "CLOSE"
     PING_EVENT: str = "ping"
 
     # life cycle
-    DECLARE: str = "declare"
+    DECLARE: str = "DECLARE"
     MSG: str = "MSG"
-    DROP: str = "drop"
+    DROP: str = "DROP"
 
-    # request type
-    CHANNEL_TYPE: str = "channel"
-    NORMAL_TYPE: str = "normal"
+    # call type
+    CHANNEL: str = "CHANNEL"
+    NORMAL: str = "NORMAL"
 
     DEFAULT_GROUP: str = "default"
 
@@ -78,14 +77,6 @@ def gen_random_time_id(length: int = 8, time_length: int = 10) -> str:
 def parse_error(exception: Exception) -> Tuple[str, str]:
     """parse python exc and return exc name and info"""
     return type(exception).__name__, str(exception)
-
-
-response_num_dict: Dict[int, int] = {
-    constant.MSG_REQUEST: constant.MSG_RESPONSE,
-    constant.CHANNEL_REQUEST: constant.CHANNEL_RESPONSE,
-    constant.CLIENT_EVENT: constant.CLIENT_EVENT,
-    constant.SERVER_EVENT: constant.SERVER_EVENT,
-}
 
 
 def check_func_type(func_sig: inspect.Signature, param_list: Sequence[Any], default_param_dict: Dict[str, Any]) -> None:
@@ -132,6 +123,6 @@ class EventEnum(Enum):
     after_end = auto()
 
 
-class InmutableDict(dict):
+class ImmutableDict(dict):
     def __setitem__(self, key, value):
-        raise TypeError("inmutable dict can not be modify")
+        raise TypeError("immutable dict can not be modify")

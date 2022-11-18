@@ -28,10 +28,7 @@ async def echo_body(channel: UserChannel) -> None:
 
 
 def match_demo_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
-    if (
-        request.msg_type == constant.CHANNEL_REQUEST
-        and request.header.get("channel_life_cycle", "") != constant.DECLARE
-    ):
+    if request.msg_type == constant.MT_CHANNEL and request.header.get("channel_life_cycle", "") != constant.DECLARE:
         return None, True
     if request.func_name in ("demo", "echo_body"):
         return request.func_name, False
@@ -40,10 +37,7 @@ def match_demo_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
 
 
 def match_ip_request(request: Request) -> limit.RULE_FUNC_RETURN_TYPE:
-    if (
-        request.msg_type == constant.CHANNEL_REQUEST
-        and request.header.get("channel_life_cycle", "") != constant.DECLARE
-    ):
+    if request.msg_type == constant.MT_CHANNEL and request.header.get("channel_life_cycle", "") != constant.DECLARE:
         return None, True
     key: str = "127.0.0.1"
     if request.context.conn.peer_tuple[0] == "127.0.0.1":

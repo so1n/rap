@@ -183,7 +183,7 @@ class TestTransport:
     #             await rap_client.invoke_by_name("sync_sum", [1, 2])
     #
     #         exec_msg: str = e.value.args[0]
-    #         assert exec_msg == f"response num must:{constant.MSG_RESPONSE} not 202"
+    #         assert exec_msg == f"response num must:{constant.MT_MSG} not 202"
 
     # async def test_request_receive_not_python_server_exc_response(
     #     self, rap_server: Server, rap_client: Client, mocker: MockerFixture

@@ -41,7 +41,7 @@ class Response(BaseResponse[ServerContext]):
 
     def set_server_event(self, event: Event) -> None:
         self.set_event(event)
-        self.msg_type = constant.SERVER_EVENT
+        self.msg_type = constant.MT_SERVER_EVENT
         self.target = f"/_event/{event.event_name}"
 
     def set_body(self, body: Any) -> None:
@@ -50,13 +50,10 @@ class Response(BaseResponse[ServerContext]):
     @classmethod
     def from_event(cls, event: Event, context: ServerContext) -> "Response":
         assert isinstance(event, Event), f"{event} type must {Event.__name__}"
-        response: Response = cls(msg_type=constant.SERVER_EVENT, context=context)
+        response: Response = cls(context=context)
+        response.msg_type = constant.MT_SERVER_EVENT
         response.set_server_event(event)
         return response
-
-    @BaseResponse.status_code.setter
-    def status_code(self, value: int) -> None:
-        self.header["status_code"] = value
 
     def __call__(self, content: Any) -> None:
         if isinstance(content, Exception):

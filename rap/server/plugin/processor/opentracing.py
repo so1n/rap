@@ -8,8 +8,9 @@ from opentracing.ext import tags
 from opentracing.propagation import Format
 from opentracing.scope import Scope
 
+from rap.common.msg import BaseMsgProtocol
 from rap.common.utils import constant
-from rap.server.model import Request, Response, ServerContext, ServerMsgProtocol
+from rap.server.model import Request, Response, ServerContext
 from rap.server.plugin.processor.base import BaseProcessor, ContextExitCallable, ResponseCallable
 
 
@@ -18,8 +19,8 @@ class TracingProcessor(BaseProcessor):
         self._tracer: Tracer = tracer
         self._scope_cache_timeout: float = scope_cache_timeout or 60.0
 
-    def _create_scope(self, msg: ServerMsgProtocol, finish_on_close: bool = True) -> Optional[Scope]:
-        if msg.msg_type in (constant.CLIENT_EVENT, constant.SERVER_EVENT):
+    def _create_scope(self, msg: BaseMsgProtocol, finish_on_close: bool = True) -> Optional[Scope]:
+        if msg.msg_type in (constant.MT_CLIENT_EVENT, constant.MT_SERVER_EVENT):
             return None
         ctx_scope: Optional[Scope] = msg.context.get_value("scope", None)
         if ctx_scope:
@@ -52,14 +53,14 @@ class TracingProcessor(BaseProcessor):
         ctx_scope: Optional[Scope] = response.context.get_value("scope", None)
         if not ctx_scope:
             return response
-        if response.msg_type is constant.MSG_RESPONSE:
+        if response.msg_type is constant.MT_MSG:
             scope: Scope = response.context.scope
             status_code: int = response.status_code
             scope.span.set_tag("status_code", status_code)
             scope.span.set_tag(tags.ERROR, status_code >= 400)
             scope.close()
         elif (
-            response.msg_type is constant.CHANNEL_RESPONSE
+            response.msg_type is constant.MT_CHANNEL
             and response.header.get("channel_life_cycle", "error") == constant.DECLARE
         ):
             # The channel is created after receiving the request

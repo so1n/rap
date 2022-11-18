@@ -43,7 +43,6 @@ async def example_http_client() -> None:
                 "arg_dict": {"a": 1, "b": 2},
             },
         )
-        print(resp.json())
         assert 3 == resp.json()["data"]
 
 

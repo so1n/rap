@@ -92,7 +92,10 @@ class BaseRequest(BaseMsgProtocol[ContextTyper]):
     @classmethod
     def from_event(cls, event: Event, context: ContextTyper) -> "Self":
         request: "BaseRequest" = cls(
-            msg_type=constant.CLIENT_EVENT, target=f"/_event/{event.event_name}", body=event.event_info, context=context
+            msg_type=constant.MT_CLIENT_EVENT,
+            target=f"/_event/{event.event_name}",
+            body=event.event_info,
+            context=context,
         )
         return request
 
@@ -101,19 +104,21 @@ class BaseResponse(BaseMsgProtocol[ContextTyper]):
     def __init__(
         self,
         *,
-        msg_type: int,
         header: Optional[dict] = None,
         body: Any = None,
         context: ContextTyper,
     ):
         self.context: ContextTyper = context
-        self.msg_type: int = msg_type
         self.body: Any = body
         self.header = header or {}
 
     @property
     def status_code(self) -> int:
         return self.header.get("status_code", 200)
+
+    @status_code.setter
+    def status_code(self, value: int) -> None:
+        self.header["status_code"] = value
 
     def to_json(self) -> dict:
         return {"msg_type": self.msg_type, "cid": self.correlation_id, "header": self.header, "body": self.body}
@@ -123,7 +128,8 @@ class BaseResponse(BaseMsgProtocol[ContextTyper]):
 
     @classmethod
     def from_msg(cls, *, msg: MSG_TYPE, context: ContextTyper) -> "Self":
-        response: "BaseResponse" = cls(msg_type=msg[0], header=msg[2], body=msg[3], context=context)
+        response: "BaseResponse" = cls(header=msg[2], body=msg[3], context=context)
+        response.msg_type = msg[0]
         target = response.header.get("target", "")
         if target:
             _, group, func_name = target.split("/")

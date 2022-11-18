@@ -36,7 +36,7 @@ class FuncModel(object):
         self.arg_list: List[str] = []
         self.kwarg_dict: OrderedDict = OrderedDict()
 
-        if self.func_type == constant.CHANNEL_TYPE and self.is_gen_func:
+        if self.func_type == constant.CHANNEL and self.is_gen_func:
             raise RegisteredError("Is not a legal function. is channel or gen func?")
 
         for name, parameter in self.func_sig.parameters.items():
@@ -75,13 +75,13 @@ class RegistryManager(object):
     @staticmethod
     def _get_func_type(func: Callable) -> str:
         """get func type, normal or channel"""
-        func_type: str = constant.NORMAL_TYPE
+        func_type: str = constant.NORMAL
         try:
             if inspect.isasyncgenfunction(func):
-                func_type = constant.CHANNEL_TYPE
+                func_type = constant.CHANNEL
             else:
                 get_corresponding_channel_class(func)
-                func_type = constant.CHANNEL_TYPE
+                func_type = constant.CHANNEL
         except TypeError:
             # ignore error TypeError: issubclass() arg 1 must be a class
             pass
@@ -116,7 +116,7 @@ class RegistryManager(object):
 
         func_type: str = self._get_func_type(func)
 
-        if func_type == constant.NORMAL_TYPE:
+        if func_type == constant.NORMAL:
             # check func param&return value type hint
             if sig.return_annotation is sig.empty:
                 raise RegisteredError(f"{func.__name__} must use TypeHints")
@@ -136,12 +136,12 @@ class RegistryManager(object):
         if func_key in self.func_dict:
             raise RegisteredError(f"`{func_key}` Already register")
 
-        if inspect.isasyncgenfunction(func) and func_type == constant.CHANNEL_TYPE:
+        if inspect.isasyncgenfunction(func) and func_type == constant.CHANNEL:
             from rap.common.channel import UserChannel
 
             async def _(channel: UserChannel):
-                func_param: tuple = await channel.read_body()
-                async for result in func(*func_param):
+                func_param: dict = await channel.read_body()
+                async for result in func(**func_param):
                     await channel.write(result)
 
             register_func = _

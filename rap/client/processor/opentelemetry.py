@@ -43,17 +43,17 @@ class OpenTelemetryProcessor(BaseClientProcessor):
         return span
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type is constant.MSG_REQUEST and not request.context.get_value("span", None):
+        if request.msg_type is constant.MT_MSG and not request.context.get_value("span", None):
             request.context.span = self._create_scope(request)
-        elif request.msg_type is constant.CHANNEL_REQUEST and not request.context.get_value("span", None):
+        elif request.msg_type is constant.MT_CHANNEL and not request.context.get_value("span", None):
             # A channel is a continuous activity that may involve the interaction of multiple coroutines
             request.context.span = self._create_scope(request)
         return await super().process_request(request)
 
     async def process_response(self, response_cb: ResponseCallable) -> Response:
         response: Response = await super().process_response(response_cb)
-        if (response.msg_type is constant.MSG_RESPONSE) or (
-            response.msg_type is constant.CHANNEL_RESPONSE
+        if (response.msg_type is constant.MT_MSG) or (
+            response.msg_type is constant.MT_CHANNEL
             and response.header.get("channel_life_cycle", "error") == constant.DECLARE
         ):
             span: Optional[Span] = response.context.get_value("span", None)

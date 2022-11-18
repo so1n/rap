@@ -82,7 +82,7 @@ class BaseCryptoProcessor(BaseProcessor):
 
     async def decrypt_request(self, request: Request) -> Request:
         """decrypt request body"""
-        if request.msg_type in (constant.MSG_REQUEST, constant.CHANNEL_REQUEST):
+        if request.msg_type in (constant.MT_MSG, constant.MT_CHANNEL):
             crypto: Optional[Crypto] = request.context.conn.state.get_value("crypto", None)
             if crypto:
                 try:
@@ -114,7 +114,7 @@ class BaseCryptoProcessor(BaseProcessor):
     @staticmethod
     async def encrypt_response(response: Response) -> Response:
         """encrypt response body"""
-        if response.msg_type in (constant.MSG_RESPONSE, constant.CHANNEL_RESPONSE) and response.status_code <= 400:
+        if response.msg_type in (constant.MT_MSG, constant.MT_CHANNEL) and response.status_code <= 400:
             crypto: Optional[Crypto] = response.context.conn.state.get_value("crypto", None)
             if not crypto:
                 return response
@@ -126,7 +126,7 @@ class BaseCryptoProcessor(BaseProcessor):
 
 class CryptoProcessor(BaseCryptoProcessor):
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type == constant.CLIENT_EVENT and request.target.endswith(constant.DECLARE):
+        if request.msg_type == constant.MT_CLIENT_EVENT and request.target.endswith(constant.DECLARE):
             crypto_id: str = request.body.get("crypto_id", "")
             if crypto_id:
                 crypto: Optional[Crypto] = self.get_crypto_by_key_id(crypto_id)
@@ -159,7 +159,7 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
         super(AutoCryptoProcessor, self).__init__({}, timeout=timeout, nonce_timeout=nonce_timeout)
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type == constant.CLIENT_EVENT and request.target.endswith(constant.DECLARE):
+        if request.msg_type == constant.MT_CLIENT_EVENT and request.target.endswith(constant.DECLARE):
             check_id: bytes = request.body.get("check_id", b"")
             crypto_id: str = request.body.get("crypto_id", "")
             crypto_key: str = request.body.get("crypto_key", "")
@@ -177,7 +177,7 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
 
     async def process_response(self, response_cb: ResponseCallable) -> Response:
         response: Response = await super().process_response(response_cb)
-        if response.msg_type == constant.SERVER_EVENT and response.target.endswith(constant.DECLARE):
+        if response.msg_type == constant.MT_SERVER_EVENT and response.target.endswith(constant.DECLARE):
             try:
                 check_id: int = response.context.check_id
             except KeyError:

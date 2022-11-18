@@ -10,6 +10,7 @@ from rap.api_gateway import exception
 from rap.api_gateway.component import RapClientTypedDict
 from rap.client import Client
 from rap.common.asyncio_helper import as_first_completed
+from rap.common.utils import constant
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ async def _websocket_route_func(websocket: WebSocket) -> None:
     except KeyError as e:
         raise exception.ParamError(extra_msg=str(e))
 
-    result: Optional[Exception] = before_check(group, func_name, "channel", rap_client_dict)
+    result: Optional[Exception] = before_check(group, func_name, constant.CHANNEL, rap_client_dict)
     if result:
         raise result
 
@@ -101,7 +102,7 @@ async def route_func(request: Request) -> JSONResponse:
     except KeyError as e:
         raise exception.ParamError(extra_msg=str(e))
 
-    check_result: Optional[Exception] = before_check(group, func_name, "normal", rap_client_dict)
+    check_result: Optional[Exception] = before_check(group, func_name, constant.NORMAL, rap_client_dict)
     if check_result:
         raise check_result
 

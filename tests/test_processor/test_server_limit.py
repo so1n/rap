@@ -18,7 +18,7 @@ class TestLimit:
     async def test_processor_raise_rap_error(self) -> None:
         class TestProcessor(BaseProcessor):
             async def process_request(self, request: Request) -> Request:
-                if request.msg_type == constant.MSG_REQUEST:
+                if request.msg_type == constant.MT_MSG:
                     raise TooManyRequest("test")
                 return request
 
@@ -37,7 +37,7 @@ class TestLimit:
     async def test_processor_raise_exc(self) -> None:
         class TestProcessor(BaseProcessor):
             async def process_request(self, request: Request) -> Request:
-                if request.msg_type == constant.MSG_REQUEST:
+                if request.msg_type == constant.MT_MSG:
                     raise ValueError("test")
                 return request
 

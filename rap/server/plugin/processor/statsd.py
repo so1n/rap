@@ -47,7 +47,7 @@ class StatsdProcessor(BaseProcessor):
 
     async def process_request(self, request: Request) -> Request:
         self._statsd_client.increment(self._request_key, 1)
-        if request.msg_type == constant.MSG_REQUEST:
+        if request.msg_type == constant.MT_MSG:
             self._statsd_client.increment(self._msg_key, 1)
             self._statsd_client.increment(self._process_msg_key, 1)
         host: str = request.header["host"]
@@ -56,18 +56,18 @@ class StatsdProcessor(BaseProcessor):
 
     async def process_response(self, response_cb: ResponseCallable) -> Response:
         response: Response = await super().process_response(response_cb)
-        if response.msg_type == constant.MSG_RESPONSE:
+        if response.msg_type == constant.MT_MSG:
             self._statsd_client.decrement(self._process_msg_key, 1)
             if response.status_code >= 400:
                 # NOTE: Don't try to get the response body data
                 self._statsd_client.increment(self._error_msg_key, 1)
-        elif response.msg_type == constant.CHANNEL_RESPONSE:
+        elif response.msg_type == constant.MT_CHANNEL:
             life_cycle: str = response.header.get("channel_life_cycle", "error")
             if life_cycle == constant.DECLARE:
                 self._channel_online_cnt += 1
                 self._statsd_client.increment(self._channel_key, 1)
             elif life_cycle == constant.DROP:
                 self._channel_online_cnt -= 1
-        elif response.msg_type == constant.SERVER_ERROR_RESPONSE:
-            self._statsd_client.increment(self._error_request_key, 1)
+        # elif response.msg_type == constant.SERVER_ERROR_RESPONSE:
+        #     self._statsd_client.increment(self._error_request_key, 1)
         return response

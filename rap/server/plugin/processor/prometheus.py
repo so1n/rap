@@ -45,7 +45,7 @@ class PrometheusProcessor(BaseProcessor):
     async def process_request(self, request: Request) -> Request:
         label_list: list = [self._service_name, self.host_name, request.target]
         request_count.labels(*label_list, request.msg_type).inc()
-        if request.msg_type == constant.MSG_REQUEST:
+        if request.msg_type == constant.MT_MSG:
             request.context.start_time = time.time()
             msg_request_count.labels(*label_list).inc()
             msg_request_in_progress.labels(*label_list).inc()
@@ -64,11 +64,11 @@ class PrometheusProcessor(BaseProcessor):
             response = resp  # type: ignore
             label_list: list = [self._service_name, self.host_name, response.target]
             response_count.labels(*label_list, response.msg_type, response.status_code).inc()
-            if response.msg_type == constant.MSG_RESPONSE:
+            if response.msg_type == constant.MT_MSG:
                 msg_response_count.labels(*label_list, response.status_code).inc()
                 msg_request_in_progress.labels(*label_list).dec()
                 msg_request_time.labels(*label_list).observe(time.time() - response.context.start_time)
-            elif response.msg_type == constant.CHANNEL_RESPONSE:
+            elif response.msg_type == constant.MT_CHANNEL:
                 life_cycle: str = response.header.get("channel_life_cycle", "error")
                 if life_cycle == constant.DECLARE:
                     channel_count.labels(*label_list).inc()

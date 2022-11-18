@@ -132,7 +132,7 @@ class TestChannel:
     #             await channel.write("close")
     #
     #     mocker.patch("rap.client.model.Request.to_msg").return_value = (
-    #         constant.CHANNEL_REQUEST,
+    #         constant.MT_CHANNEL,
     #         234,
     #         {"channel_life_cycle": constant.MSG, "target": "/default/test_channel"},
     #         None,
@@ -153,7 +153,7 @@ class TestChannel:
     #             await channel.write("close")
     #
     #     mocker.patch("rap.client.model.Request.to_msg").return_value = (
-    #         constant.CHANNEL_REQUEST,
+    #         constant.MT_CHANNEL,
     #         234,
     #         {"channel_life_cycle": constant.DROP, "target": "/default/test_channel"},
     #         None,
@@ -174,7 +174,7 @@ class TestChannel:
     #             await channel.write("close")
     #
     #     mocker.patch("rap.client.model.Request.to_msg").return_value = (
-    #         constant.CHANNEL_REQUEST,
+    #         constant.MT_CHANNEL,
     #         234,
     #         {"channel_life_cycle": -1, "target": "/default/test_channel"},
     #         None,

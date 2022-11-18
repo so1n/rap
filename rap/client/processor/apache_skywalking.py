@@ -63,9 +63,9 @@ class SkywalkingProcessor(BaseClientProcessor):
 
     async def process_request(self, request: Request) -> Request:
         try:
-            if request.msg_type is constant.MSG_REQUEST:
+            if request.msg_type is constant.MT_MSG:
                 request.context.span = self._create_span(request)
-            elif request.msg_type is constant.CHANNEL_REQUEST and not request.context.get_value("span", None):
+            elif request.msg_type is constant.MT_CHANNEL and not request.context.get_value("span", None):
                 # A channel is a continuous activity that may involve the interaction of multiple coroutines
                 request.context.span = self._create_span(request)
         except Exception:
@@ -75,7 +75,7 @@ class SkywalkingProcessor(BaseClientProcessor):
     async def process_response(self, response_cb: ResponseCallable) -> Response:
         response: Response = await super().process_response(response_cb)
         span: Optional[Span] = response.context.get_value("span", None)
-        if response.msg_type is constant.MSG_RESPONSE and span:
+        if response.msg_type is constant.MT_MSG and span:
             status_code: int = response.status_code
             span.tag(TagStatusCode(status_code))
             span.error_occurred = status_code >= 400

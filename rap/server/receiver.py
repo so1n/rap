@@ -18,10 +18,9 @@ from rap.common.exceptions import (
     InvokeError,
     ParseError,
     RpcRunTimeError,
-    ServerError,
 )
 from rap.common.types import MSG_TYPE
-from rap.common.utils import InmutableDict, constant, parse_error, response_num_dict
+from rap.common.utils import ImmutableDict, constant, parse_error
 from rap.server.channel import Channel, get_corresponding_channel_class
 from rap.server.model import Request, Response, ServerContext
 from rap.server.plugin.processor.base import BaseProcessor, ContextExitType
@@ -70,10 +69,10 @@ class Receiver(object):
         )
 
         self.dispatch_func_dict: Dict[int, DISPATCH_FUNC_TYPE] = {
-            constant.CLIENT_EVENT: self.event,
-            constant.SERVER_EVENT: self.event,
-            constant.MSG_REQUEST: self.msg_handle,
-            constant.CHANNEL_REQUEST: self.channel_handle,
+            constant.MT_CLIENT_EVENT: self.event,
+            constant.MT_SERVER_EVENT: self.event,
+            constant.MT_MSG: self.msg_handle,
+            constant.MT_CHANNEL: self.channel_handle,
         }
         # now one conn one Request object
         self._keepalive_timestamp: int = int(time.time())
@@ -85,18 +84,18 @@ class Receiver(object):
 
         # Store resources that cannot be controlled by the current concurrent process
         self._used_resources: SetEvent = SetEvent()
-        self._server_info: InmutableDict = InmutableDict(
+        self._server_info: ImmutableDict = ImmutableDict(
             host=self._conn.peer_tuple,
             version=constant.VERSION,
             user_agent=constant.USER_AGENT,
         )
-        self._client_info: InmutableDict = InmutableDict()
+        self._client_info: ImmutableDict = ImmutableDict()
 
     async def _default_call_fun_permission_fn(self, request: Request) -> FuncModel:
         func_key: str = self._app.registry.gen_key(
             request.group,
             request.func_name,
-            constant.NORMAL_TYPE if request.msg_type == constant.MSG_REQUEST else constant.CHANNEL_TYPE,
+            constant.NORMAL if request.msg_type == constant.MT_MSG else constant.CHANNEL,
         )
         if func_key not in self._app.registry.func_dict:
             raise FuncNotFoundError(extra_msg=f"name: {request.func_name}")
@@ -151,14 +150,19 @@ class Receiver(object):
         if request_msg is None:
             await self.sender.send_event(CloseConnEvent("request is empty"))
             return
-        print(request_msg)
-
+        if request_msg[0] not in (
+            constant.MT_MSG,
+            constant.MT_CHANNEL,
+            constant.MT_CLIENT_EVENT,
+            constant.MT_SERVER_EVENT,
+        ):
+            await self.sender.send_event(CloseConnEvent("Illegal request"))
         correlation_id: int = request_msg[1]
         context: ServerContext = await self.create_context(correlation_id)
         try:
             request: Request = Request.from_msg(request_msg, context=context)
         except Exception as e:
-            logger.error(f"{self._conn.peer_tuple} send bad msg:{request_msg}, error:{e}")
+            logger.error(f"{self._conn.peer_tuple} recv bad msg:{request_msg}, error:{e}")
             await self.sender.send_event(CloseConnEvent("protocol error"))
             await self.close_context(correlation_id, e)
             return
@@ -172,7 +176,7 @@ class Receiver(object):
             await self.close_context(correlation_id, e)
         except Exception as e:
             logging.exception(f"raw_request handle error e, {e}")
-            if request.msg_type != constant.SERVER_EVENT:
+            if request.msg_type != constant.MT_SERVER_EVENT:
                 # If an event is received from the client in response,
                 # it should not respond even if there is an error
                 await self.sender.send_event(ServerErrorEvent(str(e)))
@@ -180,9 +184,8 @@ class Receiver(object):
 
     async def dispatch(self, request: Request) -> Tuple[Optional[Response], bool]:
         """recv request, processor request and dispatch request by request msg type"""
-        response_msg_type: int = response_num_dict.get(request.msg_type, constant.SERVER_ERROR_RESPONSE)
         # gen response object
-        response: "Response" = Response(msg_type=response_msg_type, context=request.context)
+        response: "Response" = Response(context=request.context)
 
         if self._processor:
             # If the processor does not pass the check, then an error is thrown and the error is returned directly
@@ -193,12 +196,6 @@ class Receiver(object):
                     logger.exception(e)
                 response.set_exception(e)
                 return response, True
-
-        # check type_id
-        if response.msg_type == constant.SERVER_ERROR_RESPONSE:
-            logger.error(f"parse request data: {request} from {self._conn.peer_tuple} error")
-            response.set_exception(ServerError("Illegal request"))
-            return response, True
 
         try:
             dispatch_func: DISPATCH_FUNC_TYPE = self.dispatch_func_dict[request.msg_type]
@@ -258,7 +255,7 @@ class Receiver(object):
 
             async def write(body: Any, header: Dict[str, Any], timeout: Optional[int] = None) -> None:
                 await self.sender(
-                    Response(msg_type=constant.CHANNEL_RESPONSE, header=header, body=body, context=request.context),
+                    Response(header=header, body=body, context=request.context),
                     deadline=get_deadline(timeout),
                 )
 
@@ -329,15 +326,15 @@ class Receiver(object):
         """client event request handle"""
         # rap event handle
         if request.func_name == constant.PING_EVENT:
-            if request.msg_type == constant.SERVER_EVENT:
+            if request.msg_type == constant.MT_SERVER_EVENT:
                 self._conn.keepalive_timestamp = int(time.time())
                 return None, True
-            elif request.msg_type == constant.CLIENT_EVENT:
+            elif request.msg_type == constant.MT_CLIENT_EVENT:
                 response.set_event(PingEvent({}))
             else:
                 raise TypeError(f"Error msg type, {request.correlation_id}")
         elif request.func_name == constant.DECLARE:
-            self._client_info = InmutableDict(request.body["client_info"])
+            self._client_info = ImmutableDict(request.body["client_info"])
             self._metadata = request.body["metadata"]
             response.context.transport_metadata = self._metadata
             response.set_event(DeclareEvent({"conn_id": self._conn.conn_id, "server_info": self._server_info}))

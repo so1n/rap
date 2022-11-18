@@ -30,9 +30,9 @@ class ContextProcessor(BaseClientProcessor):
         return context, exc_type, exc_val, exc_tb
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type is constant.MSG_REQUEST:
+        if request.msg_type is constant.MT_MSG:
             self._context.request = request
-        elif request.msg_type is constant.CHANNEL_REQUEST and self._context.channel is None:
+        elif request.msg_type is constant.MT_CHANNEL and self._context.channel is None:
             # channel can not reset token
             self._context.channel = request.context.context_channel
         return await super().process_request(request)

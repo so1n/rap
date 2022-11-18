@@ -65,3 +65,9 @@ class Context(State):
                     f"'{self.__class__.__name__}<{self.correlation_id}>' object has no attribute '{key}'"
                 )
             return default_value
+
+    def __repr__(self) -> str:
+        correlation_id: int = -1
+        if hasattr(self, "correlation_id"):
+            correlation_id = self.correlation_id
+        return f"{self.__class__.__name__}<{correlation_id}>"

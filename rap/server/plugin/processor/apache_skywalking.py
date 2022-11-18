@@ -53,23 +53,23 @@ class SkywalkingProcessor(BaseProcessor):
         return span
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type is constant.MSG_REQUEST and not request.context.get_value("span", None):
+        if request.msg_type is constant.MT_MSG and not request.context.get_value("span", None):
             request.context.span = self._create_span(request)
-        elif request.msg_type is constant.CHANNEL_REQUEST and not request.context.get_value("span", None):
+        elif request.msg_type is constant.MT_CHANNEL and not request.context.get_value("span", None):
             # A channel is a continuous activity that may involve the interaction of multiple coroutines
             request.context.span = self._create_span(request)
         return request
 
     async def process_response(self, response_cb: ResponseCallable) -> Response:
         response: Response = await super().process_response(response_cb)
-        if response.msg_type is constant.MSG_RESPONSE:
+        if response.msg_type is constant.MT_MSG:
             span: Span = response.context.span
             status_code: int = response.status_code
             span.tag(TagStatusCode(status_code))
             span.error_occurred = status_code >= 400
             span.stop()
         elif (
-            response.msg_type is constant.CHANNEL_RESPONSE
+            response.msg_type is constant.MT_CHANNEL
             and response.header.get("channel_life_cycle", "error") == constant.DECLARE
         ):
             # The channel is created after receiving the request

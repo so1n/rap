@@ -34,13 +34,13 @@ class TestClientProcessor:
                 return await super().on_context_enter(context)
 
             async def process_request(self, request: Request) -> Request:
-                if request.msg_type == constant.MSG_REQUEST:
+                if request.msg_type == constant.MT_MSG:
                     process_request_list.append(self._number)
                 return await super().process_request(request)
 
             async def process_response(self, response_cb: ResponseCallable) -> Response:
                 response: Response = await super().process_response(response_cb)
-                if response.msg_type == constant.MSG_RESPONSE:
+                if response.msg_type == constant.MT_MSG:
                     process_response_list.append(self._number)
                 return response
 
@@ -79,7 +79,7 @@ class TestClientProcessor:
                 return await super().on_context_enter(context)
 
             async def process_request(self, request: Request) -> Request:
-                if request.msg_type == constant.MSG_REQUEST:
+                if request.msg_type == constant.MT_MSG:
                     process_request_list.append(self._number)
                     if self._number == 2 and request.func_name == "sync_sum":
                         raise RuntimeError("Test Error")
@@ -87,7 +87,7 @@ class TestClientProcessor:
 
             async def process_response(self, response_cb: ResponseCallable) -> Response:
                 response: Response = await super().process_response(response_cb)
-                if response.msg_type == constant.MSG_RESPONSE:
+                if response.msg_type == constant.MT_MSG:
                     process_response_list.append(self._number)
                 return response
 
@@ -134,13 +134,13 @@ class TestClientProcessor:
                 return await super().on_context_enter(context)
 
             async def process_request(self, request: Request) -> Request:
-                if request.msg_type == constant.MSG_REQUEST:
+                if request.msg_type == constant.MT_MSG:
                     process_request_list.append(self._number)
                 return await super().process_request(request)
 
             async def process_response(self, response_cb: ResponseCallable) -> Response:
                 response: Response = await super().process_response(response_cb)
-                if response.msg_type == constant.MSG_RESPONSE:
+                if response.msg_type == constant.MT_MSG:
                     process_response_list.append(self._number)
                     if self._number == 2 and response.func_name == "sync_sum":
                         raise RuntimeError("Test Error")
@@ -190,14 +190,14 @@ class TestClientProcessor:
                 return await super().on_context_enter(context)
 
             async def process_request(self, request: Request) -> Request:
-                if request.msg_type == constant.MSG_REQUEST:
+                if request.msg_type == constant.MT_MSG:
                     process_request_list.append(self._number)
                 return await super().process_request(request)
 
             async def process_response(self, response_cb: ResponseCallable) -> Response:
                 try:
                     response: Response = await super().process_response(response_cb)
-                    if response and response.msg_type == constant.MSG_RESPONSE:
+                    if response and response.msg_type == constant.MT_MSG:
                         process_response_list.append(self._number)
                     return response
                 except Exception as e:

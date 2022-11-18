@@ -7,6 +7,7 @@ from opentelemetry.propagate import extract
 from opentelemetry.semconv.trace import SpanAttributes
 from opentelemetry.trace.status import Status, StatusCode
 
+from rap.common.msg import BaseMsgProtocol
 from rap.common.utils import constant
 from rap.server.model import Request, Response
 from rap.server.plugin.processor.base import BaseProcessor, ResponseCallable
@@ -22,23 +23,23 @@ class OpenTelemetryProcessor(BaseProcessor):
             tracer_provider=tracer_provider,
         )
 
-    def _start_span(self, request: Request, set_status_on_exception=False) -> trace.Span:
-        service_name, group, func_name = request.target.split("/")
-        ctx: Context = extract(request.header)
-        request.context.open_telemetry_token = attach(ctx)
+    def _start_span(self, msg: BaseMsgProtocol, set_status_on_exception=False) -> trace.Span:
+        service_name, group, func_name = msg.target.split("/")
+        ctx: Context = extract(msg.header)
+        msg.context.open_telemetry_token = attach(ctx)
         attributes: dict = {
             SpanAttributes.RPC_SYSTEM: "rap",
             SpanAttributes.RPC_GRPC_STATUS_CODE: 0,
             SpanAttributes.RPC_METHOD: func_name,
             SpanAttributes.RPC_SERVICE: service_name + "-" + group,
-            "rap.msg_type": request.msg_type,
-            "rap.correlation_id": request.correlation_id,
-            "rap.status_code": request.header.get("status_code", 0),
+            "rap.msg_type": msg.msg_type,
+            "rap.correlation_id": msg.correlation_id,
+            "rap.status_code": msg.header.get("status_code", 0),
         }
-        if "host" in request.header:
-            attributes[SpanAttributes.NET_PEER_NAME] = ":".join([str(i) for i in request.header["host"]])
+        if "host" in msg.header:
+            attributes[SpanAttributes.NET_PEER_NAME] = ":".join([str(i) for i in msg.header["host"]])
         return self._tracer.start_as_current_span(
-            name=request.target,
+            name=msg.target,
             kind=trace.SpanKind.SERVER,
             attributes=attributes,
             set_status_on_exception=set_status_on_exception,
@@ -50,36 +51,23 @@ class OpenTelemetryProcessor(BaseProcessor):
         detach(response.context.open_telemetry_token)
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type is constant.MSG_REQUEST and not request.context.get_value("span", None):
-            request.context.span = self._start_span(request)
-        elif request.msg_type is constant.CHANNEL_REQUEST and not request.context.get_value("span", None):
-            # A channel is a continuous activity that may involve the interaction of multiple coroutines
-            request.context.span = self._start_span(request)
+        if request.msg_type in (constant.MT_MSG, constant.MT_CHANNEL):
+            self._start_span(request)
         return request
 
     async def process_response(self, response_cb: ResponseCallable) -> Response:
         response: Response = await super().process_response(response_cb)
-        if response.msg_type is constant.MSG_RESPONSE:
+        if response.msg_type is constant.MT_MSG:
             span: trace.Span = response.context.span
             span.set_status(Status(status_code=StatusCode.OK))
             span.set_attribute("rap.status_code", response.status_code)
             self._end_span(response)
         elif (
-            response.msg_type is constant.CHANNEL_RESPONSE
+            response.msg_type is constant.MT_CHANNEL
             and response.header.get("channel_life_cycle", "error") == constant.DECLARE
         ):
             # The channel is created after receiving the request
             response.context.context_channel.add_done_callback(lambda f: self._end_span(response))
         return response
 
-    async def process_exc(self, response: Response) -> Response:
-        span: Optional[trace.Span] = response.context.get_value("span", None)
-        if span and response.msg_type is constant.MSG_RESPONSE:
-            span.set_attribute("rap.status_code", response.status_code)
-            if response.exc:
-                span.record_exception(response.exc)
-                span.set_status(
-                    Status(status_code=StatusCode.ERROR, description=f"{type(response.exc).__name__}: {response.exc}")
-                )
-                self._end_span(response)
-        return response
+    # TODO end span

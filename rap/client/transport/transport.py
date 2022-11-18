@@ -26,7 +26,7 @@ from rap.common.number_range import NumberRange, get_value_by_range
 from rap.common.provider import Provider
 from rap.common.state import State
 from rap.common.types import MSG_TYPE
-from rap.common.utils import InmutableDict, constant
+from rap.common.utils import ImmutableDict, constant
 
 if TYPE_CHECKING:
     pass
@@ -116,8 +116,8 @@ class Transport(object):
         self._last_ping_timestamp: float = time.time()
         self._rtt: float = 0.0
 
-        self._client_info: InmutableDict = InmutableDict()
-        self._server_info: InmutableDict = InmutableDict()
+        self._client_info: ImmutableDict = ImmutableDict()
+        self._server_info: ImmutableDict = ImmutableDict()
         self.state: State = State()
 
     def _broadcast_server_event(self, response: Union[Response, Exception]) -> None:
@@ -214,7 +214,7 @@ class Transport(object):
 
                 if not response_msg:
                     raise ConnectionError("Connection has been closed")
-                if response_msg[0] == constant.SERVER_EVENT:
+                if response_msg[0] == constant.MT_SERVER_EVENT:
                     future = asyncio.create_task(self._server_send_msg_handler(response_msg))
                 else:
                     future = asyncio.create_task(self._server_recv_msg_handler(response_msg))
@@ -353,7 +353,7 @@ class Transport(object):
         await self._conn.connect()
         self.available = True
         self._close_soon_flag = False
-        self._client_info: InmutableDict = InmutableDict(
+        self._client_info: ImmutableDict = ImmutableDict(
             host=self._conn.peer_tuple,
             version=constant.VERSION,
             user_agent=constant.USER_AGENT,
@@ -373,7 +373,7 @@ class Transport(object):
             return None
 
         exc: Optional[Exception] = None
-        if response.msg_type == constant.SERVER_ERROR_RESPONSE or response.status_code in self._exc_status_code_dict:
+        if response.status_code in self._exc_status_code_dict:
             # Generate rap standard error
             exc_class: Type["rap_exc.BaseRapError"] = self._exc_status_code_dict.get(
                 response.status_code, rap_exc.BaseRapError
@@ -437,7 +437,7 @@ class Transport(object):
                 self._conn.set_reader_exc(exc)
             elif response.func_name == constant.PING_EVENT:
                 request: Request = Request.from_event(event.PingEvent(""), context)
-                request.msg_type = constant.SERVER_EVENT
+                request.msg_type = constant.MT_SERVER_EVENT
 
                 with Deadline(3):
                     await self.write_to_conn(request)
@@ -471,12 +471,12 @@ class Transport(object):
             )
 
             if (
-                response.msg_type == constant.CLIENT_EVENT
+                response.msg_type == constant.MT_CLIENT_EVENT
                 and response.func_name == constant.DECLARE
                 and "conn_id" in response.body
             ):
                 self._conn.conn_id = response.body["conn_id"]
-                self._server_info = InmutableDict(response.body["server_info"])
+                self._server_info = ImmutableDict(response.body["server_info"])
                 return
             raise ConnectionError(f"transport:{self._conn} declare error")
 
@@ -575,7 +575,7 @@ class Transport(object):
         param = param or {}
         async with self._transport_context() as context:
             request: Request = Request(
-                msg_type=constant.MSG_REQUEST,
+                msg_type=constant.MT_MSG,
                 target=f"/{group}/{func_name}",
                 body=param,
                 context=context,
@@ -583,8 +583,8 @@ class Transport(object):
             if header:
                 request.header.update(header)
             response: Response = await self._base_request(request, through_deadline=through_deadline)
-            if response.msg_type != constant.MSG_RESPONSE:
-                raise RPCError(f"response num must:{constant.MSG_RESPONSE} not {response.msg_type}")
+            if response.msg_type != constant.MT_MSG:
+                raise RPCError(f"response num must:{constant.MT_MSG} not {response.msg_type}")
             return response
 
     @asynccontextmanager

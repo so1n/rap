@@ -41,9 +41,9 @@ class TracingProcessor(BaseClientProcessor):
         return scope
 
     async def process_request(self, request: Request) -> Request:
-        if request.msg_type is constant.MSG_REQUEST and not request.context.get_value("scope", None):
+        if request.msg_type is constant.MT_MSG and not request.context.get_value("scope", None):
             request.context.scope = self._create_scope(request)
-        elif request.msg_type is constant.CHANNEL_REQUEST and not request.context.get_value("span", None):
+        elif request.msg_type is constant.MT_CHANNEL and not request.context.get_value("span", None):
             # A channel is a continuous activity that may involve the interaction of multiple coroutines
             request.context.span = self._create_scope(request, finish_on_close=False).span
             request.context.context_channel.add_done_callback(lambda f: request.context.span.finish())
@@ -51,7 +51,7 @@ class TracingProcessor(BaseClientProcessor):
 
     async def process_response(self, response_cb: ResponseCallable) -> Response:
         response: Response = await super().process_response(response_cb)
-        if response.msg_type is constant.MSG_RESPONSE:
+        if response.msg_type is constant.MT_MSG:
             scope: Scope = response.context.scope
             status_code: int = response.status_code
             scope.span.set_tag("status_code", status_code)

@@ -46,10 +46,7 @@ class TestHeader:
 
         class MyProcessor(BaseProcessor):
             async def process_request(self, request: Request) -> Request:
-                if (
-                    request.msg_type is constant.CHANNEL_REQUEST
-                    and request.header["channel_life_cycle"] == constant.DECLARE
-                ):
+                if request.msg_type is constant.MT_CHANNEL and request.header["channel_life_cycle"] == constant.DECLARE:
                     nonlocal request_recv_header
                     request_recv_header = request.body
                 return request
@@ -57,7 +54,7 @@ class TestHeader:
             async def process_response(self, response_cb: ResponseCallable) -> Response:
                 response: Response = await super().process_response(response_cb)
                 if (
-                    response.msg_type is constant.CHANNEL_RESPONSE
+                    response.msg_type is constant.MT_CHANNEL
                     and response.header["channel_life_cycle"] == constant.DECLARE
                 ):
                     nonlocal response_recv_header

@@ -1,12 +1,7 @@
-import asyncio
-
 import pytest
 from aredis import StrictRedis  # type: ignore
-from pytest_mock import MockerFixture
 
-from rap.client import Client
-from rap.common.asyncio_helper import Deadline
-from rap.common.exceptions import RpcRunTimeError, ServerError
+from rap.common.exceptions import RpcRunTimeError
 from rap.common.utils import EventEnum
 from rap.server import Server
 from rap.server.model import Request
@@ -66,32 +61,32 @@ class TestServerProcessor:
             rap_server.load_processor([crypto_process])
 
 
-class TestServerConnHandle:
-    async def test_request_handle_error(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
-        future: asyncio.Future = asyncio.Future()
-        future.set_exception(Exception())
-        mocker.patch("rap.server.receiver.Receiver.dispatch").return_value = future
-        with pytest.raises(ServerError):
-            with Deadline(1):
-                await rap_client.invoke_by_name("sync_sum", {"a": 1, "b": 2})
+# class TestServerConnHandle:
+# async def test_request_handle_error(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
+#     future: asyncio.Future = asyncio.Future()
+#     future.set_exception(Exception())
+#     mocker.patch("rap.server.receiver.Receiver.dispatch").return_value = future
+#     with pytest.raises(ServerError):
+#         with Deadline(1):
+#             await rap_client.invoke_by_name("sync_sum", {"a": 1, "b": 2})
 
-    # async def test_receive_error_msg(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
-    #     mocker.patch("rap.server.model.Request.from_msg").side_effect = Exception()
-    #     with pytest.raises(ConnectionError) as e:
-    #         await rap_client.invoke_by_name("sync_sum", [1, 2])
-    #
-    #     exec_msg = e.value.args[0]
-    #     assert exec_msg == "recv close transport event, event info:protocol error"
+# async def test_receive_error_msg(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
+#     mocker.patch("rap.server.model.Request.from_msg").side_effect = Exception()
+#     with pytest.raises(ConnectionError) as e:
+#         await rap_client.invoke_by_name("sync_sum", [1, 2])
+#
+#     exec_msg = e.value.args[0]
+#     assert exec_msg == "recv close transport event, event info:protocol error"
 
-    # async def test_read_timeout(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
-    #     with pytest.raises(ConnectionError) as e:
-    #         mock_future: asyncio.Future = asyncio.Future()
-    #         mocker.patch("rap.common.transport.ServerConnection.read").return_value = mock_future
-    #         mock_future.set_exception(asyncio.TimeoutError())
-    #         await rap_client.invoke_by_name("sync_sum", [1, 2])
-    #
-    #     exec_msg = e.value.args[0]
-    #     assert exec_msg == "recv close transport event, event info:keep alive timeout"
+# async def test_read_timeout(self, rap_server: Server, rap_client: Client, mocker: MockerFixture) -> None:
+#     with pytest.raises(ConnectionError) as e:
+#         mock_future: asyncio.Future = asyncio.Future()
+#         mocker.patch("rap.common.transport.ServerConnection.read").return_value = mock_future
+#         mock_future.set_exception(asyncio.TimeoutError())
+#         await rap_client.invoke_by_name("sync_sum", [1, 2])
+#
+#     exec_msg = e.value.args[0]
+#     assert exec_msg == "recv close transport event, event info:keep alive timeout"
 
 
 class TestRequestHandle:

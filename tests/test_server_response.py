@@ -22,7 +22,8 @@ test_target: str = f"/{constant.DEFAULT_GROUP}/test"
 class TestServerResponse:
     async def test_set_exc(self) -> None:
         target: str = "/_exc/exc"
-        response: Response = Response(context=ServerContext(), target=target)
+        response: Response = Response(context=ServerContext())
+        response.target = target
         with pytest.raises(AssertionError):
             response.set_exception(test_event)  # type: ignore
 
@@ -30,47 +31,40 @@ class TestServerResponse:
         assert response.body == str(test_exc)
         assert response.status_code == ServerError.status_code
 
-        response = Response(context=ServerContext(), target=target)
+        response = Response(context=ServerContext())
+        response.target = target
         response.set_exception(test_rpc_exc)
         assert response.body == str(test_rpc_exc)
         assert response.status_code == RPCError.status_code
 
-    async def test_from_exc(self) -> None:
-        response: Response = Response.from_exc(test_exc, ServerContext())
-        assert response.body == str(test_exc)
-        assert response.status_code == ServerError.status_code
-        response = Response.from_exc(test_rpc_exc, ServerContext())
-        assert response.body == str(test_rpc_exc)
-        assert response.status_code == RPCError.status_code
-
-        with pytest.raises(AssertionError):
-            Response.from_exc(test_event, ServerContext())  # type: ignore
-
     async def test_set_event(self) -> None:
         target: str = "/_event/event"
-        response: Response = Response(context=ServerContext(), target=target, msg_type=constant.CLIENT_EVENT)
+        response: Response = Response(context=ServerContext())
+        response.target = target
+        response.msg_type = constant.MT_CLIENT_EVENT
         with pytest.raises(AssertionError):
             response.set_event(test_exc)  # type: ignore
 
         response.set_event(test_event)
-        assert response.msg_type == constant.CLIENT_EVENT
+        assert response.msg_type == constant.MT_CLIENT_EVENT
         assert response.target == target
         assert response.body == test_event.event_info
 
     async def test_set_server_event(self) -> None:
         target: str = "/_event/event"
-        response: Response = Response(context=ServerContext(), target=target)
+        response: Response = Response(context=ServerContext())
+        response.target = target
         with pytest.raises(AssertionError):
             response.set_server_event(test_exc)  # type: ignore
 
         response.set_server_event(test_event)
-        assert response.msg_type == constant.SERVER_EVENT
+        assert response.msg_type == constant.MT_SERVER_EVENT
         assert response.target.endswith(test_event.event_name)
         assert response.body == test_event.event_info
 
     async def test_from_event(self) -> None:
         response: Response = Response.from_event(test_event, context=ServerContext())
-        assert response.msg_type == constant.SERVER_EVENT
+        assert response.msg_type == constant.MT_SERVER_EVENT
         assert response.target.endswith(test_event.event_name)
         assert response.body == test_event.event_info
 
@@ -78,24 +72,28 @@ class TestServerResponse:
             Response.from_event(test_exc, ServerContext())  # type: ignore
 
     async def test_set_body(self) -> None:
-        response: Response = Response(target=test_target, context=ServerContext())
+        response: Response = Response(context=ServerContext())
+        response.target = test_target
         body: dict = {"a": 1, "b": 2}
         response.set_body(body)
         assert body == response.body
 
     async def test_call__call__(self) -> None:
-        response: Response = Response(target=test_target, context=ServerContext())
+        response: Response = Response(context=ServerContext())
+        response.target = test_target
         body: dict = {"a": 1, "b": 2}
         response(body)
         assert body == response.body
 
-        response = Response(target=test_target, context=ServerContext())
+        response = Response(context=ServerContext())
+        response.target = test_target
         response(test_event)
-        assert response.msg_type == constant.SERVER_EVENT
+        assert response.msg_type == constant.MT_SERVER_EVENT
         assert response.target.endswith(test_event.event_name)
         assert response.body == test_event.event_info
 
-        response = Response(target=test_target, context=ServerContext())
+        response = Response(context=ServerContext())
+        response.target = test_target
         response(test_rpc_exc)
         assert response.body == str(test_rpc_exc)
         assert response.status_code == RPCError.status_code
@@ -105,7 +103,9 @@ class TestServerResponse:
         mocker.patch("rap.common.conn.BaseConnection.write").return_value = mock_future
         mock_future.set_exception(asyncio.TimeoutError())
         response: Sender = Sender(rap_server, BaseConnection(1), 1)  # type: ignore
-        response_model: Response = Response(target=test_target, context=response._create_context())
+        response_model: Response = Response(context=response._create_context())
+        response_model.msg_type = constant.MT_MSG
+        response_model.target = test_target
         response_model.set_body({"a": 1, "b": 2})
 
         with pytest.raises(asyncio.TimeoutError):

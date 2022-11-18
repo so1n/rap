@@ -74,16 +74,16 @@ class MosProcessor(BaseProcessor):
 
     async def process_request(self, request: Request) -> Request:
         self.request_cnt_counter.increment()
-        if request.msg_type == constant.MSG_REQUEST:
+        if request.msg_type == constant.MT_MSG:
             self.request_online_gauge.increment()
         return request
 
     async def process_response(self, response_cb: ResponseCallable) -> Response:
         response: Response = await super().process_response(response_cb)
         self.response_cnt_counter.increment()
-        if response.msg_type == constant.MSG_RESPONSE:
+        if response.msg_type == constant.MT_MSG:
             self.request_online_gauge.decrement()
-        elif response.msg_type == constant.CHANNEL_RESPONSE:
+        elif response.msg_type == constant.MT_CHANNEL:
             life_cycle: str = response.header.get("channel_life_cycle", "error")
             if life_cycle == constant.DECLARE:
                 self.channel_online_gauge.increment()
@@ -92,7 +92,7 @@ class MosProcessor(BaseProcessor):
 
         if response.status_code >= 400:
             self.error_cnt_counter.increment()
-        if response.msg_type == constant.CLIENT_EVENT and response.target.endswith(constant.PING_EVENT):
+        if response.msg_type == constant.MT_CLIENT_EVENT and response.target.endswith(constant.PING_EVENT):
             mos: int = int(
                 5
                 * (1 - self._cpu_percent)

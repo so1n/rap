@@ -121,7 +121,7 @@ class Channel(BaseChannel[Response]):
         header = header or {}
         header["channel_life_cycle"] = life_cycle
         request: Request = Request(
-            msg_type=constant.CHANNEL_REQUEST,
+            msg_type=constant.MT_CHANNEL,
             target=target,
             body=body,
             header=header,
