@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError, ParseError
 from rap.common.utils import EventEnum, constant, gen_random_time_id
-from rap.server.model import Request, Response
+from rap.server.model import Request, Response, ServerContext
 from rap.server.plugin.processor.base import BaseProcessor, ResponseCallable
 
 if TYPE_CHECKING:
@@ -125,7 +125,7 @@ class BaseCryptoProcessor(BaseProcessor):
 
 
 class CryptoProcessor(BaseCryptoProcessor):
-    async def process_request(self, request: Request) -> Request:
+    async def on_request(self, request: Request, context: ServerContext) -> Request:
         if request.msg_type == constant.MT_CLIENT_EVENT and request.target.endswith(constant.DECLARE):
             crypto_id: str = request.body.get("crypto_id", "")
             if crypto_id:
@@ -140,8 +140,8 @@ class CryptoProcessor(BaseCryptoProcessor):
                 request.context.conn.state.crypto = crypto
         return await self.decrypt_request(request)
 
-    async def process_response(self, response_cb: ResponseCallable) -> Response:
-        response: Response = await super().process_response(response_cb)
+    async def on_response(self, response_cb: ResponseCallable, context: ServerContext) -> Response:
+        response: Response = await super().on_response(response_cb, context)
         return await self.encrypt_response(response)
 
 
@@ -158,7 +158,7 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
     ):
         super(AutoCryptoProcessor, self).__init__({}, timeout=timeout, nonce_timeout=nonce_timeout)
 
-    async def process_request(self, request: Request) -> Request:
+    async def on_request(self, request: Request, context: ServerContext) -> Request:
         if request.msg_type == constant.MT_CLIENT_EVENT and request.target.endswith(constant.DECLARE):
             check_id: bytes = request.body.get("check_id", b"")
             crypto_id: str = request.body.get("crypto_id", "")
@@ -175,8 +175,8 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
         else:
             return await super().decrypt_request(request)
 
-    async def process_response(self, response_cb: ResponseCallable) -> Response:
-        response: Response = await super().process_response(response_cb)
+    async def on_response(self, response_cb: ResponseCallable, context: ServerContext) -> Response:
+        response: Response = await super().on_response(response_cb, context)
         if response.msg_type == constant.MT_SERVER_EVENT and response.target.endswith(constant.DECLARE):
             try:
                 check_id: int = response.context.check_id

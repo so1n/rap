@@ -3,7 +3,7 @@ from typing import Awaitable, List, Tuple, Union
 
 from rap.common.exceptions import TooManyRequest
 from rap.common.utils import constant
-from rap.server.model import Request
+from rap.server.model import Request, ServerContext
 from rap.server.plugin.processor.base import BaseProcessor
 from rap.server.plugin.processor.limit.backend import BaseLimitBackend
 from rap.server.plugin.processor.limit.rule import Rule
@@ -15,7 +15,7 @@ class LimitProcessor(BaseProcessor):
         self._backend: BaseLimitBackend = backend
         self._rule_list: List[Tuple[RULE_FUNC_TYPE, Rule]] = rule_list
 
-    async def process_request(self, request: Request) -> Request:
+    async def on_request(self, request: Request, context: ServerContext) -> Request:
         # not limit client event
         if request.msg_type in (constant.MT_CLIENT_EVENT, constant.MT_SERVER_EVENT):
             return request

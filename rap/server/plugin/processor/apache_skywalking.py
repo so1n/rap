@@ -52,7 +52,7 @@ class SkywalkingProcessor(BaseProcessor):
         span.tag(TagMsgType(msg.msg_type))
         return span
 
-    async def process_request(self, request: Request) -> Request:
+    async def on_request(self, request: Request, context: ServerContext) -> Request:
         if request.msg_type is constant.MT_MSG and not request.context.get_value("span", None):
             request.context.span = self._create_span(request)
         elif request.msg_type is constant.MT_CHANNEL and not request.context.get_value("span", None):
@@ -60,8 +60,8 @@ class SkywalkingProcessor(BaseProcessor):
             request.context.span = self._create_span(request)
         return request
 
-    async def process_response(self, response_cb: ResponseCallable) -> Response:
-        response: Response = await super().process_response(response_cb)
+    async def on_response(self, response_cb: ResponseCallable, context: ServerContext) -> Response:
+        response: Response = await super().on_response(response_cb, context)
         if response.msg_type is constant.MT_MSG:
             span: Span = response.context.span
             status_code: int = response.status_code
@@ -77,9 +77,9 @@ class SkywalkingProcessor(BaseProcessor):
         return response
 
     async def on_context_exit(
-        self, context_exit_cb: ContextExitCallable
+        self, context_exit_cb: ContextExitCallable, context: ServerContext
     ) -> Tuple[ServerContext, Optional[Type[BaseException]], Optional[BaseException], Optional[TracebackType]]:
-        context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb)
+        context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb, context)
         span: Optional[Span] = context.get_value("span", None)
         if span:
             span.__exit__(exc_type, exc_val, exc_tb)

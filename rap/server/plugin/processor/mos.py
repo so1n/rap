@@ -6,7 +6,7 @@ from rap.common.asyncio_helper import get_event_loop
 from rap.common.collect_statistics import Counter, Gauge
 from rap.common.number_range import get_value_by_range
 from rap.common.utils import EventEnum, constant
-from rap.server.model import Request, Response
+from rap.server.model import Request, Response, ServerContext
 from rap.server.plugin.processor.base import BaseProcessor, ResponseCallable
 
 if TYPE_CHECKING:
@@ -72,14 +72,14 @@ class MosProcessor(BaseProcessor):
     def stop_event_handle(self, app: "Server") -> None:
         self._run_cpu_percent = False
 
-    async def process_request(self, request: Request) -> Request:
+    async def on_request(self, request: Request, context: ServerContext) -> Request:
         self.request_cnt_counter.increment()
         if request.msg_type == constant.MT_MSG:
             self.request_online_gauge.increment()
         return request
 
-    async def process_response(self, response_cb: ResponseCallable) -> Response:
-        response: Response = await super().process_response(response_cb)
+    async def on_response(self, response_cb: ResponseCallable, context: ServerContext) -> Response:
+        response: Response = await super().on_response(response_cb, context)
         self.response_cnt_counter.increment()
         if response.msg_type == constant.MT_MSG:
             self.request_online_gauge.decrement()

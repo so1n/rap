@@ -4,7 +4,7 @@ from rap.client.transport.transport import Transport
 from rap.common.channel import UserChannel
 from rap.common.event import DeclareEvent
 from rap.common.utils import constant
-from rap.server.model import Request, Response
+from rap.server.model import Request, Response, ServerContext
 from rap.server.plugin.processor.base import BaseProcessor, ResponseCallable
 from tests.conftest import load_processor, process_server
 
@@ -18,14 +18,14 @@ class TestHeader:
         response_recv_header: dict = {}
 
         class MyProcessor(BaseProcessor):
-            async def process_request(self, request: Request) -> Request:
+            async def on_request(self, request: Request, context: ServerContext) -> Request:
                 if request.func_name.endswith(DeclareEvent.event_name):
                     nonlocal recv_header
                     recv_header = request.body["metadata"]
                 return request
 
-            async def process_response(self, response_cb: ResponseCallable) -> Response:
-                response: Response = await super().process_response(response_cb)
+            async def on_response(self, response_cb: ResponseCallable, context: ServerContext) -> Response:
+                response: Response = await super().on_response(response_cb, context)
                 if response.target.endswith(DeclareEvent.event_name):
                     nonlocal response_recv_header
                     response_recv_header = response.context.transport_metadata
@@ -45,14 +45,14 @@ class TestHeader:
         header: dict = {"test": "test channel header"}
 
         class MyProcessor(BaseProcessor):
-            async def process_request(self, request: Request) -> Request:
+            async def on_request(self, request: Request, context: ServerContext) -> Request:
                 if request.msg_type is constant.MT_CHANNEL and request.header["channel_life_cycle"] == constant.DECLARE:
                     nonlocal request_recv_header
                     request_recv_header = request.body
                 return request
 
-            async def process_response(self, response_cb: ResponseCallable) -> Response:
-                response: Response = await super().process_response(response_cb)
+            async def on_response(self, response_cb: ResponseCallable, context: ServerContext) -> Response:
+                response: Response = await super().on_response(response_cb, context)
                 if (
                     response.msg_type is constant.MT_CHANNEL
                     and response.header["channel_life_cycle"] == constant.DECLARE

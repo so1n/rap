@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 from aio_statsd import StatsdClient
 
 from rap.common.utils import EventEnum, constant
-from rap.server.model import Request, Response
+from rap.server.model import Request, Response, ServerContext
 from rap.server.plugin.processor.base import BaseProcessor, ResponseCallable
 
 if TYPE_CHECKING:
@@ -45,7 +45,7 @@ class StatsdProcessor(BaseProcessor):
         if self.app.window_statistics:
             self.app.window_statistics.add_callback(upload_metric)
 
-    async def process_request(self, request: Request) -> Request:
+    async def on_request(self, request: Request, context: ServerContext) -> Request:
         self._statsd_client.increment(self._request_key, 1)
         if request.msg_type == constant.MT_MSG:
             self._statsd_client.increment(self._msg_key, 1)
@@ -54,8 +54,8 @@ class StatsdProcessor(BaseProcessor):
         self._statsd_client.sets(f"{self._namespace}.online.{host}", 1)
         return request
 
-    async def process_response(self, response_cb: ResponseCallable) -> Response:
-        response: Response = await super().process_response(response_cb)
+    async def on_response(self, response_cb: ResponseCallable, context: ServerContext) -> Response:
+        response: Response = await super().on_response(response_cb, context)
         if response.msg_type == constant.MT_MSG:
             self._statsd_client.decrement(self._process_msg_key, 1)
             if response.status_code >= 400:

@@ -51,7 +51,7 @@ class Sender(object):
             return response, None
 
         if self._processor:
-            response = await self._processor.process_response(response_cb)
+            response = await self._processor.on_response(response_cb, response.context)
 
         logger.debug("resp: %s", response)
         if not deadline:

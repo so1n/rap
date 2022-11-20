@@ -6,7 +6,7 @@ from aredis import StrictRedis  # type: ignore
 
 from rap.common.exceptions import ServerError, TooManyRequest
 from rap.common.utils import constant
-from rap.server import Request, Response
+from rap.server import Request, Response, ServerContext
 from rap.server.plugin.processor import limit
 from rap.server.plugin.processor.base import BaseProcessor, ResponseCallable
 from tests.conftest import load_processor
@@ -17,13 +17,13 @@ pytestmark = pytest.mark.asyncio
 class TestLimit:
     async def test_processor_raise_rap_error(self) -> None:
         class TestProcessor(BaseProcessor):
-            async def process_request(self, request: Request) -> Request:
+            async def on_request(self, request: Request, context: ServerContext) -> Request:
                 if request.msg_type == constant.MT_MSG:
                     raise TooManyRequest("test")
                 return request
 
-            async def process_response(self, response_cb: ResponseCallable) -> Response:
-                return await super().process_response(response_cb)
+            async def on_response(self, response_cb: ResponseCallable, context: ServerContext) -> Response:
+                return await super().on_response(response_cb, context)
 
         async with load_processor([TestProcessor()], []):
             with pytest.raises(TooManyRequest) as e:
@@ -36,13 +36,13 @@ class TestLimit:
 
     async def test_processor_raise_exc(self) -> None:
         class TestProcessor(BaseProcessor):
-            async def process_request(self, request: Request) -> Request:
+            async def on_request(self, request: Request, context: ServerContext) -> Request:
                 if request.msg_type == constant.MT_MSG:
                     raise ValueError("test")
                 return request
 
-            async def process_response(self, response_cb: ResponseCallable) -> Response:
-                return await super().process_response(response_cb)
+            async def on_response(self, response_cb: ResponseCallable, context: ServerContext) -> Response:
+                return await super().on_response(response_cb, context)
 
         async with load_processor([TestProcessor()], []):
             with pytest.raises(ServerError) as e:

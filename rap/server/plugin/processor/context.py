@@ -2,7 +2,7 @@ from rap.common.channel import UserChannel
 from rap.common.context import Context as _Context
 from rap.common.context import rap_context
 from rap.common.utils import constant
-from rap.server.model import Request, Response
+from rap.server.model import Request, Response, ServerContext
 from rap.server.plugin.processor.base import BaseProcessor, ResponseCallable
 
 
@@ -15,7 +15,7 @@ class ContextProcessor(BaseProcessor):
     def __init__(self) -> None:
         self._context: Context = Context()
 
-    async def process_request(self, request: Request) -> Request:
+    async def on_request(self, request: Request, context: ServerContext) -> Request:
         if request.msg_type is constant.MT_MSG:
             request.context.context_token = rap_context.set({})
             self._context.request = request
@@ -24,8 +24,8 @@ class ContextProcessor(BaseProcessor):
             request.context.context_token = rap_context.set({})
         return request
 
-    async def process_response(self, response_cb: ResponseCallable) -> Response:
-        response: Response = await super().process_response(response_cb)
+    async def on_response(self, response_cb: ResponseCallable, context: ServerContext) -> Response:
+        response: Response = await super().on_response(response_cb, context)
         if response.msg_type is constant.MT_MSG:
             rap_context.reset(response.context.context_token)
         elif (

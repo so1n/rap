@@ -129,7 +129,7 @@ class Receiver(object):
             async def _context_exit_cb() -> ContextExitType:
                 return context, exc_type, exc_val, exc_tb
 
-            await self._processor.on_context_exit(_context_exit_cb)
+            await self._processor.on_context_exit(_context_exit_cb, context)
 
     async def __call__(self, request_msg: Optional[MSG_TYPE]) -> None:
         if request_msg is None:
@@ -176,7 +176,7 @@ class Receiver(object):
         if self._processor:
             # If the processor does not pass the check, then an error is thrown and the error is returned directly
             try:
-                request = await self._processor.process_request(request)
+                request = await self._processor.on_request(request, request.context)
             except Exception as e:
                 if not isinstance(e, BaseRapError):
                     logger.exception(e)

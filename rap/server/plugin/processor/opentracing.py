@@ -42,12 +42,12 @@ class TracingProcessor(BaseProcessor):
         msg.context.scope = scope
         return scope
 
-    async def process_request(self, request: Request) -> Request:
+    async def on_request(self, request: Request, context: ServerContext) -> Request:
         self._create_scope(request)
         return request
 
-    async def process_response(self, response_cb: ResponseCallable) -> Response:
-        response: Response = await super().process_response(response_cb)
+    async def on_response(self, response_cb: ResponseCallable, context: ServerContext) -> Response:
+        response: Response = await super().on_response(response_cb, context)
         # TODO support server push msg
         # self._create_scope(response)
         ctx_scope: Optional[Scope] = response.context.get_value("scope", None)
@@ -68,9 +68,9 @@ class TracingProcessor(BaseProcessor):
         return response
 
     async def on_context_exit(
-        self, context_exit_cb: ContextExitCallable
+        self, context_exit_cb: ContextExitCallable, context: ServerContext
     ) -> Tuple[ServerContext, Optional[Type[BaseException]], Optional[BaseException], Optional[TracebackType]]:
-        context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb)
+        context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb, context)
         scope: Optional[Scope] = context.get_value("scope", None)
         if scope:
             scope.__exit__(exc_type, exc_val, exc_tb)

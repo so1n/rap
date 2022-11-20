@@ -25,10 +25,10 @@ def chain_processor(*processor_list: "_ProcessorT") -> "_ProcessorT":
             continue
         else:
             next_processor: BaseProcessor = processor_list[index + 1]
-            setattr(processor, processor.next_context_enter.__name__, next_processor.on_context_enter)
-            setattr(processor, processor.next_process_request.__name__, next_processor.process_request)
-            setattr(processor, processor.next_process_response.__name__, next_processor.process_response)
-            setattr(processor, processor.next_context_exit.__name__, next_processor.on_context_exit)
+            setattr(processor, processor._next_context_enter.__name__, next_processor.on_context_enter)
+            setattr(processor, processor._next_request.__name__, next_processor.on_request)
+            setattr(processor, processor._next_process_response.__name__, next_processor.on_response)
+            setattr(processor, processor._next_context_exit.__name__, next_processor.on_context_exit)
     return processor_list[0]
 
 
@@ -48,26 +48,26 @@ class BaseProcessor(object):
             name = func.__name__.strip("_")
         self.app.register(func, name=name, group=group, is_private=True)
 
-    async def next_context_enter(self, context: ServerContext) -> ServerContext:
+    async def _next_context_enter(self, context: ServerContext) -> ServerContext:
         return context
 
     async def on_context_enter(self, context: ServerContext) -> ServerContext:
-        return await self.next_context_enter(context)
+        return await self._next_context_enter(context)
 
-    async def next_process_request(self, request: Request) -> Request:
+    async def _next_request(self, request: Request, context: ServerContext) -> Request:
         return request
 
-    async def process_request(self, request: Request) -> Request:
-        return await self.next_process_request(request)
+    async def on_request(self, request: Request, context: ServerContext) -> Request:
+        return await self._next_request(request, context)
 
-    async def next_process_response(self, response_cb: ResponseCallable) -> Response:
+    async def _next_process_response(self, response_cb: ResponseCallable, context: ServerContext) -> Response:
         return (await response_cb(True))[0]
 
-    async def process_response(self, response_cb: ResponseCallable) -> Response:
-        return await self.next_process_response(response_cb)
+    async def on_response(self, response_cb: ResponseCallable, context: ServerContext) -> Response:
+        return await self._next_process_response(response_cb, context)
 
-    async def next_context_exit(self, context_exit_cb: ContextExitCallable) -> ContextExitType:
+    async def _next_context_exit(self, context_exit_cb: ContextExitCallable, context: ServerContext) -> ContextExitType:
         return await context_exit_cb()
 
-    async def on_context_exit(self, context_exit_cb: ContextExitCallable) -> ContextExitType:
-        return await self.next_context_exit(context_exit_cb)
+    async def on_context_exit(self, context_exit_cb: ContextExitCallable, context: ServerContext) -> ContextExitType:
+        return await self._next_context_exit(context_exit_cb, context)

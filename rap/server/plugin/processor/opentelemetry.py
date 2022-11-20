@@ -9,7 +9,7 @@ from opentelemetry.trace.status import Status, StatusCode
 
 from rap.common.msg import BaseMsgProtocol
 from rap.common.utils import constant
-from rap.server.model import Request, Response
+from rap.server.model import Request, Response, ServerContext
 from rap.server.plugin.processor.base import BaseProcessor, ResponseCallable
 
 
@@ -50,13 +50,13 @@ class OpenTelemetryProcessor(BaseProcessor):
         response.context.span.end()
         detach(response.context.open_telemetry_token)
 
-    async def process_request(self, request: Request) -> Request:
+    async def on_request(self, request: Request, context: ServerContext) -> Request:
         if request.msg_type in (constant.MT_MSG, constant.MT_CHANNEL):
             self._start_span(request)
         return request
 
-    async def process_response(self, response_cb: ResponseCallable) -> Response:
-        response: Response = await super().process_response(response_cb)
+    async def on_response(self, response_cb: ResponseCallable, context: ServerContext) -> Response:
+        response: Response = await super().on_response(response_cb, context)
         if response.msg_type is constant.MT_MSG:
             span: trace.Span = response.context.span
             span.set_status(Status(status_code=StatusCode.OK))

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Dict, List
 from prometheus_client import Counter, Gauge, Histogram, start_http_server  # type: ignore
 
 from rap.common.utils import EventEnum, constant
-from rap.server.model import Request, Response
+from rap.server.model import Request, Response, ServerContext
 from rap.server.plugin.processor.base import BaseProcessor, ContextExitCallable, ContextExitType, ResponseCallable
 
 if TYPE_CHECKING:
@@ -42,7 +42,7 @@ class PrometheusProcessor(BaseProcessor):
     def start_event_handle(self, app: "Server") -> None:
         start_http_server(self._prometheus_host, self._prometheus_port)
 
-    async def process_request(self, request: Request) -> Request:
+    async def on_request(self, request: Request, context: ServerContext) -> Request:
         label_list: list = [self._service_name, self.host_name, request.target]
         request_count.labels(*label_list, request.msg_type).inc()
         if request.msg_type == constant.MT_MSG:
@@ -51,10 +51,10 @@ class PrometheusProcessor(BaseProcessor):
             msg_request_in_progress.labels(*label_list).inc()
         return request
 
-    async def process_response(self, response_cb: ResponseCallable) -> Response:
+    async def on_response(self, response_cb: ResponseCallable, context: ServerContext) -> Response:
         resp = None
         try:
-            response: Response = await super().process_response(response_cb)
+            response: Response = await super().on_response(response_cb, context)
             resp = response
             return response
         except Exception as e:
@@ -76,8 +76,8 @@ class PrometheusProcessor(BaseProcessor):
                 elif life_cycle == constant.DROP:
                     channel_in_progress.labels(*label_list).dec()
 
-    async def on_context_exit(self, context_exit_cb: ContextExitCallable) -> ContextExitType:
-        context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb)
+    async def on_context_exit(self, context_exit_cb: ContextExitCallable, context: ServerContext) -> ContextExitType:
+        context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb, context)
         if exc_type:
             # TODO
             # exc_count.labels(self._service_name, self.host_name, context.target, context.msg_type).inc()
