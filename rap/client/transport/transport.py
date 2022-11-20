@@ -182,7 +182,7 @@ class Transport(object):
                 async def _context_exit_cb() -> ContextExitType:
                     return context, exc_type, exc_val, exc_tb
 
-                await self._processor.on_context_exit(_context_exit_cb)
+                await self._processor.on_context_exit(_context_exit_cb, context)
             if not is_not_limit_request:
                 self._semaphore.release()
             self._context_dict.pop(correlation_id, None)
@@ -392,7 +392,7 @@ class Transport(object):
             return response, None
 
         if self._processor:
-            return await self._processor.process_response(response_cb)
+            return await self._processor.on_response(response_cb, context)
         else:
             return (await response_cb())[0]
 
@@ -550,7 +550,7 @@ class Transport(object):
         if (self._through_deadline or through_deadline) and deadline:
             request.header["X-rap-deadline"] = deadline.end_timestamp
         if self._processor:
-            request = await self._processor.process_request(request)
+            request = await self._processor.on_request(request, request.context)
         await self._conn.write(request.to_msg())
 
     ######################

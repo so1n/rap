@@ -6,7 +6,7 @@ import pytest
 from aredis import StrictRedis  # type: ignore
 from pytest_mock import MockFixture
 
-from rap.client.model import Response
+from rap.client.model import ClientContext, Response
 from rap.client.processor.base import BaseClientProcessor, ResponseCallable
 from rap.client.processor.circuit_breaker import (
     CircuitBreakerExc,
@@ -77,9 +77,9 @@ class TestCircuitBreaker:
 
     async def test_circuit_breaker_ignore_processor_exc(self, rap_server: Server, mocker: MockFixture) -> None:
         class MyProcessor(BaseClientProcessor):
-            async def process_response(self, response_cb: ResponseCallable) -> Response:
+            async def on_response(self, response_cb: ResponseCallable, context: ClientContext) -> Response:
                 try:
-                    return await super().process_response(response_cb)
+                    return await super().on_response(response_cb, context)
                 except Exception as e:
                     response: Response = (await response_cb(False))[0]
                     if response.func_name == "sync_num":

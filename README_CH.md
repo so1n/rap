@@ -354,7 +354,7 @@ rpc_server = Server()
 rpc_server.load_middleware([ConnLimitMiddleware()])
 ```
 ## 3.7.processor
-`rap`的processor用于处理入站流量和出站流量,其中`process_request`是处理入站流量,`process_response`是处理出站流量.
+`rap`的processor用于处理入站流量和出站流量,其中`on_request`是处理入站流量,`on_response`是处理出站流量.
 
 `rap.client`和`rap.server`的processor的方法是基本一样的, `rap.server`支持`start_event_handle`和`stop_event_handle`方法,分别在`Server`启动和关闭时调用
 

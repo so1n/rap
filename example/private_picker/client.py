@@ -12,7 +12,7 @@ class CheckConnProcessor(BaseClientProcessor):
     def __init__(self) -> None:
         self.transport_set: Set[Transport] = set()
 
-    async def process_request(self, request: Request) -> Request:
+    async def on_request(self, request: Request) -> Request:
         if request.context.transport and request.target.endswith("sync_sum"):
             # block event request
             self.transport_set.add(request.context.transport)

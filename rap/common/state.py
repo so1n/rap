@@ -40,6 +40,7 @@ class Context(State):
     client_info: Dict[str, Any]
     server_info: Dict[str, Any]
     # Assignment in the Request object initialization time
+    # Note: These attributes cannot be called in `on context enter`
     target: str
     func_name: str
     group: str

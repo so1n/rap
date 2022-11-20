@@ -365,7 +365,7 @@ rpc_server = Server()
 rpc_server.load_middleware([ConnLimitMiddleware()])
 ```
 ## 3.7.processor
-The `rap` processor is used to handle inbound and outbound traffic, where `process_request` is for inbound traffic and `process_response` is for outbound traffic.
+The `rap` processor is used to handle inbound and outbound traffic, where `on_request` is for inbound traffic and `on_response` is for outbound traffic.
 
 The methods of `rap.client` and `rap.server` processors are basically the same, `rap.server` supports `start_event_handle` and `stop_event_handle` methods, which are called when `Server` starts and shuts down respectively
 

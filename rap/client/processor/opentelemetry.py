@@ -1,7 +1,8 @@
 from types import TracebackType
 from typing import Iterator, Optional, Tuple, Type
 
-from opentelemetry import context, trace
+from opentelemetry import trace
+from opentelemetry.context import get_current
 from opentelemetry.propagate import inject
 from opentelemetry.semconv.trace import SpanAttributes
 from opentelemetry.trace.span import Span
@@ -39,19 +40,19 @@ class OpenTelemetryProcessor(BaseClientProcessor):
         )
         msg.context.iter_span = iter_span
         span: Span = iter_span.__enter__()  # type: ignore
-        inject(msg.header, context=context.get_current())
+        inject(msg.header, context=get_current())
         return span
 
-    async def process_request(self, request: Request) -> Request:
+    async def on_request(self, request: Request, context: ClientContext) -> Request:
         if request.msg_type is constant.MT_MSG and not request.context.get_value("span", None):
             request.context.span = self._create_scope(request)
         elif request.msg_type is constant.MT_CHANNEL and not request.context.get_value("span", None):
             # A channel is a continuous activity that may involve the interaction of multiple coroutines
             request.context.span = self._create_scope(request)
-        return await super().process_request(request)
+        return await super().on_request(request, context)
 
-    async def process_response(self, response_cb: ResponseCallable) -> Response:
-        response: Response = await super().process_response(response_cb)
+    async def on_response(self, response_cb: ResponseCallable, context: ClientContext) -> Response:
+        response: Response = await super().on_response(response_cb, context)
         if (response.msg_type is constant.MT_MSG) or (
             response.msg_type is constant.MT_CHANNEL
             and response.header.get("channel_life_cycle", "error") == constant.DECLARE
@@ -63,9 +64,9 @@ class OpenTelemetryProcessor(BaseClientProcessor):
         return response
 
     async def on_context_exit(
-        self, context_exit_cb: ContextExitCallable
+        self, context_exit_cb: ContextExitCallable, context: ClientContext
     ) -> Tuple[ClientContext, Optional[Type[BaseException]], Optional[BaseException], Optional[TracebackType]]:
-        _context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb)
+        _context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb, context)
         iter_span: Optional[Span] = _context.get_value("iter_span", None)
         if iter_span:
             iter_span.__exit__(exc_type, exc_val, exc_tb)

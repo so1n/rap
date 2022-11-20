@@ -40,7 +40,7 @@ class TracingProcessor(BaseClientProcessor):
             scope.close()
         return scope
 
-    async def process_request(self, request: Request) -> Request:
+    async def on_request(self, request: Request, context: ClientContext) -> Request:
         if request.msg_type is constant.MT_MSG and not request.context.get_value("scope", None):
             request.context.scope = self._create_scope(request)
         elif request.msg_type is constant.MT_CHANNEL and not request.context.get_value("span", None):
@@ -49,8 +49,8 @@ class TracingProcessor(BaseClientProcessor):
             request.context.context_channel.add_done_callback(lambda f: request.context.span.finish())
         return request
 
-    async def process_response(self, response_cb: ResponseCallable) -> Response:
-        response: Response = await super().process_response(response_cb)
+    async def on_response(self, response_cb: ResponseCallable, context: ClientContext) -> Response:
+        response: Response = await super().on_response(response_cb, context)
         if response.msg_type is constant.MT_MSG:
             scope: Scope = response.context.scope
             status_code: int = response.status_code
@@ -59,9 +59,9 @@ class TracingProcessor(BaseClientProcessor):
         return response
 
     async def on_context_exit(
-        self, context_exit_cb: ContextExitCallable
+        self, context_exit_cb: ContextExitCallable, context: ClientContext
     ) -> Tuple[ClientContext, Optional[Type[BaseException]], Optional[BaseException], Optional[TracebackType]]:
-        context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb)
+        context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb, context)
         scope: Optional[Scope] = context.get_value("scope", None)
         if scope:
             scope.span.__exit__(exc_type, exc_val, exc_tb)

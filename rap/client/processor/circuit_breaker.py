@@ -2,7 +2,7 @@ import logging
 import random
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from rap.client.model import Request, Response
+from rap.client.model import ClientContext, Request, Response
 from rap.client.processor.base import BaseClientProcessor, ResponseCallable
 from rap.client.types import CLIENT_EVENT_FN
 from rap.common.collect_statistics import WindowStatistics
@@ -91,7 +91,7 @@ class BaseCircuitBreakerProcessor(BaseClientProcessor):
     def get_index_from_response(self, response: Response) -> str:
         raise NotImplementedError
 
-    async def process_request(self, request: Request) -> Request:
+    async def on_request(self, request: Request, context: ClientContext) -> Request:
         if request.msg_type in (constant.MT_CLIENT_EVENT, constant.MT_SERVER_EVENT):
             # do not process event
             return request
@@ -105,16 +105,16 @@ class BaseCircuitBreakerProcessor(BaseClientProcessor):
             )
             raise self.exc
         try:
-            return await super().process_request(request)
+            return await super().on_request(request, context)
         except Exception as e:
             self._window_statistics.set_counter_value(
                 error_key, expire=self._expire, diff=self._interval, is_cover=False
             )
             raise e
 
-    async def process_response(self, response_cb: ResponseCallable) -> Response:
+    async def on_response(self, response_cb: ResponseCallable, context: ClientContext) -> Response:
         try:
-            return await super().process_response(response_cb)
+            return await super().on_response(response_cb, context)
         except Exception as e:
             response, raw_e = await response_cb(False)
             if raw_e is not e and self._ignore_processor_exception:

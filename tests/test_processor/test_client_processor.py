@@ -33,19 +33,21 @@ class TestClientProcessor:
                 context_enter_list.append(self._number)
                 return await super().on_context_enter(context)
 
-            async def process_request(self, request: Request) -> Request:
+            async def on_request(self, request: Request, context: ClientContext) -> Request:
                 if request.msg_type == constant.MT_MSG:
                     process_request_list.append(self._number)
-                return await super().process_request(request)
+                return await super().on_request(request, context)
 
-            async def process_response(self, response_cb: ResponseCallable) -> Response:
-                response: Response = await super().process_response(response_cb)
+            async def on_response(self, response_cb: ResponseCallable, context: ClientContext) -> Response:
+                response: Response = await super().on_response(response_cb, context)
                 if response.msg_type == constant.MT_MSG:
                     process_response_list.append(self._number)
                 return response
 
-            async def on_context_exit(self, context_exit_cb: ContextExitCallable) -> ContextExitType:
-                context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb)
+            async def on_context_exit(
+                self, context_exit_cb: ContextExitCallable, context: ClientContext
+            ) -> ContextExitType:
+                context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb, context)
                 context_exit_list.append(self._number)
                 return context, exc_type, exc_val, exc_tb
 
@@ -57,12 +59,12 @@ class TestClientProcessor:
 
     async def test_processor_request_error(self, rap_server: Server) -> None:
         """
-        Test `process_request` stage throws an exception
+        Test `on_request` stage throws an exception
 
-        When an exception occurs in `process_request`, the following situations will occur:
-            1. Will not continue to call the `process_request` of the next processor
-            2. The `process_response` of the processor will not be called (all processor)
-            3. The `context_exit` of each processor will receive an exception thrown by `process_request`
+        When an exception occurs in `on_request`, the following situations will occur:
+            1. Will not continue to call the `on_request` of the next processor
+            2. The `on_response` of the processor will not be called (all processor)
+            3. The `context_exit` of each processor will receive an exception thrown by `on_request`
         """
         context_enter_list: List[int] = []
         context_exit_list: List[int] = []
@@ -78,21 +80,23 @@ class TestClientProcessor:
                 context_enter_list.append(self._number)
                 return await super().on_context_enter(context)
 
-            async def process_request(self, request: Request) -> Request:
+            async def on_request(self, request: Request, context: ClientContext) -> Request:
                 if request.msg_type == constant.MT_MSG:
                     process_request_list.append(self._number)
                     if self._number == 2 and request.func_name == "sync_sum":
                         raise RuntimeError("Test Error")
-                return await super().process_request(request)
+                return await super().on_request(request, context)
 
-            async def process_response(self, response_cb: ResponseCallable) -> Response:
-                response: Response = await super().process_response(response_cb)
+            async def on_response(self, response_cb: ResponseCallable, context: ClientContext) -> Response:
+                response: Response = await super().on_response(response_cb, context)
                 if response.msg_type == constant.MT_MSG:
                     process_response_list.append(self._number)
                 return response
 
-            async def on_context_exit(self, context_exit_cb: ContextExitCallable) -> ContextExitType:
-                context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb)
+            async def on_context_exit(
+                self, context_exit_cb: ContextExitCallable, context: ClientContext
+            ) -> ContextExitType:
+                context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb, context)
                 context_exit_list.append(self._number)
                 if context.target.endswith("sync_sum"):
                     context_exit_container_list.append((exc_type, exc_val))
@@ -113,11 +117,11 @@ class TestClientProcessor:
 
     async def test_processor_response_error(self, rap_server: Server) -> None:
         """
-        Test `process_response` stage throws an exception
+        Test `on_response` stage throws an exception
 
-        When an exception occurs in `process_response`, the following situations will occur:
-            1. Will not continue to call the `process_response` of the prev processor
-            2. The `context_exit` of each processor will receive an exception thrown by `process_response`
+        When an exception occurs in `on_response`, the following situations will occur:
+            1. Will not continue to call the `on_response` of the prev processor
+            2. The `context_exit` of each processor will receive an exception thrown by `on_response`
         """
         context_enter_list: List[int] = []
         context_exit_list: List[int] = []
@@ -133,21 +137,23 @@ class TestClientProcessor:
                 context_enter_list.append(self._number)
                 return await super().on_context_enter(context)
 
-            async def process_request(self, request: Request) -> Request:
+            async def on_request(self, request: Request, context: ClientContext) -> Request:
                 if request.msg_type == constant.MT_MSG:
                     process_request_list.append(self._number)
-                return await super().process_request(request)
+                return await super().on_request(request, context)
 
-            async def process_response(self, response_cb: ResponseCallable) -> Response:
-                response: Response = await super().process_response(response_cb)
+            async def on_response(self, response_cb: ResponseCallable, context: ClientContext) -> Response:
+                response: Response = await super().on_response(response_cb, context)
                 if response.msg_type == constant.MT_MSG:
                     process_response_list.append(self._number)
                     if self._number == 2 and response.func_name == "sync_sum":
                         raise RuntimeError("Test Error")
                 return response
 
-            async def on_context_exit(self, context_exit_cb: ContextExitCallable) -> ContextExitType:
-                context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb)
+            async def on_context_exit(
+                self, context_exit_cb: ContextExitCallable, context: ClientContext
+            ) -> ContextExitType:
+                context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb, context)
                 context_exit_list.append(self._number)
                 if context.func_name == "sync_sum":
                     context_exit_container_list.append((exc_type, exc_val))
@@ -171,8 +177,8 @@ class TestClientProcessor:
         Test the error returned by the server
 
         The following will occur:
-            1. `process_request` and `on context_enter` of all processors will be executed normally.
-            2. `process_response` and `on context_exit` of all processors will pass exceptions
+            1. `on_request` and `on context_enter` of all processors will be executed normally.
+            2. `on_response` and `on context_exit` of all processors will pass exceptions
         """
         context_enter_list: List[int] = []
         context_exit_list: List[int] = []
@@ -189,14 +195,14 @@ class TestClientProcessor:
                 context_enter_list.append(self._number)
                 return await super().on_context_enter(context)
 
-            async def process_request(self, request: Request) -> Request:
+            async def on_request(self, request: Request, context: ClientContext) -> Request:
                 if request.msg_type == constant.MT_MSG:
                     process_request_list.append(self._number)
-                return await super().process_request(request)
+                return await super().on_request(request, context)
 
-            async def process_response(self, response_cb: ResponseCallable) -> Response:
+            async def on_response(self, response_cb: ResponseCallable, context: ClientContext) -> Response:
                 try:
-                    response: Response = await super().process_response(response_cb)
+                    response: Response = await super().on_response(response_cb, context)
                     if response and response.msg_type == constant.MT_MSG:
                         process_response_list.append(self._number)
                     return response
@@ -208,8 +214,10 @@ class TestClientProcessor:
                     process_response_container_list.append(e)
                     raise e
 
-            async def on_context_exit(self, context_exit_cb: ContextExitCallable) -> ContextExitType:
-                context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb)
+            async def on_context_exit(
+                self, context_exit_cb: ContextExitCallable, context: ClientContext
+            ) -> ContextExitType:
+                context, exc_type, exc_val, exc_tb = await super().on_context_exit(context_exit_cb, context)
                 context_exit_list.append(self._number)
                 if context.func_name == "error_func_name":
                     context_exit_container_list.append((exc_type, exc_val))

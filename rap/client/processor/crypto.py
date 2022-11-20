@@ -3,7 +3,7 @@ import random
 import time
 from typing import Optional
 
-from rap.client.model import Request, Response
+from rap.client.model import ClientContext, Request, Response
 from rap.client.processor.base import BaseClientProcessor, ResponseCallable
 from rap.common.crypto import Crypto
 from rap.common.exceptions import CryptoError
@@ -44,7 +44,7 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
         """
         self._nonce_timeout: int = nonce_timeout or BaseCryptoProcessor._nonce_timeout
 
-    async def process_request(self, request: Request) -> Request:
+    async def on_request(self, request: Request, context: ClientContext) -> Request:
         assert request.context.transport is not None, "Not found transport from request"
         if request.msg_type == constant.MT_CLIENT_EVENT and request.target.endswith(constant.DECLARE):
             crypto_key: str = gen_random_time_id(length=6, time_length=10)
@@ -67,10 +67,10 @@ class AutoCryptoProcessor(BaseCryptoProcessor):
                 request.body = crypto.encrypt_object(request.body)
             except Exception as e:
                 raise CryptoError("Can't encrypt body.") from e
-        return await super().process_request(request)
+        return await super().on_request(request, context)
 
-    async def process_response(self, response_cb: ResponseCallable) -> Response:
-        response: Response = await super().process_response(response_cb)
+    async def on_response(self, response_cb: ResponseCallable, context: ClientContext) -> Response:
+        response: Response = await super().on_response(response_cb, context)
         crypto: Crypto = response.context.conn.state.crypto
         try:
             if response.msg_type == constant.MT_SERVER_EVENT and response.target.endswith(constant.DECLARE):
@@ -101,7 +101,7 @@ class CryptoProcessor(BaseCryptoProcessor):
 
         self._crypto: "Crypto" = Crypto(self._crypto_key)
 
-    async def process_request(self, request: Request) -> Request:
+    async def on_request(self, request: Request, context: ClientContext) -> Request:
         if request.msg_type == constant.MT_CLIENT_EVENT and request.target.endswith(constant.DECLARE):
             # Tell the server that the key will be used for encrypted communication
             request.body["crypto_id"] = self._crypto_id
@@ -113,10 +113,10 @@ class CryptoProcessor(BaseCryptoProcessor):
                 "nonce": await async_get_snowflake_id(),
             }
             request.body = self._crypto.encrypt_object(request.body)
-        return await super().process_request(request)
+        return await super().on_request(request, context)
 
-    async def process_response(self, response_cb: ResponseCallable) -> Response:
-        response: Response = await super().process_response(response_cb)
+    async def on_response(self, response_cb: ResponseCallable, context: ClientContext) -> Response:
+        response: Response = await super().on_response(response_cb, context)
         if response.msg_type in (constant.MT_MSG, constant.MT_CHANNEL) and response.status_code < 400:
             try:
                 response.body = self._crypto.decrypt_object(response.body)
